@@ -1,0 +1,5 @@
+{
+  "name": "reThink 2026",
+  "description": "A Notion-style habit tracker and goal setter based on the Farnam Street workbook methodology. Focus on 3 goals, track daily habits with GitHub-style contribution graphs.",
+  "requestFramePermissions": []
+}
