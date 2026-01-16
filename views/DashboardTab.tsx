@@ -1,7 +1,7 @@
 import React from 'react';
 import { AppData, GoalStatus } from '../types';
 import ContributionGraph from '../components/ContributionGraph';
-import { BarChart2, Check, Target, Sparkles } from '../components/Icon';
+import { BarChart2, Check, Target, Sparkles, Map } from '../components/Icon';
 
 interface DashboardTabProps {
   data: AppData;
@@ -10,15 +10,25 @@ interface DashboardTabProps {
 const DashboardTab: React.FC<DashboardTabProps> = ({ data }) => {
   const allHabits = data.habits.filter(h => h.goalId !== 'global');
   
-  // Calculate "Day Ratings" distribution
+  // Calculate Stats
   const goldDays = data.reviews.filter(r => r.dayRating === 'GOLD').length;
   const greenDays = data.reviews.filter(r => r.dayRating === 'GREEN').length;
 
-  // Timeline: Combine completed Goals and Todos
-  const timelineItems = [
-      ...data.goals.filter(g => g.status === GoalStatus.COMPLETED).map(g => ({...g, type: 'GOAL', date: g.completedAt || 0})),
-      ...data.todos.filter(t => t.completed && t.completedAt).map(t => ({...t, type: 'TODO', date: t.completedAt || 0}))
-  ].sort((a, b) => b.date - a.date).slice(0, 20); // Last 20 items
+  // Timeline Preparation
+  // Group completed todos by Date
+  const completedTodos = data.todos
+    .filter(t => t.completed && t.completedAt)
+    .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+
+  const historyByDate: {[date: string]: typeof completedTodos} = {};
+  
+  completedTodos.forEach(todo => {
+      const dateStr = new Date(todo.completedAt!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      if (!historyByDate[dateStr]) historyByDate[dateStr] = [];
+      historyByDate[dateStr].push(todo);
+  });
+
+  const dates = Object.keys(historyByDate);
 
   return (
     <div className="animate-fade-in space-y-12 pb-20">
@@ -28,7 +38,7 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ data }) => {
         <h2 className="text-2xl font-serif">Results & Metrics</h2>
       </div>
 
-      {/* High Level Stats */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg text-center">
             <div className="text-3xl font-bold text-yellow-800 mb-1">{goldDays}</div>
@@ -42,10 +52,53 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ data }) => {
         </div>
       </div>
 
+      {/* Enhanced Timeline */}
+      <section>
+        <h3 className="text-sm font-bold text-notion-dim uppercase tracking-wider mb-6 border-b border-notion-border pb-2">
+          Action Log
+        </h3>
+        
+        <div className="space-y-8 pl-2">
+            {dates.map(dateLabel => (
+                <div key={dateLabel} className="relative border-l border-gray-200 pl-6 pb-2">
+                    <div className="absolute -left-1.5 top-0 w-3 h-3 bg-gray-200 rounded-full border-2 border-white"></div>
+                    <div className="text-xs font-bold text-notion-dim uppercase tracking-wider mb-3">{dateLabel}</div>
+                    
+                    <div className="space-y-3">
+                        {historyByDate[dateLabel].map(todo => {
+                            const goal = data.goals.find(g => g.id === todo.goalId);
+                            const milestone = goal?.milestones?.find(m => m.id === todo.milestoneId);
+
+                            return (
+                                <div key={todo.id} className="bg-gray-50 p-3 rounded border border-gray-100">
+                                    <div className="flex items-start justify-between">
+                                        <div className="font-medium text-notion-text">{todo.text}</div>
+                                        <Check className="w-4 h-4 text-green-600 mt-0.5" />
+                                    </div>
+                                    <div className="flex items-center gap-3 mt-1 text-xs text-notion-dim">
+                                        <span className="flex items-center gap-1">
+                                            <Target className="w-3 h-3" /> {goal?.text || 'Unknown Goal'}
+                                        </span>
+                                        {milestone && (
+                                            <span className="flex items-center gap-1 text-gray-400">
+                                                <Map className="w-3 h-3" /> {milestone.text}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
+            {dates.length === 0 && <p className="text-gray-400 italic pl-6">No completed actions yet.</p>}
+        </div>
+      </section>
+
       {/* Habit Heatmaps */}
       <section>
         <h3 className="text-sm font-bold text-notion-dim uppercase tracking-wider mb-6 border-b border-notion-border pb-2">
-          Habit Consistency
+          System Consistency
         </h3>
         <div className="grid grid-cols-1 gap-6">
           {allHabits.map(habit => (
@@ -62,30 +115,6 @@ const DashboardTab: React.FC<DashboardTabProps> = ({ data }) => {
             </div>
           ))}
           {allHabits.length === 0 && <p className="text-notion-dim italic">No habits tracked yet.</p>}
-        </div>
-      </section>
-
-      {/* Timeline of Achievements */}
-      <section>
-        <h3 className="text-sm font-bold text-notion-dim uppercase tracking-wider mb-6 border-b border-notion-border pb-2">
-          Timeline of Wins
-        </h3>
-        <div className="relative border-l border-notion-border ml-3 space-y-6">
-            {timelineItems.map((item, idx) => (
-                <div key={idx} className="pl-6 relative">
-                    <div className={`absolute -left-1.5 top-1.5 w-3 h-3 rounded-full border-2 border-white ${item.type === 'GOAL' ? 'bg-black' : 'bg-notion-dim'}`}></div>
-                    <div className="text-xs text-notion-dim mb-1 font-mono">
-                        {new Date(item.date).toLocaleDateString()}
-                    </div>
-                    <div className={`text-sm ${item.type === 'GOAL' ? 'font-bold text-lg' : 'text-notion-text'}`}>
-                        {item.type === 'GOAL' && <Target className="inline w-4 h-4 mr-2" />}
-                        {item.text}
-                    </div>
-                </div>
-            ))}
-            {timelineItems.length === 0 && (
-                <div className="pl-6 text-notion-dim italic">Complete tasks and goals to see your history here.</div>
-            )}
         </div>
       </section>
 

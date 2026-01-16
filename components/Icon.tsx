@@ -23,7 +23,8 @@ import {
   Printer,
   Shield,
   Zap,
-  PlayCircle
+  PlayCircle,
+  ArrowRight
 } from 'lucide-react';
 
 export { 
@@ -50,5 +51,6 @@ export {
   Printer,
   Shield,
   Zap,
-  PlayCircle
+  PlayCircle,
+  ArrowRight
 };

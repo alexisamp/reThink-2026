@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AppData, StrategicItem, Goal, GoalStatus, HabitType } from '../types';
-import { Shield, Zap, Plus, Printer, Trash2, Check, Layout, Target } from '../components/Icon';
+import { Shield, Zap, Plus, Printer, Trash2, Check, Layout, Target, Map } from '../components/Icon';
 
 interface StrategyTabProps {
   data: AppData;
@@ -11,8 +11,12 @@ interface StrategyTabProps {
   onUpdateGoalMotivation: (id: string, motivation: string) => void;
   onCompleteGoal: (id: string) => void;
   onDeleteGoal: (id: string) => void;
+  onAddMilestone: (goalId: string, text: string) => void;
+  onDeleteMilestone: (goalId: string, milestoneId: string) => void;
+  onToggleMilestone: (goalId: string, milestoneId: string) => void;
   onAddHabit: (text: string, goalId: string, type: HabitType) => void;
   onDeleteHabit: (id: string) => void;
+  onUpdateGlobalRules: (rules: string) => void;
 }
 
 const StrategyTab: React.FC<StrategyTabProps> = ({ 
@@ -24,290 +28,282 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
   onUpdateGoalMotivation,
   onCompleteGoal,
   onDeleteGoal,
+  onAddMilestone,
+  onDeleteMilestone,
+  onToggleMilestone,
   onAddHabit,
-  onDeleteHabit
+  onDeleteHabit,
+  onUpdateGlobalRules
 }) => {
-  const [newItemType, setNewItemType] = useState<'STRENGTH' | 'WEAKNESS'>('STRENGTH');
+  // Input States
   const [itemTitle, setItemTitle] = useState('');
   const [itemTactic, setItemTactic] = useState('');
+  const [itemType, setItemType] = useState<'STRENGTH' | 'WEAKNESS'>('STRENGTH');
   const [newGoalText, setNewGoalText] = useState('');
   
-  // Local state for habit creation inputs
-  const [habitInputs, setHabitInputs] = useState<{[goalId: string]: string}>({});
-  const [habitTypes, setHabitTypes] = useState<{[goalId: string]: HabitType}>({});
+  // Local inputs for sub-items
+  const [habitInputs, setHabitInputs] = useState<{[key:string]: string}>({});
+  const [milestoneInputs, setMilestoneInputs] = useState<{[key:string]: string}>({});
 
-  const strengths = data.strategy.filter(s => s.type === 'STRENGTH');
-  const weaknesses = data.strategy.filter(s => s.type === 'WEAKNESS');
   const activeGoals = data.goals.filter(g => g.status === GoalStatus.ACTIVE);
-  const backlogGoals = data.goals.filter(g => g.status === GoalStatus.BACKLOG);
 
-  const handleAddItem = () => {
-    if(!itemTitle.trim()) return;
-    const newItem: StrategicItem = {
-      id: crypto.randomUUID(),
-      type: newItemType,
-      title: itemTitle,
-      tactic: itemTactic
-    };
-    onAddStrategicItem(newItem);
-    setItemTitle('');
-    setItemTactic('');
-  };
-
-  const handleAddGoal = () => {
-    if(!newGoalText.trim()) return;
-    onAddGoal(newGoalText);
-    setNewGoalText('');
+  const handleAddStratItem = () => {
+      if(!itemTitle.trim()) return;
+      onAddStrategicItem({
+          id: crypto.randomUUID(),
+          type: itemType,
+          title: itemTitle,
+          tactic: itemTactic
+      });
+      setItemTitle('');
+      setItemTactic('');
   };
 
   const handleAddHabit = (goalId: string) => {
-    const text = habitInputs[goalId];
-    if (!text?.trim()) return;
-    const type = habitTypes[goalId] || HabitType.BINARY;
-    
-    onAddHabit(text, goalId, type);
-    
-    // Clear input
-    setHabitInputs(prev => ({...prev, [goalId]: ''}));
-    setHabitTypes(prev => ({...prev, [goalId]: HabitType.BINARY}));
+      if (!habitInputs[goalId]?.trim()) return;
+      onAddHabit(habitInputs[goalId], goalId, HabitType.BINARY);
+      setHabitInputs(prev => ({...prev, [goalId]: ''}));
+  };
+
+  const handleAddMilestone = (goalId: string) => {
+      if (!milestoneInputs[goalId]?.trim()) return;
+      onAddMilestone(goalId, milestoneInputs[goalId]);
+      setMilestoneInputs(prev => ({...prev, [goalId]: ''}));
   };
 
   return (
-    <div className="animate-fade-in space-y-12 pb-20">
+    <div className="animate-fade-in space-y-16 max-w-3xl mx-auto print:max-w-none print:space-y-8">
       
-      {/* Header & Print */}
-      <div className="flex justify-between items-end border-b border-notion-border pb-4">
-        <div>
-          <h2 className="text-3xl font-serif">Strategic Identity</h2>
-          <p className="text-notion-dim font-serif italic">Know yourself to play your own game.</p>
-        </div>
-        <button 
-          onClick={() => window.print()}
-          className="no-print flex items-center gap-2 text-xs bg-notion-sidebar px-3 py-2 rounded hover:bg-notion-hover text-notion-text transition-colors"
-        >
-          <Printer className="w-4 h-4" /> Export PDF
-        </button>
-      </div>
+      {/* Print Optimization Styles */}
+      <style>{`
+        @media print {
+            @page { margin: 1.5cm; size: auto; }
+            body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            .no-print { display: none !important; }
+            .print-break-avoid { break-inside: avoid; page-break-inside: avoid; }
+            input::placeholder, textarea::placeholder { color: transparent; }
+            input, textarea { border: none !important; }
+        }
+      `}</style>
 
-      {/* Identity Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        
-        {/* Strengths */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-2 text-green-700 bg-green-50 p-3 rounded-lg border border-green-100">
-            <Shield className="w-5 h-5" />
-            <h3 className="font-bold uppercase tracking-wider text-sm">Strengths (Leverage)</h3>
-          </div>
-          
-          <div className="space-y-3">
-             {strengths.map(s => (
-               <div key={s.id} className="group p-4 bg-white border border-notion-border rounded-lg shadow-sm">
-                 <div className="flex justify-between items-start">
-                   <div className="font-medium text-lg mb-1">{s.title}</div>
-                   <button onClick={() => onDeleteStrategicItem(s.id)} className="no-print opacity-0 group-hover:opacity-100 text-notion-dim hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
-                 </div>
-                 <div className="text-sm text-notion-dim font-serif">Action: {s.tactic}</div>
-               </div>
-             ))}
+      {/* 1. Identity / Manifesto Header */}
+      <section className="print-break-avoid">
+          <div className="flex justify-between items-start border-b border-notion-border pb-6 mb-8 print:border-black">
+            <div>
+                <h2 className="text-4xl font-serif text-notion-text mb-2">The 2026 Manifesto</h2>
+                <p className="text-notion-dim font-serif italic text-lg print:text-gray-600">"Identity determines behavior."</p>
+            </div>
+            <button 
+                onClick={() => window.print()} 
+                className="no-print flex items-center gap-2 px-4 py-2 bg-black text-white rounded hover:opacity-80 transition-opacity text-sm font-medium"
+            >
+                <Printer className="w-4 h-4" /> Export Strategy
+            </button>
           </div>
 
-          {/* Add Form (No Print) */}
-          <div className="no-print p-4 bg-notion-sidebar rounded-lg border border-notion-border space-y-2">
-            <input 
-              placeholder="Add Strength..."
-              className="w-full bg-transparent border-b border-notion-border outline-none pb-1"
-              value={newItemType === 'STRENGTH' ? itemTitle : ''}
-              onChange={e => { setNewItemType('STRENGTH'); setItemTitle(e.target.value); }}
-            />
-            {newItemType === 'STRENGTH' && itemTitle && (
-              <div className="animate-in fade-in">
-                 <input 
-                    placeholder="How will you leverage this?"
-                    className="w-full bg-transparent text-sm text-notion-dim italic outline-none"
-                    value={itemTactic}
-                    onChange={e => setItemTactic(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleAddItem()}
-                 />
-                 <button onClick={handleAddItem} className="mt-2 text-xs bg-green-600 text-white px-3 py-1 rounded">Add</button>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Weaknesses */}
-        <section className="space-y-4">
-          <div className="flex items-center gap-2 text-orange-700 bg-orange-50 p-3 rounded-lg border border-orange-100">
-            <Zap className="w-5 h-5" />
-            <h3 className="font-bold uppercase tracking-wider text-sm">Weaknesses (Mitigate)</h3>
-          </div>
-
-          <div className="space-y-3">
-             {weaknesses.map(s => (
-               <div key={s.id} className="group p-4 bg-white border border-notion-border rounded-lg shadow-sm">
-                 <div className="flex justify-between items-start">
-                   <div className="font-medium text-lg mb-1">{s.title}</div>
-                   <button onClick={() => onDeleteStrategicItem(s.id)} className="no-print opacity-0 group-hover:opacity-100 text-notion-dim hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
-                 </div>
-                 <div className="text-sm text-notion-dim font-serif">Hack: {s.tactic}</div>
-               </div>
-             ))}
-          </div>
-
-           {/* Add Form (No Print) */}
-           <div className="no-print p-4 bg-notion-sidebar rounded-lg border border-notion-border space-y-2">
-            <input 
-              placeholder="Add Weakness..."
-              className="w-full bg-transparent border-b border-notion-border outline-none pb-1"
-              value={newItemType === 'WEAKNESS' ? itemTitle : ''}
-              onChange={e => { setNewItemType('WEAKNESS'); setItemTitle(e.target.value); }}
-            />
-            {newItemType === 'WEAKNESS' && itemTitle && (
-              <div className="animate-in fade-in">
-                 <input 
-                    placeholder="System/Hack to prevent this?"
-                    className="w-full bg-transparent text-sm text-notion-dim italic outline-none"
-                    value={itemTactic}
-                    onChange={e => setItemTactic(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleAddItem()}
-                 />
-                 <button onClick={handleAddItem} className="mt-2 text-xs bg-orange-600 text-white px-3 py-1 rounded">Add</button>
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      {/* Goals & System Configuration */}
-      <section>
-        <div className="flex items-center gap-3 mb-6 pb-2 border-b border-notion-border">
-          <Target className="w-6 h-6" />
-          <h2 className="text-3xl font-serif">System Configuration</h2>
-        </div>
-
-        <div className="space-y-8">
-           {activeGoals.map(g => {
-             const goalHabits = data.habits.filter(h => h.goalId === g.id);
-
-             return (
-               <div key={g.id} className="bg-white border border-notion-border rounded-xl shadow-sm overflow-hidden flex flex-col group">
-                 
-                 {/* Card Header: Goal Definition */}
-                 <div className="p-6 border-b border-notion-border">
-                    <label className="text-xs font-bold text-notion-dim uppercase tracking-wider mb-2 block">Outcome (Goal)</label>
-                    <input 
-                      className="text-xl font-medium w-full outline-none bg-transparent mb-2 focus:bg-notion-sidebar/30 rounded p-1 -ml-1"
-                      value={g.text}
-                      onChange={(e) => onUpdateGoalText(g.id, e.target.value)}
-                      placeholder="What is the goal?"
-                    />
-                    <input 
-                      className="text-sm text-notion-dim w-full outline-none bg-transparent font-serif italic focus:bg-notion-sidebar/30 rounded p-1 -ml-1"
-                      value={g.motivation || ''}
-                      onChange={(e) => onUpdateGoalMotivation(g.id, e.target.value)}
-                      placeholder="Why does this matter? (Motivation)"
-                    />
-                 </div>
-
-                 {/* Card Body: System (Habits) */}
-                 <div className="p-6 bg-notion-sidebar/30">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Layout className="w-4 h-4 text-notion-dim" />
-                      <h4 className="text-xs font-bold text-notion-dim uppercase tracking-wider">The System (Habits)</h4>
-                    </div>
-
-                    {/* Existing Habits */}
-                    <div className="space-y-2 mb-6">
-                      {goalHabits.map(h => (
-                        <div key={h.id} className="flex items-center justify-between bg-white p-3 rounded border border-notion-border shadow-sm group/habit">
-                           <div className="flex items-center gap-3">
-                              <span className="text-sm font-medium">{h.text}</span>
-                              {h.type === HabitType.SCALE && (
-                                <span className="text-[10px] border px-1 rounded text-notion-dim uppercase">Scale</span>
-                              )}
-                           </div>
-                           <button 
-                            onClick={() => onDeleteHabit(h.id)}
-                            className="text-notion-dim hover:text-red-500 opacity-0 group-hover/habit:opacity-100 transition-opacity"
-                           >
-                             <Trash2 className="w-4 h-4" />
-                           </button>
-                        </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Strengths */}
+              <div>
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-notion-dim mb-3 flex items-center gap-2 print:text-black">
+                      <Shield className="w-3 h-3" /> Core Strengths
+                  </h3>
+                  <div className="space-y-3">
+                      {data.strategy.filter(s => s.type === 'STRENGTH').map(s => (
+                          <div key={s.id} className="group relative pl-4 border-l-2 border-green-200 print:border-green-400">
+                              <div className="font-medium text-notion-text">{s.title}</div>
+                              <div className="text-sm text-notion-dim italic print:text-gray-600">{s.tactic}</div>
+                              <button onClick={() => onDeleteStrategicItem(s.id)} className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 text-notion-dim hover:text-red-500 no-print">
+                                  <Trash2 className="w-3 h-3" />
+                              </button>
+                          </div>
                       ))}
-                      {goalHabits.length === 0 && <div className="text-sm text-notion-dim italic">No habits configured yet.</div>}
-                    </div>
+                      
+                      {/* Add Input */}
+                      <div className="no-print bg-notion-sidebar p-3 rounded text-sm mt-4">
+                          <input 
+                            className="bg-transparent w-full outline-none mb-2 font-medium" 
+                            placeholder="Add Strength..."
+                            value={itemType === 'STRENGTH' ? itemTitle : ''}
+                            onChange={e => { setItemType('STRENGTH'); setItemTitle(e.target.value); }}
+                          />
+                           {itemType === 'STRENGTH' && itemTitle && (
+                            <input 
+                                className="bg-transparent w-full outline-none text-notion-dim italic" 
+                                placeholder="How to leverage?"
+                                value={itemTactic}
+                                onChange={e => setItemTactic(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleAddStratItem()}
+                            />
+                           )}
+                      </div>
+                  </div>
+              </div>
 
-                    {/* Add Habit Form Inline */}
-                    <div className="flex items-center gap-2 bg-white p-2 rounded border border-notion-border border-dashed focus-within:border-solid focus-within:border-black">
-                       <Plus className="w-4 h-4 text-notion-dim" />
-                       <input 
-                          className="flex-1 text-sm outline-none bg-transparent"
-                          placeholder="Configure a new habit..."
-                          value={habitInputs[g.id] || ''}
-                          onChange={(e) => setHabitInputs(prev => ({...prev, [g.id]: e.target.value}))}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddHabit(g.id)}
-                       />
-                       <select 
-                          className="text-xs bg-notion-sidebar border border-notion-border rounded px-2 py-1 outline-none"
-                          value={habitTypes[g.id] || HabitType.BINARY}
-                          onChange={(e) => setHabitTypes(prev => ({...prev, [g.id]: e.target.value as HabitType}))}
-                       >
-                         <option value={HabitType.BINARY}>Binary</option>
-                         <option value={HabitType.SCALE}>Scale 1-5</option>
-                       </select>
-                       <button 
-                        onClick={() => handleAddHabit(g.id)}
-                        className="text-xs bg-black text-white px-3 py-1 rounded hover:opacity-80"
-                       >
-                         Add
-                       </button>
-                    </div>
-                 </div>
+              {/* Weaknesses */}
+              <div>
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-notion-dim mb-3 flex items-center gap-2 print:text-black">
+                      <Zap className="w-3 h-3" /> Workarounds
+                  </h3>
+                  <div className="space-y-3">
+                      {data.strategy.filter(s => s.type === 'WEAKNESS').map(s => (
+                          <div key={s.id} className="group relative pl-4 border-l-2 border-orange-200 print:border-orange-400">
+                              <div className="font-medium text-notion-text">{s.title}</div>
+                              <div className="text-sm text-notion-dim italic print:text-gray-600">{s.tactic}</div>
+                              <button onClick={() => onDeleteStrategicItem(s.id)} className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 text-notion-dim hover:text-red-500 no-print">
+                                  <Trash2 className="w-3 h-3" />
+                              </button>
+                          </div>
+                      ))}
 
-                 {/* Card Footer: Actions */}
-                 <div className="p-4 bg-white border-t border-notion-border flex justify-end gap-3 no-print">
-                    <button 
-                      onClick={() => onDeleteGoal(g.id)}
-                      className="text-xs text-notion-dim hover:text-red-600 flex items-center gap-1"
-                    >
-                      <Trash2 className="w-3 h-3" /> Delete Goal
-                    </button>
-                    <button 
-                      onClick={() => onCompleteGoal(g.id)}
-                      className="text-xs text-green-700 hover:text-green-800 bg-green-50 px-3 py-1 rounded flex items-center gap-1 border border-green-100"
-                    >
-                      <Check className="w-3 h-3" /> Archive as Complete
-                    </button>
-                 </div>
-               </div>
-             );
-           })}
-           
-           {/* New Goal Input */}
-           {activeGoals.length < 3 ? (
-             <div className="mt-8 no-print p-6 bg-notion-sidebar border border-notion-border border-dashed rounded-xl flex items-center justify-center">
-                <input 
-                  className="bg-transparent text-center text-lg outline-none placeholder:text-notion-dim/50 w-full"
-                  placeholder="+ Click to define a new outcome (Max 3)"
-                  value={newGoalText}
-                  onChange={(e) => setNewGoalText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddGoal()}
-                />
-             </div>
-           ) : (
-             <div className="text-center text-notion-dim italic mt-8">System capacity reached (3/3 active goals). Complete one to add more.</div>
-           )}
-        </div>
-        
-        <div className="mt-12 no-print border-t border-notion-border pt-6">
-            <h4 className="text-sm font-bold text-notion-dim uppercase mb-4">Backlog</h4>
-            {backlogGoals.length > 0 ? (
-              <ul className="list-disc list-inside text-sm text-notion-text space-y-1">
-                  {backlogGoals.map(g => <li key={g.id}>{g.text}</li>)}
-              </ul>
-            ) : (
-              <p className="text-sm text-notion-dim italic">No goals in backlog.</p>
-            )}
-        </div>
+                      {/* Add Input */}
+                      <div className="no-print bg-notion-sidebar p-3 rounded text-sm mt-4">
+                          <input 
+                            className="bg-transparent w-full outline-none mb-2 font-medium" 
+                            placeholder="Add Weakness..."
+                            value={itemType === 'WEAKNESS' ? itemTitle : ''}
+                            onChange={e => { setItemType('WEAKNESS'); setItemTitle(e.target.value); }}
+                          />
+                           {itemType === 'WEAKNESS' && itemTitle && (
+                            <input 
+                                className="bg-transparent w-full outline-none text-notion-dim italic" 
+                                placeholder="System to mitigate?"
+                                value={itemTactic}
+                                onChange={e => setItemTactic(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleAddStratItem()}
+                            />
+                           )}
+                      </div>
+                  </div>
+              </div>
+          </div>
+      </section>
+
+      {/* 2. Active Goals (The Core Document) */}
+      <section className="space-y-12 print:space-y-8">
+          {activeGoals.map((goal, idx) => {
+              const habits = data.habits.filter(h => h.goalId === goal.id);
+              
+              return (
+                  <div key={goal.id} className="border-t border-gray-200 pt-8 print-break-avoid">
+                      {/* Header */}
+                      <div className="mb-6">
+                          <div className="text-xs font-bold text-notion-dim uppercase tracking-widest mb-2 print:text-black">Priority {idx + 1}</div>
+                          <input 
+                            className="text-3xl font-serif text-notion-text w-full outline-none bg-transparent placeholder:text-gray-300"
+                            value={goal.text}
+                            onChange={e => onUpdateGoalText(goal.id, e.target.value)}
+                          />
+                          <input 
+                            className="text-lg font-serif italic text-notion-dim w-full outline-none bg-transparent mt-1 print:text-gray-600"
+                            value={goal.motivation}
+                            onChange={e => onUpdateGoalMotivation(goal.id, e.target.value)}
+                            placeholder="Why this matters..."
+                          />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 print:gap-8">
+                          
+                          {/* A. The System (Habits) */}
+                          <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 print:bg-gray-50 print:border-gray-300">
+                              <h4 className="font-bold text-xs uppercase tracking-wider text-notion-dim mb-4 flex items-center gap-2 print:text-black">
+                                  <Layout className="w-3 h-3" /> Daily System (Habits)
+                              </h4>
+                              <ul className="space-y-3">
+                                  {habits.map(h => (
+                                      <li key={h.id} className="flex justify-between items-center group text-sm">
+                                          <span className="flex items-center gap-2">
+                                              <div className="w-1.5 h-1.5 bg-black rounded-full" />
+                                              {h.text}
+                                          </span>
+                                          <button onClick={() => onDeleteHabit(h.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 no-print">
+                                              <Trash2 className="w-3 h-3" />
+                                          </button>
+                                      </li>
+                                  ))}
+                              </ul>
+                              <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-2 no-print">
+                                  <Plus className="w-3 h-3 text-gray-400" />
+                                  <input 
+                                    className="bg-transparent text-sm outline-none w-full"
+                                    placeholder="Add habit..."
+                                    value={habitInputs[goal.id] || ''}
+                                    onChange={e => setHabitInputs(prev => ({...prev, [goal.id]: e.target.value}))}
+                                    onKeyDown={e => e.key === 'Enter' && handleAddHabit(goal.id)}
+                                  />
+                              </div>
+                          </div>
+
+                          {/* B. The Roadmap (Milestones) */}
+                          <div className="bg-white p-6 rounded-xl border border-gray-200 print:border-gray-300">
+                              <h4 className="font-bold text-xs uppercase tracking-wider text-notion-dim mb-4 flex items-center gap-2 print:text-black">
+                                  <Map className="w-3 h-3" /> Roadmap (Milestones)
+                              </h4>
+                              <ul className="space-y-3">
+                                  {goal.milestones?.map(m => (
+                                      <li key={m.id} className="flex justify-between items-center group text-sm">
+                                          <button 
+                                            onClick={() => onToggleMilestone(goal.id, m.id)}
+                                            className={`flex items-center gap-2 text-left transition-colors ${m.completed ? 'line-through text-gray-400' : 'text-notion-text'}`}
+                                          >
+                                              <div className={`w-1.5 h-1.5 border border-black transform rotate-45 ${m.completed ? 'bg-black' : 'bg-transparent'}`} />
+                                              {m.text}
+                                          </button>
+                                          <button onClick={() => onDeleteMilestone(goal.id, m.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 no-print">
+                                              <Trash2 className="w-3 h-3" />
+                                          </button>
+                                      </li>
+                                  ))}
+                              </ul>
+                              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-2 no-print">
+                                  <Plus className="w-3 h-3 text-gray-400" />
+                                  <input 
+                                    className="bg-transparent text-sm outline-none w-full"
+                                    placeholder="Add milestone..."
+                                    value={milestoneInputs[goal.id] || ''}
+                                    onChange={e => setMilestoneInputs(prev => ({...prev, [goal.id]: e.target.value}))}
+                                    onKeyDown={e => e.key === 'Enter' && handleAddMilestone(goal.id)}
+                                  />
+                              </div>
+                          </div>
+
+                      </div>
+
+                      {/* Goal Footer */}
+                      <div className="flex justify-end mt-4 opacity-0 hover:opacity-100 transition-opacity no-print">
+                         <button onClick={() => onCompleteGoal(goal.id)} className="text-xs text-green-600 mr-4">Archive</button>
+                         <button onClick={() => onDeleteGoal(goal.id)} className="text-xs text-red-400">Delete</button>
+                      </div>
+                  </div>
+              );
+          })}
+
+          {activeGoals.length < 3 && (
+              <div className="py-10 border-t border-dashed border-gray-300 text-center no-print">
+                  <input 
+                    className="text-xl font-serif text-center bg-transparent outline-none placeholder:text-gray-300"
+                    placeholder="+ Define New Outcome"
+                    value={newGoalText}
+                    onChange={e => setNewGoalText(e.target.value)}
+                    onKeyDown={e => {
+                        if (e.key === 'Enter' && newGoalText.trim()) {
+                            onAddGoal(newGoalText);
+                            setNewGoalText('');
+                        }
+                    }}
+                  />
+              </div>
+          )}
+      </section>
+
+      {/* 3. Global Rules */}
+      <section className="border-t-4 border-black pt-8 pb-20 print:pb-0 print-break-avoid">
+          <h3 className="font-bold text-xs uppercase tracking-wider text-notion-dim mb-4 print:text-black">Non-Negotiable Rules</h3>
+          <textarea 
+            className="w-full h-32 text-sm text-notion-text bg-transparent outline-none resize-none font-mono leading-relaxed print:text-sm"
+            placeholder="- No phone after 9pm&#10;- Read 10 pages daily&#10;- Clean desk before leaving"
+            value={data.globalRules || ''}
+            onChange={e => onUpdateGlobalRules(e.target.value)}
+          />
       </section>
 
     </div>

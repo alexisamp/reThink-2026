@@ -4,11 +4,18 @@ export enum GoalStatus {
   COMPLETED = 'COMPLETED'
 }
 
+export interface Milestone {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
 export interface Goal {
   id: string;
   text: string;
   motivation?: string;
   status: GoalStatus;
+  milestones: Milestone[];
   createdAt: number;
   completedAt?: number;
 }
@@ -17,11 +24,11 @@ export interface StrategicItem {
   id: string;
   type: 'STRENGTH' | 'WEAKNESS';
   title: string;
-  tactic: string; // Action to leverage strength OR Hack to mitigate weakness
+  tactic: string; 
 }
 
 export interface ContributionMap {
-  [date: string]: number;
+  [date: string]: number; // 0/1 for Binary, 1-5 for Scale, 0/1 for Non-Negotiable
 }
 
 export enum HabitType {
@@ -41,10 +48,10 @@ export interface Habit {
 export interface Todo {
   id: string;
   goalId: string;
+  milestoneId?: string;
   text: string;
   completed: boolean;
-  completedAt?: number; // For the Timeline
-  externalLink?: string;
+  completedAt?: number;
   date: string; 
 }
 
@@ -63,5 +70,6 @@ export interface AppData {
   habits: Habit[];
   todos: Todo[];
   reviews: ReviewEntry[];
-  strategy: StrategicItem[]; // New Strategy Module Data
+  strategy: StrategicItem[];
+  globalRules?: string;
 }
