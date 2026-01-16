@@ -43,11 +43,35 @@ const App: React.FC = () => {
     setData(prev => ({ ...prev, goals: [...prev.goals, newGoal] }));
   };
 
+  const updateGoalText = (id: string, text: string) => {
+    setData(prev => ({
+      ...prev,
+      goals: prev.goals.map(g => g.id === id ? { ...g, text } : g)
+    }));
+  };
+
+  const updateGoalMotivation = (id: string, motivation: string) => {
+    setData(prev => ({
+      ...prev,
+      goals: prev.goals.map(g => g.id === id ? { ...g, motivation } : g)
+    }));
+  };
+
   const completeGoal = (id: string) => {
     if(!window.confirm("Archive this goal?")) return;
     setData(prev => ({
       ...prev,
       goals: prev.goals.map(g => g.id === id ? { ...g, status: GoalStatus.COMPLETED, completedAt: Date.now() } : g)
+    }));
+  };
+
+  const deleteGoal = (id: string) => {
+    if(!window.confirm("Delete goal permanently?")) return;
+    setData(prev => ({
+      ...prev,
+      goals: prev.goals.filter(g => g.id !== id),
+      habits: prev.habits.filter(h => h.goalId !== id),
+      todos: prev.todos.filter(t => t.goalId !== id)
     }));
   };
 
@@ -182,17 +206,20 @@ const App: React.FC = () => {
                     onAddStrategicItem={addStrategicItem}
                     onDeleteStrategicItem={deleteStrategicItem}
                     onAddGoal={addGoal}
+                    onUpdateGoalText={updateGoalText}
+                    onUpdateGoalMotivation={updateGoalMotivation}
+                    onCompleteGoal={completeGoal}
+                    onDeleteGoal={deleteGoal}
+                    onAddHabit={addHabit}
+                    onDeleteHabit={deleteHabit}
                 />
             )}
             {activeTab === 'TODAY' && (
                 <TodayTab 
                     data={data}
                     todayKey={todayKey}
-                    onAddGoal={addGoal}
                     onCompleteGoal={completeGoal}
-                    onAddHabit={addHabit}
                     onToggleHabit={toggleHabit}
-                    onDeleteHabit={deleteHabit}
                     onAddTodo={addTodo}
                     onToggleTodo={toggleTodo}
                     onDeleteTodo={deleteTodo}
