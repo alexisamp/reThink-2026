@@ -8,15 +8,6 @@ export interface Milestone {
   id: string;
   text: string;
   completed: boolean;
-}
-
-export interface Goal {
-  id: string;
-  text: string;
-  motivation?: string;
-  status: GoalStatus;
-  milestones: Milestone[];
-  createdAt: number;
   completedAt?: number;
 }
 
@@ -45,10 +36,23 @@ export interface Habit {
   contributions: ContributionMap;
 }
 
+export interface Goal {
+  id: string;
+  text: string;
+  motivation?: string;
+  type: 'STRENGTH' | 'WEAKNESS';
+  workaround?: string; // Only if type is WEAKNESS
+  metric: string; // Success Metric
+  status: GoalStatus;
+  milestones: Milestone[];
+  createdAt: number;
+  completedAt?: number;
+}
+
 export interface Todo {
   id: string;
   goalId: string;
-  milestoneId?: string;
+  milestoneId?: string; // Optional link to roadmap
   text: string;
   completed: boolean;
   completedAt?: number;

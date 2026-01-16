@@ -24,7 +24,8 @@ import {
   Shield,
   Zap,
   PlayCircle,
-  ArrowRight
+  ArrowRight,
+  Moon
 } from 'lucide-react';
 
 export { 
@@ -52,5 +53,6 @@ export {
   Shield,
   Zap,
   PlayCircle,
-  ArrowRight
+  ArrowRight,
+  Moon
 };

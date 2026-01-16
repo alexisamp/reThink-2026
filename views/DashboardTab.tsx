@@ -1,122 +1,159 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AppData, GoalStatus } from '../types';
 import ContributionGraph from '../components/ContributionGraph';
-import { BarChart2, Check, Target, Sparkles, Map } from '../components/Icon';
+import { BarChart2, Check, Target, Sparkles, Map, AlertTriangle, PlayCircle } from '../components/Icon';
 
 interface DashboardTabProps {
   data: AppData;
 }
 
 const DashboardTab: React.FC<DashboardTabProps> = ({ data }) => {
-  const allHabits = data.habits.filter(h => h.goalId !== 'global');
-  
-  // Calculate Stats
-  const goldDays = data.reviews.filter(r => r.dayRating === 'GOLD').length;
-  const greenDays = data.reviews.filter(r => r.dayRating === 'GREEN').length;
+  const activeGoals = data.goals.filter(g => g.status === GoalStatus.ACTIVE);
+  const [auditResult, setAuditResult] = useState<string | null>(null);
+  const [isAuditing, setIsAuditing] = useState(false);
 
-  // Timeline Preparation
-  // Group completed todos by Date
-  const completedTodos = data.todos
-    .filter(t => t.completed && t.completedAt)
-    .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+  const runCEOAudit = () => {
+    setIsAuditing(true);
+    setAuditResult(null);
+    
+    // Simulate AI Latency
+    setTimeout(() => {
+        // Logic for "Simulated AI" analysis
+        const totalActive = activeGoals.length;
+        const totalHabits = data.habits.filter(h => data.goals.find(g => g.id === h.goalId)?.status === GoalStatus.ACTIVE).length;
+        const completedMilestones = activeGoals.reduce((acc, g) => acc + g.milestones.filter(m => m.completed).length, 0);
+        
+        let feedback = "";
+        
+        if (totalActive < 3) {
+            feedback += "CRITICAL: You are operating below capacity. Define 3 clear strategic objectives immediately. ";
+        }
+        
+        if (totalHabits < totalActive * 2) {
+            feedback += "SYSTEM FAILURE: Your goals lack sufficient daily habits. A goal without a system is just a wish. Fix this in Strategy tab. ";
+        }
 
-  const historyByDate: {[date: string]: typeof completedTodos} = {};
-  
-  completedTodos.forEach(todo => {
-      const dateStr = new Date(todo.completedAt!).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-      if (!historyByDate[dateStr]) historyByDate[dateStr] = [];
-      historyByDate[dateStr].push(todo);
-  });
+        if (completedMilestones === 0) {
+            feedback += "STAGNATION DETECTED: No milestones completed. You are planning, not executing. Move the needle today. ";
+        } else {
+            feedback += `PROGRESS NOTED: ${completedMilestones} milestones secured. Good, but don't get comfortable. What's the next kill? `;
+        }
 
-  const dates = Object.keys(historyByDate);
+        feedback += "\n\nVERDICT: " + (completedMilestones > 0 && totalHabits > 3 ? "OPERATIONAL." : "BELOW STANDARD.");
+        
+        setAuditResult(feedback);
+        setIsAuditing(false);
+    }, 1500);
+  };
 
   return (
     <div className="animate-fade-in space-y-12 pb-20">
       
-      <div className="flex items-center gap-2 mb-6">
-        <BarChart2 className="w-6 h-6" />
-        <h2 className="text-2xl font-serif">Results & Metrics</h2>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-yellow-50 border border-yellow-200 p-6 rounded-lg text-center">
-            <div className="text-3xl font-bold text-yellow-800 mb-1">{goldDays}</div>
-            <div className="text-xs uppercase tracking-wider text-yellow-700 flex items-center justify-center gap-1">
-                <Sparkles className="w-3 h-3" /> Gold Days
-            </div>
+      <div className="flex justify-between items-center mb-8 border-b border-gray-200 pb-4">
+        <div>
+             <h2 className="text-3xl font-serif text-notion-text">Executive Health Monitor</h2>
+             <p className="text-notion-dim font-serif italic">Real-time performance telemetry.</p>
         </div>
-        <div className="bg-green-50 border border-green-200 p-6 rounded-lg text-center">
-            <div className="text-3xl font-bold text-green-800 mb-1">{greenDays}</div>
-            <div className="text-xs uppercase tracking-wider text-green-700">Green Days</div>
+        <div className="flex gap-2">
+            <button 
+                onClick={runCEOAudit}
+                disabled={isAuditing}
+                className="bg-black text-white px-4 py-2 rounded text-sm font-medium flex items-center gap-2 hover:opacity-80 disabled:opacity-50 shadow-lg"
+            >
+                {isAuditing ? "Analyzing..." : "👮 Run CEO Audit"}
+            </button>
         </div>
       </div>
 
-      {/* Enhanced Timeline */}
-      <section>
-        <h3 className="text-sm font-bold text-notion-dim uppercase tracking-wider mb-6 border-b border-notion-border pb-2">
-          Action Log
-        </h3>
-        
-        <div className="space-y-8 pl-2">
-            {dates.map(dateLabel => (
-                <div key={dateLabel} className="relative border-l border-gray-200 pl-6 pb-2">
-                    <div className="absolute -left-1.5 top-0 w-3 h-3 bg-gray-200 rounded-full border-2 border-white"></div>
-                    <div className="text-xs font-bold text-notion-dim uppercase tracking-wider mb-3">{dateLabel}</div>
-                    
-                    <div className="space-y-3">
-                        {historyByDate[dateLabel].map(todo => {
-                            const goal = data.goals.find(g => g.id === todo.goalId);
-                            const milestone = goal?.milestones?.find(m => m.id === todo.milestoneId);
-
-                            return (
-                                <div key={todo.id} className="bg-gray-50 p-3 rounded border border-gray-100">
-                                    <div className="flex items-start justify-between">
-                                        <div className="font-medium text-notion-text">{todo.text}</div>
-                                        <Check className="w-4 h-4 text-green-600 mt-0.5" />
-                                    </div>
-                                    <div className="flex items-center gap-3 mt-1 text-xs text-notion-dim">
-                                        <span className="flex items-center gap-1">
-                                            <Target className="w-3 h-3" /> {goal?.text || 'Unknown Goal'}
-                                        </span>
-                                        {milestone && (
-                                            <span className="flex items-center gap-1 text-gray-400">
-                                                <Map className="w-3 h-3" /> {milestone.text}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            ))}
-            {dates.length === 0 && <p className="text-gray-400 italic pl-6">No completed actions yet.</p>}
-        </div>
-      </section>
-
-      {/* Habit Heatmaps */}
-      <section>
-        <h3 className="text-sm font-bold text-notion-dim uppercase tracking-wider mb-6 border-b border-notion-border pb-2">
-          System Consistency
-        </h3>
-        <div className="grid grid-cols-1 gap-6">
-          {allHabits.map(habit => (
-            <div key={habit.id} className="flex flex-col md:flex-row md:items-center gap-4">
-              <div className="w-48 shrink-0">
-                <div className="font-medium text-sm">{habit.text}</div>
-                <div className="text-xs text-notion-dim mt-1 truncate">
-                  {data.goals.find(g => g.id === habit.goalId)?.text}
-                </div>
+      {/* AUDIT MODAL / AREA */}
+      {auditResult && (
+          <div className="bg-red-50 border border-red-100 p-6 rounded-xl animate-in fade-in slide-in-from-top-4 mb-8">
+              <div className="flex items-center gap-2 text-red-700 font-bold uppercase tracking-widest text-xs mb-2">
+                  <AlertTriangle className="w-4 h-4" /> Audit Report
               </div>
-              <div className="flex-1 overflow-hidden">
-                <ContributionGraph data={habit.contributions} />
+              <p className="font-mono text-sm leading-relaxed text-red-900 whitespace-pre-wrap">
+                  {auditResult}
+              </p>
+          </div>
+      )}
+
+      {/* HEALTH CARDS */}
+      <div className="space-y-8">
+          {activeGoals.map(goal => {
+              const habits = data.habits.filter(h => h.goalId === goal.id);
+              
+              return (
+                  <div key={goal.id} className="bg-white border border-notion-border rounded-xl shadow-sm overflow-hidden">
+                      {/* Header */}
+                      <div className="bg-notion-sidebar/50 p-4 border-b border-notion-border flex justify-between items-center">
+                          <div>
+                              <div className="text-[10px] font-bold uppercase tracking-widest text-notion-dim mb-1">{goal.type}</div>
+                              <h3 className="text-xl font-serif font-medium">{goal.text}</h3>
+                          </div>
+                          <div className="text-xs font-mono bg-white px-2 py-1 rounded border border-gray-200 text-notion-dim">
+                              {goal.metric}
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2">
+                          {/* Left: Timeline */}
+                          <div className="p-6 border-r border-notion-border">
+                              <h4 className="text-xs font-bold uppercase tracking-widest text-notion-dim mb-4 flex items-center gap-2">
+                                  <Map className="w-3 h-3" /> Milestone Roadmap
+                              </h4>
+                              <div className="space-y-4 relative pl-2">
+                                  {/* Line */}
+                                  <div className="absolute left-[11px] top-2 bottom-2 w-px bg-gray-200" />
+                                  
+                                  {goal.milestones.length === 0 && <span className="text-xs text-gray-400 italic">No milestones defined.</span>}
+
+                                  {goal.milestones.map((m, i) => (
+                                      <div key={m.id} className="relative flex items-start gap-4">
+                                          <div className={`relative z-10 w-5 h-5 rounded-full border-2 flex items-center justify-center bg-white ${m.completed ? 'border-black text-black' : 'border-gray-300'}`}>
+                                              {m.completed && <div className="w-2 h-2 bg-black rounded-full" />}
+                                          </div>
+                                          <div className="flex-1">
+                                              <div className={`text-sm ${m.completed ? 'line-through text-gray-400' : 'text-notion-text'}`}>{m.text}</div>
+                                              {m.completed && m.completedAt && (
+                                                  <div className="text-[10px] text-notion-dim mt-0.5">
+                                                      Completed on {new Date(m.completedAt).toLocaleDateString()}
+                                                  </div>
+                                              )}
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+
+                          {/* Right: Consistency */}
+                          <div className="p-6 bg-gray-50/50">
+                              <h4 className="text-xs font-bold uppercase tracking-widest text-notion-dim mb-4 flex items-center gap-2">
+                                  <BarChart2 className="w-3 h-3" /> Habit Consistency
+                              </h4>
+                              <div className="space-y-6">
+                                  {habits.map(h => (
+                                      <div key={h.id}>
+                                          <div className="text-xs font-medium mb-2 flex justify-between">
+                                              <span>{h.text}</span>
+                                          </div>
+                                          <ContributionGraph data={h.contributions} colorBase={h.type === 'NON_NEGOTIABLE' ? 'bg-red-500' : 'bg-black'} />
+                                      </div>
+                                  ))}
+                                  {habits.length === 0 && <span className="text-xs text-gray-400 italic">No habits linked to this goal.</span>}
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              );
+          })}
+          
+          {activeGoals.length === 0 && (
+              <div className="text-center py-20 text-notion-dim">
+                  <Target className="w-12 h-12 mx-auto mb-4 stroke-1 opacity-20" />
+                  <p className="font-serif italic text-lg">No active strategies detected.</p>
               </div>
-            </div>
-          ))}
-          {allHabits.length === 0 && <p className="text-notion-dim italic">No habits tracked yet.</p>}
-        </div>
-      </section>
+          )}
+      </div>
 
     </div>
   );

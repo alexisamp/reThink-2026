@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AppData, GoalStatus } from '../types';
 import HabitTracker from '../components/HabitTracker';
-import { Plus, Check, Trash2, ArrowRight } from '../components/Icon';
+import { Plus, Check, Trash2, ArrowRight, Sun, Moon } from '../components/Icon';
 
 interface TodayTabProps {
   data: AppData;
@@ -27,11 +27,12 @@ const TodayTab: React.FC<TodayTabProps> = ({
 
   const activeGoals = data.goals.filter(g => g.status === GoalStatus.ACTIVE);
   const todaysTodos = data.todos.filter(t => t.date === todayKey);
-  const activeHabits = data.habits.filter(h => h.goalId !== 'archived'); // basic filter
+  const activeHabits = data.habits.filter(h => {
+      const parentGoal = data.goals.find(g => g.id === h.goalId);
+      return parentGoal?.status === GoalStatus.ACTIVE;
+  });
 
-  // Derived state for dropdowns
-  const selectedGoal = activeGoals.find(g => g.id === selectedGoalId);
-  const availableMilestones = selectedGoal?.milestones?.filter(m => !m.completed) || [];
+  const availableMilestones = activeGoals.find(g => g.id === selectedGoalId)?.milestones?.filter(m => !m.completed) || [];
 
   const handleAddTask = () => {
     if (!selectedGoalId || !taskText.trim()) return;
@@ -40,157 +41,128 @@ const TodayTab: React.FC<TodayTabProps> = ({
   };
 
   return (
-    <div className="animate-fade-in pb-20 max-w-4xl mx-auto">
+    <div className="animate-fade-in pb-20 max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16">
       
-      {/* Header */}
-      <div className="mb-10">
-        <div className="text-xs font-bold text-notion-dim uppercase tracking-widest mb-1">
-            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric'})}
+      {/* LEFT COLUMN: AM BLOCK (PLANNING & TASKS) */}
+      <div className="space-y-8">
+        <div className="flex items-center gap-3 border-b border-black pb-4">
+            <Sun className="w-5 h-5" />
+            <h2 className="text-xl font-serif font-medium">AM: Strategic Action</h2>
         </div>
-        <h2 className="text-3xl font-serif text-notion-text">Execution Plan</h2>
-      </div>
 
-      {/* BLOCK 1: THE PLANNING TABLE */}
-      <section className="mb-16 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200 text-xs font-medium text-notion-dim uppercase tracking-wider">
-            <tr>
-              <th className="px-4 py-3 w-1/4">Goal (Outcome)</th>
-              <th className="px-4 py-3 w-1/4">Milestone (Context)</th>
-              <th className="px-4 py-3 w-1/3">Action (Task)</th>
-              <th className="px-4 py-3 w-16 text-center">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            
-            {/* Input Row */}
-            <tr className="bg-notion-sidebar/30">
-              <td className="px-4 py-2">
-                <select 
-                    className="w-full bg-transparent outline-none py-1 text-notion-text cursor-pointer"
+        {/* Input Area */}
+        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 shadow-sm space-y-3">
+             <div className="flex gap-2">
+                 <select 
+                    className="flex-1 bg-white border border-gray-200 rounded px-2 py-1.5 text-sm outline-none"
                     value={selectedGoalId}
                     onChange={e => { setSelectedGoalId(e.target.value); setSelectedMilestoneId(''); }}
-                >
-                    <option value="" disabled>Select Goal...</option>
-                    {activeGoals.map(g => <option key={g.id} value={g.id}>{g.text}</option>)}
-                </select>
-              </td>
-              <td className="px-4 py-2">
+                 >
+                     <option value="" disabled>Select Objective...</option>
+                     {activeGoals.map(g => <option key={g.id} value={g.id}>{g.text}</option>)}
+                 </select>
                  <select 
-                    className="w-full bg-transparent outline-none py-1 text-notion-text cursor-pointer disabled:opacity-50"
+                    className="flex-1 bg-white border border-gray-200 rounded px-2 py-1.5 text-sm outline-none disabled:opacity-50"
                     value={selectedMilestoneId}
                     onChange={e => setSelectedMilestoneId(e.target.value)}
-                    disabled={!selectedGoalId}
-                >
-                    <option value="">No specific milestone</option>
-                    {availableMilestones.map(m => <option key={m.id} value={m.id}>{m.text}</option>)}
-                </select>
-              </td>
-              <td className="px-4 py-2">
-                <input 
-                    className="w-full bg-transparent outline-none placeholder:text-gray-400"
-                    placeholder="What specific action?"
+                    disabled={!selectedGoalId || availableMilestones.length === 0}
+                 >
+                     <option value="">{availableMilestones.length === 0 ? "No active milestones" : "Link to Milestone (Opt)"}</option>
+                     {availableMilestones.map(m => <option key={m.id} value={m.id}>{m.text}</option>)}
+                 </select>
+             </div>
+             <div className="flex gap-2">
+                 <input 
+                    className="flex-1 p-2 border border-gray-200 rounded text-sm outline-none focus:border-black"
+                    placeholder="Task: What needs to be done today?"
                     value={taskText}
                     onChange={e => setTaskText(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleAddTask()}
-                />
-              </td>
-              <td className="px-4 py-2 text-center">
+                 />
                  <button 
                     onClick={handleAddTask}
                     disabled={!selectedGoalId || !taskText}
-                    className="text-black hover:bg-gray-200 p-1.5 rounded disabled:opacity-30 transition-colors"
+                    className="bg-black text-white px-3 rounded hover:opacity-80 disabled:opacity-30"
                  >
-                    <Plus className="w-4 h-4" />
+                     <Plus className="w-4 h-4" />
                  </button>
-              </td>
-            </tr>
+             </div>
+        </div>
 
-            {/* Task Rows */}
+        {/* Task List */}
+        <div className="space-y-0">
+            {todaysTodos.length === 0 && <div className="text-gray-400 italic text-sm text-center py-10">No actions logged for today.</div>}
+            
             {todaysTodos.map(todo => {
                 const goal = data.goals.find(g => g.id === todo.goalId);
                 const milestone = goal?.milestones?.find(m => m.id === todo.milestoneId);
 
                 return (
-                    <tr key={todo.id} className="group hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3 text-notion-dim font-medium truncate max-w-[150px]">
-                            {goal?.text}
-                        </td>
-                        <td className="px-4 py-3 text-gray-400 text-xs truncate max-w-[150px]">
-                            {milestone ? milestone.text : '-'}
-                        </td>
-                        <td className={`px-4 py-3 transition-all ${todo.completed ? 'line-through text-gray-300' : 'text-notion-text'}`}>
-                            {todo.text}
-                        </td>
-                        <td className="px-4 py-3 flex items-center justify-center gap-2">
-                            <button 
-                                onClick={() => onToggleTodo(todo.id)}
-                                className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${
-                                    todo.completed ? 'bg-black border-black text-white' : 'border-gray-300 hover:border-black'
-                                }`}
-                            >
-                                {todo.completed && <Check className="w-3 h-3" />}
-                            </button>
-                            <button 
-                                onClick={() => onDeleteTodo(todo.id)}
-                                className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </button>
-                        </td>
-                    </tr>
+                    <div key={todo.id} className="group flex items-center py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors -mx-2 px-2 rounded">
+                        <button 
+                            onClick={() => onToggleTodo(todo.id)}
+                            className={`flex-shrink-0 w-5 h-5 mr-3 border rounded flex items-center justify-center transition-all ${todo.completed ? 'bg-gray-200 border-gray-200 text-gray-500' : 'border-gray-300 hover:border-black'}`}
+                        >
+                            {todo.completed && <Check className="w-3 h-3" />}
+                        </button>
+                        
+                        <div className={`flex-1 ${todo.completed ? 'opacity-40' : ''}`}>
+                            <div className={`text-sm font-medium ${todo.completed ? 'line-through' : 'text-notion-text'}`}>
+                                {todo.text}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-notion-dim">{goal?.text}</span>
+                                {milestone && (
+                                    <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                                        <ArrowRight className="w-2 h-2" /> {milestone.text}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        <button onClick={() => onDeleteTodo(todo.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity">
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                    </div>
                 );
             })}
+        </div>
+      </div>
 
-            {todaysTodos.length === 0 && (
-                <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-gray-400 italic">
-                        No actions planned for today yet.
-                    </td>
-                </tr>
-            )}
+      {/* RIGHT COLUMN: PM BLOCK (SYSTEMS & HABITS) */}
+      <div className="space-y-8">
+         <div className="flex items-center gap-3 border-b border-black pb-4">
+            <Moon className="w-5 h-5" />
+            <h2 className="text-xl font-serif font-medium">PM: System Execution</h2>
+        </div>
+        
+        <div className="space-y-6">
+            {activeGoals.map(goal => {
+                const habits = activeHabits.filter(h => h.goalId === goal.id);
+                if(habits.length === 0) return null;
 
-          </tbody>
-        </table>
-      </section>
-
-      {/* BLOCK 2: SYSTEM CHECK (HABITS) */}
-      <section>
-          <div className="flex items-center gap-4 mb-6">
-              <h3 className="text-xl font-serif text-notion-text">System Check</h3>
-              <div className="h-px flex-1 bg-gray-200" />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {activeGoals.map(goal => {
-                  const habits = activeHabits.filter(h => h.goalId === goal.id);
-                  if (habits.length === 0) return null;
-
-                  return (
-                      <div key={goal.id} className="bg-gray-50 p-5 rounded-xl border border-gray-100">
-                          <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 truncate">
-                              {goal.text}
-                          </div>
-                          <div className="space-y-1">
-                              {habits.map(habit => (
-                                  <HabitTracker 
+                return (
+                    <div key={goal.id} className="bg-notion-sidebar/30 p-5 rounded-xl border border-notion-border">
+                        <h4 className="text-xs font-bold uppercase tracking-widest text-notion-dim mb-4">{goal.text}</h4>
+                        <div className="space-y-1">
+                            {habits.map(habit => (
+                                <HabitTracker 
                                     key={habit.id}
                                     habit={habit}
                                     todayKey={todayKey}
                                     onToggle={onToggleHabit}
-                                    onDelete={() => {}} 
+                                    onDelete={() => {}}
                                     showDelete={false}
-                                  />
-                              ))}
-                          </div>
-                      </div>
-                  )
-              })}
-          </div>
-          {activeHabits.length === 0 && (
-              <div className="text-center text-gray-400 italic">No system (habits) defined in Strategy.</div>
-          )}
-      </section>
+                                />
+                            ))}
+                        </div>
+                    </div>
+                );
+            })}
+            
+            {activeHabits.length === 0 && <div className="text-gray-400 italic text-sm text-center py-10">No system defined in Strategy.</div>}
+        </div>
+      </div>
 
     </div>
   );

@@ -1,24 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { loadData, saveData, getTodayKey } from './services/storage';
 import { AppData, Goal, Habit, Todo, GoalStatus, HabitType, StrategicItem, Milestone, ReviewEntry, DayRating } from './types';
-import { Target, Mic, BarChart2, Sun, Target as StrategyIcon, PenTool } from './components/Icon'; 
+import { Target, Mic, BarChart2, Sun, Target as StrategyIcon, PenTool, Layout } from './components/Icon'; 
 import StrategyTab from './views/StrategyTab';
 import TodayTab from './views/TodayTab';
 import DashboardTab from './views/DashboardTab';
-import CoachTab from './views/CoachTab';
-import ReviewTab from './views/ReviewTab';
 
 const MAX_ACTIVE_GOALS = 3;
-type Tab = 'STRATEGY' | 'TODAY' | 'REVIEW' | 'DASHBOARD' | 'COACH';
+type Tab = 'STRATEGY' | 'TODAY' | 'DASHBOARD';
 
 const App: React.FC = () => {
   const [data, setData] = useState<AppData>(() => {
     const loaded = loadData();
     if (!loaded.strategy) loaded.strategy = [];
-    if (!loaded.goals.every(g => g.milestones)) {
-        // Migration: ensure milestones array exists
-        loaded.goals = loaded.goals.map(g => ({...g, milestones: g.milestones || []}));
-    }
+    // Migration: ensure new fields exist
+    loaded.goals = loaded.goals.map(g => ({
+        ...g, 
+        milestones: g.milestones || [],
+        type: (g as any).type || 'STRENGTH',
+        metric: (g as any).metric || 'Define success metric'
+    }));
     return loaded;
   });
   
@@ -30,43 +31,17 @@ const App: React.FC = () => {
 
   const todayKey = getTodayKey();
 
-  // --- Goal Actions ---
+  // --- Actions passed to Tabs ---
 
-  const addGoal = (text: string, motivation?: string) => {
-    const activeCount = data.goals.filter(g => g.status === GoalStatus.ACTIVE).length;
-    const isFull = activeCount >= MAX_ACTIVE_GOALS;
-    
-    const newGoal: Goal = {
-      id: crypto.randomUUID(),
-      text,
-      motivation: motivation || '',
-      status: isFull ? GoalStatus.BACKLOG : GoalStatus.ACTIVE,
-      createdAt: Date.now(),
-      milestones: []
-    };
-    setData(prev => ({ ...prev, goals: [...prev.goals, newGoal] }));
-  };
-
-  const updateGoalText = (id: string, text: string) => {
+  const updateGoal = (updatedGoal: Goal) => {
     setData(prev => ({
-      ...prev,
-      goals: prev.goals.map(g => g.id === id ? { ...g, text } : g)
+        ...prev,
+        goals: prev.goals.map(g => g.id === updatedGoal.id ? updatedGoal : g)
     }));
   };
 
-  const updateGoalMotivation = (id: string, motivation: string) => {
-    setData(prev => ({
-      ...prev,
-      goals: prev.goals.map(g => g.id === id ? { ...g, motivation } : g)
-    }));
-  };
-
-  const completeGoal = (id: string) => {
-    if(!window.confirm("Archive this goal?")) return;
-    setData(prev => ({
-      ...prev,
-      goals: prev.goals.map(g => g.id === id ? { ...g, status: GoalStatus.COMPLETED, completedAt: Date.now() } : g)
-    }));
+  const addGoal = (goal: Goal) => {
+    setData(prev => ({ ...prev, goals: [...prev.goals, goal] }));
   };
 
   const deleteGoal = (id: string) => {
@@ -78,55 +53,6 @@ const App: React.FC = () => {
       todos: prev.todos.filter(t => t.goalId !== id)
     }));
   };
-
-  // --- Milestone Actions ---
-
-  const addMilestone = (goalId: string, text: string) => {
-      setData(prev => ({
-          ...prev,
-          goals: prev.goals.map(g => {
-              if (g.id === goalId) {
-                  return {
-                      ...g,
-                      milestones: [...g.milestones, { id: crypto.randomUUID(), text, completed: false }]
-                  };
-              }
-              return g;
-          })
-      }));
-  };
-
-  const deleteMilestone = (goalId: string, milestoneId: string) => {
-      setData(prev => ({
-          ...prev,
-          goals: prev.goals.map(g => {
-              if (g.id === goalId) {
-                  return {
-                      ...g,
-                      milestones: g.milestones.filter(m => m.id !== milestoneId)
-                  };
-              }
-              return g;
-          })
-      }));
-  };
-
-  const toggleMilestone = (goalId: string, milestoneId: string) => {
-      setData(prev => ({
-          ...prev,
-          goals: prev.goals.map(g => {
-              if (g.id === goalId) {
-                  return {
-                      ...g,
-                      milestones: g.milestones.map(m => m.id === milestoneId ? { ...m, completed: !m.completed } : m)
-                  };
-              }
-              return g;
-          })
-      }));
-  };
-
-  // --- Strategy Actions ---
 
   const addStrategicItem = (item: StrategicItem) => {
       setData(prev => ({ ...prev, strategy: [...prev.strategy, item] }));
@@ -140,17 +66,8 @@ const App: React.FC = () => {
       setData(prev => ({ ...prev, globalRules: rules }));
   };
 
-  // --- Habit Actions ---
-
-  const addHabit = (text: string, goalId: string, type: HabitType) => {
-    const newHabit: Habit = {
-      id: crypto.randomUUID(),
-      goalId,
-      text,
-      type,
-      contributions: {}
-    };
-    setData(prev => ({ ...prev, habits: [...prev.habits, newHabit] }));
+  const addHabit = (habit: Habit) => {
+    setData(prev => ({ ...prev, habits: [...prev.habits, habit] }));
   };
 
   const toggleHabit = (id: string, value: number) => {
@@ -174,8 +91,6 @@ const App: React.FC = () => {
   const deleteHabit = (id: string) => {
     setData(prev => ({ ...prev, habits: prev.habits.filter(h => h.id !== id) }));
   };
-
-  // --- Todo Actions ---
 
   const addTodo = (text: string, goalId: string, milestoneId?: string) => {
     if (!text.trim()) return;
@@ -207,18 +122,6 @@ const App: React.FC = () => {
     setData(prev => ({ ...prev, todos: prev.todos.filter(t => t.id !== id) }));
   };
 
-  // --- Review Actions ---
-
-  const addReview = (text: string, easyMode: boolean, energyLevel: number, dayRating: DayRating) => {
-    setData(prev => {
-        const otherReviews = prev.reviews.filter(r => r.date !== todayKey);
-        return {
-            ...prev,
-            reviews: [...otherReviews, { date: todayKey, text, easyMode, energyLevel, dayRating }]
-        };
-    });
-  };
-
   return (
     <div className="min-h-screen bg-notion-bg text-notion-text font-sans selection:bg-gray-200 flex">
       <style>{`
@@ -230,64 +133,50 @@ const App: React.FC = () => {
 
       {/* Sidebar */}
       <aside className="w-64 border-r border-notion-border h-screen sticky top-0 bg-notion-sidebar flex flex-col hidden md:flex z-50">
-        <div className="p-6">
-           <div className="w-8 h-8 bg-black text-white flex items-center justify-center rounded-sm font-serif font-bold text-lg mb-6">OS</div>
+        <div className="p-8">
+           <div className="w-10 h-10 bg-black text-white flex items-center justify-center rounded font-serif font-bold text-xl mb-8">OS</div>
            
-           <nav className="flex flex-col gap-1">
-             <button onClick={() => setActiveTab('STRATEGY')} className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${activeTab === 'STRATEGY' ? 'bg-white text-black shadow-sm' : 'text-notion-dim hover:bg-notion-hover'}`}>
+           <nav className="flex flex-col gap-2">
+             <button onClick={() => setActiveTab('STRATEGY')} className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${activeTab === 'STRATEGY' ? 'bg-white text-black shadow-sm ring-1 ring-black/5' : 'text-notion-dim hover:bg-notion-hover'}`}>
                 <StrategyIcon className="w-4 h-4" /> Strategy
              </button>
-             <button onClick={() => setActiveTab('TODAY')} className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${activeTab === 'TODAY' ? 'bg-white text-black shadow-sm' : 'text-notion-dim hover:bg-notion-hover'}`}>
+             <button onClick={() => setActiveTab('TODAY')} className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${activeTab === 'TODAY' ? 'bg-white text-black shadow-sm ring-1 ring-black/5' : 'text-notion-dim hover:bg-notion-hover'}`}>
                 <Sun className="w-4 h-4" /> Today
              </button>
-             <button onClick={() => setActiveTab('REVIEW')} className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${activeTab === 'REVIEW' ? 'bg-white text-black shadow-sm' : 'text-notion-dim hover:bg-notion-hover'}`}>
-                <PenTool className="w-4 h-4" /> Review
-             </button>
-             <button onClick={() => setActiveTab('DASHBOARD')} className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${activeTab === 'DASHBOARD' ? 'bg-white text-black shadow-sm' : 'text-notion-dim hover:bg-notion-hover'}`}>
+             <button onClick={() => setActiveTab('DASHBOARD')} className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${activeTab === 'DASHBOARD' ? 'bg-white text-black shadow-sm ring-1 ring-black/5' : 'text-notion-dim hover:bg-notion-hover'}`}>
                 <BarChart2 className="w-4 h-4" /> Dashboard
-             </button>
-             <button onClick={() => setActiveTab('COACH')} className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${activeTab === 'COACH' ? 'bg-white text-black shadow-sm' : 'text-notion-dim hover:bg-notion-hover'}`}>
-                <Mic className="w-4 h-4" /> Coach
              </button>
            </nav>
         </div>
 
-        <div className="mt-auto p-6 border-t border-notion-border">
-           <div className="text-xs font-serif italic text-notion-dim">
-              "Personal Operating System v3.1"
+        <div className="mt-auto p-8 border-t border-notion-border">
+           <div className="text-[10px] uppercase tracking-widest text-notion-dim font-medium">
+              reThink v7.0
+           </div>
+           <div className="text-xs font-serif italic text-notion-dim mt-1">
+              "Identity determines behavior."
            </div>
         </div>
       </aside>
 
       {/* Mobile Tab Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-notion-border flex justify-around p-3 z-50 no-print">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-notion-border flex justify-around p-3 z-50 no-print safe-area-bottom">
         <button onClick={() => setActiveTab('STRATEGY')} className={`p-2 ${activeTab === 'STRATEGY' ? 'text-black' : 'text-notion-dim'}`}><StrategyIcon /></button>
         <button onClick={() => setActiveTab('TODAY')} className={`p-2 ${activeTab === 'TODAY' ? 'text-black' : 'text-notion-dim'}`}><Sun /></button>
-        <button onClick={() => setActiveTab('REVIEW')} className={`p-2 ${activeTab === 'REVIEW' ? 'text-black' : 'text-notion-dim'}`}><PenTool /></button>
         <button onClick={() => setActiveTab('DASHBOARD')} className={`p-2 ${activeTab === 'DASHBOARD' ? 'text-black' : 'text-notion-dim'}`}><BarChart2 /></button>
-        <button onClick={() => setActiveTab('COACH')} className={`p-2 ${activeTab === 'COACH' ? 'text-black' : 'text-notion-dim'}`}><Mic /></button>
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 p-6 md:p-12 overflow-y-auto max-h-screen">
-        <header className="mb-8 md:mb-10 no-print">
-            <h1 className="text-3xl font-serif font-medium tracking-tight">reThink 2026</h1>
-        </header>
-
-        <div className="max-w-4xl mx-auto h-full pb-20">
+      <main className="flex-1 p-6 md:p-16 overflow-y-auto max-h-screen">
+        <div className="max-w-5xl mx-auto h-full pb-24">
             {activeTab === 'STRATEGY' && (
                 <StrategyTab 
                     data={data}
                     onAddStrategicItem={addStrategicItem}
                     onDeleteStrategicItem={deleteStrategicItem}
                     onAddGoal={addGoal}
-                    onUpdateGoalText={updateGoalText}
-                    onUpdateGoalMotivation={updateGoalMotivation}
-                    onCompleteGoal={completeGoal}
+                    onUpdateGoal={updateGoal}
                     onDeleteGoal={deleteGoal}
-                    onAddMilestone={addMilestone}
-                    onDeleteMilestone={deleteMilestone}
-                    onToggleMilestone={toggleMilestone}
                     onAddHabit={addHabit}
                     onDeleteHabit={deleteHabit}
                     onUpdateGlobalRules={updateGlobalRules}
@@ -303,19 +192,8 @@ const App: React.FC = () => {
                     onDeleteTodo={deleteTodo}
                 />
             )}
-            {activeTab === 'REVIEW' && (
-                <ReviewTab 
-                    data={data}
-                    todayKey={todayKey}
-                    onAddReview={addReview}
-                    onToggleHabit={toggleHabit}
-                />
-            )}
             {activeTab === 'DASHBOARD' && (
                 <DashboardTab data={data} />
-            )}
-            {activeTab === 'COACH' && (
-                <CoachTab data={data} />
             )}
         </div>
       </main>
