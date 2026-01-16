@@ -1,83 +1,164 @@
-import React from 'react';
-import { AppData, GoalStatus } from '../types';
-import ContributionGraph from '../components/ContributionGraph';
-import { Layout, ChevronRight, Trash2 } from '../components/Icon';
+import React, { useState } from 'react';
+import { AppData, StrategicItem, Goal, GoalStatus } from '../types';
+import { Shield, Zap, Plus, Printer, Trash2 } from '../components/Icon';
 
 interface StrategyTabProps {
   data: AppData;
-  onPromoteGoal: (id: string) => void;
-  onDeleteGoal: (id: string) => void;
+  onAddStrategicItem: (item: StrategicItem) => void;
+  onDeleteStrategicItem: (id: string) => void;
+  onAddGoal: (text: string, motivation?: string) => void;
 }
 
-const StrategyTab: React.FC<StrategyTabProps> = ({ data, onPromoteGoal, onDeleteGoal }) => {
+const StrategyTab: React.FC<StrategyTabProps> = ({ data, onAddStrategicItem, onDeleteStrategicItem, onAddGoal }) => {
+  const [newItemType, setNewItemType] = useState<'STRENGTH' | 'WEAKNESS'>('STRENGTH');
+  const [itemTitle, setItemTitle] = useState('');
+  const [itemTactic, setItemTactic] = useState('');
+  const [goalText, setGoalText] = useState('');
+
+  const strengths = data.strategy.filter(s => s.type === 'STRENGTH');
+  const weaknesses = data.strategy.filter(s => s.type === 'WEAKNESS');
+  const activeGoals = data.goals.filter(g => g.status === GoalStatus.ACTIVE);
   const backlogGoals = data.goals.filter(g => g.status === GoalStatus.BACKLOG);
-  const allHabits = data.habits.filter(h => h.goalId !== 'global'); // Exclude non-negotiables for this view usually
+
+  const handleAddItem = () => {
+    if(!itemTitle.trim()) return;
+    const newItem: StrategicItem = {
+      id: crypto.randomUUID(),
+      type: newItemType,
+      title: itemTitle,
+      tactic: itemTactic
+    };
+    onAddStrategicItem(newItem);
+    setItemTitle('');
+    setItemTactic('');
+  };
 
   return (
-    <div className="space-y-12 animate-fade-in">
-      <div className="flex items-center gap-2 mb-6">
-        <Layout className="w-5 h-5" />
-        <h2 className="text-xl font-medium">Strategy & Momentum</h2>
+    <div className="animate-fade-in space-y-12 pb-20">
+      
+      {/* Header & Print */}
+      <div className="flex justify-between items-end border-b border-notion-border pb-4">
+        <div>
+          <h2 className="text-3xl font-serif">Strategic Identity</h2>
+          <p className="text-notion-dim font-serif italic">Know yourself to play your own game.</p>
+        </div>
+        <button 
+          onClick={() => window.print()}
+          className="no-print flex items-center gap-2 text-xs bg-notion-sidebar px-3 py-2 rounded hover:bg-notion-hover text-notion-text transition-colors"
+        >
+          <Printer className="w-4 h-4" /> Export PDF
+        </button>
       </div>
 
-      {/* Consistency View */}
+      {/* Identity Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        {/* Strengths */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2 text-green-700 bg-green-50 p-3 rounded-lg border border-green-100">
+            <Shield className="w-5 h-5" />
+            <h3 className="font-bold uppercase tracking-wider text-sm">Strengths (Leverage)</h3>
+          </div>
+          
+          <div className="space-y-3">
+             {strengths.map(s => (
+               <div key={s.id} className="group p-4 bg-white border border-notion-border rounded-lg shadow-sm">
+                 <div className="flex justify-between items-start">
+                   <div className="font-medium text-lg mb-1">{s.title}</div>
+                   <button onClick={() => onDeleteStrategicItem(s.id)} className="no-print opacity-0 group-hover:opacity-100 text-notion-dim hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                 </div>
+                 <div className="text-sm text-notion-dim font-serif">Action: {s.tactic}</div>
+               </div>
+             ))}
+          </div>
+
+          {/* Add Form (No Print) */}
+          <div className="no-print p-4 bg-notion-sidebar rounded-lg border border-notion-border space-y-2">
+            <input 
+              placeholder="Add Strength..."
+              className="w-full bg-transparent border-b border-notion-border outline-none pb-1"
+              value={newItemType === 'STRENGTH' ? itemTitle : ''}
+              onChange={e => { setNewItemType('STRENGTH'); setItemTitle(e.target.value); }}
+            />
+            {newItemType === 'STRENGTH' && itemTitle && (
+              <div className="animate-in fade-in">
+                 <input 
+                    placeholder="How will you leverage this?"
+                    className="w-full bg-transparent text-sm text-notion-dim italic outline-none"
+                    value={itemTactic}
+                    onChange={e => setItemTactic(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAddItem()}
+                 />
+                 <button onClick={handleAddItem} className="mt-2 text-xs bg-green-600 text-white px-3 py-1 rounded">Add</button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Weaknesses */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2 text-orange-700 bg-orange-50 p-3 rounded-lg border border-orange-100">
+            <Zap className="w-5 h-5" />
+            <h3 className="font-bold uppercase tracking-wider text-sm">Weaknesses (Mitigate)</h3>
+          </div>
+
+          <div className="space-y-3">
+             {weaknesses.map(s => (
+               <div key={s.id} className="group p-4 bg-white border border-notion-border rounded-lg shadow-sm">
+                 <div className="flex justify-between items-start">
+                   <div className="font-medium text-lg mb-1">{s.title}</div>
+                   <button onClick={() => onDeleteStrategicItem(s.id)} className="no-print opacity-0 group-hover:opacity-100 text-notion-dim hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                 </div>
+                 <div className="text-sm text-notion-dim font-serif">Hack: {s.tactic}</div>
+               </div>
+             ))}
+          </div>
+
+           {/* Add Form (No Print) */}
+           <div className="no-print p-4 bg-notion-sidebar rounded-lg border border-notion-border space-y-2">
+            <input 
+              placeholder="Add Weakness..."
+              className="w-full bg-transparent border-b border-notion-border outline-none pb-1"
+              value={newItemType === 'WEAKNESS' ? itemTitle : ''}
+              onChange={e => { setNewItemType('WEAKNESS'); setItemTitle(e.target.value); }}
+            />
+            {newItemType === 'WEAKNESS' && itemTitle && (
+              <div className="animate-in fade-in">
+                 <input 
+                    placeholder="System/Hack to prevent this?"
+                    className="w-full bg-transparent text-sm text-notion-dim italic outline-none"
+                    value={itemTactic}
+                    onChange={e => setItemTactic(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAddItem()}
+                 />
+                 <button onClick={handleAddItem} className="mt-2 text-xs bg-orange-600 text-white px-3 py-1 rounded">Add</button>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Goals View */}
       <section>
-        <h3 className="text-sm font-bold text-notion-dim uppercase tracking-wider mb-6 border-b border-notion-border pb-2">
-          Habit Consistency (Last 90 Days)
-        </h3>
-        <div className="grid grid-cols-1 gap-6">
-          {allHabits.map(habit => (
-            <div key={habit.id} className="flex flex-col md:flex-row md:items-center gap-4">
-              <div className="w-48 shrink-0">
-                <div className="font-medium text-sm">{habit.text}</div>
-                <div className="text-xs text-notion-dim mt-1 truncate">
-                  {data.goals.find(g => g.id === habit.goalId)?.text}
-                </div>
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <ContributionGraph data={habit.contributions} />
-              </div>
-            </div>
-          ))}
-          {allHabits.length === 0 && (
-             <p className="text-sm text-notion-dim">No habits to display yet.</p>
-          )}
+        <h3 className="text-xl font-serif mb-6 pb-2 border-b border-notion-border">Current Vision</h3>
+        <div className="space-y-4">
+           {activeGoals.map(g => (
+             <div key={g.id} className="flex justify-between items-center p-4 bg-notion-sidebar rounded border border-notion-border">
+                <span className="font-medium">{g.text}</span>
+                <span className="text-xs text-notion-dim italic">{g.motivation}</span>
+             </div>
+           ))}
+           {activeGoals.length === 0 && <div className="text-notion-dim italic">No active goals set.</div>}
+        </div>
+        
+        <div className="mt-8 no-print">
+            <h4 className="text-sm font-bold text-notion-dim uppercase mb-2">Backlog</h4>
+            <ul className="list-disc list-inside text-sm text-notion-text space-y-1">
+                {backlogGoals.map(g => <li key={g.id}>{g.text}</li>)}
+            </ul>
         </div>
       </section>
 
-      {/* Backlog */}
-      <section>
-        <h3 className="text-sm font-bold text-notion-dim uppercase tracking-wider mb-6 border-b border-notion-border pb-2">
-          Goal Backlog
-        </h3>
-        {backlogGoals.length === 0 ? (
-          <p className="text-sm text-notion-dim italic">
-            Your backlog is empty. Add goals in the Focus tab (limit 3 active) to populate this.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {backlogGoals.map(goal => (
-              <div key={goal.id} className="group flex justify-between items-center p-4 border border-notion-border rounded bg-white hover:bg-notion-sidebar transition-colors">
-                <span className="text-sm font-medium">{goal.text}</span>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => onPromoteGoal(goal.id)}
-                    className="flex items-center gap-1 px-3 py-1 bg-white border border-notion-border rounded text-xs hover:border-black transition-colors"
-                  >
-                    Promote <ChevronRight className="w-3 h-3" />
-                  </button>
-                  <button 
-                    onClick={() => onDeleteGoal(goal.id)}
-                    className="p-1 text-notion-dim hover:text-red-600 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
     </div>
   );
 };

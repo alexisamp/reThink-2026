@@ -6,7 +6,8 @@ const INITIAL_DATA: AppData = {
   goals: [],
   habits: [],
   todos: [],
-  reviews: []
+  reviews: [],
+  strategy: []
 };
 
 export const loadData = (): AppData => {

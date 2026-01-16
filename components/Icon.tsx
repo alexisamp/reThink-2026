@@ -16,10 +16,16 @@ import {
   AlertTriangle,
   Sparkles,
   Ban,
-  X
+  X,
+  Mic,
+  BarChart2,
+  Sun,
+  Printer,
+  Shield,
+  Zap,
+  PlayCircle
 } from 'lucide-react';
 
-// Exporting specific icons for ease of use
 export { 
   Check, 
   Plus, 
@@ -37,5 +43,12 @@ export {
   AlertTriangle,
   Sparkles,
   Ban,
-  X
+  X,
+  Mic,
+  BarChart2,
+  Sun,
+  Printer,
+  Shield,
+  Zap,
+  PlayCircle
 };

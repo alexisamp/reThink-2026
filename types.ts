@@ -7,23 +7,27 @@ export enum GoalStatus {
 export interface Goal {
   id: string;
   text: string;
-  motivation?: string; // The "Why" behind the goal
+  motivation?: string;
   status: GoalStatus;
   createdAt: number;
+  completedAt?: number;
 }
 
-// A map of date string "YYYY-MM-DD" to a value.
-// 0 = Not done / Skipped / Rule Broken
-// 1 = Done (Binary) / Rule Kept
-// 2-5 = Scale levels
+export interface StrategicItem {
+  id: string;
+  type: 'STRENGTH' | 'WEAKNESS';
+  title: string;
+  tactic: string; // Action to leverage strength OR Hack to mitigate weakness
+}
+
 export interface ContributionMap {
   [date: string]: number;
 }
 
 export enum HabitType {
-  BINARY = 'BINARY',          // Checkbox
-  SCALE = 'SCALE',            // 1-5 Rating
-  NON_NEGOTIABLE = 'NON_NEGOTIABLE' // Rules (e.g., No Sugar). 1 = Success, 0 = Fail.
+  BINARY = 'BINARY',
+  SCALE = 'SCALE',
+  NON_NEGOTIABLE = 'NON_NEGOTIABLE'
 }
 
 export interface Habit {
@@ -36,10 +40,11 @@ export interface Habit {
 
 export interface Todo {
   id: string;
-  goalId: string; // Now Mandatory: Tasks must belong to a goal
+  goalId: string;
   text: string;
   completed: boolean;
-  externalLink?: string; // Optional URL for resources
+  completedAt?: number; // For the Timeline
+  externalLink?: string;
   date: string; 
 }
 
@@ -48,8 +53,8 @@ export type DayRating = 'GOLD' | 'GREEN' | 'GRAY';
 export interface ReviewEntry {
   date: string;
   text: string;
-  easyMode: boolean; // Did you prep for tomorrow?
-  energyLevel: number; // 1-5
+  easyMode: boolean;
+  energyLevel: number;
   dayRating: DayRating;
 }
 
@@ -58,4 +63,5 @@ export interface AppData {
   habits: Habit[];
   todos: Todo[];
   reviews: ReviewEntry[];
+  strategy: StrategicItem[]; // New Strategy Module Data
 }
