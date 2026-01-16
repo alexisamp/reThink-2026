@@ -1,119 +1,180 @@
 import React, { useState, useEffect } from 'react';
-import { AppData, ReviewEntry } from '../types';
-import { Brain, AlertTriangle, PenTool } from '../components/Icon';
+import { AppData, ReviewEntry, HabitType, DayRating, GoalStatus } from '../types';
+import { Brain, AlertTriangle, PenTool, Sparkles, Check, X, Ban } from '../components/Icon';
 
 interface ReviewTabProps {
   data: AppData;
   todayKey: string;
-  onAddReview: (text: string) => void;
+  onAddReview: (text: string, easyMode: boolean, energy: number, rating: DayRating) => void;
+  onToggleHabit: (id: string, val: number) => void;
 }
 
-const ReviewTab: React.FC<ReviewTabProps> = ({ data, todayKey, onAddReview }) => {
+const ReviewTab: React.FC<ReviewTabProps> = ({ data, todayKey, onAddReview, onToggleHabit }) => {
   const [reviewText, setReviewText] = useState('');
-  const [bottleneck, setBottleneck] = useState<{habit: string, goal: string} | null>(null);
-
-  // Socratic Logic: Check for habits missed 3 days in a row ending yesterday
+  const [easyMode, setEasyMode] = useState(false);
+  const [energy, setEnergy] = useState(3);
+  
+  // Load existing data if available
   useEffect(() => {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    // Check past 3 days
-    const checkDays = [];
-    for(let i=0; i<3; i++) {
-        const d = new Date(yesterday);
-        d.setDate(d.getDate() - i);
-        checkDays.push(d.toISOString().split('T')[0]);
-    }
+      const existing = data.reviews.find(r => r.date === todayKey);
+      if (existing) {
+          setReviewText(existing.text);
+          setEasyMode(existing.easyMode);
+          setEnergy(existing.energyLevel);
+      }
+  }, [data.reviews, todayKey]);
 
-    // Find a habit with 0 contributions in these days
-    const strugglingHabit = data.habits.find(h => {
-        // Only check habits attached to active goals
-        const parentGoal = data.goals.find(g => g.id === h.goalId);
-        if(!parentGoal || parentGoal.status !== 'ACTIVE') return false;
-        
-        // Check if all 3 days are empty/0
-        return checkDays.every(dayKey => !h.contributions[dayKey]);
-    });
+  // Calculate Status Live
+  const nonNegotiables = data.habits.filter(h => h.type === HabitType.NON_NEGOTIABLE);
+  const activeHabits = data.habits.filter(h => {
+      const goal = data.goals.find(g => g.id === h.goalId);
+      return goal?.status === GoalStatus.ACTIVE && h.type !== HabitType.NON_NEGOTIABLE;
+  });
 
-    if (strugglingHabit) {
-        const parentGoal = data.goals.find(g => g.id === strugglingHabit.goalId);
-        setBottleneck({
-            habit: strugglingHabit.text,
-            goal: parentGoal?.text || 'Unknown Goal'
-        });
-    } else {
-        setBottleneck(null);
-    }
+  // Calculation Logic
+  // 1. Habits: % Completed
+  // 2. Rules: All kept (value 1) = Pass. Any broken (value 0 or missing if we assume explicit 1 needed)
+  // Let's simplify: 
+  // Non-Negotiables: Must be 1 (Active Success) to count towards Gold.
+  
+  const activeHabitCount = activeHabits.length;
+  const activeHabitDone = activeHabits.filter(h => (h.contributions[todayKey] || 0) > 0).length;
+  
+  const rulesCount = nonNegotiables.length;
+  // For non-negotiables in this view, we assume Undefined = Success (Kept the rule), Explicit 0 = Failed.
+  // Wait, storage logic was: 1 = Done.
+  // Let's stick to storage: If stored value is 1, it is kept. If 0 or undefined, it's NOT kept.
+  // BUT the UI below initializes them as 1 (Success) if undefined.
+  const rulesKept = nonNegotiables.filter(h => {
+     const val = h.contributions[todayKey];
+     return val === undefined || val === 1; // Undefined treated as success visually, so we count it as success
+  }).length;
 
-  }, [data.habits]);
+  // Rating
+  let currentRating: DayRating = 'GRAY';
+  const habitCompletion = activeHabitCount > 0 ? activeHabitDone / activeHabitCount : 0;
+  
+  // Gold: 100% Habits + All Rules Kept (ignoring empty habits list)
+  if ((activeHabitCount === 0 || habitCompletion === 1) && rulesKept === rulesCount) {
+      currentRating = 'GOLD';
+  } else if (habitCompletion >= 0.75 && rulesKept === rulesCount) {
+      currentRating = 'GREEN';
+  }
 
   const handleSubmit = () => {
-    if(!reviewText.trim()) return;
-    onAddReview(reviewText);
-    setReviewText('');
+    onAddReview(reviewText, easyMode, energy, currentRating);
+    alert("Day closed. See you tomorrow.");
   };
 
-  const todaysEntry = data.reviews.find(r => r.date === todayKey);
+  const getRatingColor = (r: DayRating) => {
+      switch(r) {
+          case 'GOLD': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+          case 'GREEN': return 'bg-green-100 text-green-800 border-green-200';
+          default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      }
+  };
 
   return (
-    <div className="space-y-8 animate-fade-in max-w-2xl mx-auto">
-      <div className="flex items-center gap-2 mb-6 justify-center">
-        <Brain className="w-6 h-6 text-notion-text" />
-        <h2 className="text-xl font-serif">Daily Check-in</h2>
+    <div className="animate-fade-in max-w-2xl mx-auto pb-20">
+      
+      {/* Day Status Banner */}
+      <div className={`p-6 rounded-lg border flex items-center justify-between mb-8 transition-colors duration-500 ${getRatingColor(currentRating)}`}>
+          <div>
+              <div className="text-xs font-bold uppercase tracking-wider opacity-70">Current Status</div>
+              <div className="text-2xl font-serif font-bold flex items-center gap-2">
+                  {currentRating === 'GOLD' && <Sparkles className="w-6 h-6" />}
+                  {currentRating} DAY
+              </div>
+          </div>
+          <div className="text-right text-xs opacity-70">
+              <div>Habits: {activeHabitDone}/{activeHabitCount}</div>
+              <div>Rules: {rulesKept}/{rulesCount}</div>
+          </div>
       </div>
 
-      {/* Bottleneck Alert */}
-      {bottleneck && (
-        <div className="bg-orange-50 border border-orange-200 p-6 rounded-lg shadow-sm">
-           <div className="flex items-start gap-4">
-              <div className="p-2 bg-orange-100 rounded-full text-orange-600">
-                <AlertTriangle className="w-5 h-5" />
+      <div className="space-y-10">
+          
+          {/* Section 1: Non-Negotiables (Rules) */}
+          <section>
+              <h3 className="text-sm font-bold text-notion-dim uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Ban className="w-4 h-4" /> Non-Negotiables
+              </h3>
+              <div className="bg-white border border-notion-border rounded-lg overflow-hidden">
+                 {nonNegotiables.length === 0 && <div className="p-4 text-sm text-notion-dim italic">No rules defined.</div>}
+                 {nonNegotiables.map(rule => {
+                     // Logic: Undefined (default) or 1 = Success. 0 = Fail.
+                     const isKept = rule.contributions[todayKey] !== 0; 
+                     
+                     return (
+                         <div 
+                            key={rule.id} 
+                            onClick={() => onToggleHabit(rule.id, isKept ? 0 : 1)}
+                            className="p-4 border-b border-notion-border last:border-0 flex items-center justify-between cursor-pointer hover:bg-notion-sidebar transition-colors"
+                         >
+                             <span className={`text-sm ${!isKept ? 'line-through text-red-400' : ''}`}>{rule.text}</span>
+                             <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${isKept ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                 {isKept ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                             </div>
+                         </div>
+                     );
+                 })}
               </div>
-              <div>
-                 <h3 className="font-medium text-orange-900 mb-1">Bottleneck Detected</h3>
-                 <p className="text-sm text-orange-800 mb-3">
-                    You've missed <strong>"{bottleneck.habit}"</strong> for 3 days in a row. 
-                    This creates friction for your goal: <em>{bottleneck.goal}</em>.
-                 </p>
-                 <div className="bg-white p-4 rounded text-sm text-notion-text border border-orange-100 italic font-serif">
-                    "Is this a lack of capability (skill), or a fake dependency? Try shrinking the habit: 
-                    Can you do a 2-minute version of it today?"
-                 </div>
+              <p className="text-xs text-notion-dim mt-2 pl-1">
+                  *Rules start successfully. Click to mark as broken.
+              </p>
+          </section>
+
+          {/* Section 2: Easy Mode */}
+          <section>
+               <h3 className="text-sm font-bold text-notion-dim uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Brain className="w-4 h-4" /> Tomorrow's Setup
+              </h3>
+              <div 
+                onClick={() => setEasyMode(!easyMode)}
+                className={`p-4 rounded-lg border cursor-pointer transition-all flex items-center gap-4 ${easyMode ? 'bg-blue-50 border-blue-200' : 'bg-white border-notion-border hover:border-blue-200'}`}
+              >
+                  <div className={`w-5 h-5 rounded border flex items-center justify-center ${easyMode ? 'bg-blue-500 border-blue-500 text-white' : 'border-notion-dim'}`}>
+                      {easyMode && <Check className="w-3 h-3" />}
+                  </div>
+                  <div>
+                      <div className="font-medium text-sm text-notion-text">Easy Mode Activated</div>
+                      <div className="text-xs text-notion-dim">Did you lay out clothes/tasks for tomorrow?</div>
+                  </div>
               </div>
-           </div>
-        </div>
-      )}
+          </section>
 
-      {/* Review Input */}
-      <div className="bg-white border border-notion-border rounded-lg p-1 shadow-sm">
-        <textarea
-          className="w-full h-48 p-4 text-notion-text resize-none outline-none font-serif placeholder:text-notion-dim"
-          placeholder="What worked today? What didn't? Clear your mind..."
-          value={reviewText}
-          onChange={e => setReviewText(e.target.value)}
-        />
-        <div className="bg-notion-sidebar p-2 flex justify-between items-center rounded-b-md">
-            <span className="text-xs text-notion-dim pl-2">
-                {todaysEntry ? 'You have already journaled today.' : 'Reflect to disconnect.'}
-            </span>
-            <button 
-                onClick={handleSubmit}
-                className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded text-sm hover:opacity-80 transition-opacity"
-            >
-                <PenTool className="w-3 h-3" /> Save Entry
-            </button>
-        </div>
-      </div>
+          {/* Section 3: Reflection */}
+          <section>
+             <h3 className="text-sm font-bold text-notion-dim uppercase tracking-wider mb-4">Daily Log</h3>
+             <textarea
+                className="w-full h-32 p-4 text-sm bg-white border border-notion-border rounded-lg outline-none font-serif placeholder:text-notion-dim resize-none focus:border-black transition-colors"
+                placeholder="Briefly: What was the highlight? What was the struggle?"
+                value={reviewText}
+                onChange={e => setReviewText(e.target.value)}
+            />
+            
+            <div className="mt-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-notion-dim">Energy:</span>
+                    {[1,2,3,4,5].map(lvl => (
+                        <button 
+                            key={lvl}
+                            onClick={() => setEnergy(lvl)}
+                            className={`w-6 h-6 rounded text-xs transition-colors ${energy === lvl ? 'bg-black text-white' : 'bg-notion-sidebar text-notion-dim hover:bg-notion-hover'}`}
+                        >
+                            {lvl}
+                        </button>
+                    ))}
+                </div>
+                <button 
+                    onClick={handleSubmit}
+                    className="flex items-center gap-2 bg-black text-white px-6 py-2 rounded text-sm hover:opacity-80 transition-opacity shadow-sm"
+                >
+                    <PenTool className="w-3 h-3" /> Close Day
+                </button>
+            </div>
+          </section>
 
-      {/* Previous Entries (Simple List) */}
-      <div className="space-y-4 pt-8 border-t border-notion-border">
-         <h3 className="text-sm font-bold text-notion-dim uppercase tracking-wider">Recent Thoughts</h3>
-         {data.reviews.slice(-3).reverse().map((entry, idx) => (
-             <div key={idx} className="p-4 bg-notion-sidebar rounded text-sm">
-                 <div className="text-xs text-notion-dim mb-2 font-mono">{entry.date}</div>
-                 <p className="font-serif text-notion-text">{entry.text}</p>
-             </div>
-         ))}
       </div>
     </div>
   );
