@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AppData, StrategicItem, Goal, GoalStatus, Habit, HabitType, Milestone } from '../types';
-import { Shield, Zap, Plus, Printer, Trash2, Check, Layout, Target, Map, ChevronRight, ArrowRight, Clock } from '../components/Icon';
+import { Shield, Zap, Plus, Printer, Trash2, Check, Layout, Target, Map, ChevronRight, ArrowRight, Clock, Sparkles } from '../components/Icon';
 
 interface StrategyTabProps {
   data: AppData;
@@ -31,11 +31,12 @@ const GoalWizard: React.FC<{
     
     // Temporary Arrays for Wizard
     const [milestones, setMilestones] = useState<Milestone[]>(goal?.milestones || []);
-    const [habits, setHabits] = useState<{text: string, type: HabitType, defaultTime: string}[]>([]);
+    const [habits, setHabits] = useState<{text: string, type: HabitType, defaultTime: string, reward: string}[]>([]);
     
     const [tempMilestone, setTempMilestone] = useState('');
     const [tempHabit, setTempHabit] = useState('');
     const [tempHabitTime, setTempHabitTime] = useState('');
+    const [tempHabitReward, setTempHabitReward] = useState('');
 
     const handleNext = () => setStep(s => s + 1);
     const handleBack = () => setStep(s => s - 1);
@@ -61,6 +62,7 @@ const GoalWizard: React.FC<{
             text: h.text,
             type: h.type,
             defaultTime: h.defaultTime || undefined,
+            reward: h.reward || undefined,
             contributions: {}
         }));
 
@@ -72,10 +74,12 @@ const GoalWizard: React.FC<{
             setHabits([...habits, { 
                 text: tempHabit, 
                 type: HabitType.BINARY, 
-                defaultTime: tempHabitTime 
+                defaultTime: tempHabitTime,
+                reward: tempHabitReward
             }]);
             setTempHabit('');
             setTempHabitTime('');
+            setTempHabitReward('');
         }
     };
 
@@ -150,31 +154,53 @@ const GoalWizard: React.FC<{
                                             <Clock className="w-3 h-3" /> {h.defaultTime}
                                         </span>
                                     )}
+                                    {h.reward && (
+                                        <span className="text-[10px] bg-purple-50 px-1 rounded text-purple-600 flex items-center gap-1">
+                                            <Sparkles className="w-3 h-3" /> {h.reward}
+                                        </span>
+                                    )}
                                 </div>
                                 <button onClick={() => setHabits(habits.filter((_, idx) => idx !== i))}><Trash2 className="w-3 h-3 text-red-400" /></button>
                             </li>
                         ))}
                     </ul>
 
-                    <div className="flex gap-2">
-                        <div className="flex-1 flex gap-2">
-                            <input className="flex-1 p-2 border border-gray-200 rounded text-sm outline-none" 
+                    <div className="flex gap-2 items-start">
+                        <div className="flex-1 flex flex-col gap-2">
+                            <input className="w-full p-2 border border-gray-200 rounded text-sm outline-none" 
                                 placeholder="Add habit..." value={tempHabit} onChange={e => setTempHabit(e.target.value)} 
                                 onKeyDown={e => {
                                     if (e.key === 'Enter') addTempHabit();
                                 }}
                             />
-                            <div className="relative">
-                                <Clock className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
-                                <input 
-                                    type="time"
-                                    className="p-2 pl-8 border border-gray-200 rounded text-sm outline-none w-28 text-gray-600"
-                                    value={tempHabitTime}
-                                    onChange={e => setTempHabitTime(e.target.value)}
-                                />
+                            <div className="flex gap-2">
+                                {/* Time Input */}
+                                <div className="relative flex-1">
+                                    <Clock className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                    <input 
+                                        type="time"
+                                        className="p-2 pl-8 border border-gray-200 rounded text-sm outline-none w-full text-gray-600"
+                                        value={tempHabitTime}
+                                        onChange={e => setTempHabitTime(e.target.value)}
+                                    />
+                                </div>
+                                {/* Reward Input */}
+                                <div className="relative flex-[1.5]">
+                                    <Sparkles className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+                                    <input 
+                                        type="text"
+                                        className="p-2 pl-8 border border-gray-200 rounded text-sm outline-none w-full text-gray-600 placeholder:text-gray-400"
+                                        placeholder="Reward (e.g. 🎁 Coffee)"
+                                        value={tempHabitReward}
+                                        onChange={e => setTempHabitReward(e.target.value)}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter') addTempHabit();
+                                        }}
+                                    />
+                                </div>
                             </div>
                         </div>
-                        <button onClick={addTempHabit} className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300"><Plus className="w-4 h-4" /></button>
+                        <button onClick={addTempHabit} className="px-3 py-2 bg-gray-200 rounded hover:bg-gray-300 h-[76px] flex items-center"><Plus className="w-4 h-4" /></button>
                     </div>
                     <button onClick={handleNext} className="mt-4 px-6 py-2 bg-black text-white rounded text-sm hover:bg-gray-800 w-full">Next</button>
                 </div>
@@ -366,6 +392,11 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
                                                      {h.defaultTime && (
                                                          <span className="text-[9px] bg-gray-100 px-1 rounded text-gray-400 flex items-center gap-1">
                                                              <Clock className="w-2.5 h-2.5" /> {h.defaultTime}
+                                                         </span>
+                                                     )}
+                                                     {h.reward && (
+                                                         <span className="text-[9px] bg-purple-50 px-1 rounded text-purple-600 flex items-center gap-1">
+                                                             <Sparkles className="w-2.5 h-2.5" /> {h.reward}
                                                          </span>
                                                      )}
                                                  </li>

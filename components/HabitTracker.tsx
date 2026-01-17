@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Habit, HabitType } from '../types';
-import { Check, Flame, AlertTriangle, Calendar, Clock, CheckSquare } from './Icon';
+import { Check, Flame, AlertTriangle, Calendar, Clock, CheckSquare, Sparkles } from './Icon';
 import { createCalendarEvent, initGoogleClient } from '../services/google';
 
 interface HabitTrackerProps {
@@ -8,7 +8,7 @@ interface HabitTrackerProps {
   goalName: string;
   todayKey: string;
   onToggle: (id: string, value: number) => void;
-  onSchedule?: (id: string, timestamp: number) => void; // Optional for state persistence
+  onSchedule?: (id: string, timestamp: number) => void; 
   onDelete: (id: string) => void;
 }
 
@@ -22,7 +22,6 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, goalName, todayKey, 
 
   // Initialize Google Client once
   useEffect(() => {
-    // Only init if we actually might use it (performance)
     if (habit.defaultTime && !habit.lastScheduledAt) {
         initGoogleClient();
     }
@@ -45,7 +44,6 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, goalName, todayKey, 
     setIsScheduling(false);
     if (result) {
         setJustScheduled(true);
-        // Call parent to save the timestamp
         if (onSchedule) onSchedule(habit.id, Date.now());
     }
   };
@@ -118,6 +116,8 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, goalName, todayKey, 
     );
   };
 
+  const isCompleted = todayValue > 0;
+
   return (
     <div className={`group flex justify-between items-center py-3 px-4 bg-white border rounded-lg transition-all ${isCritical ? 'border-orange-200 shadow-sm' : 'border-gray-100 hover:border-gray-300'}`}>
       
@@ -137,35 +137,45 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, goalName, todayKey, 
       {/* Right: Actions */}
       <div className="flex items-center gap-4">
         
-        {/* COMMIT WIDGET (One-Click Scheduling) */}
-        {habit.defaultTime && !isScheduledToday && todayValue === 0 && (
-            <div className="hidden md:flex items-center gap-1 bg-gray-50 p-1 rounded border border-gray-200 animate-in fade-in">
-                <div className="relative">
-                    <Clock className="w-3 h-3 absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input 
-                        type="time" 
-                        value={scheduleTime} 
-                        onChange={(e) => setScheduleTime(e.target.value)}
-                        className="bg-transparent text-[10px] font-medium w-16 pl-5 outline-none text-gray-600"
-                    />
-                </div>
-                <button 
-                    onClick={handleCommit}
-                    disabled={isScheduling}
-                    className="bg-white hover:bg-black hover:text-white border border-gray-200 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
-                >
-                    {isScheduling ? '...' : <><Calendar className="w-3 h-3" /> Commit</>}
-                </button>
+        {/* REWARD LOGIC: Only show Reward if completed AND reward exists. Otherwise show scheduling. */}
+        {isCompleted && habit.reward ? (
+            <div className="flex items-center gap-1.5 text-xs text-notion-dim font-medium bg-purple-50 px-2 py-1 rounded-md animate-in fade-in slide-in-from-bottom-2">
+                <Sparkles className="w-3 h-3 text-purple-500" />
+                <span className="text-purple-700">{habit.reward}</span>
             </div>
-        )}
+        ) : (
+            <>
+                {/* COMMIT WIDGET (One-Click Scheduling) */}
+                {habit.defaultTime && !isScheduledToday && !isCompleted && (
+                    <div className="hidden md:flex items-center gap-1 bg-gray-50 p-1 rounded border border-gray-200 animate-in fade-in">
+                        <div className="relative">
+                            <Clock className="w-3 h-3 absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input 
+                                type="time" 
+                                value={scheduleTime} 
+                                onChange={(e) => setScheduleTime(e.target.value)}
+                                className="bg-transparent text-[10px] font-medium w-16 pl-5 outline-none text-gray-600 min-w-[50px]"
+                            />
+                        </div>
+                        <button 
+                            onClick={handleCommit}
+                            disabled={isScheduling}
+                            className="bg-white hover:bg-black hover:text-white border border-gray-200 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
+                        >
+                            {isScheduling ? '...' : <><Calendar className="w-3 h-3" /> Commit</>}
+                        </button>
+                    </div>
+                )}
 
-        {justScheduled && !todayValue && (
-            <span className="text-[10px] text-green-600 font-medium flex items-center gap-1 animate-in slide-in-from-right-2">
-                <CheckSquare className="w-3 h-3" /> Scheduled
-            </span>
+                {justScheduled && !isCompleted && (
+                    <span className="text-[10px] text-green-600 font-medium flex items-center gap-1 animate-in slide-in-from-right-2">
+                        <CheckSquare className="w-3 h-3" /> Scheduled
+                    </span>
+                )}
+            </>
         )}
         
-        {/* Streak Indicator */}
+        {/* Streak Indicator (Always visible) */}
         <div className={`flex items-center gap-1.5 ${streak > 0 ? 'opacity-100' : 'opacity-0'} transition-opacity`}>
             <span className={`text-xs font-bold font-mono ${streak > 3 ? 'text-orange-600' : 'text-gray-400'}`}>{streak}</span>
             <Flame className={`w-3.5 h-3.5 ${streak > 3 ? 'text-orange-500 fill-orange-500' : 'text-gray-300'}`} />

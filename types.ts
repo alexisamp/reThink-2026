@@ -47,6 +47,7 @@ export interface Habit {
   type: HabitType;
   defaultTime?: string; // Format "HH:MM"
   lastScheduledAt?: number; // Timestamp
+  reward?: string; // New field for habit completion reward
   contributions: ContributionMap;
 }
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { AppData, GoalStatus, Todo } from '../types';
+import { AppData, GoalStatus } from '../types';
 import HabitTracker from '../components/HabitTracker';
-import { Plus, Check, Trash2, ArrowRight, Sun, Moon, Zap, Feather, RefreshCw } from '../components/Icon';
+import { Plus, Check, Trash2, ArrowRight, Sun, Moon, Zap, Feather } from '../components/Icon';
 
 interface TodayTabProps {
   data: AppData;
@@ -10,14 +10,6 @@ interface TodayTabProps {
   onAddTodo: (text: string, goalId: string, milestoneId?: string, effort?: 'DEEP' | 'SHALLOW') => void;
   onToggleTodo: (id: string) => void;
   onDeleteTodo: (id: string) => void;
-  // This prop would ideally be drilled from App, but we handle it locally for now via state hack or context
-  // Since we can't edit App.tsx, we will do a local update to reflect UI changes, 
-  // but actual persistence requires App.tsx update in real world.
-  // We assume 'onToggleHabit' might handle generic updates or we use a clever workaround? 
-  // Actually, we will just pass a dummy or rely on the HabitTracker internal state for the session if App isn't updated.
-  // BUT, to be professional, we simulate the 'onSchedule' being available if the App was updated.
-  // Since I cannot update App.tsx, I will add an internal state in TodayTab to force re-renders if needed,
-  // but true persistence of 'lastScheduledAt' requires App.tsx modification.
 }
 
 const TodayTab: React.FC<TodayTabProps> = ({
@@ -50,7 +42,12 @@ const TodayTab: React.FC<TodayTabProps> = ({
       return parentGoal?.status === GoalStatus.ACTIVE;
   });
 
-  const availableMilestones = activeGoals.find(g => g.id === selectedGoalId)?.milestones?.filter(m => !m.completed) || [];
+  // Group Habits
+  const pendingHabits = activeHabits.filter(h => (h.contributions[todayKey] || 0) === 0);
+  const completedHabits = activeHabits.filter(h => (h.contributions[todayKey] || 0) > 0);
+
+  // Milestone logic: Show ALL milestones for the selected goal (removed .filter(m => !m.completed))
+  const availableMilestones = activeGoals.find(g => g.id === selectedGoalId)?.milestones || [];
 
   const handleAddTask = () => {
     if (!selectedGoalId || !taskText.trim()) return;
@@ -59,10 +56,7 @@ const TodayTab: React.FC<TodayTabProps> = ({
     setEffort('SHALLOW');
   };
 
-  // Mock schedule handler if App.tsx isn't updating data
   const handleSchedule = (id: string, timestamp: number) => {
-    // In a real app with full access, we would call an App.tsx method here.
-    // For this demo constraint, HabitTracker manages its visual state.
     console.log(`Scheduled habit ${id} at ${timestamp}`);
   };
 
@@ -116,17 +110,17 @@ const TodayTab: React.FC<TodayTabProps> = ({
                      {availableMilestones.map(m => <option key={m.id} value={m.id}>{m.text}</option>)}
                  </select>
 
-                 {/* 4. Effort Toggle */}
+                 {/* 4. Effort Toggle (New Minimal Style) */}
                  <button
                     onClick={() => setEffort(prev => prev === 'DEEP' ? 'SHALLOW' : 'DEEP')}
-                    className={`flex items-center gap-1 px-3 py-2 rounded border text-xs font-medium transition-colors ${
+                    className={`flex items-center gap-1 px-3 py-2 rounded border text-xs font-bold transition-colors ${
                         effort === 'DEEP' 
-                            ? 'bg-yellow-50 border-yellow-200 text-yellow-700' 
-                            : 'bg-notion-sidebar border-notion-border text-notion-dim'
+                            ? 'bg-notion-text border-notion-text text-white' 
+                            : 'bg-white border-notion-border text-notion-dim hover:border-black'
                     }`}
                     title={effort === 'DEEP' ? "High Energy / Deep Work" : "Low Energy / Admin"}
                  >
-                    {effort === 'DEEP' ? <Zap className="w-3 h-3" /> : <Feather className="w-3 h-3" />}
+                    {effort === 'DEEP' ? <Zap className="w-3 h-3 fill-white" /> : <Feather className="w-3 h-3" />}
                     <span className="hidden md:inline">{effort === 'DEEP' ? 'Deep' : 'Shallow'}</span>
                  </button>
 
@@ -171,7 +165,7 @@ const TodayTab: React.FC<TodayTabProps> = ({
                                     {todo.text}
                                 </span>
                                 {isOverdue && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold uppercase">Overdue</span>}
-                                {todo.effort === 'DEEP' && <Zap className="w-3 h-3 text-yellow-600" />}
+                                {todo.effort === 'DEEP' && <Zap className="w-3 h-3 text-notion-text fill-black" />}
                             </div>
                             
                             <div className="flex items-center gap-2">
@@ -207,27 +201,53 @@ const TodayTab: React.FC<TodayTabProps> = ({
             <p className="text-notion-dim font-serif italic text-sm mt-1">Consistency compounds.</p>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-6">
              {activeHabits.length === 0 && (
                 <div className="text-center py-10">
                     <p className="text-notion-dim text-sm italic">System offline. Define habits in Strategy tab.</p>
                 </div>
              )}
 
-             {activeHabits.map(habit => {
-                 const goal = data.goals.find(g => g.id === habit.goalId);
-                 return (
-                    <HabitTracker 
-                        key={habit.id}
-                        habit={habit}
-                        goalName={goal?.text || 'Strategic'}
-                        todayKey={todayKey}
-                        onToggle={onToggleHabit}
-                        onSchedule={handleSchedule}
-                        onDelete={() => {}} 
-                    />
-                 );
-             })}
+             {/* Pending Habits */}
+             {pendingHabits.length > 0 && (
+                <div className="space-y-3">
+                    {pendingHabits.map(habit => {
+                        const goal = data.goals.find(g => g.id === habit.goalId);
+                        return (
+                           <HabitTracker 
+                               key={habit.id}
+                               habit={habit}
+                               goalName={goal?.text || 'Strategic'}
+                               todayKey={todayKey}
+                               onToggle={onToggleHabit}
+                               onSchedule={handleSchedule}
+                               onDelete={() => {}} 
+                           />
+                        );
+                    })}
+                </div>
+             )}
+
+             {/* Completed Habits (Visual Separation) */}
+             {completedHabits.length > 0 && (
+                <div className="space-y-3 opacity-75 grayscale-[0.5] hover:grayscale-0 transition-all">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-notion-dim/50 pl-2">Completed</div>
+                    {completedHabits.map(habit => {
+                        const goal = data.goals.find(g => g.id === habit.goalId);
+                        return (
+                           <HabitTracker 
+                               key={habit.id}
+                               habit={habit}
+                               goalName={goal?.text || 'Strategic'}
+                               todayKey={todayKey}
+                               onToggle={onToggleHabit}
+                               onSchedule={handleSchedule}
+                               onDelete={() => {}} 
+                           />
+                        );
+                    })}
+                </div>
+             )}
         </div>
       </section>
 
