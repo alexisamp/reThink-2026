@@ -11,6 +11,18 @@ export interface Milestone {
   completedAt?: number;
 }
 
+export interface Goal {
+  id: string;
+  text: string;
+  metric: string;
+  motivation?: string;
+  type: 'STRENGTH' | 'WEAKNESS';
+  workaround?: string;
+  status: GoalStatus;
+  milestones: Milestone[];
+  createdAt: number;
+}
+
 export interface StrategicItem {
   id: string;
   type: 'STRENGTH' | 'WEAKNESS';
@@ -36,24 +48,12 @@ export interface Habit {
   contributions: ContributionMap;
 }
 
-export interface Goal {
-  id: string;
-  text: string;
-  motivation?: string;
-  type: 'STRENGTH' | 'WEAKNESS';
-  workaround?: string; // Only if type is WEAKNESS
-  metric: string; // Success Metric
-  status: GoalStatus;
-  milestones: Milestone[];
-  createdAt: number;
-  completedAt?: number;
-}
-
 export interface Todo {
   id: string;
   goalId: string;
   milestoneId?: string; // Optional link to roadmap
   text: string;
+  effort?: 'DEEP' | 'SHALLOW'; // New field for categorization
   completed: boolean;
   completedAt?: number;
   date: string; 

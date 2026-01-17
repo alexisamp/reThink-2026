@@ -25,7 +25,9 @@ import {
   Zap,
   PlayCircle,
   ArrowRight,
-  Moon
+  Moon,
+  Flame,
+  Feather
 } from 'lucide-react';
 
 export { 
@@ -54,5 +56,7 @@ export {
   Zap,
   PlayCircle,
   ArrowRight,
-  Moon
+  Moon,
+  Flame,
+  Feather
 };
