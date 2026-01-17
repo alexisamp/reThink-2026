@@ -45,6 +45,8 @@ export interface Habit {
   goalId: string; 
   text: string;
   type: HabitType;
+  defaultTime?: string; // Format "HH:MM"
+  lastScheduledAt?: number; // Timestamp
   contributions: ContributionMap;
 }
 
