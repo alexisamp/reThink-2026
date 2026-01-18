@@ -17,14 +17,26 @@ const App: React.FC = () => {
     if (!loaded.strategy) loaded.strategy = [];
 
     // 2. Goal Migration (V2 Fields)
-    loaded.goals = (loaded.goals || []).map((g: any) => ({
-        ...g, 
-        milestones: g.milestones || [],
-        type: g.type || 'STRENGTH', // Keep for legacy
-        metric: g.metric || 'Define success metric',
-        leverage: g.leverage || [],
-        obstacles: g.obstacles || []
-    }));
+    loaded.goals = (loaded.goals || []).map((g: any) => {
+        // Migrate Leverage Strings to Objects if necessary
+        let newLeverage = g.leverage || [];
+        if (newLeverage.length > 0 && typeof newLeverage[0] === 'string') {
+            newLeverage = newLeverage.map((l: string) => ({
+                id: crypto.randomUUID(),
+                strength: l,
+                application: "Apply this strength." // Default migration text
+            }));
+        }
+
+        return {
+            ...g, 
+            milestones: g.milestones || [],
+            type: g.type || 'STRENGTH', // Keep for legacy
+            metric: g.metric || 'Define success metric',
+            leverage: newLeverage,
+            obstacles: g.obstacles || []
+        };
+    });
 
     // 3. Global Rules Migration (String -> Object)
     let migratedRules: GlobalRules = { prescriptions: [], antiGoals: [] };

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { AppData, Goal, GoalStatus, Habit, HabitType, Milestone, Obstacle, GlobalRules, StrategicItem } from '../types';
-import { Shield, Zap, Plus, Printer, Trash2, Clock, Sparkles, AlertTriangle, Ban, Check, Map, Target, PenTool, Lock, Brain, Anchor } from '../components/Icon';
+import { AppData, Goal, GoalStatus, Habit, HabitType, Milestone, Obstacle, Leverage, GlobalRules, StrategicItem } from '../types';
+import { Shield, Zap, Plus, Printer, Trash2, Clock, Sparkles, AlertTriangle, Ban, Check, Map, Target, PenTool, Lock, Anchor, X } from '../components/Icon';
 
 interface StrategyTabProps {
   data: AppData;
@@ -16,49 +16,125 @@ interface StrategyTabProps {
 
 // --- Components ---
 
-const ListEditor: React.FC<{
+const SimpleListEditor: React.FC<{
     items: string[];
     onUpdate: (items: string[]) => void;
     placeholder: string;
     icon?: React.ReactNode;
-    colorClass?: string;
-}> = ({ items, onUpdate, placeholder, icon, colorClass = "text-black" }) => {
+}> = ({ items, onUpdate, placeholder, icon }) => {
     const [newItem, setNewItem] = useState('');
+    const [isAdding, setIsAdding] = useState(false);
     
     const add = () => {
         if(newItem.trim()) {
             onUpdate([...items, newItem.trim()]);
             setNewItem('');
+            setIsAdding(false); // Close after adding
         }
     };
 
     return (
-        <div className="space-y-2">
-            <ul className="space-y-1">
+        <div className="space-y-3">
+            <ul className="space-y-2">
                 {items.map((item, idx) => (
-                    <li key={idx} className="group flex justify-between items-center text-sm p-2 bg-white border border-notion-border rounded hover:border-gray-300 transition-colors">
-                        <div className={`flex items-start gap-2 ${colorClass}`}>
-                            <div className="mt-0.5">{icon}</div>
+                    <li key={idx} className="group flex justify-between items-center text-sm p-3 bg-white border border-notion-border rounded hover:border-black transition-colors">
+                        <div className="flex items-start gap-3 text-notion-text">
+                            <div className="mt-0.5 text-notion-dim">{icon}</div>
                             <span>{item}</span>
                         </div>
-                        <button onClick={() => onUpdate(items.filter((_, i) => i !== idx))} className="opacity-0 group-hover:opacity-100 text-notion-dim hover:text-red-500">
+                        <button onClick={() => onUpdate(items.filter((_, i) => i !== idx))} className="opacity-0 group-hover:opacity-100 text-notion-dim hover:text-black">
                             <Trash2 className="w-3 h-3" />
                         </button>
                     </li>
                 ))}
             </ul>
-            <div className="flex gap-2">
-                <input 
-                    className="flex-1 p-2 text-sm bg-gray-50 border border-transparent rounded outline-none focus:bg-white focus:border-black transition-all"
-                    placeholder={placeholder}
-                    value={newItem}
-                    onChange={e => setNewItem(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && add()}
-                />
-                <button onClick={add} disabled={!newItem} className="p-2 bg-black text-white rounded hover:opacity-80 disabled:opacity-30">
-                    <Plus className="w-4 h-4" />
+            
+            {isAdding ? (
+                <div className="flex gap-2 animate-in fade-in zoom-in-95">
+                    <input 
+                        className="flex-1 p-2 text-sm bg-white border border-black rounded outline-none"
+                        placeholder={placeholder}
+                        value={newItem}
+                        onChange={e => setNewItem(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && add()}
+                        autoFocus
+                    />
+                    <button onClick={add} disabled={!newItem} className="p-2 bg-black text-white rounded hover:opacity-80 disabled:opacity-30">
+                        <Check className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => { setIsAdding(false); setNewItem(''); }} className="p-2 bg-gray-100 text-notion-text rounded hover:bg-gray-200">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+            ) : (
+                <button 
+                    onClick={() => setIsAdding(true)} 
+                    className="text-xs font-bold flex items-center gap-1 text-notion-dim hover:text-black transition-colors"
+                >
+                    <Plus className="w-3 h-3" /> Add Item
                 </button>
-            </div>
+            )}
+        </div>
+    );
+};
+
+// Generic Editor for Structure items (Leverage / Obstacles)
+const StructuredListEditor: React.FC<{
+    items: { id: string; main: string; sub: string }[];
+    onAdd: (main: string, sub: string) => void;
+    onDelete: (id: string) => void;
+    mainPlaceholder: string;
+    subPlaceholder: string;
+    icon: React.ReactNode;
+}> = ({ items, onAdd, onDelete, mainPlaceholder, subPlaceholder, icon }) => {
+    const [main, setMain] = useState('');
+    const [sub, setSub] = useState('');
+    const [isAdding, setIsAdding] = useState(false);
+
+    const handleAdd = () => {
+        if(main && sub) {
+            onAdd(main, sub);
+            setMain('');
+            setSub('');
+            setIsAdding(false);
+        }
+    };
+
+    return (
+        <div className="space-y-3">
+             <ul className="space-y-2">
+                {items.map((item) => (
+                    <li key={item.id} className="text-sm p-3 bg-white rounded border border-notion-border flex justify-between items-start group hover:border-black transition-colors">
+                        <div>
+                            <div className="font-bold text-notion-text mb-1 text-xs flex items-center gap-1">
+                                {icon} {item.main}
+                            </div>
+                            <div className="text-notion-dim text-xs pl-4 border-l border-notion-border">{item.sub}</div>
+                        </div>
+                        <button onClick={() => onDelete(item.id)} className="opacity-0 group-hover:opacity-100 text-notion-dim hover:text-black"><Trash2 className="w-3 h-3" /></button>
+                    </li>
+                ))}
+             </ul>
+
+             {isAdding ? (
+                 <div className="p-3 bg-gray-50 rounded border border-notion-border animate-in fade-in zoom-in-95">
+                     <div className="space-y-2 mb-2">
+                         <input className="w-full p-2 text-sm bg-white border border-gray-300 rounded outline-none focus:border-black" placeholder={mainPlaceholder} value={main} onChange={e => setMain(e.target.value)} autoFocus />
+                         <input className="w-full p-2 text-sm bg-white border border-gray-300 rounded outline-none focus:border-black" placeholder={subPlaceholder} value={sub} onChange={e => setSub(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()} />
+                     </div>
+                     <div className="flex justify-end gap-2">
+                         <button onClick={() => setIsAdding(false)} className="text-xs text-notion-dim hover:text-black px-2">Cancel</button>
+                         <button onClick={handleAdd} disabled={!main || !sub} className="px-3 py-1 bg-black text-white rounded text-xs font-bold disabled:opacity-50">Save</button>
+                     </div>
+                 </div>
+             ) : (
+                <button 
+                    onClick={() => setIsAdding(true)} 
+                    className="text-xs font-bold flex items-center gap-1 text-notion-dim hover:text-black transition-colors"
+                >
+                    <Plus className="w-3 h-3" /> Add Item
+                </button>
+             )}
         </div>
     );
 };
@@ -77,22 +153,19 @@ const GoalWizard: React.FC<{
     const [metric, setMetric] = useState(goal?.metric || '');
     const [motivation, setMotivation] = useState(goal?.motivation || '');
     
-    // Step 2: Reality Check
-    const [leverage, setLeverage] = useState<string[]>(goal?.leverage || []);
+    // Step 2: Strategic Audit (Symmetrical)
+    const [leverage, setLeverage] = useState<Leverage[]>(goal?.leverage || []);
     const [obstacles, setObstacles] = useState<Obstacle[]>(goal?.obstacles || []);
-    // Temp obstacle state
-    const [obsText, setObsText] = useState('');
-    const [workaroundText, setWorkaroundText] = useState('');
 
     // Step 3: System
     const [habits, setHabits] = useState<{text: string, defaultTime: string, reward: string}[]>([]);
     const [tempHabit, setTempHabit] = useState('');
     const [tempHabitTime, setTempHabitTime] = useState('');
     const [tempHabitReward, setTempHabitReward] = useState('');
+    const [isAddingHabit, setIsAddingHabit] = useState(false);
 
     // Step 4: Roadmap
     const [milestones, setMilestones] = useState<Milestone[]>(goal?.milestones || []);
-    const [tempMilestone, setTempMilestone] = useState('');
 
     // Step 5: Status
     const [status, setStatus] = useState<GoalStatus>(goal?.status || GoalStatus.ACTIVE);
@@ -125,18 +198,11 @@ const GoalWizard: React.FC<{
         onSave(finalGoal, newHabits);
     };
 
-    const addObstacle = () => {
-        if(obsText && workaroundText) {
-            setObstacles([...obstacles, { id: crypto.randomUUID(), obstacle: obsText, workaround: workaroundText }]);
-            setObsText('');
-            setWorkaroundText('');
-        }
-    };
-
     const addHabit = () => {
         if(tempHabit) {
             setHabits([...habits, { text: tempHabit, defaultTime: tempHabitTime, reward: tempHabitReward }]);
             setTempHabit(''); setTempHabitTime(''); setTempHabitReward('');
+            setIsAddingHabit(false);
         }
     };
 
@@ -148,7 +214,7 @@ const GoalWizard: React.FC<{
                 </div>
                 <div className="flex gap-3">
                     {step > 1 && <button onClick={() => setStep(s => s - 1)} className="text-xs text-notion-dim hover:text-black font-medium">Back</button>}
-                    <button onClick={onCancel} className="text-xs text-red-500 hover:text-red-700 font-medium">Cancel</button>
+                    <button onClick={onCancel} className="text-xs text-notion-dim hover:text-black font-medium">Cancel</button>
                 </div>
             </div>
 
@@ -177,41 +243,40 @@ const GoalWizard: React.FC<{
                 </div>
             )}
 
-            {/* Step 2: Reality Check */}
+            {/* Step 2: Reality Check (Refactor) */}
             {step === 2 && (
                 <div className="space-y-8">
                     <h3 className="text-2xl font-serif font-medium">Strategic Audit</h3>
                     
-                    {/* Leverage */}
-                    <div>
-                        <label className="block text-xs font-bold text-green-700 mb-2 uppercase tracking-wide flex items-center gap-2">
-                            <Zap className="w-3 h-3" /> Why I will win (Unfair Advantages)
-                        </label>
-                        <ListEditor items={leverage} onUpdate={setLeverage} placeholder="e.g. 'Deep industry knowledge'" colorClass="text-green-800" icon={<Check className="w-3 h-3" />} />
-                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Leverage (Easy Mode) */}
+                        <div>
+                            <label className="block text-xs font-bold text-black mb-2 uppercase tracking-wide flex items-center gap-2">
+                                <Zap className="w-3 h-3 text-notion-dim" /> Strengths (Play on Easy Mode)
+                            </label>
+                            <StructuredListEditor 
+                                items={leverage.map(l => ({ id: l.id, main: l.strength, sub: l.application }))}
+                                onAdd={(main, sub) => setLeverage([...leverage, { id: crypto.randomUUID(), strength: main, application: sub }])}
+                                onDelete={(id) => setLeverage(leverage.filter(l => l.id !== id))}
+                                mainPlaceholder="Strength (e.g. Deep Knowledge)"
+                                subPlaceholder="Application (How to use it?)"
+                                icon={<Check className="w-3 h-3 text-notion-dim" />}
+                            />
+                        </div>
 
-                    {/* Obstacles */}
-                    <div>
-                         <label className="block text-xs font-bold text-red-700 mb-2 uppercase tracking-wide flex items-center gap-2">
-                            <AlertTriangle className="w-3 h-3" /> Failure Modes (What kills this goal?)
-                        </label>
-                        <ul className="space-y-2 mb-3">
-                            {obstacles.map(o => (
-                                <li key={o.id} className="text-sm p-3 bg-red-50/50 rounded border border-red-100 flex justify-between items-start">
-                                    <div>
-                                        <div className="font-bold text-red-900 mb-1 text-xs">⚠️ {o.obstacle}</div>
-                                        <div className="text-green-700 text-xs flex items-center gap-1">🛡️ <span className="font-medium">The Fix:</span> {o.workaround}</div>
-                                    </div>
-                                    <button onClick={() => setObstacles(obstacles.filter(x => x.id !== o.id))}><Trash2 className="w-3 h-3 text-red-300 hover:text-red-500" /></button>
-                                </li>
-                            ))}
-                        </ul>
-                        <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded border border-gray-100">
-                            <input className="p-2 text-sm bg-white border border-gray-200 rounded outline-none" placeholder="Failure Mode (e.g. 'I get distracted')" value={obsText} onChange={e => setObsText(e.target.value)} />
-                            <div className="flex gap-2">
-                                <input className="flex-1 p-2 text-sm bg-white border border-gray-200 rounded outline-none" placeholder="The Fix (Prevention Mechanism)" value={workaroundText} onChange={e => setWorkaroundText(e.target.value)} onKeyDown={e => e.key === 'Enter' && addObstacle()} />
-                                <button onClick={addObstacle} disabled={!obsText || !workaroundText} className="px-4 bg-black text-white rounded text-xs font-bold disabled:opacity-50">Add</button>
-                            </div>
+                        {/* Obstacles (Hard Mode) */}
+                        <div>
+                             <label className="block text-xs font-bold text-black mb-2 uppercase tracking-wide flex items-center gap-2">
+                                <AlertTriangle className="w-3 h-3 text-notion-dim" /> Weaknesses (Manage Hard Mode)
+                            </label>
+                            <StructuredListEditor 
+                                items={obstacles.map(o => ({ id: o.id, main: o.obstacle, sub: o.workaround }))}
+                                onAdd={(main, sub) => setObstacles([...obstacles, { id: crypto.randomUUID(), obstacle: main, workaround: sub }])}
+                                onDelete={(id) => setObstacles(obstacles.filter(o => o.id !== id))}
+                                mainPlaceholder="Obstacle (e.g. Distraction)"
+                                subPlaceholder="Workaround (How to fix it?)"
+                                icon={<AlertTriangle className="w-3 h-3 text-notion-dim" />}
+                            />
                         </div>
                     </div>
                     
@@ -227,26 +292,36 @@ const GoalWizard: React.FC<{
                     
                     <ul className="space-y-2">
                         {habits.map((h, i) => (
-                            <li key={i} className="flex justify-between items-center text-sm p-3 bg-gray-50 rounded border border-gray-100">
+                            <li key={i} className="flex justify-between items-center text-sm p-3 bg-white rounded border border-notion-border">
                                 <div className="flex items-center gap-2">
                                     <span className="font-medium">{h.text}</span>
-                                    {h.defaultTime && <span className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-gray-200 text-notion-dim flex items-center gap-1"><Clock className="w-3 h-3"/> {h.defaultTime}</span>}
-                                    {h.reward && <span className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-gray-200 text-notion-dim flex items-center gap-1"><Sparkles className="w-3 h-3"/> {h.reward}</span>}
+                                    {h.defaultTime && <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 text-notion-dim flex items-center gap-1"><Clock className="w-3 h-3"/> {h.defaultTime}</span>}
+                                    {h.reward && <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 text-notion-dim flex items-center gap-1"><Sparkles className="w-3 h-3"/> {h.reward}</span>}
                                 </div>
-                                <button onClick={() => setHabits(habits.filter((_, idx) => idx !== i))}><Trash2 className="w-3 h-3 text-gray-400 hover:text-red-500" /></button>
+                                <button onClick={() => setHabits(habits.filter((_, idx) => idx !== i))}><Trash2 className="w-3 h-3 text-notion-dim hover:text-black" /></button>
                             </li>
                         ))}
                     </ul>
 
-                    <div className="p-3 bg-gray-50 rounded border border-gray-100 flex flex-col gap-2">
-                        <input className="p-2 text-sm bg-white border border-gray-200 rounded outline-none" placeholder="Daily Habit (e.g. Write 500 words)" value={tempHabit} onChange={e => setTempHabit(e.target.value)} onKeyDown={e => e.key === 'Enter' && addHabit()} />
-                        <div className="flex gap-2">
-                            <input type="time" className="w-24 p-2 text-sm bg-white border border-gray-200 rounded outline-none text-notion-dim" value={tempHabitTime} onChange={e => setTempHabitTime(e.target.value)} />
-                            <input className="flex-1 p-2 text-sm bg-white border border-gray-200 rounded outline-none" placeholder="Reward (Optional)" value={tempHabitReward} onChange={e => setTempHabitReward(e.target.value)} onKeyDown={e => e.key === 'Enter' && addHabit()} />
-                            <button onClick={addHabit} disabled={!tempHabit} className="px-4 bg-black text-white rounded text-xs font-bold disabled:opacity-50">Add</button>
+                    {isAddingHabit ? (
+                         <div className="p-3 bg-gray-50 rounded border border-notion-border flex flex-col gap-2 animate-in fade-in zoom-in-95">
+                            <input className="p-2 text-sm bg-white border border-gray-200 rounded outline-none" placeholder="Habit (e.g. Write 500 words)" value={tempHabit} onChange={e => setTempHabit(e.target.value)} onKeyDown={e => e.key === 'Enter' && addHabit()} autoFocus />
+                            <div className="flex gap-2">
+                                <input type="time" className="w-24 p-2 text-sm bg-white border border-gray-200 rounded outline-none text-notion-dim" value={tempHabitTime} onChange={e => setTempHabitTime(e.target.value)} />
+                                <input className="flex-1 p-2 text-sm bg-white border border-gray-200 rounded outline-none" placeholder="Reward (Optional)" value={tempHabitReward} onChange={e => setTempHabitReward(e.target.value)} onKeyDown={e => e.key === 'Enter' && addHabit()} />
+                                <button onClick={addHabit} disabled={!tempHabit} className="px-4 bg-black text-white rounded text-xs font-bold disabled:opacity-50">Add</button>
+                                <button onClick={() => setIsAddingHabit(false)} className="px-2 text-xs text-notion-dim hover:text-black">Cancel</button>
+                            </div>
                         </div>
-                    </div>
-                    <button onClick={() => setStep(4)} className="w-full px-6 py-3 bg-black text-white rounded font-medium text-sm hover:opacity-90">Next: Roadmap</button>
+                    ) : (
+                         <button 
+                            onClick={() => setIsAddingHabit(true)} 
+                            className="text-xs font-bold flex items-center gap-1 text-notion-dim hover:text-black transition-colors"
+                        >
+                            <Plus className="w-3 h-3" /> Add Habit
+                        </button>
+                    )}
+                    <button onClick={() => setStep(4)} className="w-full px-6 py-3 bg-black text-white rounded font-medium text-sm hover:opacity-90 mt-4">Next: Roadmap</button>
                 </div>
             )}
 
@@ -255,7 +330,7 @@ const GoalWizard: React.FC<{
                 <div className="space-y-6">
                     <h3 className="text-2xl font-serif font-medium">The Roadmap</h3>
                     <p className="text-sm text-notion-dim">Proof of progress.</p>
-                    <ListEditor items={milestones.map(m => m.text)} onUpdate={(strs) => setMilestones(strs.map(s => ({id: crypto.randomUUID(), text: s, completed: false})))} placeholder="Milestone (e.g. First 10 users)" icon={<Map className="w-3 h-3 text-notion-dim"/>} />
+                    <SimpleListEditor items={milestones.map(m => m.text)} onUpdate={(strs) => setMilestones(strs.map(s => ({id: crypto.randomUUID(), text: s, completed: false})))} placeholder="Milestone (e.g. First 10 users)" icon={<Map className="w-3 h-3 text-notion-dim"/>} />
                     <button onClick={() => setStep(5)} className="w-full px-6 py-3 bg-black text-white rounded font-medium text-sm hover:opacity-90">Next: Confirm</button>
                 </div>
             )}
@@ -300,10 +375,11 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
-  // Strategic Item state
+  // Strategic Item state (Global Identity)
   const [strType, setStrType] = useState<'STRENGTH' | 'WEAKNESS'>('STRENGTH');
   const [strTitle, setStrTitle] = useState('');
   const [strTactic, setStrTactic] = useState('');
+  const [isAddingIdentity, setIsAddingIdentity] = useState(false);
 
   const activeGoals = data.goals.filter(g => g.status === GoalStatus.ACTIVE);
   const backlogGoals = data.goals.filter(g => g.status === GoalStatus.BACKLOG);
@@ -313,6 +389,7 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
           onAddStrategicItem({ id: crypto.randomUUID(), type: strType, title: strTitle, tactic: strTactic });
           setStrTitle('');
           setStrTactic('');
+          setIsAddingIdentity(false);
       }
   };
 
@@ -371,11 +448,11 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
                                 {/* Card Actions */}
                                 <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2 z-10 no-print">
                                     <button onClick={() => setEditingGoal(goal)} className="p-1.5 bg-gray-100 hover:bg-black hover:text-white rounded text-xs">Edit</button>
-                                    <button onClick={() => onDeleteGoal(goal.id)} className="p-1.5 bg-gray-100 hover:bg-red-500 hover:text-white rounded text-xs"><Trash2 className="w-3 h-3" /></button>
+                                    <button onClick={() => onDeleteGoal(goal.id)} className="p-1.5 bg-gray-100 hover:bg-black hover:text-white rounded text-xs"><Trash2 className="w-3 h-3" /></button>
                                 </div>
 
                                 {/* Manifesto Header */}
-                                <div className="p-8 border-b border-notion-border bg-notion-sidebar/30">
+                                <div className="p-8 border-b border-notion-border bg-gray-50">
                                     <div className="flex justify-between items-start">
                                         <div>
                                             <div className="text-[10px] text-notion-dim font-bold uppercase tracking-wider mb-2">Priority Sequence 0{idx + 1}</div>
@@ -392,17 +469,18 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
 
                                 <div className="grid grid-cols-1 md:grid-cols-2">
                                     {/* Column 1: Strategic Audit */}
-                                    <div className="p-6 border-b md:border-b-0 md:border-r border-notion-border bg-gray-50/50">
+                                    <div className="p-6 border-b md:border-b-0 md:border-r border-notion-border bg-white">
                                         <h4 className="text-[10px] font-bold uppercase tracking-widest text-notion-dim mb-4 border-b border-gray-200 pb-2">Strategic Audit</h4>
                                         
                                         <div className="space-y-6">
                                             {/* Leverage */}
                                             <div>
-                                                <div className="text-xs font-bold text-green-800 mb-2 flex items-center gap-1"><Zap className="w-3 h-3" /> UNFAIR ADVANTAGES</div>
-                                                <ul className="space-y-1">
+                                                <div className="text-xs font-bold text-black mb-2 flex items-center gap-1"><Zap className="w-3 h-3 text-notion-dim" /> EASY MODE (Strengths)</div>
+                                                <ul className="space-y-2">
                                                     {goal.leverage.length > 0 ? goal.leverage.map((l, i) => (
-                                                        <li key={i} className="text-sm text-notion-text flex items-start gap-2">
-                                                            <span className="text-green-500 mt-1">✓</span> {l}
+                                                        <li key={i} className="text-sm p-2 rounded border border-gray-200">
+                                                            <div className="font-medium text-notion-text mb-1">{l.strength}</div>
+                                                            <div className="text-xs text-notion-dim pl-2 border-l border-gray-300 italic">{l.application}</div>
                                                         </li>
                                                     )) : <li className="text-xs text-gray-400 italic">None defined.</li>}
                                                 </ul>
@@ -410,12 +488,12 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
 
                                             {/* Failure Modes */}
                                             <div>
-                                                <div className="text-xs font-bold text-red-800 mb-2 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> FAILURE MODES & FIXES</div>
-                                                <ul className="space-y-3">
+                                                <div className="text-xs font-bold text-black mb-2 flex items-center gap-1"><AlertTriangle className="w-3 h-3 text-notion-dim" /> HARD MODE (Risks)</div>
+                                                <ul className="space-y-2">
                                                     {goal.obstacles.length > 0 ? goal.obstacles.map((o, i) => (
-                                                        <li key={i} className="text-sm bg-white p-2 rounded border border-gray-200 shadow-sm">
-                                                            <div className="text-red-900 font-medium mb-1">⚠️ {o.obstacle}</div>
-                                                            <div className="text-green-800 text-xs pl-4 border-l-2 border-green-200">🛡️ {o.workaround}</div>
+                                                        <li key={i} className="text-sm p-2 rounded border border-gray-200">
+                                                            <div className="font-medium text-notion-text mb-1">{o.obstacle}</div>
+                                                            <div className="text-xs text-notion-dim pl-2 border-l border-gray-300 italic">Fix: {o.workaround}</div>
                                                         </li>
                                                     )) : <li className="text-xs text-gray-400 italic">No risks identified.</li>}
                                                 </ul>
@@ -424,7 +502,7 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
                                     </div>
 
                                     {/* Column 2: Execution Contract */}
-                                    <div className="p-6">
+                                    <div className="p-6 bg-white">
                                         <h4 className="text-[10px] font-bold uppercase tracking-widest text-notion-dim mb-4 border-b border-gray-200 pb-2">Execution Contract</h4>
                                         
                                         <div className="space-y-6">
@@ -496,67 +574,78 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
 
       {/* SECTION 2: STRATEGIC IDENTITY */}
       <section>
-          <div className="mb-6">
-              <h2 className="text-xl font-serif font-bold text-notion-text mb-1">Strategic Identity</h2>
-              <p className="text-sm text-notion-dim italic">Know yourself. Leverage assets, mitigate liabilities.</p>
+          <div className="mb-6 flex justify-between items-end">
+              <div>
+                <h2 className="text-xl font-serif font-bold text-notion-text mb-1">Strategic Identity</h2>
+                <p className="text-sm text-notion-dim italic">Know yourself. Leverage assets, mitigate liabilities.</p>
+              </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* ASSETS */}
-              <div className="border border-green-200 bg-green-50/30 rounded-xl p-6">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-green-800 mb-4 flex items-center gap-2">
-                      <Zap className="w-4 h-4" /> Assets (Global Strengths)
+              <div className="border border-notion-border bg-gray-50 rounded-xl p-6">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-black mb-4 flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-notion-dim" /> Assets (Global Strengths)
                   </h3>
                   <ul className="space-y-3 mb-4">
                       {data.strategy.filter(s => s.type === 'STRENGTH').map(s => (
-                          <li key={s.id} className="bg-white p-3 rounded border border-green-100 shadow-sm flex justify-between group">
+                          <li key={s.id} className="bg-white p-3 rounded border border-gray-200 shadow-sm flex justify-between group hover:border-black transition-colors">
                               <div>
-                                  <div className="font-bold text-sm text-green-900">{s.title}</div>
-                                  <div className="text-xs text-green-700 mt-0.5">{s.tactic}</div>
+                                  <div className="font-bold text-sm text-notion-text">{s.title}</div>
+                                  <div className="text-xs text-notion-dim mt-0.5">{s.tactic}</div>
                               </div>
-                              <button onClick={() => onDeleteStrategicItem(s.id)} className="opacity-0 group-hover:opacity-100 text-green-300 hover:text-green-600"><Trash2 className="w-3 h-3" /></button>
+                              <button onClick={() => onDeleteStrategicItem(s.id)} className="opacity-0 group-hover:opacity-100 text-notion-dim hover:text-black"><Trash2 className="w-3 h-3" /></button>
                           </li>
                       ))}
                   </ul>
               </div>
 
               {/* LIABILITIES */}
-              <div className="border border-red-200 bg-red-50/30 rounded-xl p-6">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-red-800 mb-4 flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4" /> Liabilities (Global Weaknesses)
+              <div className="border border-notion-border bg-gray-50 rounded-xl p-6">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-black mb-4 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-notion-dim" /> Liabilities (Global Weaknesses)
                   </h3>
                   <ul className="space-y-3 mb-4">
                       {data.strategy.filter(s => s.type === 'WEAKNESS').map(s => (
-                          <li key={s.id} className="bg-white p-3 rounded border border-red-100 shadow-sm flex justify-between group">
+                          <li key={s.id} className="bg-white p-3 rounded border border-gray-200 shadow-sm flex justify-between group hover:border-black transition-colors">
                               <div>
-                                  <div className="font-bold text-sm text-red-900">{s.title}</div>
-                                  <div className="text-xs text-red-700 mt-0.5">{s.tactic}</div>
+                                  <div className="font-bold text-sm text-notion-text">{s.title}</div>
+                                  <div className="text-xs text-notion-dim mt-0.5">{s.tactic}</div>
                               </div>
-                              <button onClick={() => onDeleteStrategicItem(s.id)} className="opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-600"><Trash2 className="w-3 h-3" /></button>
+                              <button onClick={() => onDeleteStrategicItem(s.id)} className="opacity-0 group-hover:opacity-100 text-notion-dim hover:text-black"><Trash2 className="w-3 h-3" /></button>
                           </li>
                       ))}
                   </ul>
               </div>
           </div>
           
-          {/* Quick Add for Identity */}
-          <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg flex flex-wrap gap-4 items-end no-print">
-              <div className="flex-1 min-w-[200px]">
-                  <label className="block text-[10px] font-bold uppercase text-notion-dim mb-1">Characteristic</label>
-                  <input className="w-full p-2 text-sm border border-gray-300 rounded" placeholder="e.g. Deep Focus" value={strTitle} onChange={e => setStrTitle(e.target.value)} />
-              </div>
-              <div className="flex-1 min-w-[200px]">
-                  <label className="block text-[10px] font-bold uppercase text-notion-dim mb-1">Tactic / Application</label>
-                  <input className="w-full p-2 text-sm border border-gray-300 rounded" placeholder="e.g. Can work 4h blocks without break" value={strTactic} onChange={e => setStrTactic(e.target.value)} />
-              </div>
-              <div>
-                  <label className="block text-[10px] font-bold uppercase text-notion-dim mb-1">Type</label>
-                  <select className="p-2 text-sm border border-gray-300 rounded w-32" value={strType} onChange={e => setStrType(e.target.value as any)}>
-                      <option value="STRENGTH">Asset</option>
-                      <option value="WEAKNESS">Liability</option>
-                  </select>
-              </div>
-              <button onClick={handleAddStrategicItem} disabled={!strTitle || !strTactic} className="px-4 py-2 bg-black text-white rounded text-sm font-bold hover:opacity-80 disabled:opacity-50">Add Item</button>
+          {/* Add Identity Button/Form */}
+          <div className="mt-4">
+              {isAddingIdentity ? (
+                <div className="p-4 bg-white border border-black rounded-lg flex flex-wrap gap-4 items-end animate-in fade-in zoom-in-95">
+                    <div className="flex-1 min-w-[200px]">
+                        <label className="block text-[10px] font-bold uppercase text-notion-dim mb-1">Characteristic</label>
+                        <input className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-black" placeholder="e.g. Deep Focus" value={strTitle} onChange={e => setStrTitle(e.target.value)} autoFocus />
+                    </div>
+                    <div className="flex-1 min-w-[200px]">
+                        <label className="block text-[10px] font-bold uppercase text-notion-dim mb-1">Tactic / Application</label>
+                        <input className="w-full p-2 text-sm border border-gray-300 rounded outline-none focus:border-black" placeholder="e.g. Can work 4h blocks without break" value={strTactic} onChange={e => setStrTactic(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddStrategicItem()} />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-bold uppercase text-notion-dim mb-1">Type</label>
+                        <select className="p-2 text-sm border border-gray-300 rounded w-32 outline-none focus:border-black" value={strType} onChange={e => setStrType(e.target.value as any)}>
+                            <option value="STRENGTH">Asset</option>
+                            <option value="WEAKNESS">Liability</option>
+                        </select>
+                    </div>
+                    <button onClick={handleAddStrategicItem} disabled={!strTitle || !strTactic} className="px-4 py-2 bg-black text-white rounded text-sm font-bold hover:opacity-80 disabled:opacity-50">Save</button>
+                    <button onClick={() => setIsAddingIdentity(false)} className="px-2 text-sm text-notion-dim hover:text-black">Cancel</button>
+                </div>
+              ) : (
+                 <button onClick={() => setIsAddingIdentity(true)} className="text-xs font-bold flex items-center gap-1 text-notion-dim hover:text-black transition-colors">
+                    <Plus className="w-3 h-3" /> Add Identity Item
+                 </button>
+              )}
           </div>
       </section>
 
@@ -574,11 +663,11 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
                   <h3 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2 text-black">
                      <Shield className="w-4 h-4" /> Prescriptions (Identity)
                   </h3>
-                  <ListEditor 
+                  <SimpleListEditor 
                      items={data.globalRules.prescriptions} 
                      onUpdate={(items) => onUpdateGlobalRules({ ...data.globalRules, prescriptions: items })} 
                      placeholder="Always do..."
-                     icon={<Check className="w-3 h-3 text-green-600" />}
+                     icon={<Check className="w-3 h-3 text-notion-dim" />}
                   />
               </div>
               {/* Anti-Goals */}
@@ -586,11 +675,11 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
                   <h3 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2 text-black">
                      <Ban className="w-4 h-4" /> Anti-Goals (Constraints)
                   </h3>
-                  <ListEditor 
+                  <SimpleListEditor 
                      items={data.globalRules.antiGoals} 
                      onUpdate={(items) => onUpdateGlobalRules({ ...data.globalRules, antiGoals: items })} 
                      placeholder="Never do..."
-                     icon={<Ban className="w-3 h-3 text-red-600" />}
+                     icon={<Ban className="w-3 h-3 text-notion-dim" />}
                   />
               </div>
           </div>

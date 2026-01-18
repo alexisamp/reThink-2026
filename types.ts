@@ -13,8 +13,14 @@ export interface Milestone {
 
 export interface Obstacle {
   id: string;
-  obstacle: string;
-  workaround: string;
+  obstacle: string; // The "What"
+  workaround: string; // The "Fix"
+}
+
+export interface Leverage {
+  id: string;
+  strength: string; // The "What"
+  application: string; // The "How to use"
 }
 
 export interface Goal {
@@ -23,9 +29,9 @@ export interface Goal {
   metric: string;
   motivation?: string;
   
-  // Strategy V2 Fields
-  leverage: string[]; // Unfair advantages
-  obstacles: Obstacle[]; // Reality check
+  // Strategy V2 Fields (Symmetrical Audit)
+  leverage: Leverage[]; // "Play on Easy Mode"
+  obstacles: Obstacle[]; // "Manage Hard Mode"
   
   // Deprecated (kept for Dashboard compatibility)
   type?: 'STRENGTH' | 'WEAKNESS'; 
