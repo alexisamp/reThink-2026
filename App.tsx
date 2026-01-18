@@ -130,6 +130,13 @@ const App: React.FC = () => {
     }));
   };
 
+  const updateTodo = (id: string, updates: Partial<Todo>) => {
+    setData(prev => ({
+      ...prev,
+      todos: prev.todos.map(t => t.id === id ? { ...t, ...updates } : t)
+    }));
+  };
+
   const deleteTodo = (id: string) => {
     setData(prev => ({ ...prev, todos: prev.todos.filter(t => t.id !== id) }));
   };
@@ -202,6 +209,7 @@ const App: React.FC = () => {
                     onAddTodo={addTodo}
                     onToggleTodo={toggleTodo}
                     onEditTodo={editTodo}
+                    onUpdateTodo={updateTodo}
                     onDeleteTodo={deleteTodo}
                 />
             )}

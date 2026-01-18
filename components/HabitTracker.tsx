@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Habit, HabitType } from '../types';
 import { Check, Flame, AlertTriangle, Calendar, Clock, CheckSquare, Sparkles } from './Icon';
 import { createCalendarEvent, initGoogleClient } from '../services/google';
@@ -14,6 +14,7 @@ interface HabitTrackerProps {
 
 const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, goalName, todayKey, onToggle, onSchedule }) => {
   const todayValue = habit.contributions[todayKey] || 0;
+  const timeInputRef = useRef<HTMLInputElement>(null);
   
   // Scheduling State
   const [scheduleTime, setScheduleTime] = useState(habit.defaultTime || '');
@@ -35,7 +36,8 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, goalName, todayKey, 
     return last === today;
   }, [habit.lastScheduledAt, justScheduled]);
 
-  const handleCommit = async () => {
+  const handleCommit = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!scheduleTime) return;
     setIsScheduling(true);
     
@@ -119,12 +121,12 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, goalName, todayKey, 
   const isCompleted = todayValue > 0;
 
   return (
-    <div className={`group flex justify-between items-center py-3 px-4 bg-white border rounded-lg transition-all ${isCritical ? 'border-orange-200 shadow-sm' : 'border-gray-100 hover:border-gray-300'}`}>
+    <div className={`group flex justify-between items-center py-3 px-4 bg-white border rounded-lg transition-all ${isCritical ? 'border-notion-text' : 'border-notion-border hover:border-gray-300'}`}>
       
       {/* Left: Identity & Habit */}
       <div className="flex items-center gap-3">
          {isCritical && (
-             <div className="text-orange-500" title="Never Miss Twice! You missed yesterday.">
+             <div className="text-red-500 animate-pulse" title="Never Miss Twice! You missed yesterday.">
                  <AlertTriangle className="w-4 h-4" />
              </div>
          )}
@@ -148,19 +150,25 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, goalName, todayKey, 
                 {/* COMMIT WIDGET (One-Click Scheduling) */}
                 {habit.defaultTime && !isScheduledToday && !isCompleted && (
                     <div className="hidden md:flex items-center gap-1 bg-gray-50 p-1 rounded border border-gray-200 animate-in fade-in">
-                        <div className="relative">
-                            <Clock className="w-3 h-3 absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                        {/* Time Picker Container - Click to open */}
+                        <div 
+                            className="relative flex items-center cursor-pointer hover:bg-gray-100 rounded px-1 transition-colors"
+                            onClick={() => timeInputRef.current?.showPicker()}
+                        >
+                            <Clock className="w-3 h-3 text-gray-400 mr-1" />
                             <input 
+                                ref={timeInputRef}
                                 type="time" 
                                 value={scheduleTime} 
                                 onChange={(e) => setScheduleTime(e.target.value)}
-                                className="bg-transparent text-[10px] font-medium w-20 pl-5 outline-none text-gray-600 min-w-[85px]"
+                                className="bg-transparent text-[10px] font-medium w-16 outline-none text-gray-600 min-w-[65px] cursor-pointer"
                             />
                         </div>
+                        <div className="h-3 w-px bg-gray-300 mx-1"></div>
                         <button 
                             onClick={handleCommit}
                             disabled={isScheduling}
-                            className="bg-white hover:bg-black hover:text-white border border-gray-200 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
+                            className="bg-white hover:bg-black hover:text-white text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
                         >
                             {isScheduling ? '...' : <><Calendar className="w-3 h-3" /> Commit</>}
                         </button>

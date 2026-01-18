@@ -57,6 +57,7 @@ export interface Todo {
   milestoneId?: string; // Optional link to roadmap
   text: string;
   effort?: 'DEEP' | 'SHALLOW'; // New field for categorization
+  block?: 'AM' | 'PM'; // New field for time blocking
   completed: boolean;
   completedAt?: number;
   date: string; 

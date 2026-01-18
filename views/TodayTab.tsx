@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { AppData, GoalStatus } from '../types';
+import { AppData, GoalStatus, Todo } from '../types';
 import HabitTracker from '../components/HabitTracker';
-import { Plus, Check, Trash2, ArrowRight, Sun, Moon, Zap, Feather, PenTool } from '../components/Icon';
+import { Plus, Check, Trash2, ArrowRight, Sun, Moon, Zap, Feather, PenTool, CheckSquare, RefreshCw, Clock } from '../components/Icon';
 
 interface TodayTabProps {
   data: AppData;
@@ -10,6 +10,7 @@ interface TodayTabProps {
   onAddTodo: (text: string, goalId: string, milestoneId?: string, effort?: 'DEEP' | 'SHALLOW') => void;
   onToggleTodo: (id: string) => void;
   onEditTodo: (id: string, newText: string) => void;
+  onUpdateTodo: (id: string, updates: Partial<Todo>) => void;
   onDeleteTodo: (id: string) => void;
 }
 
@@ -20,6 +21,7 @@ const TodayTab: React.FC<TodayTabProps> = ({
   onAddTodo,
   onToggleTodo,
   onEditTodo,
+  onUpdateTodo,
   onDeleteTodo
 }) => {
   // --- Refs for Navigation ---
@@ -39,24 +41,34 @@ const TodayTab: React.FC<TodayTabProps> = ({
   // --- Derived Data ---
   const activeGoals = data.goals.filter(g => g.status === GoalStatus.ACTIVE);
   
-  // Tasks: Show today's tasks OR incomplete tasks from the past (carry-over)
-  const activeTodos = data.todos.filter(t => {
-      if (t.completed && t.date !== todayKey) return false; // Hide old completed
-      if (t.date === todayKey) return true; // Show all today
-      if (!t.completed && t.date < todayKey) return true; // Show past overdue
+  // Tasks Logic
+  const allTodos = data.todos.filter(t => {
+      if (t.completed && t.date !== todayKey) return false;
+      if (t.date === todayKey) return true;
+      if (!t.completed && t.date < todayKey) return true; 
       return false;
-  }).sort((a, b) => (a.completed === b.completed ? 0 : a.completed ? 1 : -1)); // Sort incomplete first
+  });
+
+  const pendingTodos = allTodos
+    .filter(t => !t.completed)
+    .sort((a, b) => {
+        // Sort: AM -> PM -> Unassigned
+        const score = (t: Todo) => t.block === 'AM' ? 0 : t.block === 'PM' ? 1 : 2;
+        return score(a) - score(b);
+    });
+
+  const completedTodos = allTodos
+    .filter(t => t.completed)
+    .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
 
   const activeHabits = data.habits.filter(h => {
       const parentGoal = data.goals.find(g => g.id === h.goalId);
       return parentGoal?.status === GoalStatus.ACTIVE;
   });
 
-  // Group Habits
   const pendingHabits = activeHabits.filter(h => (h.contributions[todayKey] || 0) === 0);
   const completedHabits = activeHabits.filter(h => (h.contributions[todayKey] || 0) > 0);
 
-  // Milestone logic
   const availableMilestones = activeGoals.find(g => g.id === selectedGoalId)?.milestones || [];
 
   const handleAddTask = () => {
@@ -86,8 +98,13 @@ const TodayTab: React.FC<TodayTabProps> = ({
       ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const formatCompletedTime = (timestamp?: number) => {
+      if (!timestamp) return '';
+      return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
-    <div className="animate-fade-in pb-32 max-w-3xl mx-auto space-y-10">
+    <div className="animate-fade-in pb-32 max-w-3xl mx-auto space-y-12">
       
       {/* ================= AM BLOCK: PLANNING ================= */}
       <section ref={todoSectionRef} className="scroll-mt-6">
@@ -98,19 +115,21 @@ const TodayTab: React.FC<TodayTabProps> = ({
             </div>
             <div className="flex items-center justify-between">
                 <h2 className="text-3xl font-serif font-medium text-notion-text">Today's Action Plan</h2>
-                {/* Navigation Pills */}
+                {/* Navigation Pills - Updated to Minimalist Lucide Icons */}
                 <div className="flex gap-2">
                     <button 
                         onClick={() => scrollToSection(todoSectionRef)}
-                        className="text-xs font-medium px-3 py-1 bg-notion-sidebar rounded-full text-notion-dim hover:bg-gray-200 hover:text-black transition-colors flex items-center gap-1"
+                        className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-notion-text text-white text-xs font-medium shadow-sm hover:opacity-90 transition-all"
                     >
-                        📝 To Do
+                        <CheckSquare className="w-3.5 h-3.5" />
+                        <span>Tasks</span>
                     </button>
                     <button 
                          onClick={() => scrollToSection(habitSectionRef)}
-                         className="text-xs font-medium px-3 py-1 bg-notion-sidebar rounded-full text-notion-dim hover:bg-gray-200 hover:text-black transition-colors flex items-center gap-1"
+                         className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-notion-sidebar text-notion-dim hover:bg-gray-200 hover:text-notion-text text-xs font-medium transition-all"
                     >
-                        ✅ Habits
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Habits</span>
                     </button>
                 </div>
             </div>
@@ -119,7 +138,6 @@ const TodayTab: React.FC<TodayTabProps> = ({
 
         {/* --- Inverted Input Row --- */}
         <div className="bg-white p-2 rounded-xl border border-notion-border shadow-sm flex flex-col md:flex-row gap-2 mb-8 items-center focus-within:ring-2 focus-within:ring-notion-dim/20 transition-all">
-             {/* 1. Task Text (Grow) */}
              <div className="flex-1 w-full">
                  <input 
                     className="w-full p-2.5 bg-transparent text-sm font-medium placeholder:text-gray-400 outline-none"
@@ -132,7 +150,6 @@ const TodayTab: React.FC<TodayTabProps> = ({
              </div>
              
              <div className="flex gap-2 w-full md:w-auto overflow-x-auto md:overflow-visible pb-2 md:pb-0">
-                 {/* 2. Goal Select */}
                  <select 
                     className="bg-notion-sidebar border border-notion-border rounded px-3 py-2 text-xs font-medium outline-none cursor-pointer hover:bg-gray-100 max-w-[120px] truncate"
                     value={selectedGoalId}
@@ -142,7 +159,6 @@ const TodayTab: React.FC<TodayTabProps> = ({
                      {activeGoals.map(g => <option key={g.id} value={g.id}>{g.text}</option>)}
                  </select>
 
-                 {/* 3. Milestone Select */}
                  <select 
                     className="bg-notion-sidebar border border-notion-border rounded px-3 py-2 text-xs font-medium outline-none cursor-pointer hover:bg-gray-100 max-w-[120px] truncate disabled:opacity-50"
                     value={selectedMilestoneId}
@@ -153,7 +169,6 @@ const TodayTab: React.FC<TodayTabProps> = ({
                      {availableMilestones.map(m => <option key={m.id} value={m.id}>{m.text}</option>)}
                  </select>
 
-                 {/* 4. Effort Toggle (New Minimal Style) */}
                  <button
                     onClick={() => setEffort(prev => prev === 'DEEP' ? 'SHALLOW' : 'DEEP')}
                     className={`flex items-center gap-1 px-3 py-2 rounded border text-xs font-bold transition-colors ${
@@ -161,13 +176,11 @@ const TodayTab: React.FC<TodayTabProps> = ({
                             ? 'bg-notion-text border-notion-text text-white' 
                             : 'bg-white border-notion-border text-notion-dim hover:border-black'
                     }`}
-                    title={effort === 'DEEP' ? "High Energy / Deep Work" : "Low Energy / Admin"}
                  >
                     {effort === 'DEEP' ? <Zap className="w-3 h-3 fill-white" /> : <Feather className="w-3 h-3" />}
                     <span className="hidden md:inline">{effort === 'DEEP' ? 'Deep' : 'Shallow'}</span>
                  </button>
 
-                 {/* 5. Add Button */}
                  <button 
                     onClick={handleAddTask}
                     disabled={!taskText || !selectedGoalId}
@@ -178,32 +191,31 @@ const TodayTab: React.FC<TodayTabProps> = ({
              </div>
         </div>
 
-        {/* --- Task List --- */}
-        <div className="space-y-1">
-            {activeTodos.length === 0 && (
+        {/* --- Task List: PENDING --- */}
+        <div className="space-y-1 mb-8">
+            {pendingTodos.length > 0 && <div className="text-[10px] font-bold uppercase tracking-widest text-notion-dim pl-1 mb-2">Pending</div>}
+            
+            {pendingTodos.length === 0 && completedTodos.length === 0 && (
                 <div className="text-center py-10 border-2 border-dashed border-notion-border rounded-xl">
-                    <p className="text-notion-dim text-sm italic">No active tasks. Plan your victory.</p>
+                    <p className="text-notion-dim text-sm italic">No tasks. Plan your victory.</p>
                 </div>
             )}
             
-            {activeTodos.map(todo => {
+            {pendingTodos.map(todo => {
                 const goal = data.goals.find(g => g.id === todo.goalId);
                 const milestone = goal?.milestones?.find(m => m.id === todo.milestoneId);
                 const isOverdue = !todo.completed && todo.date < todayKey;
                 const isEditing = editingTodoId === todo.id;
 
                 return (
-                    <div key={todo.id} className="group flex items-center p-3 hover:bg-notion-sidebar rounded-lg transition-colors border border-transparent hover:border-notion-border">
+                    <div key={todo.id} className="group flex items-center p-3 bg-white hover:bg-notion-sidebar rounded-lg transition-colors border border-notion-border hover:border-gray-300">
                         <button 
                             onClick={() => onToggleTodo(todo.id)}
-                            className={`flex-shrink-0 w-5 h-5 mr-4 border rounded flex items-center justify-center transition-all ${
-                                todo.completed ? 'bg-notion-dim border-notion-dim text-white' : 'bg-white border-gray-300 hover:border-black'
-                            }`}
+                            className="flex-shrink-0 w-5 h-5 mr-4 border border-gray-300 rounded flex items-center justify-center transition-all bg-white hover:border-black"
                         >
-                            {todo.completed && <Check className="w-3 h-3" />}
                         </button>
                         
-                        <div className={`flex-1 ${todo.completed ? 'opacity-40' : ''}`}>
+                        <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                                 {isEditing ? (
                                     <input 
@@ -216,7 +228,7 @@ const TodayTab: React.FC<TodayTabProps> = ({
                                     />
                                 ) : (
                                     <>
-                                        <span className={`text-sm font-medium ${todo.completed ? 'line-through text-notion-dim' : 'text-notion-text'}`}>
+                                        <span className="text-sm font-medium text-notion-text truncate">
                                             {todo.text}
                                         </span>
                                         {isOverdue && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold uppercase">Overdue</span>}
@@ -228,27 +240,64 @@ const TodayTab: React.FC<TodayTabProps> = ({
                             <div className="flex items-center gap-2">
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-notion-dim">{goal?.text}</span>
                                 {milestone && (
-                                    <span className="text-[10px] text-gray-400 flex items-center gap-1 border-l border-gray-300 pl-2">
+                                    <span className="text-[10px] text-gray-400 flex items-center gap-1 border-l border-gray-300 pl-2 truncate">
                                         <ArrowRight className="w-2 h-2" /> {milestone.text}
                                     </span>
                                 )}
                             </div>
                         </div>
 
+                        {/* Block Selector */}
+                        <select 
+                            className="bg-transparent text-[10px] font-bold text-notion-dim hover:text-black border-none outline-none cursor-pointer text-right mr-2 uppercase"
+                            value={todo.block || ''}
+                            onChange={(e) => onUpdateTodo(todo.id, { block: e.target.value as 'AM'|'PM' || undefined })}
+                        >
+                            <option value="">--</option>
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                        </select>
+
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {!todo.completed && (
-                                <button onClick={() => startEditing(todo.id, todo.text)} className="p-2 text-gray-300 hover:text-black transition-all">
-                                    <PenTool className="w-3 h-3" />
-                                </button>
-                            )}
-                            <button onClick={() => onDeleteTodo(todo.id)} className="p-2 text-gray-300 hover:text-red-500 transition-all">
-                                <Trash2 className="w-4 h-4" />
+                            <button onClick={() => startEditing(todo.id, todo.text)} className="p-1.5 text-gray-300 hover:text-black transition-all">
+                                <PenTool className="w-3 h-3" />
+                            </button>
+                            <button onClick={() => onDeleteTodo(todo.id)} className="p-1.5 text-gray-300 hover:text-red-500 transition-all">
+                                <Trash2 className="w-3 h-3" />
                             </button>
                         </div>
                     </div>
                 );
             })}
         </div>
+
+        {/* --- Task List: COMPLETED --- */}
+        {completedTodos.length > 0 && (
+            <div className="space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-notion-dim pl-1 mb-2">Completed</div>
+                {completedTodos.map(todo => {
+                    const goal = data.goals.find(g => g.id === todo.goalId);
+                    return (
+                        <div key={todo.id} className="flex items-center p-3 rounded-lg opacity-60 hover:opacity-100 transition-opacity border border-transparent">
+                             <button 
+                                onClick={() => onToggleTodo(todo.id)}
+                                className="flex-shrink-0 w-5 h-5 mr-4 border border-notion-dim bg-notion-dim text-white rounded flex items-center justify-center"
+                            >
+                                <Check className="w-3 h-3" />
+                            </button>
+                            <div className="flex-1 min-w-0">
+                                <span className="text-sm font-medium text-notion-dim line-through decoration-notion-dim truncate block">
+                                    {todo.text}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-notion-dim font-serif italic">
+                                <span>{formatCompletedTime(todo.completedAt)}</span>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        )}
       </section>
 
       {/* --- DIVIDER --- */}
@@ -265,7 +314,7 @@ const TodayTab: React.FC<TodayTabProps> = ({
             <p className="text-notion-dim font-serif italic text-sm mt-1">Consistency compounds.</p>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-8">
              {activeHabits.length === 0 && (
                 <div className="text-center py-10">
                     <p className="text-notion-dim text-sm italic">System offline. Define habits in Strategy tab.</p>
@@ -274,7 +323,7 @@ const TodayTab: React.FC<TodayTabProps> = ({
 
              {/* Pending Habits */}
              {pendingHabits.length > 0 && (
-                <div className="space-y-3">
+                <div className="space-y-2">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-notion-dim pl-1 mb-2">Pending</div>
                     {pendingHabits.map(habit => {
                         const goal = data.goals.find(g => g.id === habit.goalId);
@@ -293,9 +342,9 @@ const TodayTab: React.FC<TodayTabProps> = ({
                 </div>
              )}
 
-             {/* Completed Habits (Visual Separation) */}
+             {/* Completed Habits */}
              {completedHabits.length > 0 && (
-                <div className="space-y-3 opacity-75 grayscale-[0.5] hover:grayscale-0 transition-all">
+                <div className="space-y-2 opacity-60 grayscale-[0.8] hover:grayscale-0 hover:opacity-100 transition-all">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-notion-dim/50 pl-1 mb-2">Completed</div>
                     {completedHabits.map(habit => {
                         const goal = data.goals.find(g => g.id === habit.goalId);
