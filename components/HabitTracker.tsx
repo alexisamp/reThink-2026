@@ -139,9 +139,9 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, goalName, todayKey, 
         
         {/* REWARD LOGIC: Only show Reward if completed AND reward exists. Otherwise show scheduling. */}
         {isCompleted && habit.reward ? (
-            <div className="flex items-center gap-1.5 text-xs text-notion-dim font-medium bg-purple-50 px-2 py-1 rounded-md animate-in fade-in slide-in-from-bottom-2">
-                <Sparkles className="w-3 h-3 text-purple-500" />
-                <span className="text-purple-700">{habit.reward}</span>
+            <div className="flex items-center gap-1.5 text-xs font-semibold bg-gray-100 px-2 py-1 rounded-md animate-in fade-in slide-in-from-bottom-2 border border-gray-200">
+                <Sparkles className="w-3 h-3 text-notion-text" />
+                <span className="text-notion-text">{habit.reward}</span>
             </div>
         ) : (
             <>
@@ -154,7 +154,7 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, goalName, todayKey, 
                                 type="time" 
                                 value={scheduleTime} 
                                 onChange={(e) => setScheduleTime(e.target.value)}
-                                className="bg-transparent text-[10px] font-medium w-16 pl-5 outline-none text-gray-600 min-w-[50px]"
+                                className="bg-transparent text-[10px] font-medium w-20 pl-5 outline-none text-gray-600 min-w-[85px]"
                             />
                         </div>
                         <button 

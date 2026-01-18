@@ -111,10 +111,22 @@ const App: React.FC = () => {
       todos: prev.todos.map(t => {
           if (t.id === id) {
               const nowCompleted = !t.completed;
-              return { ...t, completed: nowCompleted, completedAt: nowCompleted ? Date.now() : undefined };
+              // Save exact timestamp when completing
+              return { 
+                ...t, 
+                completed: nowCompleted, 
+                completedAt: nowCompleted ? Date.now() : undefined 
+              };
           }
           return t;
       })
+    }));
+  };
+
+  const editTodo = (id: string, newText: string) => {
+    setData(prev => ({
+      ...prev,
+      todos: prev.todos.map(t => t.id === id ? { ...t, text: newText } : t)
     }));
   };
 
@@ -151,7 +163,7 @@ const App: React.FC = () => {
 
         <div className="mt-auto p-8 border-t border-notion-border">
            <div className="text-[10px] uppercase tracking-widest text-notion-dim font-medium">
-              reThink v7.0
+              reThink v7.1
            </div>
            <div className="text-xs font-serif italic text-notion-dim mt-1">
               "Identity determines behavior."
@@ -189,6 +201,7 @@ const App: React.FC = () => {
                     onToggleHabit={toggleHabit}
                     onAddTodo={addTodo}
                     onToggleTodo={toggleTodo}
+                    onEditTodo={editTodo}
                     onDeleteTodo={deleteTodo}
                 />
             )}

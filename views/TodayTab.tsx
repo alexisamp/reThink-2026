@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { AppData, GoalStatus } from '../types';
 import HabitTracker from '../components/HabitTracker';
-import { Plus, Check, Trash2, ArrowRight, Sun, Moon, Zap, Feather } from '../components/Icon';
+import { Plus, Check, Trash2, ArrowRight, Sun, Moon, Zap, Feather, PenTool } from '../components/Icon';
 
 interface TodayTabProps {
   data: AppData;
@@ -9,6 +9,7 @@ interface TodayTabProps {
   onToggleHabit: (id: string, val: number) => void;
   onAddTodo: (text: string, goalId: string, milestoneId?: string, effort?: 'DEEP' | 'SHALLOW') => void;
   onToggleTodo: (id: string) => void;
+  onEditTodo: (id: string, newText: string) => void;
   onDeleteTodo: (id: string) => void;
 }
 
@@ -18,13 +19,22 @@ const TodayTab: React.FC<TodayTabProps> = ({
   onToggleHabit,
   onAddTodo,
   onToggleTodo,
+  onEditTodo,
   onDeleteTodo
 }) => {
+  // --- Refs for Navigation ---
+  const todoSectionRef = useRef<HTMLElement>(null);
+  const habitSectionRef = useRef<HTMLElement>(null);
+
   // --- Input State ---
   const [taskText, setTaskText] = useState('');
   const [selectedGoalId, setSelectedGoalId] = useState<string>('');
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string>('');
   const [effort, setEffort] = useState<'DEEP' | 'SHALLOW'>('SHALLOW');
+
+  // --- Editing State ---
+  const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
 
   // --- Derived Data ---
   const activeGoals = data.goals.filter(g => g.status === GoalStatus.ACTIVE);
@@ -46,7 +56,7 @@ const TodayTab: React.FC<TodayTabProps> = ({
   const pendingHabits = activeHabits.filter(h => (h.contributions[todayKey] || 0) === 0);
   const completedHabits = activeHabits.filter(h => (h.contributions[todayKey] || 0) > 0);
 
-  // Milestone logic: Show ALL milestones for the selected goal (removed .filter(m => !m.completed))
+  // Milestone logic
   const availableMilestones = activeGoals.find(g => g.id === selectedGoalId)?.milestones || [];
 
   const handleAddTask = () => {
@@ -60,17 +70,50 @@ const TodayTab: React.FC<TodayTabProps> = ({
     console.log(`Scheduled habit ${id} at ${timestamp}`);
   };
 
+  const startEditing = (id: string, currentText: string) => {
+      setEditingTodoId(id);
+      setEditingText(currentText);
+  };
+
+  const saveEditing = (id: string) => {
+      if (editingText.trim()) {
+          onEditTodo(id, editingText);
+      }
+      setEditingTodoId(null);
+  };
+
+  const scrollToSection = (ref: React.RefObject<HTMLElement>) => {
+      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
-    <div className="animate-fade-in pb-32 max-w-3xl mx-auto space-y-16">
+    <div className="animate-fade-in pb-32 max-w-3xl mx-auto space-y-10">
       
       {/* ================= AM BLOCK: PLANNING ================= */}
-      <section>
+      <section ref={todoSectionRef} className="scroll-mt-6">
         <div className="mb-6">
             <div className="flex items-center gap-2 text-notion-dim mb-1">
                 <Sun className="w-4 h-4" />
                 <span className="text-xs font-bold uppercase tracking-widest">AM • Planning</span>
             </div>
-            <h2 className="text-3xl font-serif font-medium text-notion-text">Today's Action Plan</h2>
+            <div className="flex items-center justify-between">
+                <h2 className="text-3xl font-serif font-medium text-notion-text">Today's Action Plan</h2>
+                {/* Navigation Pills */}
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => scrollToSection(todoSectionRef)}
+                        className="text-xs font-medium px-3 py-1 bg-notion-sidebar rounded-full text-notion-dim hover:bg-gray-200 hover:text-black transition-colors flex items-center gap-1"
+                    >
+                        📝 To Do
+                    </button>
+                    <button 
+                         onClick={() => scrollToSection(habitSectionRef)}
+                         className="text-xs font-medium px-3 py-1 bg-notion-sidebar rounded-full text-notion-dim hover:bg-gray-200 hover:text-black transition-colors flex items-center gap-1"
+                    >
+                        ✅ Habits
+                    </button>
+                </div>
+            </div>
             <p className="text-notion-dim font-serif italic text-sm mt-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
         </div>
 
@@ -147,6 +190,7 @@ const TodayTab: React.FC<TodayTabProps> = ({
                 const goal = data.goals.find(g => g.id === todo.goalId);
                 const milestone = goal?.milestones?.find(m => m.id === todo.milestoneId);
                 const isOverdue = !todo.completed && todo.date < todayKey;
+                const isEditing = editingTodoId === todo.id;
 
                 return (
                     <div key={todo.id} className="group flex items-center p-3 hover:bg-notion-sidebar rounded-lg transition-colors border border-transparent hover:border-notion-border">
@@ -161,11 +205,24 @@ const TodayTab: React.FC<TodayTabProps> = ({
                         
                         <div className={`flex-1 ${todo.completed ? 'opacity-40' : ''}`}>
                             <div className="flex items-center gap-2 mb-1">
-                                <span className={`text-sm font-medium ${todo.completed ? 'line-through text-notion-dim' : 'text-notion-text'}`}>
-                                    {todo.text}
-                                </span>
-                                {isOverdue && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold uppercase">Overdue</span>}
-                                {todo.effort === 'DEEP' && <Zap className="w-3 h-3 text-notion-text fill-black" />}
+                                {isEditing ? (
+                                    <input 
+                                        autoFocus
+                                        className="w-full bg-transparent border-b border-black outline-none text-sm font-medium"
+                                        value={editingText}
+                                        onChange={e => setEditingText(e.target.value)}
+                                        onBlur={() => saveEditing(todo.id)}
+                                        onKeyDown={e => e.key === 'Enter' && saveEditing(todo.id)}
+                                    />
+                                ) : (
+                                    <>
+                                        <span className={`text-sm font-medium ${todo.completed ? 'line-through text-notion-dim' : 'text-notion-text'}`}>
+                                            {todo.text}
+                                        </span>
+                                        {isOverdue && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold uppercase">Overdue</span>}
+                                        {todo.effort === 'DEEP' && <Zap className="w-3 h-3 text-notion-text fill-black" />}
+                                    </>
+                                )}
                             </div>
                             
                             <div className="flex items-center gap-2">
@@ -178,9 +235,16 @@ const TodayTab: React.FC<TodayTabProps> = ({
                             </div>
                         </div>
 
-                        <button onClick={() => onDeleteTodo(todo.id)} className="opacity-0 group-hover:opacity-100 p-2 text-gray-300 hover:text-red-500 transition-all">
-                            <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {!todo.completed && (
+                                <button onClick={() => startEditing(todo.id, todo.text)} className="p-2 text-gray-300 hover:text-black transition-all">
+                                    <PenTool className="w-3 h-3" />
+                                </button>
+                            )}
+                            <button onClick={() => onDeleteTodo(todo.id)} className="p-2 text-gray-300 hover:text-red-500 transition-all">
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
                     </div>
                 );
             })}
@@ -191,7 +255,7 @@ const TodayTab: React.FC<TodayTabProps> = ({
       <hr className="border-notion-border" />
 
       {/* ================= PM BLOCK: SYSTEM ================= */}
-      <section>
+      <section ref={habitSectionRef} className="scroll-mt-6">
         <div className="mb-8">
             <div className="flex items-center gap-2 text-notion-dim mb-1">
                 <Moon className="w-4 h-4" />
@@ -211,6 +275,7 @@ const TodayTab: React.FC<TodayTabProps> = ({
              {/* Pending Habits */}
              {pendingHabits.length > 0 && (
                 <div className="space-y-3">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-notion-dim pl-1 mb-2">Pending</div>
                     {pendingHabits.map(habit => {
                         const goal = data.goals.find(g => g.id === habit.goalId);
                         return (
@@ -231,7 +296,7 @@ const TodayTab: React.FC<TodayTabProps> = ({
              {/* Completed Habits (Visual Separation) */}
              {completedHabits.length > 0 && (
                 <div className="space-y-3 opacity-75 grayscale-[0.5] hover:grayscale-0 transition-all">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-notion-dim/50 pl-2">Completed</div>
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-notion-dim/50 pl-1 mb-2">Completed</div>
                     {completedHabits.map(habit => {
                         const goal = data.goals.find(g => g.id === habit.goalId);
                         return (
