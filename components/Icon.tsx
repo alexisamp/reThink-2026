@@ -28,7 +28,9 @@ import {
   Moon,
   Flame,
   Feather,
-  Clock
+  Clock,
+  Lock,
+  Anchor
 } from 'lucide-react';
 
 export { 
@@ -60,5 +62,7 @@ export {
   Moon,
   Flame,
   Feather,
-  Clock
+  Clock,
+  Lock,
+  Anchor
 };
