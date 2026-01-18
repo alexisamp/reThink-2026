@@ -7,7 +7,8 @@ const INITIAL_DATA: AppData = {
   habits: [],
   todos: [],
   reviews: [],
-  strategy: []
+  strategy: [],
+  globalRules: { prescriptions: [], antiGoals: [] }
 };
 
 export const loadData = (): AppData => {

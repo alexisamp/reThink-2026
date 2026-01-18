@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { loadData, saveData, getTodayKey } from './services/storage';
-import { AppData, Goal, Habit, Todo, GoalStatus, HabitType, StrategicItem, Milestone, ReviewEntry, DayRating } from './types';
+import { AppData, Goal, Habit, Todo, GoalStatus, HabitType, StrategicItem, Milestone, ReviewEntry, DayRating, GlobalRules } from './types';
 import { Target, Mic, BarChart2, Sun, Target as StrategyIcon, PenTool, Layout } from './components/Icon'; 
 import StrategyTab from './views/StrategyTab';
 import TodayTab from './views/TodayTab';
@@ -11,16 +11,34 @@ type Tab = 'STRATEGY' | 'TODAY' | 'DASHBOARD';
 
 const App: React.FC = () => {
   const [data, setData] = useState<AppData>(() => {
-    const loaded = loadData();
+    const loaded = loadData() as any; // Cast to allow migration checks
+
+    // 1. Ensure Strategy Array exists
     if (!loaded.strategy) loaded.strategy = [];
-    // Migration: ensure new fields exist
-    loaded.goals = loaded.goals.map(g => ({
+
+    // 2. Goal Migration (V2 Fields)
+    loaded.goals = (loaded.goals || []).map((g: any) => ({
         ...g, 
         milestones: g.milestones || [],
-        type: (g as any).type || 'STRENGTH',
-        metric: (g as any).metric || 'Define success metric'
+        type: g.type || 'STRENGTH', // Keep for legacy
+        metric: g.metric || 'Define success metric',
+        leverage: g.leverage || [],
+        obstacles: g.obstacles || []
     }));
-    return loaded;
+
+    // 3. Global Rules Migration (String -> Object)
+    let migratedRules: GlobalRules = { prescriptions: [], antiGoals: [] };
+    if (typeof loaded.globalRules === 'string') {
+        // Attempt to parse old text blob into prescriptions
+        if (loaded.globalRules.trim()) {
+            migratedRules.prescriptions = loaded.globalRules.split('\n').filter((r: string) => r.trim().length > 0);
+        }
+    } else if (loaded.globalRules) {
+        migratedRules = loaded.globalRules;
+    }
+    loaded.globalRules = migratedRules;
+
+    return loaded as AppData;
   });
   
   const [activeTab, setActiveTab] = useState<Tab>('TODAY');
@@ -62,7 +80,7 @@ const App: React.FC = () => {
       setData(prev => ({ ...prev, strategy: prev.strategy.filter(s => s.id !== id) }));
   };
 
-  const updateGlobalRules = (rules: string) => {
+  const updateGlobalRules = (rules: GlobalRules) => {
       setData(prev => ({ ...prev, globalRules: rules }));
   };
 
@@ -187,7 +205,7 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="flex-1 p-6 md:p-16 overflow-y-auto max-h-screen">
-        <div className="max-w-5xl mx-auto h-full pb-24">
+        <div className="max-w-6xl mx-auto h-full pb-24">
             {activeTab === 'STRATEGY' && (
                 <StrategyTab 
                     data={data}

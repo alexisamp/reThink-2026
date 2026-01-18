@@ -11,13 +11,26 @@ export interface Milestone {
   completedAt?: number;
 }
 
+export interface Obstacle {
+  id: string;
+  obstacle: string;
+  workaround: string;
+}
+
 export interface Goal {
   id: string;
   text: string;
   metric: string;
   motivation?: string;
-  type: 'STRENGTH' | 'WEAKNESS';
+  
+  // Strategy V2 Fields
+  leverage: string[]; // Unfair advantages
+  obstacles: Obstacle[]; // Reality check
+  
+  // Deprecated (kept for Dashboard compatibility)
+  type?: 'STRENGTH' | 'WEAKNESS'; 
   workaround?: string;
+
   status: GoalStatus;
   milestones: Milestone[];
   createdAt: number;
@@ -73,11 +86,16 @@ export interface ReviewEntry {
   dayRating: DayRating;
 }
 
+export interface GlobalRules {
+  prescriptions: string[]; // "Always do"
+  antiGoals: string[];     // "Never do"
+}
+
 export interface AppData {
   goals: Goal[];
   habits: Habit[];
   todos: Todo[];
   reviews: ReviewEntry[];
   strategy: StrategicItem[];
-  globalRules?: string;
+  globalRules: GlobalRules; // Updated from string to structured object
 }

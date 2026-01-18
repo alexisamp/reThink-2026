@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { AppData, GoalStatus, Todo } from '../types';
 import HabitTracker from '../components/HabitTracker';
-import { Plus, Check, Trash2, ArrowRight, Sun, Moon, Zap, Feather, PenTool, CheckSquare, RefreshCw, Clock } from '../components/Icon';
+import { Plus, Check, Trash2, ArrowRight, Sun, Moon, Zap, Feather, PenTool, CheckSquare, RefreshCw, Shield, Ban } from '../components/Icon';
 
 interface TodayTabProps {
   data: AppData;
@@ -33,6 +33,7 @@ const TodayTab: React.FC<TodayTabProps> = ({
   const [selectedGoalId, setSelectedGoalId] = useState<string>('');
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string>('');
   const [effort, setEffort] = useState<'DEEP' | 'SHALLOW'>('SHALLOW');
+  const [showRules, setShowRules] = useState(false);
 
   // --- Editing State ---
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
@@ -108,36 +109,81 @@ const TodayTab: React.FC<TodayTabProps> = ({
   };
 
   return (
-    <div className="animate-fade-in pb-32 max-w-3xl mx-auto space-y-12">
+    <div className="animate-fade-in pb-32 max-w-3xl mx-auto space-y-12 relative">
       
+      {/* RULES OVERLAY */}
+      {showRules && (
+          <div className="absolute top-12 right-0 z-20 w-72 bg-white border border-notion-border rounded-xl shadow-xl p-4 animate-in fade-in zoom-in-95">
+              <div className="flex justify-between items-center mb-3">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-notion-dim">The Code</h4>
+                  <button onClick={() => setShowRules(false)} className="text-notion-dim hover:text-black">✕</button>
+              </div>
+              <div className="space-y-4">
+                  {data.globalRules.prescriptions.length > 0 && (
+                      <div>
+                          <div className="text-[10px] text-green-700 font-bold mb-1 flex items-center gap-1"><Check className="w-3 h-3"/> ALWAYS</div>
+                          <ul className="text-xs space-y-1 text-notion-text">
+                              {data.globalRules.prescriptions.map((r, i) => <li key={i}>• {r}</li>)}
+                          </ul>
+                      </div>
+                  )}
+                  {data.globalRules.antiGoals.length > 0 && (
+                      <div>
+                          <div className="text-[10px] text-red-700 font-bold mb-1 flex items-center gap-1"><Ban className="w-3 h-3"/> NEVER</div>
+                          <ul className="text-xs space-y-1 text-notion-text">
+                              {data.globalRules.antiGoals.map((r, i) => <li key={i}>• {r}</li>)}
+                          </ul>
+                      </div>
+                  )}
+                  {data.globalRules.prescriptions.length === 0 && data.globalRules.antiGoals.length === 0 && (
+                      <div className="text-xs text-gray-400 italic">No rules defined in Strategy.</div>
+                  )}
+              </div>
+          </div>
+      )}
+
       {/* ================= AM BLOCK: PLANNING ================= */}
       <section ref={todoSectionRef} className="scroll-mt-6">
         <div className="mb-6">
-            <div className="flex items-center gap-2 text-notion-dim mb-1">
-                <Sun className="w-4 h-4" />
-                <span className="text-xs font-bold uppercase tracking-widest">AM • Planning</span>
-            </div>
-            <div className="flex items-center justify-between">
-                <h2 className="text-3xl font-serif font-medium text-notion-text">Today's Action Plan</h2>
-                {/* Navigation Pills - Updated to Minimalist Lucide Icons */}
-                <div className="flex gap-2">
+            <div className="flex justify-between items-start">
+                <div>
+                    <div className="flex items-center gap-2 text-notion-dim mb-1">
+                        <Sun className="w-4 h-4" />
+                        <span className="text-xs font-bold uppercase tracking-widest">AM • Planning</span>
+                    </div>
+                    <h2 className="text-3xl font-serif font-medium text-notion-text">Today's Action Plan</h2>
+                    <p className="text-notion-dim font-serif italic text-sm mt-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                </div>
+                
+                {/* Header Actions */}
+                <div className="flex items-center gap-3">
                     <button 
-                        onClick={() => scrollToSection(todoSectionRef)}
-                        className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-notion-text text-white text-xs font-medium shadow-sm hover:opacity-90 transition-all"
+                        onClick={() => setShowRules(!showRules)}
+                        className={`p-2 rounded-full transition-colors ${showRules ? 'bg-black text-white' : 'bg-gray-100 text-gray-500 hover:text-black'}`}
+                        title="View Rules"
                     >
-                        <CheckSquare className="w-3.5 h-3.5" />
-                        <span>Tasks</span>
-                    </button>
-                    <button 
-                         onClick={() => scrollToSection(habitSectionRef)}
-                         className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-notion-sidebar text-notion-dim hover:bg-gray-200 hover:text-notion-text text-xs font-medium transition-all"
-                    >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>Habits</span>
+                        <Shield className="w-4 h-4" />
                     </button>
                 </div>
             </div>
-            <p className="text-notion-dim font-serif italic text-sm mt-1">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+            
+            {/* Navigation Pills */}
+            <div className="flex gap-2 mt-4">
+                <button 
+                    onClick={() => scrollToSection(todoSectionRef)}
+                    className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-notion-text text-white text-xs font-medium shadow-sm hover:opacity-90 transition-all"
+                >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>Tasks</span>
+                </button>
+                <button 
+                        onClick={() => scrollToSection(habitSectionRef)}
+                        className="group flex items-center gap-2 px-3 py-1.5 rounded-full bg-notion-sidebar text-notion-dim hover:bg-gray-200 hover:text-notion-text text-xs font-medium transition-all"
+                >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Habits</span>
+                </button>
+            </div>
         </div>
 
         {/* --- Inverted Input Row --- */}
