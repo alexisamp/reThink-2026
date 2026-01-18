@@ -100,7 +100,11 @@ const TodayTab: React.FC<TodayTabProps> = ({
 
   const formatCompletedTime = (timestamp?: number) => {
       if (!timestamp) return '';
-      return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const date = new Date(timestamp);
+      // Format: "Jan 2 • 14:30"
+      const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+      return `${dateStr} • ${timeStr}`;
   };
 
   return (

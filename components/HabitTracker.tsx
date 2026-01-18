@@ -121,12 +121,12 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, goalName, todayKey, 
   const isCompleted = todayValue > 0;
 
   return (
-    <div className={`group flex justify-between items-center py-3 px-4 bg-white border rounded-lg transition-all ${isCritical ? 'border-notion-text' : 'border-notion-border hover:border-gray-300'}`}>
+    <div className={`group flex justify-between items-center py-3 px-4 bg-white border rounded-lg transition-all ${isCritical ? 'border-notion-border border-l-4 border-l-black bg-gray-50' : 'border-notion-border hover:border-gray-300'}`}>
       
       {/* Left: Identity & Habit */}
       <div className="flex items-center gap-3">
          {isCritical && (
-             <div className="text-red-500 animate-pulse" title="Never Miss Twice! You missed yesterday.">
+             <div className="text-notion-text opacity-70" title="Never Miss Twice! You missed yesterday.">
                  <AlertTriangle className="w-4 h-4" />
              </div>
          )}
@@ -149,22 +149,22 @@ const HabitTracker: React.FC<HabitTrackerProps> = ({ habit, goalName, todayKey, 
             <>
                 {/* COMMIT WIDGET (One-Click Scheduling) */}
                 {habit.defaultTime && !isScheduledToday && !isCompleted && (
-                    <div className="hidden md:flex items-center gap-1 bg-gray-50 p-1 rounded border border-gray-200 animate-in fade-in">
+                    <div className="hidden md:flex items-center gap-1 bg-gray-50 p-1 rounded border border-gray-200 animate-in fade-in min-w-[120px]">
                         {/* Time Picker Container - Click to open */}
                         <div 
-                            className="relative flex items-center cursor-pointer hover:bg-gray-100 rounded px-1 transition-colors"
+                            className="relative flex items-center cursor-pointer hover:bg-gray-100 rounded px-1 transition-colors flex-1"
                             onClick={() => timeInputRef.current?.showPicker()}
                         >
-                            <Clock className="w-3 h-3 text-gray-400 mr-1" />
+                            <Clock className="w-3 h-3 text-gray-400 mr-1 flex-shrink-0" />
                             <input 
                                 ref={timeInputRef}
                                 type="time" 
                                 value={scheduleTime} 
                                 onChange={(e) => setScheduleTime(e.target.value)}
-                                className="bg-transparent text-[10px] font-medium w-16 outline-none text-gray-600 min-w-[65px] cursor-pointer"
+                                className="bg-transparent text-[10px] font-medium w-full outline-none text-gray-600 cursor-pointer"
                             />
                         </div>
-                        <div className="h-3 w-px bg-gray-300 mx-1"></div>
+                        <div className="h-3 w-px bg-gray-300 mx-1 flex-shrink-0"></div>
                         <button 
                             onClick={handleCommit}
                             disabled={isScheduling}
