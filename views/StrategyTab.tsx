@@ -1,31 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { AppData, Goal, GoalStatus, Habit, HabitType, WorkbookData } from '../types';
-import { Printer, PenTool, Target, Map, Zap, AlertTriangle, Anchor, Check, Trash2, Plus, Clock, Sparkles, Ban } from '../components/Icon';
+import { Printer, PenTool, Target, Map, Zap, AlertTriangle, Anchor, Check, Trash2, Plus, Clock, Sparkles, Ban, Shield, Users, BarChart2 } from '../components/Icon';
 import AnnualReview from './AnnualReview';
+import ContributionGraph from '../components/ContributionGraph';
 
-// --- GOAL SYSTEM WIZARD ---
+// --- GOAL SYSTEM WIZARD (Redesigned) ---
 const GoalWizard: React.FC<{
     goal: Goal;
     onSave: (g: Goal, newHabits: Habit[]) => void;
     onCancel: () => void;
 }> = ({ goal, onSave, onCancel }) => {
-    const [step, setStep] = useState(1);
     
-    // Step 1: Definition
+    // Flattened State
     const [text, setText] = useState(goal.text || '');
-    const [metric, setMetric] = useState(goal.metric === 'To be defined' ? '' : goal.metric);
+    const [metric, setMetric] = useState(goal.metric || '');
     const [motivation, setMotivation] = useState(goal.motivation || '');
     
-    // Step 2: System
-    const [habits, setHabits] = useState<{text: string, defaultTime: string, reward: string}[]>([]);
-    const [tempHabit, setTempHabit] = useState('');
-    const [tempTime, setTempTime] = useState('');
-    const [tempReward, setTempReward] = useState('');
-    const [isAddingHabit, setIsAddingHabit] = useState(false);
+    const [habits, setHabits] = useState<{text: string, defaultTime: string}[]>([]);
+    const [newHabit, setNewHabit] = useState('');
+    const [newHabitTime, setNewHabitTime] = useState('');
 
-    // Step 3: Roadmap
     const [milestones, setMilestones] = useState(goal.milestones || []);
-    const [tempMilestone, setTempMilestone] = useState('');
+    const [newMilestone, setNewMilestone] = useState('');
 
     const handleSave = () => {
         const finalGoal: Goal = {
@@ -34,132 +30,134 @@ const GoalWizard: React.FC<{
             metric: metric || 'Defined',
             motivation,
             milestones,
-            needsConfig: false // Mark systemized
+            needsConfig: false
         };
 
-        const newHabits = habits.map(h => ({
+        const newHabitsToCreate = habits.map(h => ({
             id: crypto.randomUUID(),
             goalId: finalGoal.id,
             text: h.text,
             type: HabitType.BINARY,
             defaultTime: h.defaultTime || undefined,
-            reward: h.reward || undefined,
             contributions: {}
         }));
 
-        onSave(finalGoal, newHabits);
+        onSave(finalGoal, newHabitsToCreate);
     };
 
     const addHabit = () => {
-        if(tempHabit) {
-            setHabits([...habits, { text: tempHabit, defaultTime: tempTime, reward: tempReward }]);
-            setTempHabit(''); setTempTime(''); setTempReward('');
-            setIsAddingHabit(false);
+        if(newHabit.trim()) {
+            setHabits([...habits, { text: newHabit, defaultTime: newHabitTime }]);
+            setNewHabit(''); setNewHabitTime('');
+        }
+    };
+
+    const addMilestone = () => {
+        if(newMilestone.trim()) {
+            setMilestones([...milestones, {id: crypto.randomUUID(), text: newMilestone, completed: false}]);
+            setNewMilestone('');
         }
     };
 
     return (
-        <div className="fixed inset-0 bg-white z-[200] flex items-center justify-center p-4">
-            <div className="max-w-2xl w-full p-8 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-12 border-b-2 border-black pb-4">
-                    <h3 className="text-3xl font-serif font-bold">Systemize: {goal.text}</h3>
-                    <div className="flex gap-4">
-                        {step > 1 && <button onClick={() => setStep(s => s - 1)} className="text-sm font-bold underline">Back</button>}
-                        <button onClick={onCancel} className="text-sm text-gray-400 hover:text-black">Cancel</button>
+        <div className="fixed inset-0 bg-white/90 z-[200] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="max-w-4xl w-full bg-white shadow-2xl border border-gray-200 max-h-[90vh] overflow-y-auto rounded-xl flex flex-col md:flex-row overflow-hidden animate-in fade-in zoom-in-95">
+                
+                {/* Left: Context */}
+                <div className="bg-gray-50 p-8 md:w-1/3 border-r border-gray-200">
+                    <h3 className="font-bold uppercase tracking-widest text-xs text-gray-400 mb-6">Workbook Context</h3>
+                    <div className="space-y-6">
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 block mb-1">Goal</label>
+                            <p className="font-serif text-lg leading-tight">{goal.text}</p>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 block mb-1">Support Needed</label>
+                            <p className="text-sm text-gray-600">{goal.keySupport || 'None specified'}</p>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 block mb-1">Initial Next Step</label>
+                            <p className="text-sm text-gray-600">{goal.nextStep || 'None specified'}</p>
+                        </div>
                     </div>
                 </div>
 
-                {step === 1 && (
-                    <div className="space-y-8">
-                        <div>
-                            <label className="block text-xs font-bold uppercase mb-2">Objective (Refine)</label>
-                            <input className="w-full p-4 bg-gray-50 border-b border-gray-200 focus:border-black outline-none font-medium" value={text} onChange={e => setText(e.target.value)} />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold uppercase mb-2">Success Metric (Key Result)</label>
-                            <input className="w-full p-4 bg-gray-50 border-b border-gray-200 focus:border-black outline-none font-medium" placeholder="e.g. 100 Paying Users" value={metric} onChange={e => setMetric(e.target.value)} autoFocus />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold uppercase mb-2">Motivation (Why)</label>
-                            <input className="w-full p-4 bg-gray-50 border-b border-gray-200 focus:border-black outline-none font-medium" placeholder="Why does this matter?" value={motivation} onChange={e => setMotivation(e.target.value)} />
-                        </div>
-                        <button onClick={() => setStep(2)} disabled={!metric} className="w-full py-4 bg-black text-white font-bold hover:opacity-90 disabled:opacity-50 mt-8">Next: The System</button>
+                {/* Right: Form */}
+                <div className="p-8 md:w-2/3 space-y-8">
+                    <div className="flex justify-between items-center pb-4 border-b border-gray-100">
+                        <h2 className="text-2xl font-serif font-bold">Systemize Goal</h2>
+                        <button onClick={onCancel} className="text-gray-400 hover:text-black"><Trash2 className="w-5 h-5"/></button>
                     </div>
-                )}
 
-                {step === 2 && (
-                    <div className="space-y-8">
-                        <div className="bg-gray-50 p-4 border border-gray-200 italic font-serif text-sm">
-                            "You do not rise to the level of your goals. You fall to the level of your systems."
-                        </div>
-                        
-                        <div className="space-y-3">
-                             {habits.map((h, i) => (
-                                <div key={i} className="flex justify-between items-center p-4 border border-gray-200">
-                                    <div>
-                                        <div className="font-bold">{h.text}</div>
-                                        <div className="text-xs text-gray-500 flex gap-2 mt-1">
-                                            {h.defaultTime && <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {h.defaultTime}</span>}
-                                            {h.reward && <span className="flex items-center gap-1"><Sparkles className="w-3 h-3"/> {h.reward}</span>}
-                                        </div>
-                                    </div>
-                                    <button onClick={() => setHabits(habits.filter((_, idx) => idx !== i))}><Trash2 className="w-4 h-4 text-gray-300 hover:text-black" /></button>
-                                </div>
-                            ))}
-                        </div>
-
-                        {isAddingHabit ? (
-                             <div className="p-6 bg-gray-50 border border-gray-200 space-y-4">
-                                <div>
-                                    <label className="block text-[10px] font-bold uppercase mb-1">Habit</label>
-                                    <input className="w-full p-2 border-b border-gray-300 bg-transparent outline-none" placeholder="e.g. Write 500 words" value={tempHabit} onChange={e => setTempHabit(e.target.value)} autoFocus />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                     <div>
-                                        <label className="block text-[10px] font-bold uppercase mb-1">Time (Optional)</label>
-                                        <input type="time" className="w-full p-2 border-b border-gray-300 bg-transparent outline-none" value={tempTime} onChange={e => setTempTime(e.target.value)} />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold uppercase mb-1">Reward (Optional)</label>
-                                        <input className="w-full p-2 border-b border-gray-300 bg-transparent outline-none" placeholder="e.g. Coffee" value={tempReward} onChange={e => setTempReward(e.target.value)} />
-                                    </div>
-                                </div>
-                                <div className="flex gap-2 pt-2">
-                                    <button onClick={addHabit} disabled={!tempHabit} className="px-6 py-2 bg-black text-white text-xs font-bold">Add Habit</button>
-                                    <button onClick={() => setIsAddingHabit(false)} className="px-4 py-2 text-xs font-bold">Cancel</button>
-                                </div>
+                    {/* Section 1: Identity */}
+                    <div className="space-y-4">
+                        <h4 className="text-sm font-bold uppercase tracking-wide">1. Definition</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="col-span-2">
+                                <label className="text-xs text-gray-500 block mb-1">Refined Objective</label>
+                                <input className="w-full border border-gray-200 p-2 rounded text-sm focus:border-black outline-none" value={text} onChange={e => setText(e.target.value)} />
                             </div>
-                        ) : (
-                             <button onClick={() => setIsAddingHabit(true)} className="flex items-center gap-2 font-bold text-sm border-b border-black pb-0.5"><Plus className="w-4 h-4" /> Add Daily Habit</button>
-                        )}
-
-                        <button onClick={() => setStep(3)} className="w-full py-4 bg-black text-white font-bold hover:opacity-90 mt-8">Next: Roadmap</button>
-                    </div>
-                )}
-
-                {step === 3 && (
-                    <div className="space-y-8">
-                        <div>
-                             <label className="block text-xs font-bold uppercase mb-2">Milestones (Checkpoints)</label>
-                             <div className="flex gap-2">
-                                 <input className="flex-1 p-3 bg-gray-50 border-b border-gray-200 outline-none" placeholder="Add milestone..." value={tempMilestone} onChange={e => setTempMilestone(e.target.value)} onKeyDown={e => e.key === 'Enter' && (setMilestones([...milestones, {id: crypto.randomUUID(), text: tempMilestone, completed: false}]), setTempMilestone(''))} />
-                                 <button onClick={() => { if(tempMilestone) { setMilestones([...milestones, {id: crypto.randomUUID(), text: tempMilestone, completed: false}]); setTempMilestone(''); }}} className="px-6 bg-black text-white font-bold">Add</button>
-                             </div>
-                             <ul className="space-y-2 mt-4">
-                                 {milestones.map(m => (
-                                     <li key={m.id} className="flex items-center gap-3 p-3 border-b border-gray-100">
-                                         <div className="w-2 h-2 rounded-full bg-black"></div>
-                                         <span className="flex-1 font-medium">{m.text}</span>
-                                         <button onClick={() => setMilestones(milestones.filter(x => x.id !== m.id))}><Trash2 className="w-3 h-3 text-gray-300 hover:text-black"/></button>
-                                     </li>
-                                 ))}
-                             </ul>
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1">Metric (KPI)</label>
+                                <input className="w-full border border-gray-200 p-2 rounded text-sm focus:border-black outline-none" value={metric} onChange={e => setMetric(e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1">Why (Motivation)</label>
+                                <input className="w-full border border-gray-200 p-2 rounded text-sm focus:border-black outline-none" value={motivation} onChange={e => setMotivation(e.target.value)} />
+                            </div>
                         </div>
-                        <button onClick={handleSave} className="w-full py-5 bg-black text-white rounded-none font-bold text-xl hover:scale-[1.01] transition-transform shadow-2xl mt-8 border border-black">
-                            Initialize Directive
+                    </div>
+
+                    {/* Section 2: System (Habits) */}
+                    <div className="space-y-4">
+                         <h4 className="text-sm font-bold uppercase tracking-wide">2. Daily System</h4>
+                         <p className="text-xs text-gray-500 italic">"You fall to the level of your systems." Add daily actions.</p>
+                         
+                         <div className="space-y-2">
+                             {habits.map((h, i) => (
+                                 <div key={i} className="flex items-center justify-between bg-gray-50 p-2 rounded border border-gray-100">
+                                     <div className="flex items-center gap-2">
+                                         <Check className="w-4 h-4 text-gray-400" />
+                                         <span className="text-sm font-medium">{h.text}</span>
+                                         {h.defaultTime && <span className="text-xs text-gray-400">({h.defaultTime})</span>}
+                                     </div>
+                                     <button onClick={() => setHabits(habits.filter((_, idx) => idx !== i))}><Trash2 className="w-3 h-3 text-gray-300 hover:text-red-500"/></button>
+                                 </div>
+                             ))}
+                             
+                             <div className="flex gap-2">
+                                 <input className="flex-1 border border-gray-200 p-2 rounded text-sm outline-none" placeholder="Habit (e.g. Read 10 pages)" value={newHabit} onChange={e => setNewHabit(e.target.value)} onKeyDown={e => e.key === 'Enter' && addHabit()} />
+                                 <input className="w-24 border border-gray-200 p-2 rounded text-sm outline-none" type="time" value={newHabitTime} onChange={e => setNewHabitTime(e.target.value)} />
+                                 <button onClick={addHabit} className="bg-black text-white px-3 rounded text-sm font-bold">+</button>
+                             </div>
+                         </div>
+                    </div>
+
+                    {/* Section 3: Roadmap (Milestones) */}
+                    <div className="space-y-4">
+                         <h4 className="text-sm font-bold uppercase tracking-wide">3. Milestones</h4>
+                         
+                         <div className="space-y-2">
+                             {milestones.map((m, i) => (
+                                 <div key={i} className="flex items-center gap-3 p-2 border-b border-gray-100 last:border-0">
+                                     <div className="w-1.5 h-1.5 bg-black rounded-full"></div>
+                                     <span className="flex-1 text-sm">{m.text}</span>
+                                     <button onClick={() => setMilestones(milestones.filter(x => x.id !== m.id))}><Trash2 className="w-3 h-3 text-gray-300 hover:text-red-500"/></button>
+                                 </div>
+                             ))}
+                             <div className="flex gap-2 pt-2">
+                                 <input className="flex-1 border-b border-gray-200 p-1 text-sm outline-none" placeholder="Next milestone..." value={newMilestone} onChange={e => setNewMilestone(e.target.value)} onKeyDown={e => e.key === 'Enter' && addMilestone()} />
+                                 <button onClick={addMilestone} className="text-xs font-bold text-gray-500 hover:text-black">Add</button>
+                             </div>
+                         </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100 flex justify-end">
+                        <button onClick={handleSave} className="bg-black text-white px-8 py-3 rounded text-sm font-bold hover:opacity-90 shadow-lg">
+                            Initialize System
                         </button>
                     </div>
-                )}
+                </div>
             </div>
         </div>
     );
@@ -224,12 +222,19 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
   const currentWorkbook = data.workbookReviews[selectedYear];
 
   return (
-    <div className="max-w-6xl mx-auto pb-32 animate-fade-in">
+    <div className="animate-fade-in pb-20 space-y-12">
       
-      <div className="flex justify-end mb-12 no-print">
-         <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest bg-white border border-black px-4 py-2 hover:bg-black hover:text-white transition-colors">
-            <Plus className="w-3 h-3" /> New Review
-         </button>
+      {/* Header Area */}
+      <div className="flex justify-between items-center border-b border-gray-200 pb-4 no-print">
+         <div>
+             <h2 className="text-3xl font-serif text-notion-text">Executive Strategy</h2>
+             <p className="text-notion-dim font-serif italic">Your contract with yourself for {selectedYear}.</p>
+         </div>
+         <div className="flex gap-2">
+             <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded text-sm font-medium hover:opacity-80 transition-opacity shadow-sm">
+                <Plus className="w-4 h-4" /> Review
+             </button>
+         </div>
       </div>
 
       {editingGoal && (
@@ -244,94 +249,140 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
           />
       )}
 
-      {/* --- ZONE 1: ACTIVE GOALS --- */}
-      <section className="mb-24">
-          <h2 className="text-4xl font-serif mb-8">The Action Board</h2>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 space-y-8">
-                   {activeGoals.map((goal, idx) => {
-                        const habits = data.habits.filter(h => h.goalId === goal.id);
+      {/* ================= ZONE A: ACTIVE STRATEGY (2-Column Layout) ================= */}
+      <section>
+          {activeGoals.length === 0 && (
+              <div className="text-center py-20 text-gray-400">
+                  No active goals. Start a review.
+              </div>
+          )}
 
-                        // --- UNCONFIGURED: BLACK & WHITE STRONG UI ---
-                        if (goal.needsConfig) {
-                            return (
-                                <div key={goal.id} className="border-2 border-black p-8 flex flex-col items-center justify-center text-center gap-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] bg-white">
-                                    <div className="w-12 h-12 bg-black text-white rounded-full flex items-center justify-center">
-                                        <AlertTriangle className="w-6 h-6" />
-                                    </div>
-                                    <div>
-                                        <div className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">Priority {idx + 1}</div>
-                                        <h3 className="text-3xl font-serif font-bold">{goal.text}</h3>
-                                        <p className="text-gray-500 mt-2">Directive established. System required.</p>
-                                    </div>
-                                    <button 
-                                        onClick={() => setEditingGoal(goal)}
-                                        className="px-8 py-3 bg-black text-white font-bold hover:scale-105 transition-transform flex items-center gap-2"
-                                    >
-                                        <Zap className="w-4 h-4" /> ⚙️ Systemize Goal
-                                    </button>
-                                </div>
-                            );
-                        }
+          <div className="flex flex-col lg:flex-row gap-8">
+              {/* Left Column: Active Goals */}
+              <div className="flex-1 space-y-8">
+                  {activeGoals.map(goal => {
+                      const habits = data.habits.filter(h => h.goalId === goal.id);
+                      
+                      // --- UNCONFIGURED: Minimalist Card (Dashboard Style) ---
+                      if (goal.needsConfig) {
+                          return (
+                              <div key={goal.id} className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm flex flex-col justify-between group h-full min-h-[200px] relative overflow-hidden">
+                                  <div className="absolute top-0 right-0 bg-gray-100 px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                                      Needs System
+                                  </div>
+                                  <div>
+                                      <h3 className="text-xl font-serif font-bold mb-2">{goal.text}</h3>
+                                      <p className="text-sm text-gray-500">Metric: {goal.metric}</p>
+                                  </div>
+                                  <div className="mt-6 flex justify-end">
+                                      <button 
+                                          onClick={() => setEditingGoal(goal)}
+                                          className="flex items-center gap-2 text-sm font-bold border border-black px-4 py-2 rounded hover:bg-black hover:text-white transition-colors"
+                                      >
+                                          <Zap className="w-3 h-3" /> Systemize
+                                      </button>
+                                  </div>
+                              </div>
+                          );
+                      }
 
-                        // --- CONFIGURED ---
-                        return (
-                             <div key={goal.id} className="border border-gray-200 bg-white shadow-sm relative group">
-                                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 flex gap-2">
-                                     <button onClick={() => setEditingGoal(goal)} className="p-2 hover:bg-gray-100"><PenTool className="w-3 h-3" /></button>
-                                    <button onClick={() => onDeleteGoal(goal.id)} className="p-2 hover:bg-red-50 text-red-500"><Trash2 className="w-3 h-3" /></button>
-                                </div>
+                      // --- CONFIGURED: Dashboard Card Style ---
+                      return (
+                          <div key={goal.id} className="bg-white border border-notion-border rounded-xl shadow-sm overflow-hidden group">
+                              {/* Header */}
+                              <div className="bg-notion-sidebar/50 p-4 border-b border-notion-border flex justify-between items-center">
+                                  <div>
+                                      <div className="text-[10px] font-bold uppercase tracking-widest text-notion-dim mb-1">Strategic Objective</div>
+                                      <h3 className="text-xl font-serif font-medium">{goal.text}</h3>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                      <div className="text-xs font-mono bg-white px-2 py-1 rounded border border-gray-200 text-notion-dim">
+                                          {goal.metric}
+                                      </div>
+                                      <button onClick={() => setEditingGoal(goal)} className="p-1.5 text-notion-dim hover:text-black bg-white rounded border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <PenTool className="w-3 h-3" />
+                                      </button>
+                                  </div>
+                              </div>
 
-                                <div className="p-8 border-b border-gray-100">
-                                    <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Priority 0{idx + 1}</div>
-                                    <h3 className="text-2xl font-serif font-bold mb-3">{goal.text}</h3>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-xs font-mono bg-gray-50 px-2 py-1 border border-gray-200">{goal.metric}</span>
-                                    </div>
-                                    <p className="text-sm text-gray-500 italic">"{goal.motivation}"</p>
-                                </div>
-                                <div className="p-6 bg-gray-50/30">
-                                    <div className="text-xs font-bold uppercase mb-4 flex items-center gap-1"><Anchor className="w-3 h-3" /> System</div>
-                                    <ul className="space-y-3">
-                                        {habits.map(h => (
-                                            <li key={h.id} className="text-sm flex justify-between items-center border-b border-dashed border-gray-200 pb-2 last:border-0 last:pb-0">
-                                                <span>{h.text}</span>
-                                                <button onClick={() => onDeleteHabit(h.id)} className="opacity-0 group-hover:opacity-100"><Trash2 className="w-3 h-3 text-gray-300 hover:text-red-500" /></button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                             </div>
-                        );
-                   })}
+                              <div className="grid grid-cols-1 md:grid-cols-2">
+                                  {/* Left: Timeline & Milestones */}
+                                  <div className="p-6 border-r border-notion-border">
+                                      <h4 className="text-xs font-bold uppercase tracking-widest text-notion-dim mb-4 flex items-center gap-2">
+                                          <Map className="w-3 h-3" /> Execution Roadmap
+                                      </h4>
+                                      <div className="space-y-4 relative pl-2">
+                                          <div className="absolute left-[11px] top-2 bottom-2 w-px bg-gray-200" />
+                                          
+                                          {goal.milestones.length === 0 && <span className="text-xs text-gray-400 italic">No milestones defined.</span>}
+
+                                          {goal.milestones.map((m) => (
+                                              <div key={m.id} className="relative flex items-start gap-4">
+                                                  <div className={`relative z-10 w-5 h-5 rounded-full border-2 flex items-center justify-center bg-white ${m.completed ? 'border-black text-black' : 'border-gray-300'}`}>
+                                                      {m.completed && <div className="w-2 h-2 bg-black rounded-full" />}
+                                                  </div>
+                                                  <div className="flex-1">
+                                                      <div className={`text-sm ${m.completed ? 'line-through text-gray-400' : 'text-notion-text'}`}>{m.text}</div>
+                                                  </div>
+                                              </div>
+                                          ))}
+                                      </div>
+                                  </div>
+
+                                  {/* Right: Consistency */}
+                                  <div className="p-6 bg-gray-50/30">
+                                      <h4 className="text-xs font-bold uppercase tracking-widest text-notion-dim mb-4 flex items-center gap-2">
+                                          <BarChart2 className="w-3 h-3" /> Daily System
+                                      </h4>
+                                      <div className="space-y-6">
+                                          {habits.map(h => (
+                                              <div key={h.id}>
+                                                  <div className="text-xs font-medium mb-2 flex justify-between">
+                                                      <span>{h.text}</span>
+                                                  </div>
+                                                  <ContributionGraph data={h.contributions} colorBase="bg-black" />
+                                              </div>
+                                          ))}
+                                          {habits.length === 0 && <span className="text-xs text-gray-400 italic">No habits linked. Edit goal to add.</span>}
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
+                      );
+                  })}
               </div>
 
-              <div>
-                  <div className="bg-gray-50 border border-gray-200 p-8 min-h-[300px]">
+              {/* Right Column: Avoid List (Backlog) */}
+              <div className="lg:w-1/3">
+                  <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 sticky top-6">
                       <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
                           <Ban className="w-4 h-4"/> Avoid List
                       </h3>
-                      <ul className="space-y-4">
+                      <p className="text-xs text-gray-400 mb-6 italic border-b border-gray-200 pb-4">
+                          "Really successful people say no to almost everything."
+                      </p>
+                      <ul className="space-y-3">
                           {backlogGoals.map(g => (
-                              <li key={g.id} className="p-4 bg-white border border-gray-200 text-sm font-medium text-gray-600 shadow-sm">
-                                  {g.text}
+                              <li key={g.id} className="bg-white border border-gray-200 p-3 rounded text-sm text-gray-600 shadow-sm flex items-start gap-3">
+                                  <div className="w-1.5 h-1.5 bg-gray-300 rounded-full mt-1.5 flex-shrink-0"></div>
+                                  <span className="leading-snug">{g.text}</span>
                               </li>
                           ))}
+                          {backlogGoals.length === 0 && <li className="text-xs text-gray-400 italic">Empty list.</li>}
                       </ul>
                   </div>
               </div>
           </div>
       </section>
 
-      {/* --- ZONE 2: ARCHIVE --- */}
-      <section>
-           <div className="flex gap-8 border-b-2 border-gray-100 mb-12">
+      {/* ================= ZONE B: THE MANIFESTO ================= */}
+      <section className="border-t border-gray-200 pt-12">
+           <div className="flex gap-4 mb-8">
                {availableYears.map(year => (
                    <button 
                       key={year}
                       onClick={() => setSelectedYear(year)}
-                      className={`pb-4 text-3xl font-serif transition-colors ${selectedYear === year ? 'text-black border-b-2 border-black -mb-0.5' : 'text-gray-300 hover:text-gray-500'}`}
+                      className={`px-3 py-1 rounded text-sm transition-colors ${selectedYear === year ? 'bg-black text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                    >
                        {year}
                    </button>
@@ -339,97 +390,92 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
            </div>
 
            {currentWorkbook ? (
-               <div className="max-w-4xl mx-auto space-y-20 animate-in fade-in slide-in-from-bottom-2">
+               <div className="bg-white border border-notion-border rounded-xl p-8 md:p-12 shadow-sm space-y-16">
                     
-                    <div className="text-center">
-                        <h2 className="text-5xl font-serif mb-4">The Contract</h2>
-                        <div className="text-sm uppercase tracking-widest text-gray-400">Signed by {currentWorkbook.signatureName}</div>
+                    <div className="text-center space-y-4">
+                        <h2 className="text-4xl font-serif font-medium">The Contract</h2>
+                        <div className="w-24 h-px bg-black mx-auto"></div>
+                        <p className="text-sm font-serif italic text-gray-500">"What lies behind us and what lies before us are tiny matters compared to what lies within us."</p>
                     </div>
 
+                    {/* Key & Audit */}
                     <div className="grid md:grid-cols-2 gap-12">
-                        <div>
-                             <h3 className="text-xs font-bold uppercase border-b border-black pb-2 mb-4">Key to Success</h3>
-                             <p className="font-serif text-lg leading-relaxed">{currentWorkbook.keySuccess}</p>
+                        <div className="space-y-4">
+                             <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">The Key to Success</h3>
+                             <p className="font-serif text-xl leading-relaxed text-notion-text whitespace-pre-line">{currentWorkbook.keySuccess}</p>
                         </div>
-                         <div>
-                             <h3 className="text-xs font-bold uppercase border-b border-black pb-2 mb-4">Time Audit</h3>
-                             <p className="font-serif text-lg leading-relaxed">{currentWorkbook.timeAudit}</p>
+                         <div className="space-y-4">
+                             <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Time Audit</h3>
+                             <p className="font-serif text-lg leading-relaxed text-gray-600">{currentWorkbook.timeAudit}</p>
                         </div>
                     </div>
 
-                    <div>
-                        <h3 className="text-xs font-bold uppercase border-b border-black pb-2 mb-6">Momentum</h3>
-                        <div className="grid md:grid-cols-3 gap-6">
+                    {/* The Lists */}
+                    <div className="bg-gray-50 p-8 rounded-lg border border-gray-100 grid md:grid-cols-2 gap-12">
+                        <div>
+                            <h4 className="font-bold text-sm uppercase mb-4 flex items-center gap-2"><Trash2 className="w-4 h-4"/> Eliminated</h4>
+                            <ul className="list-disc pl-5 space-y-2">{currentWorkbook.notWorking?.map((item, i) => <li key={i} className="text-gray-600 text-sm">{item}</li>)}</ul>
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-sm uppercase mb-4 flex items-center gap-2"><Check className="w-4 h-4"/> Doubled Down</h4>
+                            <ul className="list-disc pl-5 space-y-2">{currentWorkbook.working?.map((item, i) => <li key={i} className="text-gray-600 text-sm">{item}</li>)}</ul>
+                        </div>
+                    </div>
+
+                    {/* Strategy Grid */}
+                    <div className="grid md:grid-cols-3 gap-8">
+                        {/* Column 1: Momentum */}
+                        <div className="space-y-4">
+                            <h3 className="text-xs font-bold uppercase border-b border-gray-200 pb-2">Momentum</h3>
                             {currentWorkbook.momentum.map((m, i) => (
-                                <div key={i} className="bg-gray-50 p-6 border border-gray-200">
-                                    <div className="font-bold mb-2">{m.item}</div>
-                                    <div className="text-sm italic text-gray-500">→ {m.smallStep}</div>
+                                <div key={i} className="text-sm">
+                                    <div className="font-medium text-gray-900">{m.item}</div>
+                                    <div className="text-gray-500">→ {m.step}</div>
+                                </div>
+                            ))}
+                        </div>
+                        {/* Column 2: Easy Mode */}
+                        <div className="space-y-4">
+                            <h3 className="text-xs font-bold uppercase border-b border-gray-200 pb-2">Easy Mode</h3>
+                            {currentWorkbook.easyMode.map((m, i) => (
+                                <div key={i} className="text-sm">
+                                    <div className="font-medium text-gray-900">{m.hard}</div>
+                                    <div className="text-gray-500">→ {m.easy}</div>
+                                </div>
+                            ))}
+                        </div>
+                        {/* Column 3: Workarounds */}
+                        <div className="space-y-4">
+                            <h3 className="text-xs font-bold uppercase border-b border-gray-200 pb-2">Workarounds</h3>
+                            {currentWorkbook.weaknesses.map((m, i) => (
+                                <div key={i} className="text-sm">
+                                    <div className="font-medium text-gray-900">{m.weakness}</div>
+                                    <div className="text-gray-500">→ {m.workaround}</div>
                                 </div>
                             ))}
                         </div>
                     </div>
 
-                    <div className="grid md:grid-cols-2 gap-12">
-                        <div className="bg-gray-50 p-8 border border-gray-200">
-                             <h3 className="text-xs font-bold uppercase mb-6 flex gap-2"><Zap className="w-4 h-4"/> Assets</h3>
-                             <ul className="space-y-6">
-                                 {currentWorkbook.strengths.map((s, i) => (
-                                     <li key={i}>
-                                         <div className="font-bold text-lg mb-1">{s.strength}</div>
-                                         <div className="text-sm text-gray-600">{s.application}</div>
-                                     </li>
-                                 ))}
-                             </ul>
+                    {/* Rules (Monochrome) */}
+                     <div className="grid md:grid-cols-3 gap-8 pt-8 border-t border-gray-100">
+                        <div className="bg-white p-6 rounded-lg border border-gray-200">
+                             <h3 className="text-xs font-bold uppercase mb-4 text-black flex items-center gap-2"><Target className="w-3 h-3"/> Prosper</h3>
+                             <ul className="list-disc pl-5 space-y-2 text-sm text-gray-700">{currentWorkbook.rulesProsper?.map((r, i) => <li key={i}>{r}</li>)}</ul>
                         </div>
-                        <div className="bg-gray-50 p-8 border border-gray-200">
-                             <h3 className="text-xs font-bold uppercase mb-6 flex gap-2"><AlertTriangle className="w-4 h-4"/> Liabilities</h3>
-                             <ul className="space-y-6">
-                                 {currentWorkbook.weaknesses.map((s, i) => (
-                                     <li key={i}>
-                                         <div className="font-bold text-lg mb-1">{s.weakness}</div>
-                                         <div className="text-sm text-gray-600">Fix: {s.workaround}</div>
-                                     </li>
-                                 ))}
-                             </ul>
+                        <div className="bg-white p-6 rounded-lg border border-gray-200">
+                             <h3 className="text-xs font-bold uppercase mb-4 text-black flex items-center gap-2"><Shield className="w-3 h-3"/> Protect</h3>
+                             <ul className="list-disc pl-5 space-y-2 text-sm text-gray-700">{currentWorkbook.rulesProtect?.map((r, i) => <li key={i}>{r}</li>)}</ul>
+                        </div>
+                        <div className="bg-white p-6 rounded-lg border border-gray-200">
+                             <h3 className="text-xs font-bold uppercase mb-4 text-black flex items-center gap-2"><Ban className="w-3 h-3"/> Limit</h3>
+                             <ul className="list-disc pl-5 space-y-2 text-sm text-gray-700">{currentWorkbook.rulesLimit?.map((r, i) => <li key={i}>{r}</li>)}</ul>
                         </div>
                     </div>
 
-                    <div className="space-y-8">
-                        <h3 className="text-xs font-bold uppercase border-b border-black pb-2">Mental Models</h3>
-                        <div className="grid gap-8">
-                            <div className="bg-gray-50 p-6">
-                                <div className="font-bold mb-2">Easy Mode</div>
-                                <p className="font-serif text-gray-600">{currentWorkbook.easyMode}</p>
-                            </div>
-                            <div className="bg-gray-50 p-6">
-                                <div className="font-bold mb-2">Inversion</div>
-                                <p className="font-serif text-gray-600">{currentWorkbook.inversion}</p>
-                            </div>
-                            <div className="bg-gray-50 p-6">
-                                <div className="font-bold mb-2">Second Order</div>
-                                <p className="font-serif text-gray-600">{currentWorkbook.secondOrder}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                     <div className="grid md:grid-cols-2 gap-16">
-                        <div>
-                             <h3 className="text-xs font-bold uppercase border-b border-black pb-2 mb-6">Prescriptions</h3>
-                             <ul className="list-disc pl-5 space-y-3 font-serif text-lg">
-                                 {currentWorkbook.prescriptions.map((r, i) => <li key={i}>{r}</li>)}
-                             </ul>
-                        </div>
-                        <div>
-                             <h3 className="text-xs font-bold uppercase border-b border-black pb-2 mb-6">Anti-Goals</h3>
-                             <ul className="list-disc pl-5 space-y-3 font-serif text-lg">
-                                 {currentWorkbook.antiGoals.map((r, i) => <li key={i}>{r}</li>)}
-                             </ul>
-                        </div>
-                    </div>
-
-                    <div className="text-center pt-16 border-t border-gray-100">
+                    <div className="text-center pt-8 border-t border-gray-100">
+                        <div className="font-serif text-2xl mb-2">{currentWorkbook.signatureName}</div>
                         <p className="text-gray-400 text-xs uppercase tracking-widest">
-                            {new Date(currentWorkbook.signedAt!).toLocaleDateString()}
+                            Signed on {new Date(currentWorkbook.signedAt!).toLocaleDateString()}
                         </p>
                     </div>
                </div>

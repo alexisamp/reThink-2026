@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { 
   Check, 
@@ -30,7 +31,8 @@ import {
   Feather,
   Clock,
   Lock,
-  Anchor
+  Anchor,
+  Users
 } from 'lucide-react';
 
 export { 
@@ -44,7 +46,7 @@ export {
   Target, 
   Calendar,
   Layout,
-  Map,
+  Map, 
   PenTool,
   Brain,
   AlertTriangle,
@@ -64,5 +66,6 @@ export {
   Feather,
   Clock,
   Lock,
-  Anchor
+  Anchor,
+  Users
 };

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Goal, GoalStatus, WorkbookData } from '../types';
-import { ArrowRight, Check, Trash2, Plus, Ban, Zap, AlertTriangle } from '../components/Icon';
+import { Goal, GoalStatus, WorkbookData, InnerCircleMember } from '../types';
+import { ArrowRight, Check, Trash2, Plus, Ban, Zap, AlertTriangle, Users, Shield, Target } from '../components/Icon';
 
 interface AnnualReviewProps {
   onComplete: (workbook: WorkbookData, activeGoals: Goal[], backlogGoals: Goal[]) => void;
@@ -9,106 +9,201 @@ interface AnnualReviewProps {
 }
 
 const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initialYear = "2026" }) => {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1); // Mapped to Levels 1-11
   const [year] = useState(initialYear);
 
-  // --- L1 & L2: Audit ---
-  const [keySuccess, setKeySuccess] = useState('');
-  const [stupidestDecision, setStupidestDecision] = useState('');
-  const [smartestDecision, setSmartestDecision] = useState('');
-  const [timeAudit, setTimeAudit] = useState('');
+  // --- L1: Key to Success ---
+  const [keySuccessLines, setKeySuccessLines] = useState<string[]>(['', '', '']);
 
-  // --- L3 & L4: Lists ---
-  const [rawLongList, setRawLongList] = useState<{id: string, text: string}[]>([]);
-  const [tempLongItem, setTempLongItem] = useState('');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // --- L2: Audit ---
+  const [timeAudit, setTimeAudit] = useState('');
+  const [notWorking, setNotWorking] = useState<string[]>(['', '', '']);
+  const [working, setWorking] = useState<string[]>(['', '', '']);
+
+  // --- L3: Top 10 ---
+  const [topTen, setTopTen] = useState<string[]>([]);
+  const [tempGoal, setTempGoal] = useState('');
+
+  // --- L4: Critical 3 ---
+  const [selectedGoalIndices, setSelectedGoalIndices] = useState<number[]>([]);
+  const [refinedGoals, setRefinedGoals] = useState<{
+      id: string, 
+      text: string, 
+      metric: string, 
+      nextSteps: string[], // Up to 3
+      support: string
+  }[]>([]);
 
   // --- L5: Momentum ---
   const [momentum, setMomentum] = useState([
-      {id: '1', item: '', smallStep: ''}, 
-      {id: '2', item: '', smallStep: ''}, 
-      {id: '3', item: '', smallStep: ''}
+      {id: '1', item: '', step: ''}, 
+      {id: '2', item: '', step: ''}, 
+      {id: '3', item: '', step: ''}
   ]);
 
-  // --- L6: Identity ---
-  const [strengths, setStrengths] = useState<{ id: string; strength: string; application: string }[]>([]);
-  const [weaknesses, setWeaknesses] = useState<{ id: string; weakness: string; workaround: string }[]>([]);
-  const [tempS, setTempS] = useState({ title: '', body: '' });
-  const [tempW, setTempW] = useState({ title: '', body: '' });
+  // --- L6: Weaknesses ---
+  const [weaknesses, setWeaknesses] = useState([
+      {id: '1', weakness: '', workaround: ''},
+      {id: '2', weakness: '', workaround: ''},
+      {id: '3', weakness: '', workaround: ''}
+  ]);
 
-  // --- L7, L8, L9: Models ---
-  const [easyMode, setEasyMode] = useState('');
-  const [inversion, setInversion] = useState('');
-  const [secondOrder, setSecondOrder] = useState('');
+  // --- L7: Easy Mode ---
+  const [easyModes, setEasyModes] = useState([
+      {id: '1', hard: '', easy: ''},
+      {id: '2', hard: '', easy: ''},
+      {id: '3', hard: '', easy: ''}
+  ]);
+
+  // --- L8 & L9: Inner Circle ---
+  const [innerCircle, setInnerCircle] = useState<InnerCircleMember[]>(
+      Array(5).fill({ name: '', scores: { info: 0, growth: 0, energy: 0, future: 0, values: 0 }, totalScore: 0 })
+  );
 
   // --- L10: Rules ---
-  const [prescriptions, setPrescriptions] = useState<string[]>([]);
-  const [antiGoals, setAntiGoals] = useState<string[]>([]);
-  const [tempP, setTempP] = useState('');
-  const [tempA, setTempA] = useState('');
+  const [rulesProsper, setRulesProsper] = useState<string[]>(['', '', '']);
+  const [rulesProtect, setRulesProtect] = useState<string[]>(['', '', '']);
+  const [rulesLimit, setRulesLimit] = useState<string[]>(['', '', '']);
 
-  // --- L11: Contract ---
+  // --- L11: Commit ---
+  const [insights, setInsights] = useState<string[]>(['', '', '']);
+  const [oneChange, setOneChange] = useState('');
+  const [revisitDate, setRevisitDate] = useState('');
   const [signatureName, setSignatureName] = useState('');
 
   // --- Helpers ---
-  const addLongItem = () => {
-    if (!tempLongItem.trim()) return;
-    setRawLongList([...rawLongList, { id: crypto.randomUUID(), text: tempLongItem }]);
-    setTempLongItem('');
+  const updateList = (setter: React.Dispatch<React.SetStateAction<string[]>>, idx: number, val: string) => {
+      setter(prev => prev.map((item, i) => i === idx ? val : item));
   };
 
-  const toggleSelection = (id: string) => {
-    if (selectedIds.includes(id)) {
-      setSelectedIds(selectedIds.filter(x => x !== id));
-    } else {
-      if (selectedIds.length >= 3) return; // Strict limit UI
-      setSelectedIds([...selectedIds, id]);
-    }
+  const addTopTen = () => {
+      if (tempGoal.trim() && topTen.length < 10) { 
+          setTopTen([...topTen, tempGoal]);
+          setTempGoal('');
+      }
   };
 
-  const updateMomentum = (idx: number, field: 'item' | 'smallStep', val: string) => {
-    const arr = [...momentum];
-    arr[idx] = { ...arr[idx], [field]: val };
-    setMomentum(arr);
+  const toggleSelection = (idx: number) => {
+      if (selectedGoalIndices.includes(idx)) {
+          setSelectedGoalIndices(selectedGoalIndices.filter(i => i !== idx));
+          // Remove from refined
+          setRefinedGoals(refinedGoals.filter(g => g.id !== idx.toString()));
+      } else {
+          if (selectedGoalIndices.length >= 3) return;
+          setSelectedGoalIndices([...selectedGoalIndices, idx]);
+          // Add to refined
+          setRefinedGoals([...refinedGoals, {
+              id: idx.toString(),
+              text: topTen[idx],
+              metric: '',
+              nextSteps: [''],
+              support: ''
+          }]);
+      }
+  };
+
+  const updateRefined = (id: string, field: string, val: any) => {
+      setRefinedGoals(refinedGoals.map(g => g.id === id ? { ...g, [field]: val } : g));
+  };
+
+  const updateRefinedStep = (goalId: string, stepIdx: number, val: string) => {
+      setRefinedGoals(refinedGoals.map(g => {
+          if(g.id !== goalId) return g;
+          const newSteps = [...g.nextSteps];
+          newSteps[stepIdx] = val;
+          return { ...g, nextSteps: newSteps };
+      }));
+  };
+
+  const addRefinedStep = (goalId: string) => {
+      setRefinedGoals(refinedGoals.map(g => {
+          if(g.id !== goalId) return g;
+          if(g.nextSteps.length >= 3) return g;
+          return { ...g, nextSteps: [...g.nextSteps, ''] };
+      }));
+  };
+
+  const updateInnerName = (idx: number, name: string) => {
+      setInnerCircle(prev => prev.map((m, i) => i === idx ? { ...m, name } : m));
+  };
+
+  const updateInnerScore = (idx: number, field: keyof InnerCircleMember['scores'], val: number) => {
+      setInnerCircle(prev => prev.map((m, i) => {
+          if (i !== idx) return m;
+          const newScores = { ...m.scores, [field]: val };
+          const total = Object.values(newScores).reduce((a: number, b: number) => a + b, 0);
+          return { ...m, scores: newScores, totalScore: total };
+      }));
   };
 
   const finish = () => {
-    const wb: WorkbookData = {
-      year,
-      keySuccess, stupidestDecision, smartestDecision, timeAudit,
-      momentum, strengths, weaknesses,
-      easyMode, inversion, secondOrder,
-      prescriptions, antiGoals,
-      signedAt: Date.now(),
-      signatureName
-    };
+      const finalActiveGoals: Goal[] = refinedGoals.map(rg => {
+          const validSteps = rg.nextSteps.filter(s => s.trim());
+          return {
+              id: crypto.randomUUID(),
+              text: rg.text,
+              metric: rg.metric,
+              motivation: `Support: ${rg.support}`,
+              nextStep: validSteps.join(', '), // For display summary
+              keySupport: rg.support,
+              leverage: [],
+              obstacles: [],
+              status: GoalStatus.ACTIVE,
+              // Convert next steps to pre-filled milestones
+              milestones: validSteps.map(s => ({
+                  id: crypto.randomUUID(),
+                  text: s,
+                  completed: false,
+                  completedAt: undefined
+              })),
+              createdAt: Date.now(),
+              needsConfig: true
+          };
+      });
 
-    const activeGoals: Goal[] = [];
-    const backlogGoals: Goal[] = [];
+      const finalBacklogGoals: Goal[] = topTen
+          .filter((_, i) => !selectedGoalIndices.includes(i))
+          .map(text => ({
+              id: crypto.randomUUID(),
+              text,
+              metric: 'Backlog',
+              leverage: [],
+              obstacles: [],
+              status: GoalStatus.BACKLOG,
+              milestones: [],
+              createdAt: Date.now(),
+              needsConfig: false
+          }));
 
-    rawLongList.forEach(i => {
-      const isActive = selectedIds.includes(i.id);
-      const goal: Goal = {
-        id: i.id,
-        text: i.text,
-        metric: 'To be defined',
-        status: isActive ? GoalStatus.ACTIVE : GoalStatus.BACKLOG,
-        milestones: [],
-        leverage: [],
-        obstacles: [],
-        createdAt: Date.now(),
-        needsConfig: isActive // Active goals need systemization
+      const wb: WorkbookData = {
+          year,
+          keySuccess: keySuccessLines.filter(l => l.trim()).join('\n'),
+          timeAudit,
+          notWorking: notWorking.filter(x => x),
+          working: working.filter(x => x),
+          topTen,
+          criticalThree: finalActiveGoals,
+          momentum: momentum.filter(x => x.item),
+          weaknesses: weaknesses.filter(x => x.weakness),
+          strengths: [],
+          easyMode: easyModes.filter(x => x.hard),
+          innerCircle: innerCircle.filter(x => x.name),
+          rulesProsper: rulesProsper.filter(x => x),
+          rulesProtect: rulesProtect.filter(x => x),
+          rulesLimit: rulesLimit.filter(x => x),
+          insights: insights.filter(x => x),
+          oneChange,
+          revisitDate,
+          signedAt: Date.now(),
+          signatureName
       };
-      if (isActive) activeGoals.push(goal);
-      else backlogGoals.push(goal);
-    });
 
-    onComplete(wb, activeGoals, backlogGoals);
+      onComplete(wb, finalActiveGoals, finalBacklogGoals);
   };
 
-  // --- Steps UI ---
+  // --- Render Steps ---
   return (
-    <div className="fixed inset-0 bg-white z-[100] overflow-y-auto">
+    <div className="fixed inset-0 bg-white z-[100] overflow-y-auto font-sans text-[#37352F]">
       <div className="max-w-3xl mx-auto py-16 px-6">
         
         {/* Header */}
@@ -117,220 +212,469 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
             <div className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">reThink Workbook</div>
             <h1 className="text-4xl font-serif font-medium">Annual Review {year}</h1>
           </div>
-          <div className="font-serif italic text-xl">{step} / 10</div>
+          <div className="font-serif italic text-xl">{step} / 11</div>
         </div>
 
-        {/* Step 1: Audit */}
+        {/* STEP 1: L1 - Key to Success (Rows) */}
         {step === 1 && (
           <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
+             <div>
+                 <h2 className="text-3xl font-serif mb-4">The Key to Success</h2>
+                 <p className="font-serif text-lg text-gray-600 mb-6">
+                    Every breakthrough starts from knowing what you want to achieve.
+                 </p>
+                 <label className="font-bold block text-2xl font-serif mb-6">What I really want is...</label>
+                 
+                 <div className="space-y-6">
+                    {keySuccessLines.map((line, i) => (
+                        <div key={i} className="flex gap-4 items-end">
+                            <span className="font-serif text-gray-300 text-2xl italic">{i + 1}.</span>
+                            <input 
+                                className="w-full text-xl font-serif border-b border-gray-300 outline-none pb-2 focus:border-black transition-colors"
+                                value={line}
+                                onChange={e => updateList(setKeySuccessLines, i, e.target.value)}
+                                placeholder="I want to..."
+                                autoFocus={i === 0}
+                            />
+                        </div>
+                    ))}
+                 </div>
+             </div>
+          </div>
+        )}
+
+        {/* STEP 2: L2 - Audit */}
+        {step === 2 && (
+          <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
+             <div>
+                 <h2 className="text-3xl font-serif mb-4">An Honest Audit</h2>
+                 <p className="text-gray-800 leading-relaxed mb-8">
+                    Imagine a world-class CEO just took over your life. You're not in charge anymore, they are. 
+                 </p>
+             </div>
+
              <div className="space-y-4">
-                <label className="text-2xl font-serif">What was the key to your success this year?</label>
-                <textarea className="w-full p-4 bg-gray-50 border-l-4 border-black outline-none min-h-[120px]" 
-                  value={keySuccess} onChange={e => setKeySuccess(e.target.value)} />
-             </div>
-             <div className="grid md:grid-cols-2 gap-8">
-                <div className="space-y-2">
-                   <label className="font-serif text-lg font-bold">Stupidest Decision</label>
-                   <textarea className="w-full p-4 bg-gray-50 border border-gray-200 outline-none h-32" 
-                     value={stupidestDecision} onChange={e => setStupidestDecision(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                   <label className="font-serif text-lg font-bold">Smartest Decision</label>
-                   <textarea className="w-full p-4 bg-gray-50 border border-gray-200 outline-none h-32" 
-                     value={smartestDecision} onChange={e => setSmartestDecision(e.target.value)} />
-                </div>
-             </div>
-             <div className="space-y-2">
-                <label className="font-serif text-lg font-bold">Time Audit (Reality vs Perception)</label>
-                <textarea className="w-full p-4 bg-gray-50 border border-gray-200 outline-none h-32" 
+                <label className="font-bold block">Time Audit</label>
+                <p className="text-sm text-gray-500 mb-2">If they looked at your calendar, where are you spending your time?</p>
+                <textarea className="w-full p-4 bg-gray-50 border border-gray-200 outline-none h-24 resize-none" 
                   value={timeAudit} onChange={e => setTimeAudit(e.target.value)} />
              </div>
-          </div>
-        )}
 
-        {/* Step 2: Long List */}
-        {step === 2 && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-             <div>
-                <h2 className="text-3xl font-serif mb-4">The Long List</h2>
-                <p className="font-serif text-lg text-gray-600">Write down everything you want to accomplish. Don't filter. Aim for 25 items.</p>
-             </div>
-             <div className="flex gap-2">
-                <input className="flex-1 p-4 border-b-2 border-black outline-none text-lg font-medium placeholder:text-gray-300"
-                  placeholder="I want to..." 
-                  value={tempLongItem} 
-                  onChange={e => setTempLongItem(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && addLongItem()}
-                  autoFocus 
-                />
-                <button onClick={addLongItem} className="px-6 bg-black text-white font-bold hover:opacity-80">Add</button>
-             </div>
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {rawLongList.map((item, i) => (
-                   <div key={item.id} className="p-3 bg-gray-50 flex justify-between group border border-transparent hover:border-gray-200">
-                      <span className="font-medium">{(i+1).toString().padStart(2,'0')}. {item.text}</span>
-                      <button onClick={() => setRawLongList(rawLongList.filter(x => x.id !== item.id))} className="opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4 text-gray-400"/></button>
-                   </div>
-                ))}
+             <div className="grid md:grid-cols-2 gap-12">
+                 <div>
+                     <label className="font-bold block mb-2">Eliminate (Not Working)</label>
+                     {notWorking.map((val, i) => (
+                         <div key={i} className="flex gap-2 mb-3">
+                             <span className="text-gray-400 font-serif italic w-4">{i+1}.</span>
+                             <input className="w-full border-b border-gray-300 outline-none pb-1" value={val} onChange={e => updateList(setNotWorking, i, e.target.value)} />
+                         </div>
+                     ))}
+                 </div>
+                 <div>
+                     <label className="font-bold block mb-2">Focus (Working)</label>
+                     {working.map((val, i) => (
+                         <div key={i} className="flex gap-2 mb-3">
+                             <span className="text-gray-400 font-serif italic w-4">{i+1}.</span>
+                             <input className="w-full border-b border-gray-300 outline-none pb-1" value={val} onChange={e => updateList(setWorking, i, e.target.value)} />
+                         </div>
+                     ))}
+                 </div>
              </div>
           </div>
         )}
 
-        {/* Step 3: The Cut */}
+        {/* STEP 3: L3 - Map Your Horizon (Max 10) */}
         {step === 3 && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
              <div>
-                <h2 className="text-3xl font-serif mb-4">The Critical Three</h2>
-                <p className="font-serif text-lg text-gray-600">Select exactly 3 items. Everything else becomes your "Avoid-At-All-Costs" list.</p>
+                <h2 className="text-3xl font-serif mb-4">Map Your Horizon</h2>
+                <p className="font-serif text-lg text-gray-600 mb-6">
+                    Even exceptional leaders face the challenge of too many opportunities.
+                </p>
+                <label className="font-bold block text-xl mb-4">List your top 10 goals for {year}:</label>
              </div>
-             <div className="grid gap-3">
-                {rawLongList.map(item => {
-                   const isSelected = selectedIds.includes(item.id);
-                   const isDisabled = !isSelected && selectedIds.length >= 3;
+
+             <div className="space-y-3">
+                 {topTen.map((item, i) => (
+                     <div key={i} className="flex items-center gap-4 p-3 bg-gray-50 border border-gray-200 group">
+                         <span className="font-mono text-gray-400 w-6">{i+1}.</span>
+                         <span className="flex-1 font-medium">{item}</span>
+                         <button onClick={() => setTopTen(topTen.filter((_, idx) => idx !== i))} className="opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4 text-gray-400 hover:text-black"/></button>
+                     </div>
+                 ))}
+                 
+                 {topTen.length < 10 ? (
+                     <div className="flex gap-2">
+                        <span className="font-mono text-gray-400 w-6 py-3">{topTen.length + 1}.</span>
+                        <input 
+                            className="flex-1 p-3 border-b-2 border-black outline-none font-medium placeholder:text-gray-300"
+                            placeholder="Add a goal..." 
+                            value={tempGoal} 
+                            onChange={e => setTempGoal(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && addTopTen()}
+                            autoFocus 
+                        />
+                        <button onClick={addTopTen} className="px-4 bg-black text-white font-bold text-sm hover:opacity-80">Add</button>
+                     </div>
+                 ) : (
+                    <p className="text-sm text-gray-500 italic mt-4">Limit reached. Proceed to selection.</p>
+                 )}
+             </div>
+          </div>
+        )}
+
+        {/* STEP 4: L4 - Do Less, Better (3 Goals + Milestones) */}
+        {step === 4 && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+             <div>
+                <h2 className="text-3xl font-serif mb-4">Do Less, Better</h2>
+                <p className="text-gray-800 mb-6">
+                    <strong>Step 1:</strong> Select your top three goals. The remaining seven become your "avoid-at-all-costs" list.
+                </p>
+             </div>
+
+             <div className="grid gap-3 mb-12">
+                {topTen.map((goal, i) => {
+                   const isSelected = selectedGoalIndices.includes(i);
+                   const isDisabled = !isSelected && selectedGoalIndices.length >= 3;
                    return (
-                      <div key={item.id} onClick={() => !isDisabled && toggleSelection(item.id)} 
-                        className={`p-4 border-2 cursor-pointer flex items-center gap-4 transition-all ${isSelected ? 'border-black bg-black text-white' : 'border-gray-100 hover:border-black' + (isDisabled ? ' opacity-50 cursor-not-allowed' : '')}`}>
-                          <div className={`w-6 h-6 border flex items-center justify-center ${isSelected ? 'border-white' : 'border-black'}`}>
-                             {isSelected && <Check className="w-4 h-4"/>}
+                      <div key={i} onClick={() => !isDisabled && toggleSelection(i)} 
+                        className={`p-4 border cursor-pointer flex items-center gap-4 transition-all ${isSelected ? 'border-black bg-black text-white' : 'border-gray-200 hover:border-black' + (isDisabled ? ' opacity-40 cursor-not-allowed' : '')}`}>
+                          <div className={`w-5 h-5 border flex items-center justify-center ${isSelected ? 'border-white' : 'border-black'}`}>
+                             {isSelected && <Check className="w-3 h-3"/>}
                           </div>
-                          <span className="text-lg font-bold">{item.text}</span>
+                          <span className="text-lg">{goal}</span>
                       </div>
                    )
                 })}
              </div>
-             <div className="text-right font-bold uppercase tracking-widest text-sm">Selected: {selectedIds.length} / 3</div>
+
+             {selectedGoalIndices.length === 3 && (
+                 <div className="animate-in fade-in space-y-12 pt-8 border-t border-gray-200">
+                     <p className="text-gray-800 text-lg font-serif">
+                        <strong>Step 2:</strong> Refine your Critical 3.
+                     </p>
+                     {refinedGoals.map((rg, i) => (
+                         <div key={rg.id} className="bg-gray-50 p-8 border border-gray-200 space-y-6 relative">
+                             <div className="absolute top-0 right-0 bg-black text-white px-3 py-1 text-xs font-bold uppercase tracking-widest">Goal {i+1}</div>
+                             <h4 className="font-serif font-bold text-2xl pt-4">{rg.text}</h4>
+                             
+                             <div>
+                                 <label className="text-xs font-bold uppercase block mb-1">Success metric(s)</label>
+                                 <input className="w-full bg-white border border-gray-300 p-3 text-sm outline-none focus:border-black transition-colors" placeholder="How will you measure progress?" value={rg.metric} onChange={e => updateRefined(rg.id, 'metric', e.target.value)} />
+                             </div>
+                             
+                             <div>
+                                 <label className="text-xs font-bold uppercase block mb-2">Next Steps / Milestones (Up to 3)</label>
+                                 <div className="space-y-2">
+                                     {rg.nextSteps.map((step, sIdx) => (
+                                         <div key={sIdx} className="flex gap-2">
+                                            <span className="text-gray-400 font-mono text-sm py-2">{sIdx+1}.</span>
+                                            <input 
+                                                className="w-full bg-white border border-gray-300 p-2 text-sm outline-none focus:border-black transition-colors" 
+                                                placeholder="Action step..." 
+                                                value={step} 
+                                                onChange={e => updateRefinedStep(rg.id, sIdx, e.target.value)} 
+                                            />
+                                         </div>
+                                     ))}
+                                     {rg.nextSteps.length < 3 && (
+                                         <button onClick={() => addRefinedStep(rg.id)} className="text-xs font-bold text-gray-500 hover:text-black flex items-center gap-1 pl-6">
+                                             <Plus className="w-3 h-3"/> Add Step
+                                         </button>
+                                     )}
+                                 </div>
+                             </div>
+
+                             <div>
+                                 <label className="text-xs font-bold uppercase block mb-1">Key support</label>
+                                 <input className="w-full bg-white border border-gray-300 p-3 text-sm outline-none focus:border-black transition-colors" placeholder="Who or what do you need?" value={rg.support} onChange={e => updateRefined(rg.id, 'support', e.target.value)} />
+                             </div>
+                         </div>
+                     ))}
+                 </div>
+             )}
           </div>
         )}
 
-        {/* Step 4: Momentum */}
-        {step === 4 && (
+        {/* STEP 5: L5 - Momentum */}
+        {step === 5 && (
            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
               <div>
                 <h2 className="text-3xl font-serif mb-4">Small Steps for Momentum</h2>
-                <p className="font-serif text-lg text-gray-600">Identify 3 things you are procrastinating on. Define the smallest possible step.</p>
+                <p className="font-serif text-lg text-gray-600 italic">
+                    "Now is no time to think of what you do not have. Think of what you can do with what there is."
+                </p>
               </div>
               <div className="space-y-6">
                  {momentum.map((m, i) => (
-                    <div key={m.id} className="bg-gray-50 p-6 border border-gray-200">
-                       <div className="grid md:grid-cols-2 gap-6">
-                          <div>
-                             <label className="text-xs font-bold uppercase mb-1 block">Procrastination Item</label>
-                             <input className="w-full bg-transparent border-b border-gray-300 focus:border-black outline-none py-1" 
-                               value={m.item} onChange={e => updateMomentum(i, 'item', e.target.value)} />
-                          </div>
-                          <div>
-                             <label className="text-xs font-bold uppercase mb-1 block">Smallest Step</label>
-                             <input className="w-full bg-transparent border-b border-gray-300 focus:border-black outline-none py-1" 
-                               value={m.smallStep} onChange={e => updateMomentum(i, 'smallStep', e.target.value)} />
-                          </div>
-                       </div>
+                    <div key={m.id} className="grid md:grid-cols-2 gap-8 border-b border-gray-200 pb-6">
+                        <div>
+                             <label className="font-bold block mb-2">I'm putting off</label>
+                             <input className="w-full bg-transparent border-b border-gray-300 outline-none pb-1" 
+                               value={m.item} onChange={e => {
+                                   const newArr = [...momentum];
+                                   newArr[i].item = e.target.value;
+                                   setMomentum(newArr);
+                               }} />
+                        </div>
+                        <div>
+                             <label className="font-bold block mb-2">Smallest first step</label>
+                             <input className="w-full bg-transparent border-b border-gray-300 outline-none pb-1" 
+                               value={m.step} onChange={e => {
+                                   const newArr = [...momentum];
+                                   newArr[i].step = e.target.value;
+                                   setMomentum(newArr);
+                               }} />
+                        </div>
                     </div>
                  ))}
               </div>
            </div>
         )}
 
-        {/* Step 5: Identity */}
-        {step === 5 && (
+        {/* STEP 6: L6 - Play to Strengths */}
+        {step === 6 && (
+           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+              <div>
+                 <h2 className="text-3xl font-serif mb-4">Play to Your Strengths</h2>
+                 <p className="text-gray-800">
+                    List three areas where others would say you're weak. For each one, write down a practical way to work around it.
+                 </p>
+              </div>
+              
+              <div className="space-y-6">
+                 {weaknesses.map((w, i) => (
+                    <div key={w.id} className="grid md:grid-cols-2 gap-8 border-b border-gray-200 pb-6">
+                        <div>
+                             <label className="font-bold block mb-2">Weakness</label>
+                             <input className="w-full bg-transparent border-b border-gray-300 outline-none pb-1" 
+                               value={w.weakness} onChange={e => {
+                                   const newArr = [...weaknesses];
+                                   newArr[i].weakness = e.target.value;
+                                   setWeaknesses(newArr);
+                               }} />
+                        </div>
+                        <div>
+                             <label className="font-bold block mb-2">Workaround</label>
+                             <input className="w-full bg-transparent border-b border-gray-300 outline-none pb-1" 
+                               value={w.workaround} onChange={e => {
+                                   const newArr = [...weaknesses];
+                                   newArr[i].workaround = e.target.value;
+                                   setWeaknesses(newArr);
+                               }} />
+                        </div>
+                    </div>
+                 ))}
+              </div>
+           </div>
+        )}
+
+        {/* STEP 7: L7 - Easy Mode */}
+        {step === 7 && (
+           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+              <div>
+                 <h2 className="text-3xl font-serif mb-4">Find Your Easy Mode</h2>
+                 <p className="text-gray-800">
+                    Identify three areas where you're choosing the difficult path by default. For each one, find and describe your easy mode.
+                 </p>
+              </div>
+              
+              <div className="space-y-6">
+                 {easyModes.map((em, i) => (
+                    <div key={em.id} className="grid md:grid-cols-2 gap-8 border-b border-gray-200 pb-6">
+                        <div>
+                             <label className="font-bold block mb-2">Hard mode</label>
+                             <input className="w-full bg-transparent border-b border-gray-300 outline-none pb-1" 
+                               value={em.hard} onChange={e => {
+                                   const newArr = [...easyModes];
+                                   newArr[i].hard = e.target.value;
+                                   setEasyModes(newArr);
+                               }} />
+                        </div>
+                        <div>
+                             <label className="font-bold block mb-2">Easy mode</label>
+                             <input className="w-full bg-transparent border-b border-gray-300 outline-none pb-1" 
+                               value={em.easy} onChange={e => {
+                                   const newArr = [...easyModes];
+                                   newArr[i].easy = e.target.value;
+                                   setEasyModes(newArr);
+                               }} />
+                        </div>
+                    </div>
+                 ))}
+              </div>
+           </div>
+        )}
+
+        {/* STEP 8: L8 - Inner Circle List */}
+        {step === 8 && (
+           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+              <div>
+                 <h2 className="text-3xl font-serif mb-4">The Inner Circle</h2>
+                 <p className="text-gray-800 mb-6">
+                    List the five people who have the most presence in your daily life.
+                 </p>
+              </div>
+              
+              <div className="space-y-4 max-w-md">
+                 {innerCircle.map((member, i) => (
+                    <div key={i} className="flex gap-4 items-center">
+                        <span className="font-mono text-gray-400 w-4">{i+1}.</span>
+                        <input className="flex-1 p-3 border border-gray-200 outline-none" 
+                            placeholder={`Person ${i+1}`}
+                            value={member.name} 
+                            onChange={e => updateInnerName(i, e.target.value)} 
+                        />
+                    </div>
+                 ))}
+              </div>
+           </div>
+        )}
+
+        {/* STEP 9: L9 - Inner Circle Score */}
+        {step === 9 && (
+           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+              <div>
+                 <h2 className="text-3xl font-serif mb-4">The Inner Circle</h2>
+                 <p className="text-gray-800 mb-6">
+                    Score each person (+1 for positive, 0 for neutral, -1 for negative).
+                 </p>
+              </div>
+              
+              <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                      <thead>
+                          <tr className="border-b border-black">
+                              <th className="text-left py-2 font-bold w-32">Person</th>
+                              <th className="py-2 px-1 font-normal text-xs text-gray-500 w-24">Info Quality</th>
+                              <th className="py-2 px-1 font-normal text-xs text-gray-500 w-24">Growth</th>
+                              <th className="py-2 px-1 font-normal text-xs text-gray-500 w-24">Energy</th>
+                              <th className="py-2 px-1 font-normal text-xs text-gray-500 w-24">Future</th>
+                              <th className="py-2 px-1 font-normal text-xs text-gray-500 w-24">Values</th>
+                              <th className="py-2 px-1 font-bold text-right w-16">Total</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          {innerCircle.filter(m => m.name).map((member, i) => (
+                              <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
+                                  <td className="py-4 font-bold">{member.name}</td>
+                                  {['info', 'growth', 'energy', 'future', 'values'].map((field) => (
+                                      <td key={field} className="text-center">
+                                          <input 
+                                            type="number" min="-1" max="1"
+                                            className="w-10 text-center border border-gray-200 py-1 outline-none"
+                                            value={member.scores[field as keyof typeof member.scores]}
+                                            onChange={e => updateInnerScore(i, field as any, parseInt(e.target.value) || 0)}
+                                          />
+                                      </td>
+                                  ))}
+                                  <td className="text-right font-mono font-bold text-lg">
+                                      {member.totalScore > 0 ? `+${member.totalScore}` : member.totalScore}
+                                  </td>
+                              </tr>
+                          ))}
+                      </tbody>
+                  </table>
+              </div>
+           </div>
+        )}
+
+        {/* STEP 10: L10 - Rules (No Colors) */}
+        {step === 10 && (
+           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+              <div>
+                 <h2 className="text-3xl font-serif mb-4">Set the Rules</h2>
+                 <p className="font-serif text-lg text-gray-600 italic mb-6">
+                    "The secret to effective results is turning acquired knowledge into default behavior."
+                 </p>
+              </div>
+              
+              <div className="grid gap-8">
+                  <div className="border border-gray-200 p-6 rounded-lg">
+                      <h3 className="font-bold text-lg mb-2 flex items-center gap-2 uppercase tracking-wide"><Target className="w-4 h-4"/> Rules that prosper</h3>
+                      <p className="text-sm text-gray-500 mb-4">Automate progress toward your goals.</p>
+                      {rulesProsper.map((r, i) => (
+                          <div key={i} className="flex gap-2 mb-2"><span className="text-gray-300 w-4">{i+1}.</span><input className="w-full border-b border-gray-200 outline-none pb-1" value={r} onChange={e => updateList(setRulesProsper, i, e.target.value)} /></div>
+                      ))}
+                  </div>
+                  <div className="border border-gray-200 p-6 rounded-lg">
+                      <h3 className="font-bold text-lg mb-2 flex items-center gap-2 uppercase tracking-wide"><Shield className="w-4 h-4"/> Rules that protect</h3>
+                      <p className="text-sm text-gray-500 mb-4">Guard your priorities and energy.</p>
+                      {rulesProtect.map((r, i) => (
+                          <div key={i} className="flex gap-2 mb-2"><span className="text-gray-300 w-4">{i+1}.</span><input className="w-full border-b border-gray-200 outline-none pb-1" value={r} onChange={e => updateList(setRulesProtect, i, e.target.value)} /></div>
+                      ))}
+                  </div>
+                  <div className="border border-gray-200 p-6 rounded-lg">
+                      <h3 className="font-bold text-lg mb-2 flex items-center gap-2 uppercase tracking-wide"><Ban className="w-4 h-4"/> Rules that limit</h3>
+                      <p className="text-sm text-gray-500 mb-4">Identify rules ready for retirement.</p>
+                      {rulesLimit.map((r, i) => (
+                          <div key={i} className="flex gap-2 mb-2"><span className="text-gray-300 w-4">{i+1}.</span><input className="w-full border-b border-gray-200 outline-none pb-1" value={r} onChange={e => updateList(setRulesLimit, i, e.target.value)} /></div>
+                      ))}
+                  </div>
+              </div>
+           </div>
+        )}
+
+        {/* STEP 11: L11 - Commit */}
+        {step === 11 && (
            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
               <div>
-                 <h2 className="text-3xl font-serif mb-2">Play to Your Strengths</h2>
-                 <p className="mb-4 text-gray-600">List 3 strengths and how to apply them.</p>
-                 <div className="flex gap-2 mb-4">
-                    <input className="flex-1 p-3 border border-gray-200 outline-none" placeholder="Strength" value={tempS.title} onChange={e => setTempS({...tempS, title: e.target.value})} />
-                    <input className="flex-1 p-3 border border-gray-200 outline-none" placeholder="Application" value={tempS.body} onChange={e => setTempS({...tempS, body: e.target.value})} />
-                    <button onClick={() => { if(tempS.title){ setStrengths([...strengths, {id:crypto.randomUUID(), strength:tempS.title, application:tempS.body}]); setTempS({title:'',body:''}); }}} className="px-4 bg-black text-white font-bold">Add</button>
-                 </div>
-                 <ul className="space-y-2">{strengths.map(s => <li key={s.id} className="bg-gray-50 p-3 flex justify-between"><span className="font-medium">{s.strength} <span className="text-gray-400 font-normal">→ {s.application}</span></span> <button onClick={() => setStrengths(strengths.filter(x=>x.id!==s.id))}><Trash2 className="w-4 h-4 text-gray-400"/></button></li>)}</ul>
+                 <h2 className="text-4xl font-serif mb-4">Commit to Your Path</h2>
+                 <p className="text-gray-800 text-lg mb-8">
+                    Clear thinking leads to better decisions.
+                 </p>
               </div>
-              <div className="border-t pt-12">
-                 <h2 className="text-3xl font-serif mb-2">Mitigate Weaknesses</h2>
-                 <p className="mb-4 text-gray-600">List 3 weaknesses and workarounds.</p>
-                 <div className="flex gap-2 mb-4">
-                    <input className="flex-1 p-3 border border-gray-200 outline-none" placeholder="Weakness" value={tempW.title} onChange={e => setTempW({...tempW, title: e.target.value})} />
-                    <input className="flex-1 p-3 border border-gray-200 outline-none" placeholder="Workaround" value={tempW.body} onChange={e => setTempW({...tempW, body: e.target.value})} />
-                    <button onClick={() => { if(tempW.title){ setWeaknesses([...weaknesses, {id:crypto.randomUUID(), weakness:tempW.title, workaround:tempW.body}]); setTempW({title:'',body:''}); }}} className="px-4 bg-black text-white font-bold">Add</button>
-                 </div>
-                 <ul className="space-y-2">{weaknesses.map(s => <li key={s.id} className="bg-gray-50 p-3 flex justify-between"><span className="font-medium">{s.weakness} <span className="text-gray-400 font-normal">→ {s.workaround}</span></span> <button onClick={() => setWeaknesses(weaknesses.filter(x=>x.id!==s.id))}><Trash2 className="w-4 h-4 text-gray-400"/></button></li>)}</ul>
+
+              <div className="space-y-6">
+                  <label className="font-bold block">What three insights from this review will most transform your next year?</label>
+                  {insights.map((val, i) => (
+                      <div key={i} className="flex gap-4">
+                          <span className="font-mono text-gray-400">{i+1}.</span>
+                          <input className="w-full border-b border-gray-300 outline-none pb-1" value={val} onChange={e => updateList(setInsights, i, e.target.value)} />
+                      </div>
+                  ))}
               </div>
-           </div>
-        )}
 
-        {/* Step 6: Easy Mode */}
-        {step === 6 && (
-           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-              <h2 className="text-3xl font-serif">Find Your Easy Mode</h2>
-              <p className="text-lg text-gray-600">Where are you making things harder than needed? What is the path of least resistance?</p>
-              <textarea className="w-full p-6 bg-gray-50 border-l-4 border-black outline-none min-h-[400px] text-lg font-serif" 
-                value={easyMode} onChange={e => setEasyMode(e.target.value)} placeholder="Journal..." />
-           </div>
-        )}
-
-        {/* Step 7: Inversion */}
-        {step === 7 && (
-           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-              <h2 className="text-3xl font-serif">Inversion</h2>
-              <p className="text-lg text-gray-600">What would guarantee failure? List everything that ensures you fail.</p>
-              <textarea className="w-full p-6 bg-gray-50 border-l-4 border-black outline-none min-h-[400px] text-lg font-serif" 
-                value={inversion} onChange={e => setInversion(e.target.value)} placeholder="How to fail..." />
-           </div>
-        )}
-
-        {/* Step 8: Second Order */}
-        {step === 8 && (
-           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-              <h2 className="text-3xl font-serif">Second-Order Thinking</h2>
-              <p className="text-lg text-gray-600">"And then what?" Ensure short-term gains don't cause long-term pain.</p>
-              <textarea className="w-full p-6 bg-gray-50 border-l-4 border-black outline-none min-h-[400px] text-lg font-serif" 
-                value={secondOrder} onChange={e => setSecondOrder(e.target.value)} placeholder="Consequences of consequences..." />
-           </div>
-        )}
-
-        {/* Step 9: Rules */}
-        {step === 9 && (
-           <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4">
-              <h2 className="text-3xl font-serif">Rules of Engagement</h2>
-              <div className="bg-gray-50 p-8 border border-gray-200">
-                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Check className="w-5 h-5"/> Prescriptions (Always)</h3>
-                 <div className="flex gap-2 mb-4">
-                    <input className="flex-1 p-3 bg-white border border-gray-200 outline-none" value={tempP} onChange={e => setTempP(e.target.value)} onKeyDown={e => e.key === 'Enter' && (setPrescriptions([...prescriptions, tempP]), setTempP(''))} />
-                    <button onClick={() => { if(tempP) { setPrescriptions([...prescriptions, tempP]); setTempP(''); }}} className="px-4 bg-black text-white font-bold">Add</button>
-                 </div>
-                 <ul className="list-disc pl-5 space-y-2">{prescriptions.map((p,i) => <li key={i} className="text-lg font-serif">{p}</li>)}</ul>
+              <div className="space-y-2">
+                  <label className="font-bold block">What one change will you implement immediately?</label>
+                  <input className="w-full border-b border-gray-300 outline-none pb-1" value={oneChange} onChange={e => setOneChange(e.target.value)} />
               </div>
-              <div className="bg-gray-50 p-8 border border-gray-200">
-                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Ban className="w-5 h-5"/> Anti-Goals (Never)</h3>
-                 <div className="flex gap-2 mb-4">
-                    <input className="flex-1 p-3 bg-white border border-gray-200 outline-none" value={tempA} onChange={e => setTempA(e.target.value)} onKeyDown={e => e.key === 'Enter' && (setAntiGoals([...antiGoals, tempA]), setTempA(''))} />
-                    <button onClick={() => { if(tempA) { setAntiGoals([...antiGoals, tempA]); setTempA(''); }}} className="px-4 bg-black text-white font-bold">Add</button>
-                 </div>
-                 <ul className="list-disc pl-5 space-y-2">{antiGoals.map((p,i) => <li key={i} className="text-lg font-serif">{p}</li>)}</ul>
-              </div>
-           </div>
-        )}
 
-        {/* Step 10: Contract */}
-        {step === 10 && (
-           <div className="space-y-12 text-center py-24 animate-in fade-in slide-in-from-bottom-4">
-              <h2 className="text-4xl font-serif mb-8">The Contract</h2>
-              <p className="text-2xl font-serif italic max-w-2xl mx-auto leading-relaxed">
-                 "I commit to executing this plan. I accept that I cannot do everything, but I can do anything if I focus."
-              </p>
-              <div className="max-w-md mx-auto space-y-2">
-                 <input className="w-full text-center text-3xl font-serif border-b-2 border-black outline-none bg-transparent py-2 placeholder:text-gray-200" 
-                    placeholder="Sign Name" value={signatureName} onChange={e => setSignatureName(e.target.value)} />
-                 <div className="text-xs uppercase tracking-widest text-gray-400">Dated: {new Date().toLocaleDateString()}</div>
+              <div className="space-y-2">
+                  <label className="font-bold block">When will you revisit these exercises to check your progress?</label>
+                  <input className="w-full border-b border-gray-300 outline-none pb-1" value={revisitDate} onChange={e => setRevisitDate(e.target.value)} />
               </div>
-              <button onClick={finish} disabled={!signatureName} className="mt-12 px-10 py-4 bg-black text-white font-bold text-lg hover:scale-105 transition-transform disabled:opacity-50">Sign Manifesto</button>
+
+              <div className="pt-12 mt-12 border-t-2 border-black text-center">
+                  <p className="font-serif italic text-xl max-w-2xl mx-auto mb-12">
+                     "I commit to pursuing my chosen priorities..."
+                  </p>
+                  <input 
+                    className="w-full max-w-md text-center text-2xl font-serif border-b-2 border-gray-300 outline-none bg-transparent py-2 placeholder:text-gray-200"
+                    placeholder="Place, date, and signature"
+                    value={signatureName}
+                    onChange={e => setSignatureName(e.target.value)}
+                  />
+                  <br/>
+                  <button onClick={finish} disabled={!signatureName} className="mt-12 px-10 py-4 bg-black text-white font-bold text-lg hover:scale-105 transition-transform disabled:opacity-50">
+                      Sign Manifesto
+                  </button>
+              </div>
            </div>
         )}
 
         {/* Nav */}
         <div className="flex justify-between border-t pt-8 mt-16">
            <button onClick={() => step > 1 ? setStep(step - 1) : onCancel()} className="text-gray-400 hover:text-black font-medium">{step === 1 ? 'Cancel' : 'Back'}</button>
-           {step < 10 && (
-             <button onClick={() => setStep(step + 1)} disabled={step === 3 && selectedIds.length !== 3} 
-               className="flex items-center gap-2 font-bold hover:underline disabled:opacity-30 disabled:no-underline">Next <ArrowRight className="w-4 h-4"/></button>
+           {step < 11 && (
+             <button 
+                onClick={() => setStep(step + 1)} 
+                disabled={(step === 3 && topTen.length !== 10) || (step === 4 && selectedGoalIndices.length !== 3)} 
+                className="flex items-center gap-2 font-bold hover:underline disabled:opacity-30 disabled:no-underline"
+             >
+                Next <ArrowRight className="w-4 h-4"/>
+             </button>
            )}
         </div>
 

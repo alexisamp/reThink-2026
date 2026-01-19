@@ -29,6 +29,10 @@ export interface Goal {
   metric: string;
   motivation?: string;
   
+  // Specific fields from "Do Less, Better" (L4)
+  nextStep?: string; 
+  keySupport?: string;
+
   leverage: Leverage[]; 
   obstacles: Obstacle[]; 
   
@@ -99,36 +103,65 @@ export interface GlobalRules {
   antiGoals: string[];
 }
 
-// --- YEARLY ARCHITECTURE ---
+// --- YEARLY ARCHITECTURE (PDF 2025) ---
+
+export interface InnerCircleMember {
+  name: string;
+  scores: {
+    info: number;    // Information quality
+    growth: number;  // Growth catalyst
+    energy: number;  // Energy impact
+    future: number;  // Future alignment
+    values: number;  // Values and ethics
+  };
+  totalScore: number;
+}
 
 export interface WorkbookData {
   year: string;
   
-  // Level 1 & 2: The Audit
+  // Level 1: The Key
   keySuccess: string;
-  stupidestDecision: string;
-  smartestDecision: string;
-  timeAudit: string;
+
+  // Level 2: An Honest Audit
+  timeAudit: string; // "If they looked at your calendar..."
+  notWorking: string[]; // "What's not working..."
+  working: string[]; // "What is working..."
+  
+  // Level 3 & 4: Horizon & Focus
+  topTen: string[];    
+  criticalThree: Goal[]; // Stored here for archive, also pushed to AppData.goals
   
   // Level 5: Momentum
-  momentum: { id: string; item: string; smallStep: string }[];
+  momentum: { id: string; item: string; step: string }[];
   
-  // Level 6: Identity
-  strengths: { id: string; strength: string; application: string }[];
+  // Level 6: Play to strengths (Weakness Workarounds)
   weaknesses: { id: string; weakness: string; workaround: string }[];
+  strengths: { id: string; strength: string; application: string }[];
   
-  // Level 7, 8, 9: Mental Models
-  easyMode: string;
-  inversion: string;
-  secondOrder: string;
+  // Level 7: Easy Mode
+  easyMode: { id: string; hard: string; easy: string }[];
 
-  // Level 10: Rules
-  prescriptions: string[];
-  antiGoals: string[];
+  // Level 8 & 9: Inner Circle
+  innerCircle: InnerCircleMember[];
 
-  // Level 11: Contract
+  // Level 10: Set the rules
+  rulesProsper: string[]; // Automate progress
+  rulesProtect: string[]; // Guard priorities
+  rulesLimit: string[];   // Identify rules to retire
+
+  // Level 11: Commit
+  insights: string[];
+  oneChange: string;
+  revisitDate: string;
   signedAt: number | null;
   signatureName: string;
+  
+  // Legacy fields kept for compatibility
+  stupidestDecision?: string;
+  smartestDecision?: string;
+  prescriptions?: string[]; // Legacy
+  antiGoals?: string[]; // Legacy
 }
 
 export interface AppData {
