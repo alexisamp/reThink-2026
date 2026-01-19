@@ -36,7 +36,7 @@ export interface Goal {
   milestones: Milestone[];
   createdAt: number;
   
-  // Flag to indicate this goal came from a review and might need detailing
+  // Flag to indicate this goal came from a review and needs systemization
   needsConfig?: boolean; 
   
   // Deprecated legacy fields
@@ -111,18 +111,18 @@ export interface WorkbookData {
   timeAudit: string;
   
   // Level 5: Momentum
-  momentum: { id: string; item: string; step: string }[];
+  momentum: { id: string; item: string; smallStep: string }[];
   
-  // Level 6: Identity Snapshot
+  // Level 6: Identity
   strengths: { id: string; strength: string; application: string }[];
   weaknesses: { id: string; weakness: string; workaround: string }[];
   
-  // Level 7, 8, 9: Deep Work
-  easyModeReflection: string;
-  failurePreMortem: string;
-  secondOrderThinking: string; // Level 9
+  // Level 7, 8, 9: Mental Models
+  easyMode: string;
+  inversion: string;
+  secondOrder: string;
 
-  // Level 10: Rules Snapshot
+  // Level 10: Rules
   prescriptions: string[];
   antiGoals: string[];
 
