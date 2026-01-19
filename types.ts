@@ -117,9 +117,10 @@ export interface WorkbookData {
   strengths: { id: string; strength: string; application: string }[];
   weaknesses: { id: string; weakness: string; workaround: string }[];
   
-  // Level 7 & 8: Deep Work
+  // Level 7, 8, 9: Deep Work
   easyModeReflection: string;
   failurePreMortem: string;
+  secondOrderThinking: string; // Level 9
 
   // Level 10: Rules Snapshot
   prescriptions: string[];

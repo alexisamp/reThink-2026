@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Goal, GoalStatus, WorkbookData } from '../types';
-import { ArrowRight, Check, Trash2 } from '../components/Icon';
+import { ArrowRight, Check, Trash2, Plus, AlertTriangle, Brain, Ban } from '../components/Icon';
 
 interface AnnualReviewProps {
   onComplete: (workbook: WorkbookData, activeGoals: Goal[], backlogGoals: Goal[]) => void;
@@ -20,9 +20,10 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
   const [smartestDecision, setSmartestDecision] = useState('');
   const [timeAudit, setTimeAudit] = useState('');
 
-  // Step 2 & 3: The Lists
-  const [longList, setLongList] = useState<Goal[]>([]);
-  const [tempGoal, setTempGoal] = useState('');
+  // Step 2 (Long List) & 3 (Selection)
+  const [rawLongList, setRawLongList] = useState<{id: string, text: string}[]>([]);
+  const [tempLongItem, setTempLongItem] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Step 4: Momentum
   const [momentum, setMomentum] = useState([
@@ -34,8 +35,6 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
   // Step 5: Strategy (Identity)
   const [strengths, setStrengths] = useState<{ id: string; strength: string; application: string }[]>([]);
   const [weaknesses, setWeaknesses] = useState<{ id: string; weakness: string; workaround: string }[]>([]);
-  
-  // Temp inputs for strategy
   const [sTitle, setSTitle] = useState(''); const [sApp, setSApp] = useState('');
   const [wTitle, setWTitle] = useState(''); const [wWork, setWWork] = useState('');
 
@@ -45,51 +44,35 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
   // Step 7: Inversion
   const [failurePreMortem, setFailurePreMortem] = useState('');
 
-  // Step 8: Rules
+  // Step 8: Second-Order Thinking
+  const [secondOrderThinking, setSecondOrderThinking] = useState('');
+
+  // Step 9: Rules
   const [prescriptions, setPrescriptions] = useState<string[]>([]);
   const [antiGoals, setAntiGoals] = useState<string[]>([]);
   const [tempRule, setTempRule] = useState('');
   const [tempAnti, setTempAnti] = useState('');
 
-  // Final: Contract
+  // Step 10: Contract
   const [signatureName, setSignatureName] = useState('');
 
   // --- Helpers ---
 
-  const addToLongList = () => {
-      if(!tempGoal.trim()) return;
-      const newGoal: Goal = {
-          id: crypto.randomUUID(),
-          text: tempGoal,
-          metric: 'To be defined',
-          motivation: '',
-          leverage: [],
-          obstacles: [],
-          status: GoalStatus.BACKLOG, 
-          milestones: [],
-          createdAt: Date.now(),
-          needsConfig: true
-      };
-      setLongList([...longList, newGoal]);
-      setTempGoal('');
+  const addToRawList = () => {
+      if(!tempLongItem.trim()) return;
+      setRawLongList([...rawLongList, { id: crypto.randomUUID(), text: tempLongItem }]);
+      setTempLongItem('');
   };
 
-  const toggleCriticalThree = (id: string) => {
-      const currentActive = longList.filter(g => g.status === GoalStatus.ACTIVE).length;
-      const targetGoal = longList.find(g => g.id === id);
-      
-      if (!targetGoal) return;
-
-      if (targetGoal.status === GoalStatus.ACTIVE) {
-          // Deactivate
-          setLongList(longList.map(g => g.id === id ? { ...g, status: GoalStatus.BACKLOG } : g));
+  const toggleSelection = (id: string) => {
+      if (selectedIds.includes(id)) {
+          setSelectedIds(selectedIds.filter(x => x !== id));
       } else {
-          // Activate (Limit 3)
-          if (currentActive >= 3) {
-              alert("You can only choose 3 Critical Goals. Deselect one first.");
+          if (selectedIds.length >= 3) {
+              alert("You can only select 3 Critical Goals.");
               return;
           }
-          setLongList(longList.map(g => g.id === id ? { ...g, status: GoalStatus.ACTIVE } : g));
+          setSelectedIds([...selectedIds, id]);
       }
   };
 
@@ -113,14 +96,33 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
           weaknesses,
           easyModeReflection,
           failurePreMortem,
+          secondOrderThinking,
           prescriptions,
           antiGoals,
           signedAt: Date.now(),
           signatureName
       };
 
-      const activeGoals = longList.filter(g => g.status === GoalStatus.ACTIVE);
-      const backlogGoals = longList.filter(g => g.status === GoalStatus.BACKLOG);
+      const activeGoals: Goal[] = [];
+      const backlogGoals: Goal[] = [];
+
+      rawLongList.forEach(item => {
+          const isSelected = selectedIds.includes(item.id);
+          const goal: Goal = {
+              id: item.id,
+              text: item.text,
+              metric: 'To be defined',
+              motivation: '',
+              leverage: [],
+              obstacles: [],
+              status: isSelected ? GoalStatus.ACTIVE : GoalStatus.BACKLOG,
+              milestones: [],
+              createdAt: Date.now(),
+              needsConfig: isSelected // Only active goals need immediate config
+          };
+          if (isSelected) activeGoals.push(goal);
+          else backlogGoals.push(goal);
+      });
 
       onComplete(finalWorkbook, activeGoals, backlogGoals);
   };
@@ -138,7 +140,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                     <h1 className="text-3xl font-serif font-medium">Annual Review {year}</h1>
                 </div>
                 <div className="text-right">
-                    <span className="font-serif text-xl italic">{step} / 9</span>
+                    <span className="font-serif text-xl italic">{step} / 10</span>
                 </div>
             </div>
 
@@ -169,7 +171,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                 </div>
             )}
 
-            {/* STEP 2: THE LONG LIST */}
+            {/* STEP 2: THE LONG LIST (Brainstorming) */}
             {step === 2 && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
                     <div>
@@ -181,26 +183,26 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                         <input 
                             className="flex-1 p-4 border border-black outline-none font-medium"
                             placeholder="I want to..."
-                            value={tempGoal}
-                            onChange={e => setTempGoal(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && addToLongList()}
+                            value={tempLongItem}
+                            onChange={e => setTempLongItem(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && addToRawList()}
                             autoFocus
                         />
-                        <button onClick={addToLongList} className="px-6 bg-black text-white font-bold hover:opacity-80">Add</button>
+                        <button onClick={addToRawList} className="px-6 bg-black text-white font-bold hover:opacity-80">Add</button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {longList.map((g, i) => (
-                            <div key={g.id} className="p-4 bg-gray-50 border border-gray-200 flex justify-between items-center group">
-                                <span className="text-sm font-medium">{(i+1).toString().padStart(2, '0')}. {g.text}</span>
-                                <button onClick={() => setLongList(longList.filter(x => x.id !== g.id))} className="opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" /></button>
+                        {rawLongList.map((item, i) => (
+                            <div key={item.id} className="p-4 bg-gray-50 border border-gray-200 flex justify-between items-center group">
+                                <span className="text-sm font-medium">{(i+1).toString().padStart(2, '0')}. {item.text}</span>
+                                <button onClick={() => setRawLongList(rawLongList.filter(x => x.id !== item.id))} className="opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4 text-gray-400 hover:text-red-500" /></button>
                             </div>
                         ))}
                     </div>
                 </div>
             )}
 
-            {/* STEP 3: THE CRITICAL THREE */}
+            {/* STEP 3: THE CRITICAL THREE (Selection) */}
             {step === 3 && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
                     <div>
@@ -213,21 +215,24 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                     </div>
 
                     <div className="space-y-2">
-                         {longList.map(g => (
-                            <div 
-                                key={g.id} 
-                                onClick={() => toggleCriticalThree(g.id)}
-                                className={`p-4 border cursor-pointer transition-all flex items-center gap-4 ${g.status === GoalStatus.ACTIVE ? 'bg-black text-white border-black' : 'bg-white border-gray-200 hover:border-black'}`}
-                            >
-                                <div className={`w-6 h-6 border flex items-center justify-center ${g.status === GoalStatus.ACTIVE ? 'border-white' : 'border-black'}`}>
-                                    {g.status === GoalStatus.ACTIVE && <Check className="w-4 h-4" />}
+                         {rawLongList.map(item => {
+                             const isSelected = selectedIds.includes(item.id);
+                             return (
+                                <div 
+                                    key={item.id} 
+                                    onClick={() => toggleSelection(item.id)}
+                                    className={`p-4 border cursor-pointer transition-all flex items-center gap-4 ${isSelected ? 'bg-black text-white border-black' : 'bg-white border-gray-200 hover:border-black'}`}
+                                >
+                                    <div className={`w-6 h-6 border flex items-center justify-center ${isSelected ? 'border-white' : 'border-black'}`}>
+                                        {isSelected && <Check className="w-4 h-4" />}
+                                    </div>
+                                    <span className="text-lg font-medium">{item.text}</span>
                                 </div>
-                                <span className="text-lg font-medium">{g.text}</span>
-                            </div>
-                         ))}
+                             );
+                         })}
                     </div>
                     <div className="text-right text-xs font-bold uppercase tracking-widest mt-4">
-                        Selected: {longList.filter(g => g.status === GoalStatus.ACTIVE).length} / 3
+                        Selected: {selectedIds.length} / 3
                     </div>
                 </div>
             )}
@@ -334,15 +339,32 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                 </div>
             )}
 
-            {/* STEP 8: RULES */}
+            {/* STEP 8: SECOND-ORDER THINKING */}
             {step === 8 && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                     <div>
+                        <h2 className="text-4xl font-serif mb-4">Second-Order Thinking</h2>
+                        <p className="font-serif text-lg leading-relaxed text-notion-dim">
+                             Take one of your planned actions. Ask: 'If I do this, what are the immediate consequences?' Then ask: 'And then what?' Ensure your short-term gain doesn't cause long-term pain.
+                        </p>
+                    </div>
+                    <textarea className="w-full p-6 bg-gray-50 border-l-2 border-black focus:outline-none min-h-[300px] text-lg font-serif" 
+                        value={secondOrderThinking} onChange={e => setSecondOrderThinking(e.target.value)} placeholder="Consequences of consequences..." />
+                </div>
+            )}
+
+            {/* STEP 9: RULES */}
+            {step === 9 && (
                 <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4">
-                    <h2 className="text-4xl font-serif mb-4">Rules of Engagement</h2>
-                    
                     <div>
-                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">Prescriptions: Things I always do.</h3>
+                         <h2 className="text-4xl font-serif mb-4">Rules of Engagement</h2>
+                         <p className="font-serif text-lg leading-relaxed text-notion-dim">Success often comes down to a few simple rules you never break.</p>
+                    </div>
+                    
+                    <div className="bg-gray-50 p-6 border border-gray-200">
+                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Check className="w-5 h-5"/> Prescriptions (Things I ALWAYS do)</h3>
                          <div className="flex gap-2 mb-4">
-                            <input className="flex-1 p-3 border border-gray-300 outline-none text-sm" value={tempRule} onChange={e => setTempRule(e.target.value)} onKeyDown={e => e.key === 'Enter' && (setPrescriptions([...prescriptions, tempRule]), setTempRule(''))} />
+                            <input className="flex-1 p-3 border border-gray-300 outline-none text-sm bg-white" value={tempRule} onChange={e => setTempRule(e.target.value)} onKeyDown={e => e.key === 'Enter' && (setPrescriptions([...prescriptions, tempRule]), setTempRule(''))} />
                             <button onClick={() => { if(tempRule) { setPrescriptions([...prescriptions, tempRule]); setTempRule(''); }}} className="px-4 bg-black text-white text-xs font-bold">Add</button>
                         </div>
                         <ul className="list-disc pl-5 space-y-2">
@@ -350,10 +372,10 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                         </ul>
                     </div>
 
-                     <div>
-                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">Anti-Goals: Things I never do.</h3>
+                     <div className="bg-gray-50 p-6 border border-gray-200">
+                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Ban className="w-5 h-5"/> Anti-Goals (Things I NEVER do)</h3>
                          <div className="flex gap-2 mb-4">
-                            <input className="flex-1 p-3 border border-gray-300 outline-none text-sm" value={tempAnti} onChange={e => setTempAnti(e.target.value)} onKeyDown={e => e.key === 'Enter' && (setAntiGoals([...antiGoals, tempAnti]), setTempAnti(''))} />
+                            <input className="flex-1 p-3 border border-gray-300 outline-none text-sm bg-white" value={tempAnti} onChange={e => setTempAnti(e.target.value)} onKeyDown={e => e.key === 'Enter' && (setAntiGoals([...antiGoals, tempAnti]), setTempAnti(''))} />
                             <button onClick={() => { if(tempAnti) { setAntiGoals([...antiGoals, tempAnti]); setTempAnti(''); }}} className="px-4 bg-black text-white text-xs font-bold">Add</button>
                         </div>
                         <ul className="list-disc pl-5 space-y-2">
@@ -363,8 +385,8 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                 </div>
             )}
 
-            {/* STEP 9: THE CONTRACT */}
-            {step === 9 && (
+            {/* STEP 10: THE CONTRACT */}
+            {step === 10 && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 text-center py-20">
                      <h2 className="text-4xl font-serif mb-8">The Contract</h2>
                      <p className="font-serif text-2xl leading-relaxed text-notion-text italic max-w-2xl mx-auto">
@@ -394,7 +416,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                 <button onClick={() => step > 1 ? setStep(step - 1) : onCancel()} className="text-notion-dim hover:text-black">
                     {step === 1 ? 'Cancel' : 'Back'}
                 </button>
-                {step < 9 && (
+                {step < 10 && (
                     <button onClick={() => setStep(step + 1)} className="flex items-center gap-2 font-bold hover:underline">
                         Next <ArrowRight className="w-4 h-4" />
                     </button>
