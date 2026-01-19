@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { loadData, saveData, getTodayKey } from './services/storage';
-import { AppData, Goal, Habit, Todo, GoalStatus, HabitType, StrategicItem, Milestone, ReviewEntry, DayRating, GlobalRules } from './types';
+import { AppData, Goal, Habit, Todo, GoalStatus, HabitType, StrategicItem, Milestone, ReviewEntry, DayRating, GlobalRules, WorkbookData } from './types';
 import { Target, Mic, BarChart2, Sun, Target as StrategyIcon, PenTool, Layout } from './components/Icon'; 
 import StrategyTab from './views/StrategyTab';
 import TodayTab from './views/TodayTab';
@@ -11,37 +11,48 @@ type Tab = 'STRATEGY' | 'TODAY' | 'DASHBOARD';
 
 const App: React.FC = () => {
   const [data, setData] = useState<AppData>(() => {
-    const loaded = loadData() as any; // Cast to allow migration checks
+    const loaded = loadData() as any; 
 
-    // 1. Ensure Strategy Array exists
+    // Migration and Defaults Logic
     if (!loaded.strategy) loaded.strategy = [];
+    if (!loaded.workbook) {
+        loaded.workbook = {
+            keySuccess: '',
+            stupidestDecision: '',
+            smartestDecision: '',
+            timeAudit: '',
+            procrastinationList: [],
+            easyModeReflection: '',
+            failurePreMortem: '',
+            signedAt: null,
+            signatureName: ''
+        };
+    }
 
-    // 2. Goal Migration (V2 Fields)
+    // Goal Migration (V2 Fields)
     loaded.goals = (loaded.goals || []).map((g: any) => {
-        // Migrate Leverage Strings to Objects if necessary
         let newLeverage = g.leverage || [];
         if (newLeverage.length > 0 && typeof newLeverage[0] === 'string') {
             newLeverage = newLeverage.map((l: string) => ({
                 id: crypto.randomUUID(),
                 strength: l,
-                application: "Apply this strength." // Default migration text
+                application: "Apply this strength." 
             }));
         }
 
         return {
             ...g, 
             milestones: g.milestones || [],
-            type: g.type || 'STRENGTH', // Keep for legacy
+            type: g.type || 'STRENGTH',
             metric: g.metric || 'Define success metric',
             leverage: newLeverage,
             obstacles: g.obstacles || []
         };
     });
 
-    // 3. Global Rules Migration (String -> Object)
+    // Global Rules Migration
     let migratedRules: GlobalRules = { prescriptions: [], antiGoals: [] };
     if (typeof loaded.globalRules === 'string') {
-        // Attempt to parse old text blob into prescriptions
         if (loaded.globalRules.trim()) {
             migratedRules.prescriptions = loaded.globalRules.split('\n').filter((r: string) => r.trim().length > 0);
         }
@@ -61,7 +72,22 @@ const App: React.FC = () => {
 
   const todayKey = getTodayKey();
 
-  // --- Actions passed to Tabs ---
+  // --- Actions ---
+
+  const handleFullUpdate = (wb: WorkbookData, active: Goal[], backlog: Goal[], strat: StrategicItem[], rules: GlobalRules) => {
+      // Reconstruct goals list ensuring we don't lose other data, but prioritize the list from wizard
+      // Actually, wizard passes full objects back, so we can merge lists.
+      // But simpler is to take the list passed from wizard (it contains ALL goals)
+      const allGoals = [...active, ...backlog];
+      
+      setData(prev => ({
+          ...prev,
+          workbook: wb,
+          goals: allGoals,
+          strategy: strat,
+          globalRules: rules
+      }));
+  };
 
   const updateGoal = (updatedGoal: Goal) => {
     setData(prev => ({
@@ -141,7 +167,6 @@ const App: React.FC = () => {
       todos: prev.todos.map(t => {
           if (t.id === id) {
               const nowCompleted = !t.completed;
-              // Save exact timestamp when completing
               return { 
                 ...t, 
                 completed: nowCompleted, 
@@ -229,6 +254,7 @@ const App: React.FC = () => {
                     onAddHabit={addHabit}
                     onDeleteHabit={deleteHabit}
                     onUpdateGlobalRules={updateGlobalRules}
+                    onUpdateFullData={handleFullUpdate}
                 />
             )}
             {activeTab === 'TODAY' && (

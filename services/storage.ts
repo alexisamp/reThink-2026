@@ -8,7 +8,18 @@ const INITIAL_DATA: AppData = {
   todos: [],
   reviews: [],
   strategy: [],
-  globalRules: { prescriptions: [], antiGoals: [] }
+  globalRules: { prescriptions: [], antiGoals: [] },
+  workbook: {
+    keySuccess: '',
+    stupidestDecision: '',
+    smartestDecision: '',
+    timeAudit: '',
+    procrastinationList: [],
+    easyModeReflection: '',
+    failurePreMortem: '',
+    signedAt: null,
+    signatureName: ''
+  }
 };
 
 export const loadData = (): AppData => {

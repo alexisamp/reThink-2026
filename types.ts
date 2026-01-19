@@ -29,17 +29,16 @@ export interface Goal {
   metric: string;
   motivation?: string;
   
-  // Strategy V2 Fields (Symmetrical Audit)
-  leverage: Leverage[]; // "Play on Easy Mode"
-  obstacles: Obstacle[]; // "Manage Hard Mode"
+  leverage: Leverage[]; 
+  obstacles: Obstacle[]; 
   
-  // Deprecated (kept for Dashboard compatibility)
-  type?: 'STRENGTH' | 'WEAKNESS'; 
-  workaround?: string;
-
   status: GoalStatus;
   milestones: Milestone[];
   createdAt: number;
+  
+  // Deprecated legacy fields
+  type?: 'STRENGTH' | 'WEAKNESS'; 
+  workaround?: string;
 }
 
 export interface StrategicItem {
@@ -50,7 +49,7 @@ export interface StrategicItem {
 }
 
 export interface ContributionMap {
-  [date: string]: number; // 0/1 for Binary, 1-5 for Scale, 0/1 for Non-Negotiable
+  [date: string]: number;
 }
 
 export enum HabitType {
@@ -64,19 +63,19 @@ export interface Habit {
   goalId: string; 
   text: string;
   type: HabitType;
-  defaultTime?: string; // Format "HH:MM"
-  lastScheduledAt?: number; // Timestamp
-  reward?: string; // New field for habit completion reward
+  defaultTime?: string;
+  lastScheduledAt?: number;
+  reward?: string;
   contributions: ContributionMap;
 }
 
 export interface Todo {
   id: string;
   goalId: string;
-  milestoneId?: string; // Optional link to roadmap
+  milestoneId?: string;
   text: string;
-  effort?: 'DEEP' | 'SHALLOW'; // New field for categorization
-  block?: 'AM' | 'PM'; // New field for time blocking
+  effort?: 'DEEP' | 'SHALLOW';
+  block?: 'AM' | 'PM';
   completed: boolean;
   completedAt?: number;
   date: string; 
@@ -93,8 +92,30 @@ export interface ReviewEntry {
 }
 
 export interface GlobalRules {
-  prescriptions: string[]; // "Always do"
-  antiGoals: string[];     // "Never do"
+  prescriptions: string[];
+  antiGoals: string[];
+}
+
+// New Workbook Data Structure
+export interface WorkbookData {
+  // Level 1 & 2: The Review
+  keySuccess: string;
+  stupidestDecision: string;
+  smartestDecision: string;
+  timeAudit: string;
+  
+  // Level 5: Momentum
+  procrastinationList: { id: string; item: string; smallStep: string }[];
+  
+  // Level 7: Easy Mode
+  easyModeReflection: string;
+  
+  // Level 8: Inversion
+  failurePreMortem: string;
+
+  // Level 11: Contract
+  signedAt: number | null;
+  signatureName: string;
 }
 
 export interface AppData {
@@ -103,5 +124,6 @@ export interface AppData {
   todos: Todo[];
   reviews: ReviewEntry[];
   strategy: StrategicItem[];
-  globalRules: GlobalRules; // Updated from string to structured object
+  globalRules: GlobalRules;
+  workbook: WorkbookData; // New field
 }
