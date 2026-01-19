@@ -13,58 +13,44 @@ const App: React.FC = () => {
   const [data, setData] = useState<AppData>(() => {
     const loaded = loadData() as any; 
 
-    // Migration and Defaults Logic
+    // Initialize Multi-Year Structure if missing
+    if (!loaded.workbookReviews) loaded.workbookReviews = {};
     if (!loaded.strategy) loaded.strategy = [];
-    if (!loaded.workbook) {
-        loaded.workbook = {
-            keySuccess: '',
-            stupidestDecision: '',
-            smartestDecision: '',
-            timeAudit: '',
-            procrastinationList: [],
-            easyModeReflection: '',
-            failurePreMortem: '',
-            signedAt: null,
-            signatureName: ''
+    if (!loaded.globalRules) loaded.globalRules = { prescriptions: [], antiGoals: [] };
+    
+    // Migration: If old 'workbook' exists, move it to '2025' (Legacy)
+    if (loaded.workbook && Object.keys(loaded.workbookReviews).length === 0) {
+        // Map old structure to new structure mostly for safekeeping
+        const legacyYear = "2025";
+        loaded.workbookReviews[legacyYear] = {
+            year: legacyYear,
+            keySuccess: loaded.workbook.keySuccess || '',
+            stupidestDecision: loaded.workbook.stupidestDecision || '',
+            smartestDecision: loaded.workbook.smartestDecision || '',
+            timeAudit: loaded.workbook.timeAudit || '',
+            momentum: loaded.workbook.procrastinationList?.map((p:any) => ({ id: p.id, item: p.item, step: p.smallStep })) || [],
+            strengths: [], // Legacy didn't store these in workbook explicitly before
+            weaknesses: [],
+            easyModeReflection: loaded.workbook.easyModeReflection || '',
+            failurePreMortem: loaded.workbook.failurePreMortem || '',
+            prescriptions: loaded.globalRules.prescriptions || [],
+            antiGoals: loaded.globalRules.antiGoals || [],
+            signedAt: loaded.workbook.signedAt,
+            signatureName: loaded.workbook.signatureName || ''
         };
     }
-
-    // Goal Migration (V2 Fields)
-    loaded.goals = (loaded.goals || []).map((g: any) => {
-        let newLeverage = g.leverage || [];
-        if (newLeverage.length > 0 && typeof newLeverage[0] === 'string') {
-            newLeverage = newLeverage.map((l: string) => ({
-                id: crypto.randomUUID(),
-                strength: l,
-                application: "Apply this strength." 
-            }));
-        }
-
-        return {
-            ...g, 
-            milestones: g.milestones || [],
-            type: g.type || 'STRENGTH',
-            metric: g.metric || 'Define success metric',
-            leverage: newLeverage,
-            obstacles: g.obstacles || []
-        };
-    });
-
-    // Global Rules Migration
-    let migratedRules: GlobalRules = { prescriptions: [], antiGoals: [] };
-    if (typeof loaded.globalRules === 'string') {
-        if (loaded.globalRules.trim()) {
-            migratedRules.prescriptions = loaded.globalRules.split('\n').filter((r: string) => r.trim().length > 0);
-        }
-    } else if (loaded.globalRules) {
-        migratedRules = loaded.globalRules;
-    }
-    loaded.globalRules = migratedRules;
 
     return loaded as AppData;
   });
   
   const [activeTab, setActiveTab] = useState<Tab>('TODAY');
+
+  // Auto-Redirect to Strategy if no reviews exist (Onboarding)
+  useEffect(() => {
+     if (Object.keys(data.workbookReviews).length === 0 && activeTab !== 'STRATEGY') {
+         setActiveTab('STRATEGY');
+     }
+  }, []);
 
   useEffect(() => {
     saveData(data);
@@ -72,32 +58,50 @@ const App: React.FC = () => {
 
   const todayKey = getTodayKey();
 
-  // --- Actions ---
-
-  const handleFullUpdate = (wb: WorkbookData, active: Goal[], backlog: Goal[], strat: StrategicItem[], rules: GlobalRules) => {
-      // Reconstruct goals list ensuring we don't lose other data, but prioritize the list from wizard
-      // Actually, wizard passes full objects back, so we can merge lists.
-      // But simpler is to take the list passed from wizard (it contains ALL goals)
-      const allGoals = [...active, ...backlog];
+  // --- REVIEW COMPLETION LOGIC ---
+  const handleReviewComplete = (wb: WorkbookData, activeGoalsFromReview: Goal[], backlogGoalsFromReview: Goal[]) => {
+      // 1. Save the Workbook to the Year
+      const newReviews = { ...data.workbookReviews, [wb.year]: wb };
       
+      // 2. Update Global Rules & Strategy (Identity) for TodayTab to use
+      // We map the Workbook identity format to the App's global format
+      const newGlobalStrategy: StrategicItem[] = [
+          ...wb.strengths.map(s => ({ id: s.id, type: 'STRENGTH' as const, title: s.strength, tactic: s.application })),
+          ...wb.weaknesses.map(w => ({ id: w.id, type: 'WEAKNESS' as const, title: w.weakness, tactic: w.workaround }))
+      ];
+      
+      const newGlobalRules: GlobalRules = {
+          prescriptions: wb.prescriptions,
+          antiGoals: wb.antiGoals
+      };
+
+      // 3. Update Goals
+      // We merge existing goals with new ones to preserve IDs if they match, but Review basically resets priorities
+      // To be safe: We keep existing goals that ARE NOT in the review lists (maybe completed ones?), 
+      // and append/update the ones from review.
+      
+      // Simpler approach for "Annual Review": It defines the new state.
+      // But we must preserve Habit history for existing goals if IDs match.
+      // Since `AnnualReview.tsx` generates NEW IDs for new goals, we treat them as additions.
+      
+      const combinedGoals = [...data.goals, ...activeGoalsFromReview, ...backlogGoalsFromReview];
+
       setData(prev => ({
           ...prev,
-          workbook: wb,
-          goals: allGoals,
-          strategy: strat,
-          globalRules: rules
+          workbookReviews: newReviews,
+          goals: combinedGoals,
+          strategy: newGlobalStrategy,
+          globalRules: newGlobalRules
       }));
   };
+
+  // --- Actions ---
 
   const updateGoal = (updatedGoal: Goal) => {
     setData(prev => ({
         ...prev,
         goals: prev.goals.map(g => g.id === updatedGoal.id ? updatedGoal : g)
     }));
-  };
-
-  const addGoal = (goal: Goal) => {
-    setData(prev => ({ ...prev, goals: [...prev.goals, goal] }));
   };
 
   const deleteGoal = (id: string) => {
@@ -108,18 +112,6 @@ const App: React.FC = () => {
       habits: prev.habits.filter(h => h.goalId !== id),
       todos: prev.todos.filter(t => t.goalId !== id)
     }));
-  };
-
-  const addStrategicItem = (item: StrategicItem) => {
-      setData(prev => ({ ...prev, strategy: [...prev.strategy, item] }));
-  };
-
-  const deleteStrategicItem = (id: string) => {
-      setData(prev => ({ ...prev, strategy: prev.strategy.filter(s => s.id !== id) }));
-  };
-
-  const updateGlobalRules = (rules: GlobalRules) => {
-      setData(prev => ({ ...prev, globalRules: rules }));
   };
 
   const addHabit = (habit: Habit) => {
@@ -225,7 +217,7 @@ const App: React.FC = () => {
 
         <div className="mt-auto p-8 border-t border-notion-border">
            <div className="text-[10px] uppercase tracking-widest text-notion-dim font-medium">
-              reThink v7.1
+              reThink v7.2
            </div>
            <div className="text-xs font-serif italic text-notion-dim mt-1">
               "Identity determines behavior."
@@ -246,15 +238,16 @@ const App: React.FC = () => {
             {activeTab === 'STRATEGY' && (
                 <StrategyTab 
                     data={data}
-                    onAddStrategicItem={addStrategicItem}
-                    onDeleteStrategicItem={deleteStrategicItem}
-                    onAddGoal={addGoal}
                     onUpdateGoal={updateGoal}
                     onDeleteGoal={deleteGoal}
                     onAddHabit={addHabit}
                     onDeleteHabit={deleteHabit}
-                    onUpdateGlobalRules={updateGlobalRules}
-                    onUpdateFullData={handleFullUpdate}
+                    onCompleteReview={handleReviewComplete}
+                    onAddStrategicItem={() => {}} // Legacy: Handled via review now
+                    onDeleteStrategicItem={() => {}} // Legacy
+                    onAddGoal={() => {}} // Legacy
+                    onUpdateGlobalRules={() => {}} // Legacy
+                    onUpdateFullData={() => {}} // Legacy
                 />
             )}
             {activeTab === 'TODAY' && (

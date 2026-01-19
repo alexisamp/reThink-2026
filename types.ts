@@ -36,6 +36,9 @@ export interface Goal {
   milestones: Milestone[];
   createdAt: number;
   
+  // Flag to indicate this goal came from a review and might need detailing
+  needsConfig?: boolean; 
+  
   // Deprecated legacy fields
   type?: 'STRENGTH' | 'WEAKNESS'; 
   workaround?: string;
@@ -96,22 +99,31 @@ export interface GlobalRules {
   antiGoals: string[];
 }
 
-// New Workbook Data Structure
+// --- YEARLY ARCHITECTURE ---
+
 export interface WorkbookData {
-  // Level 1 & 2: The Review
+  year: string;
+  
+  // Level 1 & 2: The Audit
   keySuccess: string;
   stupidestDecision: string;
   smartestDecision: string;
   timeAudit: string;
   
   // Level 5: Momentum
-  procrastinationList: { id: string; item: string; smallStep: string }[];
+  momentum: { id: string; item: string; step: string }[];
   
-  // Level 7: Easy Mode
+  // Level 6: Identity Snapshot
+  strengths: { id: string; strength: string; application: string }[];
+  weaknesses: { id: string; weakness: string; workaround: string }[];
+  
+  // Level 7 & 8: Deep Work
   easyModeReflection: string;
-  
-  // Level 8: Inversion
   failurePreMortem: string;
+
+  // Level 10: Rules Snapshot
+  prescriptions: string[];
+  antiGoals: string[];
 
   // Level 11: Contract
   signedAt: number | null;
@@ -119,11 +131,17 @@ export interface WorkbookData {
 }
 
 export interface AppData {
+  // Global Active State (Driven by latest review)
   goals: Goal[];
   habits: Habit[];
   todos: Todo[];
-  reviews: ReviewEntry[];
-  strategy: StrategicItem[];
-  globalRules: GlobalRules;
-  workbook: WorkbookData; // New field
+  reviews: ReviewEntry[]; // Daily logs
+  strategy: StrategicItem[]; // Global identity
+  globalRules: GlobalRules; // Global rules
+  
+  // The Archive
+  workbookReviews: Record<string, WorkbookData>; // Keyed by Year "2025", "2026"
+  
+  // Deprecated but kept for safe migration if needed
+  workbook?: any; 
 }

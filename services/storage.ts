@@ -1,6 +1,6 @@
-import { AppData, Goal, Habit, Todo } from '../types';
+import { AppData } from '../types';
 
-const STORAGE_KEY = 'rethink-app-v2';
+const STORAGE_KEY = 'rethink-app-v3';
 
 const INITIAL_DATA: AppData = {
   goals: [],
@@ -9,17 +9,7 @@ const INITIAL_DATA: AppData = {
   reviews: [],
   strategy: [],
   globalRules: { prescriptions: [], antiGoals: [] },
-  workbook: {
-    keySuccess: '',
-    stupidestDecision: '',
-    smartestDecision: '',
-    timeAudit: '',
-    procrastinationList: [],
-    easyModeReflection: '',
-    failurePreMortem: '',
-    signedAt: null,
-    signatureName: ''
-  }
+  workbookReviews: {} // New multi-year structure
 };
 
 export const loadData = (): AppData => {
@@ -27,7 +17,6 @@ export const loadData = (): AppData => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      // Migration for old versions
       return { ...INITIAL_DATA, ...parsed };
     }
   } catch (e) {

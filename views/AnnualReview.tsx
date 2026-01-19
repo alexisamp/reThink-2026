@@ -1,67 +1,58 @@
 import React, { useState } from 'react';
-import { AppData, Goal, GoalStatus, WorkbookData, StrategicItem, GlobalRules } from '../types';
-import { ArrowRight, Check, Plus, Trash2, PenTool } from '../components/Icon';
+import { Goal, GoalStatus, WorkbookData } from '../types';
+import { ArrowRight, Check, Trash2 } from '../components/Icon';
 
 interface AnnualReviewProps {
-  data: AppData;
-  onComplete: (
-    workbook: WorkbookData, 
-    activeGoals: Goal[], 
-    backlogGoals: Goal[],
-    strategy: StrategicItem[],
-    rules: GlobalRules
-  ) => void;
+  onComplete: (workbook: WorkbookData, activeGoals: Goal[], backlogGoals: Goal[]) => void;
   onCancel: () => void;
+  initialYear?: string;
 }
 
-const AnnualReview: React.FC<AnnualReviewProps> = ({ data, onComplete, onCancel }) => {
+const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initialYear = "2026" }) => {
   const [step, setStep] = useState(1);
+  const [year] = useState(initialYear);
 
   // --- State for each Level ---
   
   // Step 1: Audit
-  const [keySuccess, setKeySuccess] = useState(data.workbook.keySuccess || '');
-  const [stupidestDecision, setStupidestDecision] = useState(data.workbook.stupidestDecision || '');
-  const [smartestDecision, setSmartestDecision] = useState(data.workbook.smartestDecision || '');
-  const [timeAudit, setTimeAudit] = useState(data.workbook.timeAudit || '');
+  const [keySuccess, setKeySuccess] = useState('');
+  const [stupidestDecision, setStupidestDecision] = useState('');
+  const [smartestDecision, setSmartestDecision] = useState('');
+  const [timeAudit, setTimeAudit] = useState('');
 
   // Step 2 & 3: The Lists
-  // Initialize with existing goals if available to allow editing, otherwise empty
-  const [longList, setLongList] = useState<Goal[]>(data.goals.length > 0 ? data.goals : []);
+  const [longList, setLongList] = useState<Goal[]>([]);
   const [tempGoal, setTempGoal] = useState('');
 
   // Step 4: Momentum
-  const [procrastinationList, setProcrastinationList] = useState(
-      data.workbook.procrastinationList.length === 3 
-      ? data.workbook.procrastinationList 
-      : [{id: '1', item: '', smallStep: ''}, {id: '2', item: '', smallStep: ''}, {id: '3', item: '', smallStep: ''}]
-  );
+  const [momentum, setMomentum] = useState([
+      {id: '1', item: '', step: ''}, 
+      {id: '2', item: '', step: ''}, 
+      {id: '3', item: '', step: ''}
+  ]);
 
-  // Step 5: Strategy
-  const [strengths, setStrengths] = useState(
-      data.strategy.filter(s => s.type === 'STRENGTH') 
-  );
-  const [weaknesses, setWeaknesses] = useState(
-      data.strategy.filter(s => s.type === 'WEAKNESS')
-  );
+  // Step 5: Strategy (Identity)
+  const [strengths, setStrengths] = useState<{ id: string; strength: string; application: string }[]>([]);
+  const [weaknesses, setWeaknesses] = useState<{ id: string; weakness: string; workaround: string }[]>([]);
+  
   // Temp inputs for strategy
-  const [sTitle, setSTitle] = useState(''); const [sTactic, setSTactic] = useState('');
-  const [wTitle, setWTitle] = useState(''); const [wTactic, setWTactic] = useState('');
+  const [sTitle, setSTitle] = useState(''); const [sApp, setSApp] = useState('');
+  const [wTitle, setWTitle] = useState(''); const [wWork, setWWork] = useState('');
 
   // Step 6: Easy Mode
-  const [easyModeReflection, setEasyModeReflection] = useState(data.workbook.easyModeReflection || '');
+  const [easyModeReflection, setEasyModeReflection] = useState('');
 
   // Step 7: Inversion
-  const [failurePreMortem, setFailurePreMortem] = useState(data.workbook.failurePreMortem || '');
+  const [failurePreMortem, setFailurePreMortem] = useState('');
 
   // Step 8: Rules
-  const [prescriptions, setPrescriptions] = useState<string[]>(data.globalRules.prescriptions);
-  const [antiGoals, setAntiGoals] = useState<string[]>(data.globalRules.antiGoals);
+  const [prescriptions, setPrescriptions] = useState<string[]>([]);
+  const [antiGoals, setAntiGoals] = useState<string[]>([]);
   const [tempRule, setTempRule] = useState('');
   const [tempAnti, setTempAnti] = useState('');
 
   // Final: Contract
-  const [signatureName, setSignatureName] = useState(data.workbook.signatureName || '');
+  const [signatureName, setSignatureName] = useState('');
 
   // --- Helpers ---
 
@@ -74,9 +65,10 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ data, onComplete, onCancel 
           motivation: '',
           leverage: [],
           obstacles: [],
-          status: GoalStatus.BACKLOG, // Default to backlog first
+          status: GoalStatus.BACKLOG, 
           milestones: [],
-          createdAt: Date.now()
+          createdAt: Date.now(),
+          needsConfig: true
       };
       setLongList([...longList, newGoal]);
       setTempGoal('');
@@ -101,33 +93,36 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ data, onComplete, onCancel 
       }
   };
 
-  const updateProcList = (idx: number, field: 'item' | 'smallStep', val: string) => {
-      const newList = [...procrastinationList];
+  const updateMomentum = (idx: number, field: 'item' | 'step', val: string) => {
+      const newList = [...momentum];
       newList[idx] = { ...newList[idx], [field]: val };
-      setProcrastinationList(newList);
+      setMomentum(newList);
   };
 
   const finish = () => {
       if(!signatureName.trim()) return;
       
       const finalWorkbook: WorkbookData = {
+          year,
           keySuccess,
           stupidestDecision,
           smartestDecision,
           timeAudit,
-          procrastinationList,
+          momentum,
+          strengths,
+          weaknesses,
           easyModeReflection,
           failurePreMortem,
+          prescriptions,
+          antiGoals,
           signedAt: Date.now(),
           signatureName
       };
 
-      const finalStrategy: StrategicItem[] = [...strengths, ...weaknesses];
-      const finalRules: GlobalRules = { prescriptions, antiGoals };
       const activeGoals = longList.filter(g => g.status === GoalStatus.ACTIVE);
       const backlogGoals = longList.filter(g => g.status === GoalStatus.BACKLOG);
 
-      onComplete(finalWorkbook, activeGoals, backlogGoals, finalStrategy, finalRules);
+      onComplete(finalWorkbook, activeGoals, backlogGoals);
   };
 
   // --- Render ---
@@ -140,7 +135,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ data, onComplete, onCancel 
             <div className="mb-12 flex justify-between items-end border-b border-black pb-4">
                 <div>
                     <div className="text-xs font-bold uppercase tracking-widest text-notion-dim mb-2">reThink Workbook</div>
-                    <h1 className="text-3xl font-serif font-medium">Annual Review 2025/2026</h1>
+                    <h1 className="text-3xl font-serif font-medium">Annual Review {year}</h1>
                 </div>
                 <div className="text-right">
                     <span className="font-serif text-xl italic">{step} / 9</span>
@@ -202,7 +197,6 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ data, onComplete, onCancel 
                             </div>
                         ))}
                     </div>
-                    {longList.length === 0 && <div className="text-center py-20 text-gray-300 font-serif italic">The page is blank. Begin.</div>}
                 </div>
             )}
 
@@ -249,17 +243,17 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ data, onComplete, onCancel 
                     </div>
 
                     <div className="space-y-6">
-                        {procrastinationList.map((p, idx) => (
+                        {momentum.map((p, idx) => (
                             <div key={idx} className="bg-gray-50 p-6 border border-gray-200">
                                 <div className="mb-4">
                                     <label className="block text-xs font-bold uppercase mb-1">Thing I'm Avoiding</label>
                                     <input className="w-full bg-transparent border-b border-gray-300 focus:border-black outline-none py-2" 
-                                        value={p.item} onChange={e => updateProcList(idx, 'item', e.target.value)} placeholder="e.g. Taxes" />
+                                        value={p.item} onChange={e => updateMomentum(idx, 'item', e.target.value)} placeholder="e.g. Taxes" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold uppercase mb-1">Smallest Step</label>
                                     <input className="w-full bg-transparent border-b border-gray-300 focus:border-black outline-none py-2" 
-                                        value={p.smallStep} onChange={e => updateProcList(idx, 'smallStep', e.target.value)} placeholder="e.g. Open folder" />
+                                        value={p.step} onChange={e => updateMomentum(idx, 'step', e.target.value)} placeholder="e.g. Open folder" />
                                 </div>
                             </div>
                         ))}
@@ -276,16 +270,15 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ data, onComplete, onCancel 
                             List your top 3 strengths. How can you apply these to achieve your Critical Three?
                         </p>
                         
-                        {/* Strengths Input */}
                         <div className="flex gap-2 mb-4">
                              <input className="flex-1 p-3 border border-gray-300 outline-none text-sm" placeholder="Strength" value={sTitle} onChange={e => setSTitle(e.target.value)} />
-                             <input className="flex-1 p-3 border border-gray-300 outline-none text-sm" placeholder="Application" value={sTactic} onChange={e => setSTactic(e.target.value)} />
-                             <button onClick={() => { if(sTitle && sTactic) { setStrengths([...strengths, {id: crypto.randomUUID(), type: 'STRENGTH', title: sTitle, tactic: sTactic}]); setSTitle(''); setSTactic(''); }}} className="px-4 bg-black text-white text-xs font-bold">Add</button>
+                             <input className="flex-1 p-3 border border-gray-300 outline-none text-sm" placeholder="Application" value={sApp} onChange={e => setSApp(e.target.value)} />
+                             <button onClick={() => { if(sTitle && sApp) { setStrengths([...strengths, {id: crypto.randomUUID(), strength: sTitle, application: sApp}]); setSTitle(''); setSApp(''); }}} className="px-4 bg-black text-white text-xs font-bold">Add</button>
                         </div>
                         <ul className="space-y-2">
                             {strengths.map(s => (
                                 <li key={s.id} className="bg-gray-50 p-3 border border-gray-200 flex justify-between">
-                                    <span className="text-sm"><strong>{s.title}:</strong> {s.tactic}</span>
+                                    <span className="text-sm"><strong>{s.strength}:</strong> {s.application}</span>
                                     <button onClick={() => setStrengths(strengths.filter(x => x.id !== s.id))}><Trash2 className="w-3 h-3" /></button>
                                 </li>
                             ))}
@@ -296,16 +289,15 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ data, onComplete, onCancel 
                         <p className="font-serif text-lg leading-relaxed text-notion-dim mb-6">
                            List your top 3 weaknesses. Don't try to fix them. Create a workaround.
                         </p>
-                        {/* Weaknesses Input */}
                          <div className="flex gap-2 mb-4">
                              <input className="flex-1 p-3 border border-gray-300 outline-none text-sm" placeholder="Weakness" value={wTitle} onChange={e => setWTitle(e.target.value)} />
-                             <input className="flex-1 p-3 border border-gray-300 outline-none text-sm" placeholder="Workaround" value={wTactic} onChange={e => setWTactic(e.target.value)} />
-                             <button onClick={() => { if(wTitle && wTactic) { setWeaknesses([...weaknesses, {id: crypto.randomUUID(), type: 'WEAKNESS', title: wTitle, tactic: wTactic}]); setWTitle(''); setWTactic(''); }}} className="px-4 bg-black text-white text-xs font-bold">Add</button>
+                             <input className="flex-1 p-3 border border-gray-300 outline-none text-sm" placeholder="Workaround" value={wWork} onChange={e => setWWork(e.target.value)} />
+                             <button onClick={() => { if(wTitle && wWork) { setWeaknesses([...weaknesses, {id: crypto.randomUUID(), weakness: wTitle, workaround: wWork}]); setWTitle(''); setWWork(''); }}} className="px-4 bg-black text-white text-xs font-bold">Add</button>
                         </div>
                          <ul className="space-y-2">
                             {weaknesses.map(s => (
                                 <li key={s.id} className="bg-gray-50 p-3 border border-gray-200 flex justify-between">
-                                    <span className="text-sm"><strong>{s.title}:</strong> {s.tactic}</span>
+                                    <span className="text-sm"><strong>{s.weakness}:</strong> {s.workaround}</span>
                                     <button onClick={() => setWeaknesses(weaknesses.filter(x => x.id !== s.id))}><Trash2 className="w-3 h-3" /></button>
                                 </li>
                             ))}
@@ -348,7 +340,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ data, onComplete, onCancel 
                     <h2 className="text-4xl font-serif mb-4">Rules of Engagement</h2>
                     
                     <div>
-                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Check className="w-5 h-5"/> Prescriptions: Things I always do.</h3>
+                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">Prescriptions: Things I always do.</h3>
                          <div className="flex gap-2 mb-4">
                             <input className="flex-1 p-3 border border-gray-300 outline-none text-sm" value={tempRule} onChange={e => setTempRule(e.target.value)} onKeyDown={e => e.key === 'Enter' && (setPrescriptions([...prescriptions, tempRule]), setTempRule(''))} />
                             <button onClick={() => { if(tempRule) { setPrescriptions([...prescriptions, tempRule]); setTempRule(''); }}} className="px-4 bg-black text-white text-xs font-bold">Add</button>
@@ -359,7 +351,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ data, onComplete, onCancel 
                     </div>
 
                      <div>
-                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Trash2 className="w-5 h-5"/> Anti-Goals: Things I never do.</h3>
+                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">Anti-Goals: Things I never do.</h3>
                          <div className="flex gap-2 mb-4">
                             <input className="flex-1 p-3 border border-gray-300 outline-none text-sm" value={tempAnti} onChange={e => setTempAnti(e.target.value)} onKeyDown={e => e.key === 'Enter' && (setAntiGoals([...antiGoals, tempAnti]), setTempAnti(''))} />
                             <button onClick={() => { if(tempAnti) { setAntiGoals([...antiGoals, tempAnti]); setTempAnti(''); }}} className="px-4 bg-black text-white text-xs font-bold">Add</button>
