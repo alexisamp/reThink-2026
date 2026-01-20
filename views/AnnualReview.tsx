@@ -136,6 +136,85 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
       }));
   };
 
+  // --- DEV: DUMMY DATA ---
+  const fillDummyData = () => {
+      setKeySuccessLines(["Build a SaaS Product", "Run a Marathon", "Read 50 Books"]);
+      setTimeAudit("Spent too much time on scrolling twitter and not enough on deep work.");
+      setNotWorking(["Mindless scrolling", "Eating late", "Complaining"]);
+      setWorking(["Morning workouts", "Blocking time", "Writing daily"]);
+      
+      const dummyTopTen = [
+          "Launch Product X", "Run 42km", "Read 50 books", 
+          "Save $50k", "Learn Spanish", "Visit Japan", 
+          "Write a book", "Quit sugar", "Meditate daily", "Learn Piano"
+      ];
+      setTopTen(dummyTopTen);
+      
+      // Select first 3
+      setSelectedGoalIndices([0, 1, 2]);
+      setRefinedGoals([
+          {
+              id: "0",
+              text: "Launch Product X",
+              metric: "$10k MRR",
+              nextSteps: ["Build MVP", "Get 10 Beta users", "Launch on PH"],
+              support: "Developer friend"
+          },
+          {
+              id: "1",
+              text: "Run 42km",
+              metric: "Sub 4hr marathon",
+              nextSteps: ["Buy shoes", "Find training plan", "Run 5k"],
+              support: "Running club"
+          },
+          {
+              id: "2",
+              text: "Read 50 books",
+              metric: "50 books finished",
+              nextSteps: ["Buy Kindle", "List books", "Read 30 mins/day"],
+              support: "Goodreads"
+          }
+      ]);
+
+      setMomentum([
+          {id: '1', item: 'Taxes', step: 'Open folder'}, 
+          {id: '2', item: 'Garage cleaning', step: 'Buy boxes'}, 
+          {id: '3', item: 'Dentist', step: 'Call clinic'}
+      ]);
+
+      setWeaknesses([
+          {id: '1', weakness: 'Impatience', workaround: 'Wait 24h before responding'},
+          {id: '2', weakness: 'Disorganization', workaround: 'Hire VA'},
+          {id: '3', weakness: 'Public speaking', workaround: 'Join Toastmasters'}
+      ]);
+      
+      setEasyModes([
+          {id: '1', hard: 'Cooking daily', easy: 'Meal prep Sunday'},
+          {id: '2', hard: 'Writing code from scratch', easy: 'Use templates'},
+          {id: '3', hard: 'Remembering dates', easy: 'Calendar alerts'}
+      ]);
+
+      setInnerCircle([
+          { name: 'Partner', scores: { info: 1, growth: 1, energy: 1, future: 1, values: 1 }, totalScore: 5 },
+          { name: 'Best Friend', scores: { info: 0, growth: 1, energy: 1, future: 0, values: 1 }, totalScore: 3 },
+          { name: 'Mentor', scores: { info: 1, growth: 1, energy: 0, future: 1, values: 1 }, totalScore: 4 },
+          { name: 'Colleague', scores: { info: 1, growth: 0, energy: -1, future: 0, values: 0 }, totalScore: 0 },
+          { name: 'Neighbor', scores: { info: 0, growth: 0, energy: 0, future: 0, values: 0 }, totalScore: 0 }
+      ]);
+
+      setRulesProsper(["Invest 20% of income", "Write daily", "Network weekly"]);
+      setRulesProtect(["No phone in bed", "No meetings before 10am", "Sleep 8h"]);
+      setRulesLimit(["No sugar", "No gossip", "No complaining"]);
+
+      setInsights(["Consistency beats intensity", "Environment is key", "Say no more often"]);
+      setOneChange("Wake up at 5am");
+      setRevisitDate("June 1st");
+      setSignatureName("John Doe");
+      
+      // Advance to last step so user can sign
+      setStep(11);
+  };
+
   const finish = () => {
       const finalActiveGoals: Goal[] = refinedGoals.map(rg => {
           const validSteps = rg.nextSteps.filter(s => s.trim());
@@ -209,10 +288,15 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
         {/* Header */}
         <div className="flex justify-between items-end border-b-2 border-black pb-4 mb-12">
           <div>
-            <div className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-1">reThink Workbook</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-notion-dim mb-1">reThink Workbook</div>
             <h1 className="text-4xl font-serif font-medium">Annual Review {year}</h1>
           </div>
-          <div className="font-serif italic text-xl">{step} / 11</div>
+          <div className="flex flex-col items-end gap-1">
+             <div className="font-serif italic text-xl">{step} / 11</div>
+             <button onClick={fillDummyData} className="text-[10px] text-gray-400 hover:text-black underline">
+               Auto-Fill (Dev)
+             </button>
+          </div>
         </div>
 
         {/* STEP 1: L1 - Key to Success (Rows) */}
@@ -230,7 +314,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                         <div key={i} className="flex gap-4 items-end">
                             <span className="font-serif text-gray-300 text-2xl italic">{i + 1}.</span>
                             <input 
-                                className="w-full bg-white text-xl font-serif border-b border-gray-300 outline-none pb-2 focus:border-black transition-colors"
+                                className="w-full bg-white text-xl font-serif border-b border-notion-border outline-none pb-2 focus:border-black transition-colors"
                                 value={line}
                                 onChange={e => updateList(setKeySuccessLines, i, e.target.value)}
                                 placeholder="I want to..."
@@ -255,8 +339,8 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
 
              <div className="space-y-4">
                 <label className="font-bold block">Time Audit</label>
-                <p className="text-sm text-gray-500 mb-2">If they looked at your calendar, where are you spending your time?</p>
-                <textarea className="w-full p-4 bg-white border border-gray-200 outline-none h-24 resize-none focus:border-black" 
+                <p className="text-sm text-notion-dim mb-2">If they looked at your calendar, where are you spending your time?</p>
+                <textarea className="w-full p-4 bg-white border border-notion-border outline-none h-24 resize-none focus:border-black" 
                   value={timeAudit} onChange={e => setTimeAudit(e.target.value)} />
              </div>
 
@@ -265,8 +349,8 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                      <label className="font-bold block mb-2">Eliminate (Not Working)</label>
                      {notWorking.map((val, i) => (
                          <div key={i} className="flex gap-2 mb-3">
-                             <span className="text-gray-400 font-serif italic w-4">{i+1}.</span>
-                             <input className="w-full bg-white border-b border-gray-300 outline-none pb-1 focus:border-black" value={val} onChange={e => updateList(setNotWorking, i, e.target.value)} />
+                             <span className="text-notion-dim font-serif italic w-4">{i+1}.</span>
+                             <input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" value={val} onChange={e => updateList(setNotWorking, i, e.target.value)} />
                          </div>
                      ))}
                  </div>
@@ -274,8 +358,8 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                      <label className="font-bold block mb-2">Focus (Working)</label>
                      {working.map((val, i) => (
                          <div key={i} className="flex gap-2 mb-3">
-                             <span className="text-gray-400 font-serif italic w-4">{i+1}.</span>
-                             <input className="w-full bg-white border-b border-gray-300 outline-none pb-1 focus:border-black" value={val} onChange={e => updateList(setWorking, i, e.target.value)} />
+                             <span className="text-notion-dim font-serif italic w-4">{i+1}.</span>
+                             <input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" value={val} onChange={e => updateList(setWorking, i, e.target.value)} />
                          </div>
                      ))}
                  </div>
@@ -296,16 +380,16 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
 
              <div className="space-y-3">
                  {topTen.map((item, i) => (
-                     <div key={i} className="flex items-center gap-4 p-3 bg-gray-50 border border-gray-200 group">
-                         <span className="font-mono text-gray-400 w-6">{i+1}.</span>
+                     <div key={i} className="flex items-center gap-4 p-3 bg-notion-sidebar border border-notion-border group">
+                         <span className="font-mono text-notion-dim w-6">{i+1}.</span>
                          <span className="flex-1 font-medium">{item}</span>
-                         <button onClick={() => setTopTen(topTen.filter((_, idx) => idx !== i))} className="opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4 text-gray-400 hover:text-black"/></button>
+                         <button onClick={() => setTopTen(topTen.filter((_, idx) => idx !== i))} className="opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4 text-notion-dim hover:text-black"/></button>
                      </div>
                  ))}
                  
                  {topTen.length < 10 ? (
                      <div className="flex gap-2">
-                        <span className="font-mono text-gray-400 w-6 py-3">{topTen.length + 1}.</span>
+                        <span className="font-mono text-notion-dim w-6 py-3">{topTen.length + 1}.</span>
                         <input 
                             className="flex-1 p-3 border-b-2 border-black outline-none font-medium placeholder:text-gray-300 bg-white"
                             placeholder="Add a goal..." 
@@ -317,7 +401,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                         <button onClick={addTopTen} className="px-4 bg-black text-white font-bold text-sm hover:opacity-80">Add</button>
                      </div>
                  ) : (
-                    <p className="text-sm text-gray-500 italic mt-4">Limit reached. Proceed to selection.</p>
+                    <p className="text-sm text-notion-dim italic mt-4">Limit reached. Proceed to selection.</p>
                  )}
              </div>
           </div>
@@ -339,7 +423,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                    const isDisabled = !isSelected && selectedGoalIndices.length >= 3;
                    return (
                       <div key={i} onClick={() => !isDisabled && toggleSelection(i)} 
-                        className={`p-4 border-2 cursor-pointer flex items-center gap-4 transition-all rounded-lg ${isSelected ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-black' + (isDisabled ? ' opacity-40 cursor-not-allowed border-transparent bg-gray-50' : '')}`}>
+                        className={`p-4 border-2 cursor-pointer flex items-center gap-4 transition-all rounded-lg ${isSelected ? 'border-black bg-notion-sidebar' : 'border-notion-border hover:border-black' + (isDisabled ? ' opacity-40 cursor-not-allowed border-transparent bg-notion-sidebar' : '')}`}>
                           <div className={`w-5 h-5 border flex items-center justify-center ${isSelected ? 'border-black bg-black text-white' : 'border-black'}`}>
                              {isSelected && <Check className="w-3 h-3"/>}
                           </div>
@@ -350,18 +434,18 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
              </div>
 
              {selectedGoalIndices.length === 3 && (
-                 <div className="animate-in fade-in space-y-12 pt-8 border-t border-gray-200">
+                 <div className="animate-in fade-in space-y-12 pt-8 border-t border-notion-border">
                      <p className="text-gray-800 text-lg font-serif">
                         <strong>Step 2:</strong> Refine your Critical 3.
                      </p>
                      {refinedGoals.map((rg, i) => (
-                         <div key={rg.id} className="bg-gray-50 p-8 border border-gray-200 space-y-6 relative">
+                         <div key={rg.id} className="bg-notion-sidebar p-8 border border-notion-border space-y-6 relative">
                              <div className="absolute top-0 right-0 bg-black text-white px-3 py-1 text-xs font-bold uppercase tracking-widest">Goal {i+1}</div>
                              <h4 className="font-serif font-bold text-2xl pt-4">{rg.text}</h4>
                              
                              <div>
                                  <label className="text-xs font-bold uppercase block mb-1">Success metric(s)</label>
-                                 <input className="w-full bg-white border border-gray-300 p-3 text-sm outline-none focus:border-black transition-colors" placeholder="How will you measure progress?" value={rg.metric} onChange={e => updateRefined(rg.id, 'metric', e.target.value)} />
+                                 <input className="w-full bg-white border border-notion-border p-3 text-sm outline-none focus:border-black transition-colors" placeholder="How will you measure progress?" value={rg.metric} onChange={e => updateRefined(rg.id, 'metric', e.target.value)} />
                              </div>
                              
                              <div>
@@ -369,9 +453,9 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                                  <div className="space-y-2">
                                      {rg.nextSteps.map((step, sIdx) => (
                                          <div key={sIdx} className="flex gap-2">
-                                            <span className="text-gray-400 font-mono text-sm py-2">{sIdx+1}.</span>
+                                            <span className="text-notion-dim font-mono text-sm py-2">{sIdx+1}.</span>
                                             <input 
-                                                className="w-full bg-white border border-gray-300 p-2 text-sm outline-none focus:border-black transition-colors" 
+                                                className="w-full bg-white border border-notion-border p-2 text-sm outline-none focus:border-black transition-colors" 
                                                 placeholder="Action step..." 
                                                 value={step} 
                                                 onChange={e => updateRefinedStep(rg.id, sIdx, e.target.value)} 
@@ -379,7 +463,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                                          </div>
                                      ))}
                                      {rg.nextSteps.length < 3 && (
-                                         <button onClick={() => addRefinedStep(rg.id)} className="text-xs font-bold text-gray-500 hover:text-black flex items-center gap-1 pl-6">
+                                         <button onClick={() => addRefinedStep(rg.id)} className="text-xs font-bold text-notion-dim hover:text-black flex items-center gap-1 pl-6">
                                              <Plus className="w-3 h-3"/> Add Step
                                          </button>
                                      )}
@@ -388,7 +472,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
 
                              <div>
                                  <label className="text-xs font-bold uppercase block mb-1">Key support</label>
-                                 <input className="w-full bg-white border border-gray-300 p-3 text-sm outline-none focus:border-black transition-colors" placeholder="Who or what do you need?" value={rg.support} onChange={e => updateRefined(rg.id, 'support', e.target.value)} />
+                                 <input className="w-full bg-white border border-notion-border p-3 text-sm outline-none focus:border-black transition-colors" placeholder="Who or what do you need?" value={rg.support} onChange={e => updateRefined(rg.id, 'support', e.target.value)} />
                              </div>
                          </div>
                      ))}
@@ -408,10 +492,10 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
               </div>
               <div className="space-y-6">
                  {momentum.map((m, i) => (
-                    <div key={m.id} className="grid md:grid-cols-2 gap-8 border-b border-gray-200 pb-6">
+                    <div key={m.id} className="grid md:grid-cols-2 gap-8 border-b border-notion-border pb-6">
                         <div>
                              <label className="font-bold block mb-2">I'm putting off</label>
-                             <input className="w-full bg-white border-b border-gray-300 outline-none pb-1 focus:border-black" 
+                             <input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" 
                                value={m.item} onChange={e => {
                                    const newArr = [...momentum];
                                    newArr[i].item = e.target.value;
@@ -420,7 +504,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                         </div>
                         <div>
                              <label className="font-bold block mb-2">Smallest first step</label>
-                             <input className="w-full bg-white border-b border-gray-300 outline-none pb-1 focus:border-black" 
+                             <input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" 
                                value={m.step} onChange={e => {
                                    const newArr = [...momentum];
                                    newArr[i].step = e.target.value;
@@ -445,10 +529,10 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
               
               <div className="space-y-6">
                  {weaknesses.map((w, i) => (
-                    <div key={w.id} className="grid md:grid-cols-2 gap-8 border-b border-gray-200 pb-6">
+                    <div key={w.id} className="grid md:grid-cols-2 gap-8 border-b border-notion-border pb-6">
                         <div>
                              <label className="font-bold block mb-2">Weakness</label>
-                             <input className="w-full bg-white border-b border-gray-300 outline-none pb-1 focus:border-black" 
+                             <input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" 
                                value={w.weakness} onChange={e => {
                                    const newArr = [...weaknesses];
                                    newArr[i].weakness = e.target.value;
@@ -457,7 +541,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                         </div>
                         <div>
                              <label className="font-bold block mb-2">Workaround</label>
-                             <input className="w-full bg-white border-b border-gray-300 outline-none pb-1 focus:border-black" 
+                             <input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" 
                                value={w.workaround} onChange={e => {
                                    const newArr = [...weaknesses];
                                    newArr[i].workaround = e.target.value;
@@ -482,10 +566,10 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
               
               <div className="space-y-6">
                  {easyModes.map((em, i) => (
-                    <div key={em.id} className="grid md:grid-cols-2 gap-8 border-b border-gray-200 pb-6">
+                    <div key={em.id} className="grid md:grid-cols-2 gap-8 border-b border-notion-border pb-6">
                         <div>
                              <label className="font-bold block mb-2">Hard mode</label>
-                             <input className="w-full bg-white border-b border-gray-300 outline-none pb-1 focus:border-black" 
+                             <input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" 
                                value={em.hard} onChange={e => {
                                    const newArr = [...easyModes];
                                    newArr[i].hard = e.target.value;
@@ -494,7 +578,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                         </div>
                         <div>
                              <label className="font-bold block mb-2">Easy mode</label>
-                             <input className="w-full bg-white border-b border-gray-300 outline-none pb-1 focus:border-black" 
+                             <input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" 
                                value={em.easy} onChange={e => {
                                    const newArr = [...easyModes];
                                    newArr[i].easy = e.target.value;
@@ -520,8 +604,8 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
               <div className="space-y-4 max-w-md">
                  {innerCircle.map((member, i) => (
                     <div key={i} className="flex gap-4 items-center">
-                        <span className="font-mono text-gray-400 w-4">{i+1}.</span>
-                        <input className="flex-1 p-3 border border-gray-200 outline-none bg-white focus:border-black" 
+                        <span className="font-mono text-notion-dim w-4">{i+1}.</span>
+                        <input className="flex-1 p-3 border border-notion-border outline-none bg-white focus:border-black" 
                             placeholder={`Person ${i+1}`}
                             value={member.name} 
                             onChange={e => updateInnerName(i, e.target.value)} 
@@ -547,23 +631,23 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                       <thead>
                           <tr className="border-b border-black">
                               <th className="text-left py-2 font-bold w-32">Person</th>
-                              <th className="py-2 px-1 font-normal text-xs text-gray-500 w-24">Info Quality</th>
-                              <th className="py-2 px-1 font-normal text-xs text-gray-500 w-24">Growth</th>
-                              <th className="py-2 px-1 font-normal text-xs text-gray-500 w-24">Energy</th>
-                              <th className="py-2 px-1 font-normal text-xs text-gray-500 w-24">Future</th>
-                              <th className="py-2 px-1 font-normal text-xs text-gray-500 w-24">Values</th>
+                              <th className="py-2 px-1 font-normal text-xs text-notion-dim w-24">Info Quality</th>
+                              <th className="py-2 px-1 font-normal text-xs text-notion-dim w-24">Growth</th>
+                              <th className="py-2 px-1 font-normal text-xs text-notion-dim w-24">Energy</th>
+                              <th className="py-2 px-1 font-normal text-xs text-notion-dim w-24">Future</th>
+                              <th className="py-2 px-1 font-normal text-xs text-notion-dim w-24">Values</th>
                               <th className="py-2 px-1 font-bold text-right w-16">Total</th>
                           </tr>
                       </thead>
                       <tbody>
                           {innerCircle.filter(m => m.name).map((member, i) => (
-                              <tr key={i} className="border-b border-gray-200 hover:bg-gray-50">
+                              <tr key={i} className="border-b border-notion-border hover:bg-notion-sidebar">
                                   <td className="py-4 font-bold">{member.name}</td>
                                   {['info', 'growth', 'energy', 'future', 'values'].map((field) => (
                                       <td key={field} className="text-center">
                                           <input 
                                             type="number" min="-1" max="1"
-                                            className="w-10 text-center border border-gray-200 py-1 outline-none bg-white"
+                                            className="w-10 text-center border border-notion-border py-1 outline-none bg-white"
                                             value={member.scores[field as keyof typeof member.scores]}
                                             onChange={e => updateInnerScore(i, field as any, parseInt(e.target.value) || 0)}
                                           />
@@ -591,25 +675,25 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
               </div>
               
               <div className="grid gap-8">
-                  <div className="border border-gray-200 p-6 rounded-lg">
+                  <div className="border border-notion-border p-6 rounded-lg">
                       <h3 className="font-bold text-lg mb-2 flex items-center gap-2 uppercase tracking-wide"><Target className="w-4 h-4"/> Rules that prosper</h3>
-                      <p className="text-sm text-gray-500 mb-4">Automate progress toward your goals.</p>
+                      <p className="text-sm text-notion-dim mb-4">Automate progress toward your goals.</p>
                       {rulesProsper.map((r, i) => (
-                          <div key={i} className="flex gap-2 mb-2"><span className="text-gray-300 w-4">{i+1}.</span><input className="w-full bg-white border-b border-gray-200 outline-none pb-1 focus:border-black" value={r} onChange={e => updateList(setRulesProsper, i, e.target.value)} /></div>
+                          <div key={i} className="flex gap-2 mb-2"><span className="text-notion-dim w-4">{i+1}.</span><input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" value={r} onChange={e => updateList(setRulesProsper, i, e.target.value)} /></div>
                       ))}
                   </div>
-                  <div className="border border-gray-200 p-6 rounded-lg">
+                  <div className="border border-notion-border p-6 rounded-lg">
                       <h3 className="font-bold text-lg mb-2 flex items-center gap-2 uppercase tracking-wide"><Shield className="w-4 h-4"/> Rules that protect</h3>
-                      <p className="text-sm text-gray-500 mb-4">Guard your priorities and energy.</p>
+                      <p className="text-sm text-notion-dim mb-4">Guard your priorities and energy.</p>
                       {rulesProtect.map((r, i) => (
-                          <div key={i} className="flex gap-2 mb-2"><span className="text-gray-300 w-4">{i+1}.</span><input className="w-full bg-white border-b border-gray-200 outline-none pb-1 focus:border-black" value={r} onChange={e => updateList(setRulesProtect, i, e.target.value)} /></div>
+                          <div key={i} className="flex gap-2 mb-2"><span className="text-notion-dim w-4">{i+1}.</span><input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" value={r} onChange={e => updateList(setRulesProtect, i, e.target.value)} /></div>
                       ))}
                   </div>
-                  <div className="border border-gray-200 p-6 rounded-lg">
+                  <div className="border border-notion-border p-6 rounded-lg">
                       <h3 className="font-bold text-lg mb-2 flex items-center gap-2 uppercase tracking-wide"><Ban className="w-4 h-4"/> Rules that limit</h3>
-                      <p className="text-sm text-gray-500 mb-4">Identify rules ready for retirement.</p>
+                      <p className="text-sm text-notion-dim mb-4">Identify rules ready for retirement.</p>
                       {rulesLimit.map((r, i) => (
-                          <div key={i} className="flex gap-2 mb-2"><span className="text-gray-300 w-4">{i+1}.</span><input className="w-full bg-white border-b border-gray-200 outline-none pb-1 focus:border-black" value={r} onChange={e => updateList(setRulesLimit, i, e.target.value)} /></div>
+                          <div key={i} className="flex gap-2 mb-2"><span className="text-notion-dim w-4">{i+1}.</span><input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" value={r} onChange={e => updateList(setRulesLimit, i, e.target.value)} /></div>
                       ))}
                   </div>
               </div>
@@ -630,20 +714,20 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
                   <label className="font-bold block">What three insights from this review will most transform your next year?</label>
                   {insights.map((val, i) => (
                       <div key={i} className="flex gap-4">
-                          <span className="font-mono text-gray-400">{i+1}.</span>
-                          <input className="w-full bg-white border-b border-gray-300 outline-none pb-1 focus:border-black" value={val} onChange={e => updateList(setInsights, i, e.target.value)} />
+                          <span className="font-mono text-notion-dim">{i+1}.</span>
+                          <input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" value={val} onChange={e => updateList(setInsights, i, e.target.value)} />
                       </div>
                   ))}
               </div>
 
               <div className="space-y-2">
                   <label className="font-bold block">What one change will you implement immediately?</label>
-                  <input className="w-full bg-white border-b border-gray-300 outline-none pb-1 focus:border-black" value={oneChange} onChange={e => setOneChange(e.target.value)} />
+                  <input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" value={oneChange} onChange={e => setOneChange(e.target.value)} />
               </div>
 
               <div className="space-y-2">
                   <label className="font-bold block">When will you revisit these exercises to check your progress?</label>
-                  <input className="w-full bg-white border-b border-gray-300 outline-none pb-1 focus:border-black" value={revisitDate} onChange={e => setRevisitDate(e.target.value)} />
+                  <input className="w-full bg-white border-b border-notion-border outline-none pb-1 focus:border-black" value={revisitDate} onChange={e => setRevisitDate(e.target.value)} />
               </div>
 
               <div className="pt-12 mt-12 border-t-2 border-black text-center">
@@ -666,7 +750,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
 
         {/* Nav */}
         <div className="flex justify-between border-t pt-8 mt-16">
-           <button onClick={() => step > 1 ? setStep(step - 1) : onCancel()} className="text-gray-400 hover:text-black font-medium">{step === 1 ? 'Cancel' : 'Back'}</button>
+           <button onClick={() => step > 1 ? setStep(step - 1) : onCancel()} className="text-notion-dim hover:text-black font-medium">{step === 1 ? 'Cancel' : 'Back'}</button>
            {step < 11 && (
              <button 
                 onClick={() => setStep(step + 1)} 
