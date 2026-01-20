@@ -32,7 +32,9 @@ import {
   Clock,
   Lock,
   Anchor,
-  Users
+  Users,
+  Share2,
+  Award
 } from 'lucide-react';
 
 export { 
@@ -67,5 +69,7 @@ export {
   Clock,
   Lock,
   Anchor,
-  Users
+  Users,
+  Share2,
+  Award
 };
