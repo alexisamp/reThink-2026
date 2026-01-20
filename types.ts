@@ -7,6 +7,7 @@ export enum GoalStatus {
 export interface Milestone {
   id: string;
   text: string;
+  targetMonth?: string; // New field for target completion
   completed: boolean;
   completedAt?: number;
 }
@@ -70,6 +71,7 @@ export interface Habit {
   goalId: string; 
   text: string;
   type: HabitType;
+  frequency?: 'DAILY' | 'WEEKLY'; // New field
   defaultTime?: string;
   lastScheduledAt?: number;
   reward?: string;

@@ -5,9 +5,10 @@ import { Target, Mic, BarChart2, Sun, Target as StrategyIcon, PenTool, Layout } 
 import StrategyTab from './views/StrategyTab';
 import TodayTab from './views/TodayTab';
 import DashboardTab from './views/DashboardTab';
+import CoachTab from './views/CoachTab';
 
 const MAX_ACTIVE_GOALS = 3;
-type Tab = 'STRATEGY' | 'TODAY' | 'DASHBOARD';
+type Tab = 'STRATEGY' | 'TODAY' | 'DASHBOARD' | 'COACH';
 
 const App: React.FC = () => {
   const [data, setData] = useState<AppData>(() => {
@@ -71,20 +72,14 @@ const App: React.FC = () => {
       ];
       
       const newGlobalRules: GlobalRules = {
-          prescriptions: wb.prescriptions,
-          antiGoals: wb.antiGoals
+          prescriptions: wb.rulesProsper.concat(wb.rulesProtect).concat(wb.rulesLimit), // Flatten for simple rules display if needed
+          antiGoals: [] // Not strictly used in new workbook format but kept for types
       };
 
       // 3. Update Goals
-      // We merge existing goals with new ones to preserve IDs if they match, but Review basically resets priorities
-      // To be safe: We keep existing goals that ARE NOT in the review lists (maybe completed ones?), 
-      // and append/update the ones from review.
-      
-      // Simpler approach for "Annual Review": It defines the new state.
-      // But we must preserve Habit history for existing goals if IDs match.
-      // Since `AnnualReview.tsx` generates NEW IDs for new goals, we treat them as additions.
-      
-      const combinedGoals = [...data.goals, ...activeGoalsFromReview, ...backlogGoalsFromReview];
+      // Preserve existing goals not in the review list if needed, but Annual Review usually resets Focus.
+      // We merge active and backlog.
+      const combinedGoals = [...activeGoalsFromReview, ...backlogGoalsFromReview];
 
       setData(prev => ({
           ...prev,
@@ -140,13 +135,14 @@ const App: React.FC = () => {
     setData(prev => ({ ...prev, habits: prev.habits.filter(h => h.id !== id) }));
   };
 
-  const addTodo = (text: string, goalId: string, milestoneId?: string) => {
+  const addTodo = (text: string, goalId: string, milestoneId?: string, effort?: 'DEEP' | 'SHALLOW') => {
     if (!text.trim()) return;
     const newTodo: Todo = { 
       id: crypto.randomUUID(), 
       goalId, 
       milestoneId,
       text, 
+      effort: effort || 'SHALLOW',
       completed: false, 
       date: todayKey 
     };
@@ -212,12 +208,15 @@ const App: React.FC = () => {
              <button onClick={() => setActiveTab('DASHBOARD')} className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${activeTab === 'DASHBOARD' ? 'bg-white text-black shadow-sm ring-1 ring-black/5' : 'text-notion-dim hover:bg-notion-hover'}`}>
                 <BarChart2 className="w-4 h-4" /> Dashboard
              </button>
+             <button onClick={() => setActiveTab('COACH')} className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors ${activeTab === 'COACH' ? 'bg-white text-black shadow-sm ring-1 ring-black/5' : 'text-notion-dim hover:bg-notion-hover'}`}>
+                <Mic className="w-4 h-4" /> Coach
+             </button>
            </nav>
         </div>
 
         <div className="mt-auto p-8 border-t border-notion-border">
            <div className="text-[10px] uppercase tracking-widest text-notion-dim font-medium">
-              reThink v7.2
+              reThink v7.3
            </div>
            <div className="text-xs font-serif italic text-notion-dim mt-1">
               "Identity determines behavior."
@@ -230,11 +229,12 @@ const App: React.FC = () => {
         <button onClick={() => setActiveTab('STRATEGY')} className={`p-2 ${activeTab === 'STRATEGY' ? 'text-black' : 'text-notion-dim'}`}><StrategyIcon /></button>
         <button onClick={() => setActiveTab('TODAY')} className={`p-2 ${activeTab === 'TODAY' ? 'text-black' : 'text-notion-dim'}`}><Sun /></button>
         <button onClick={() => setActiveTab('DASHBOARD')} className={`p-2 ${activeTab === 'DASHBOARD' ? 'text-black' : 'text-notion-dim'}`}><BarChart2 /></button>
+        <button onClick={() => setActiveTab('COACH')} className={`p-2 ${activeTab === 'COACH' ? 'text-black' : 'text-notion-dim'}`}><Mic /></button>
       </div>
 
       {/* Main Content */}
       <main className="flex-1 p-6 md:p-16 overflow-y-auto max-h-screen">
-        <div className="max-w-6xl mx-auto h-full pb-24">
+        <div className="max-w-6xl mx-auto min-h-full pb-24">
             {activeTab === 'STRATEGY' && (
                 <StrategyTab 
                     data={data}
@@ -243,11 +243,11 @@ const App: React.FC = () => {
                     onAddHabit={addHabit}
                     onDeleteHabit={deleteHabit}
                     onCompleteReview={handleReviewComplete}
-                    onAddStrategicItem={() => {}} // Legacy: Handled via review now
-                    onDeleteStrategicItem={() => {}} // Legacy
-                    onAddGoal={() => {}} // Legacy
-                    onUpdateGlobalRules={() => {}} // Legacy
-                    onUpdateFullData={() => {}} // Legacy
+                    onAddStrategicItem={() => {}} 
+                    onDeleteStrategicItem={() => {}} 
+                    onAddGoal={() => {}} 
+                    onUpdateGlobalRules={() => {}} 
+                    onUpdateFullData={() => {}} 
                 />
             )}
             {activeTab === 'TODAY' && (
@@ -264,6 +264,9 @@ const App: React.FC = () => {
             )}
             {activeTab === 'DASHBOARD' && (
                 <DashboardTab data={data} />
+            )}
+            {activeTab === 'COACH' && (
+                <CoachTab data={data} />
             )}
         </div>
       </main>
