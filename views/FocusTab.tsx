@@ -121,6 +121,7 @@ const FocusTab: React.FC<FocusTabProps> = ({
                         <HabitTracker 
                             key={habit.id}
                             habit={habit}
+                            goalName={goal.text}
                             todayKey={todayKey}
                             onToggle={onToggleHabit}
                             onDelete={onDeleteHabit}

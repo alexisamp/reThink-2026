@@ -34,7 +34,9 @@ import {
   Anchor,
   Users,
   Share2,
-  Award
+  Award,
+  Mail,
+  Loader
 } from 'lucide-react';
 
 export { 
@@ -49,8 +51,8 @@ export {
   Calendar,
   Layout,
   Map, 
-  PenTool,
-  Brain,
+  PenTool, 
+  Brain, 
   AlertTriangle,
   Sparkles,
   Ban,
@@ -71,5 +73,7 @@ export {
   Anchor,
   Users,
   Share2,
-  Award
+  Award,
+  Mail,
+  Loader
 };
