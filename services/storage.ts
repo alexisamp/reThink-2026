@@ -39,6 +39,8 @@ export const loadData = async (userId: string): Promise<AppData> => {
 
     const goals = (goalsData || []).map((g: any) => ({
         ...g,
+        createdAt: g.created_at ? new Date(g.created_at).getTime() : Date.now(),
+        needsConfig: g.needs_config,
         milestones: typeof g.milestones === 'string' ? JSON.parse(g.milestones) : (g.milestones || []),
         leverage: typeof g.leverage === 'string' ? JSON.parse(g.leverage) : (g.leverage || []),
         obstacles: typeof g.obstacles === 'string' ? JSON.parse(g.obstacles) : (g.obstacles || []),
@@ -59,7 +61,14 @@ export const loadData = async (userId: string): Promise<AppData> => {
         completedAt: t.completed_at ? new Date(t.completed_at).getTime() : undefined
     })) as Todo[];
 
-    const reviews = (reviewsData || []) as ReviewEntry[];
+    const reviews = (reviewsData || []).map((r: any) => ({
+        date: r.date,
+        text: r.text,
+        easyMode: r.easy_mode,
+        energyLevel: r.energy_level,
+        dayRating: r.day_rating
+    })) as ReviewEntry[];
+    
     const strategy = (strategiesData || []) as StrategicItem[];
 
     // Extract Global Rules from latest workbook
