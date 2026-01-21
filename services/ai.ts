@@ -1,22 +1,20 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { AppData, GoalStatus } from "../types";
 
-// Hardcoded API Key as requested
+// Hardcoded API Key
 const API_KEY = 'AIzaSyBVySdYTM1Uv1ffAIBfP4LqYWAgBsykl-c';
 
 const getAI = () => {
-  return new GoogleGenAI({ apiKey: API_KEY });
+  return new GoogleGenerativeAI(API_KEY);
 };
 
 export const refineGoalWithAI = async (goalText: string): Promise<string> => {
-  const ai = getAI();
+  const genAI = getAI();
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: `You are a productivity expert. Rewrite the following goal to be specific, measurable, and action-oriented (S.M.A.R.T), but keep it concise (under 10 words). Original: "${goalText}". Return ONLY the rewritten text.`,
-    });
-    return response.text?.trim() || goalText;
+    const result = await model.generateContent(`You are a productivity expert. Rewrite the following goal to be specific, measurable, and action-oriented (S.M.A.R.T), but keep it concise (under 10 words). Original: "${goalText}". Return ONLY the rewritten text.`);
+    return result.response.text().trim() || goalText;
   } catch (error) {
     console.error("AI Error:", error);
     return goalText;
@@ -24,7 +22,8 @@ export const refineGoalWithAI = async (goalText: string): Promise<string> => {
 };
 
 export const getCoachFeedback = async (data: AppData): Promise<string> => {
-  const ai = getAI();
+  const genAI = getAI();
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   // Summarize data to save tokens
   const activeGoals = data.goals.filter(g => g.status === GoalStatus.ACTIVE).map(g => g.text).join(", ");
@@ -32,9 +31,7 @@ export const getCoachFeedback = async (data: AppData): Promise<string> => {
   const habitsCount = data.habits.length;
   
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: `
+    const result = await model.generateContent(`
         Act as a tough but motivating performance coach (Farnam Street style). 
         Analyze this user data:
         - Focus: ${activeGoals}
@@ -47,9 +44,8 @@ export const getCoachFeedback = async (data: AppData): Promise<string> => {
         3. A motivation.
         
         Keep it under 60 words total. Do not use markdown symbols like * or #, just plain text suitable for speech synthesis.
-      `,
-    });
-    return response.text?.trim() || "Keep pushing.";
+      `);
+    return result.response.text().trim() || "Keep pushing.";
   } catch (error) {
     console.error("AI Error:", error);
     return "I couldn't analyze your data right now. Keep pushing.";
