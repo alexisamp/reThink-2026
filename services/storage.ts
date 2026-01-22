@@ -158,6 +158,42 @@ export const saveWorkbook = async (workbook: WorkbookData) => {
   if (error) console.error("Error saving workbook:", error);
 };
 
+export const deleteWorkbook = async (year: string) => {
+  const userId = await getUserId();
+  if (!userId) return;
+
+  // 1. Fetch the workbook first to identify associated Goals
+  const { data: wbRows } = await supabase
+      .from('workbooks')
+      .select('data')
+      .eq('user_id', userId)
+      .eq('year', year);
+
+  if (wbRows && wbRows.length > 0) {
+      const workbookData = wbRows[0].data as WorkbookData;
+      // Get IDs of goals created during this annual review
+      const goalIds = workbookData.criticalThree?.map(g => g.id) || [];
+      const backlogIds = workbookData.topTen?.map((_, i) => `BACKLOG_${i}`) || []; // Just in case, though backlog usually aren't saved as goals rows until active
+
+      if (goalIds.length > 0) {
+          console.log(`Cascading delete for workbook ${year}. Removing goals:`, goalIds);
+          
+          // 2. Delete Todos associated with these goals
+          await supabase.from('todos').delete().in('goal_id', goalIds);
+
+          // 3. Delete Habits associated with these goals
+          await supabase.from('habits').delete().in('goal_id', goalIds);
+
+          // 4. Delete the Goals themselves
+          await supabase.from('goals').delete().in('id', goalIds);
+      }
+  }
+
+  // 5. Finally, delete the workbook record
+  const { error } = await supabase.from('workbooks').delete().eq('user_id', userId).eq('year', year);
+  if (error) console.error("Error deleting workbook:", error);
+};
+
 // --- AUXILIARY SAVES ---
 
 export const saveTodo = async (todo: Todo) => {

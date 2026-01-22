@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AppData, Goal, GoalStatus, Habit, HabitType, WorkbookData } from '../types';
 import { Printer, PenTool, Target, Map, Zap, AlertTriangle, Anchor, Check, Trash2, Plus, Clock, Sparkles, Ban, Shield, Users, BarChart2, Calendar } from '../components/Icon';
 import AnnualReview from './AnnualReview';
+import ContributionGraph from '../components/ContributionGraph';
 
 // --- HELPERS ---
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -265,17 +266,22 @@ interface StrategyTabProps {
   onAddHabit: (habit: Habit) => void;
   onDeleteHabit: (id: string) => void;
   onCompleteReview: (wb: WorkbookData, active: Goal[], backlog: Goal[]) => void;
+  onDeleteWorkbook: (year: string) => void;
   // Legacy unused
   onAddStrategicItem: any; onDeleteStrategicItem: any; onAddGoal: any; onUpdateGlobalRules: any; onUpdateFullData: any;
 }
 
 const StrategyTab: React.FC<StrategyTabProps> = ({ 
   data, 
-  onUpdateGoal, onDeleteGoal, onAddHabit, onDeleteHabit, onCompleteReview 
+  onUpdateGoal, onDeleteGoal, onAddHabit, onDeleteHabit, onCompleteReview, onDeleteWorkbook 
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [selectedYear, setSelectedYear] = useState<string>("2026");
+  
+  // Delete Modal State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   const availableYears = Object.keys(data.workbookReviews).sort().reverse();
 
@@ -284,6 +290,17 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
       setSelectedYear(availableYears[0]);
     }
   }, [availableYears]);
+
+  const handleDeleteSubmit = () => {
+    if (deleteConfirmation === "Delete") {
+        onDeleteWorkbook(selectedYear);
+        setShowDeleteModal(false);
+        setDeleteConfirmation("");
+        // Fallback to latest year or empty
+        const remaining = availableYears.filter(y => y !== selectedYear);
+        if (remaining.length > 0) setSelectedYear(remaining[0]);
+    }
+  };
 
   if (availableYears.length === 0 && !isEditing) {
       return (
@@ -316,15 +333,76 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
   const currentWorkbook = data.workbookReviews[selectedYear];
 
   return (
-    <div className="animate-fade-in pb-24 space-y-16">
+    <div className="animate-fade-in pb-24 space-y-16 relative">
       
+      {/* --- DELETE CONFIRMATION MODAL --- */}
+      {showDeleteModal && (
+          <div className="fixed inset-0 z-[200] bg-black/20 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md animate-in fade-in zoom-in-95 border border-notion-border">
+                  <div className="flex items-start gap-4 mb-6">
+                      <div className="p-3 bg-red-100 rounded-full text-red-600">
+                          <AlertTriangle className="w-6 h-6" />
+                      </div>
+                      <div>
+                          <h3 className="font-bold text-lg text-gray-900">Delete Review?</h3>
+                          <p className="text-sm text-gray-500 mt-1">
+                              This will permanently remove the <strong>{selectedYear} Annual Review</strong>. 
+                              This action cannot be undone.
+                          </p>
+                      </div>
+                  </div>
+                  
+                  <div className="mb-6">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-notion-dim mb-2">
+                          Type "Delete" to confirm
+                      </label>
+                      <input 
+                          type="text" 
+                          className="w-full border border-gray-300 rounded p-2 text-sm outline-none focus:border-red-500 transition-colors"
+                          placeholder="Delete"
+                          value={deleteConfirmation}
+                          onChange={(e) => setDeleteConfirmation(e.target.value)}
+                          autoFocus
+                      />
+                  </div>
+                  
+                  <div className="flex justify-end gap-3">
+                      <button 
+                          onClick={() => setShowDeleteModal(false)}
+                          className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-black hover:bg-gray-100 rounded transition-colors"
+                      >
+                          Cancel
+                      </button>
+                      <button 
+                          onClick={handleDeleteSubmit}
+                          disabled={deleteConfirmation !== "Delete"}
+                          className="px-4 py-2 text-sm font-bold text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                          Delete Review
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* Header Area */}
       <div className="flex justify-between items-center border-b border-notion-border pb-4 no-print">
          <div>
              <h2 className="text-3xl font-serif text-notion-text">Executive Strategy</h2>
              <p className="text-notion-dim font-serif italic">Your contract with yourself for {selectedYear}.</p>
          </div>
-         <div className="flex gap-2">
+         <div className="flex items-center gap-2">
+             {/* Delete Button (Only if review exists) */}
+             {currentWorkbook && (
+                 <button 
+                    onClick={() => { setDeleteConfirmation(""); setShowDeleteModal(true); }}
+                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
+                    title="Delete Review"
+                 >
+                     <Trash2 className="w-4 h-4" />
+                 </button>
+             )}
+             
              <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded text-sm font-medium hover:opacity-80 transition-opacity shadow-sm">
                 <Plus className="w-4 h-4" /> Review
              </button>
@@ -380,7 +458,7 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
                           );
                       }
 
-                      // --- CONFIGURED: Text-Based Summary Card (No Graphs) ---
+                      // --- CONFIGURED: Text-Based Summary Card WITH GRAPHS ---
                       return (
                           <div key={goal.id} className="bg-white border border-notion-border rounded-xl shadow-sm overflow-hidden group">
                               {/* Header */}
@@ -419,23 +497,26 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
                                       </ul>
                                   </div>
 
-                                  {/* Right: Daily Protocol */}
+                                  {/* Right: Daily Protocol (With Graphs) */}
                                   <div>
                                       <h4 className="text-xs font-bold uppercase tracking-widest text-notion-dim mb-4 flex items-center gap-2">
                                           <Zap className="w-3 h-3" /> System
                                       </h4>
-                                      <ul className="space-y-3">
+                                      <div className="space-y-4">
                                           {habits.map(h => (
-                                              <li key={h.id} className="text-sm flex flex-col gap-0.5 border-b border-notion-border pb-2 last:border-0">
-                                                  <div className="font-medium text-notion-text">{h.text}</div>
-                                                  <div className="text-[10px] text-notion-dim flex flex-wrap gap-2 uppercase tracking-wide">
-                                                      <span>{h.frequency || 'DAILY'}</span>
-                                                      {h.defaultTime && <span className="text-notion-dim/70">| {h.defaultTime}</span>}
-                                                      {h.reward && <span className="text-notion-dim/70">| Reward: {h.reward}</span>}
+                                              <div key={h.id} className="text-sm flex flex-col gap-1">
+                                                  <div className="flex justify-between items-baseline">
+                                                      <span className="font-medium text-notion-text">{h.text}</span>
+                                                      <span className="text-[9px] uppercase tracking-wider text-notion-dim">{h.frequency || 'DAILY'}</span>
                                                   </div>
-                                              </li>
+                                                  {/* Graph Integrated directly here */}
+                                                  <div className="h-4">
+                                                     <ContributionGraph data={h.contributions} frequency={h.frequency} year={selectedYear} />
+                                                  </div>
+                                              </div>
                                           ))}
-                                      </ul>
+                                          {habits.length === 0 && <span className="text-xs text-notion-dim italic">No habits configured.</span>}
+                                      </div>
                                   </div>
                               </div>
                           </div>

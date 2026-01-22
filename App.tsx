@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, signOut } from './services/supabase';
-import { loadData, saveGoal, deleteGoal, saveHabit, deleteHabit, saveWorkbook, saveTodo, deleteTodo, saveReview, getTodayKey, INITIAL_DATA } from './services/storage';
+import { loadData, saveGoal, deleteGoal, saveHabit, deleteHabit, saveWorkbook, deleteWorkbook, saveTodo, deleteTodo, saveReview, getTodayKey, INITIAL_DATA } from './services/storage';
 import { AppData, Goal, Habit, Todo, WorkbookData, StrategicItem, GlobalRules } from './types';
 import { Target as StrategyIcon, Sun, BarChart2, Mic, Lock } from './components/Icon'; 
 import StrategyTab from './views/StrategyTab';
@@ -9,9 +9,18 @@ import DashboardTab from './views/DashboardTab';
 import CoachTab from './views/CoachTab';
 import LoginView from './views/LoginView';
 
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
 // Internal Error Boundary to prevent white screens
-class AppErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
-  constructor(props: any) {
+class AppErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
   }
@@ -99,6 +108,37 @@ const AppContent: React.FC = () => {
           strategy: newGlobalStrategy,
           globalRules: { prescriptions: [...wb.rulesProsper, ...wb.rulesProtect, ...wb.rulesLimit], antiGoals: [] }
       }));
+  };
+
+  const deleteWorkbookAction = async (year: string) => {
+      // 1. Call DB Delete
+      await deleteWorkbook(year);
+      
+      // 2. Cleanup Local State
+      setData(prev => {
+          const workbookToDelete = prev.workbookReviews[year];
+          let goalIdsToDelete: string[] = [];
+          
+          if (workbookToDelete && workbookToDelete.criticalThree) {
+              goalIdsToDelete = workbookToDelete.criticalThree.map(g => g.id);
+          }
+
+          // Filter out the deleted goals, and any habits/todos linked to them
+          const newGoals = prev.goals.filter(g => !goalIdsToDelete.includes(g.id));
+          const newHabits = prev.habits.filter(h => !goalIdsToDelete.includes(h.goalId));
+          const newTodos = prev.todos.filter(t => !goalIdsToDelete.includes(t.goalId));
+
+          const newReviews = { ...prev.workbookReviews };
+          delete newReviews[year];
+          
+          return { 
+              ...prev, 
+              workbookReviews: newReviews,
+              goals: newGoals,
+              habits: newHabits,
+              todos: newTodos
+          };
+      });
   };
 
   const updateGoal = (g: Goal) => {
@@ -242,6 +282,7 @@ const AppContent: React.FC = () => {
                     onAddHabit={addHabitAction}
                     onDeleteHabit={deleteHabitAction}
                     onCompleteReview={handleReviewComplete}
+                    onDeleteWorkbook={deleteWorkbookAction}
                     onAddStrategicItem={() => {}} onDeleteStrategicItem={() => {}} onAddGoal={() => {}} onUpdateGlobalRules={() => {}} onUpdateFullData={() => {}} 
                 />
             )}
