@@ -266,7 +266,7 @@ interface StrategyTabProps {
   onAddHabit: (habit: Habit) => void;
   onDeleteHabit: (id: string) => void;
   onCompleteReview: (wb: WorkbookData, active: Goal[], backlog: Goal[]) => void;
-  onDeleteWorkbook: (year: string) => void;
+  onDeleteWorkbook: (year: string, deleteGoals: boolean, deleteHabits: boolean) => void;
   // Legacy unused
   onAddStrategicItem: any; onDeleteStrategicItem: any; onAddGoal: any; onUpdateGlobalRules: any; onUpdateFullData: any;
 }
@@ -282,6 +282,8 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
   // Delete Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteOptionGoals, setDeleteOptionGoals] = useState(true);
+  const [deleteOptionHabits, setDeleteOptionHabits] = useState(true);
 
   const availableYears = Object.keys(data.workbookReviews).sort().reverse();
 
@@ -292,10 +294,14 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
   }, [availableYears]);
 
   const handleDeleteSubmit = () => {
-    if (deleteConfirmation === "Delete") {
-        onDeleteWorkbook(selectedYear);
+    if (deleteConfirmation.toLowerCase() === "delete") {
+        onDeleteWorkbook(selectedYear, deleteOptionGoals, deleteOptionHabits);
         setShowDeleteModal(false);
         setDeleteConfirmation("");
+        // Reset defaults
+        setDeleteOptionGoals(true);
+        setDeleteOptionHabits(true);
+        
         // Fallback to latest year or empty
         const remaining = availableYears.filter(y => y !== selectedYear);
         if (remaining.length > 0) setSelectedYear(remaining[0]);
@@ -346,12 +352,33 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
                       <div>
                           <h3 className="font-bold text-lg text-gray-900">Delete Review?</h3>
                           <p className="text-sm text-gray-500 mt-1">
-                              This will permanently remove the <strong>{selectedYear} Annual Review</strong>. 
-                              This action cannot be undone.
+                              This will permanently remove the <strong>{selectedYear} Annual Review</strong>.
                           </p>
                       </div>
                   </div>
                   
+                  <div className="space-y-3 mb-6 bg-gray-50 p-4 rounded border border-gray-100">
+                      <div className="text-xs font-bold uppercase tracking-wider text-notion-dim mb-2">What to delete?</div>
+                      <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded">
+                          <input 
+                            type="checkbox" 
+                            checked={deleteOptionGoals} 
+                            onChange={e => setDeleteOptionGoals(e.target.checked)}
+                            className="accent-black w-4 h-4 rounded border-gray-300"
+                          />
+                          <span className="text-sm text-gray-700">Delete associated Goals & Milestones</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded">
+                          <input 
+                            type="checkbox" 
+                            checked={deleteOptionHabits} 
+                            onChange={e => setDeleteOptionHabits(e.target.checked)}
+                            className="accent-black w-4 h-4 rounded border-gray-300"
+                          />
+                          <span className="text-sm text-gray-700">Delete associated Habits</span>
+                      </label>
+                  </div>
+
                   <div className="mb-6">
                       <label className="block text-xs font-bold uppercase tracking-wider text-notion-dim mb-2">
                           Type "Delete" to confirm
@@ -375,7 +402,7 @@ const StrategyTab: React.FC<StrategyTabProps> = ({
                       </button>
                       <button 
                           onClick={handleDeleteSubmit}
-                          disabled={deleteConfirmation !== "Delete"}
+                          disabled={deleteConfirmation.toLowerCase() !== "delete"}
                           className="px-4 py-2 text-sm font-bold text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                       >
                           Delete Review

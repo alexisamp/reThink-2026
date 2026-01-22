@@ -158,7 +158,7 @@ export const saveWorkbook = async (workbook: WorkbookData) => {
   if (error) console.error("Error saving workbook:", error);
 };
 
-export const deleteWorkbook = async (year: string) => {
+export const deleteWorkbook = async (year: string, deleteGoals: boolean, deleteHabits: boolean) => {
   const userId = await getUserId();
   if (!userId) return;
 
@@ -173,23 +173,26 @@ export const deleteWorkbook = async (year: string) => {
       const workbookData = wbRows[0].data as WorkbookData;
       // Get IDs of goals created during this annual review
       const goalIds = workbookData.criticalThree?.map(g => g.id) || [];
-      const backlogIds = workbookData.topTen?.map((_, i) => `BACKLOG_${i}`) || []; // Just in case, though backlog usually aren't saved as goals rows until active
+      // Note: We only track active goals linked via workbook ID here. Backlog items if not in goals table won't be deleted via this, 
+      // but they are usually string-only in workbook JSON unless activated.
 
       if (goalIds.length > 0) {
-          console.log(`Cascading delete for workbook ${year}. Removing goals:`, goalIds);
-          
-          // 2. Delete Todos associated with these goals
-          await supabase.from('todos').delete().in('goal_id', goalIds);
-
-          // 3. Delete Habits associated with these goals
-          await supabase.from('habits').delete().in('goal_id', goalIds);
-
-          // 4. Delete the Goals themselves
-          await supabase.from('goals').delete().in('id', goalIds);
+          if (deleteGoals) {
+              console.log(`Cascading delete for workbook ${year}. Removing goals + habits/todos:`, goalIds);
+              // Delete Goals AND Habits/Todos (Cascade)
+              await supabase.from('todos').delete().in('goal_id', goalIds);
+              await supabase.from('habits').delete().in('goal_id', goalIds);
+              await supabase.from('goals').delete().in('id', goalIds);
+          } else if (deleteHabits) {
+              console.log(`Partial delete for workbook ${year}. Removing habits/todos only:`, goalIds);
+              // Delete Habits/Todos ONLY (Keep Goals)
+              await supabase.from('todos').delete().in('goal_id', goalIds);
+              await supabase.from('habits').delete().in('goal_id', goalIds);
+          }
       }
   }
 
-  // 5. Finally, delete the workbook record
+  // 5. Finally, delete the workbook record (Review Text)
   const { error } = await supabase.from('workbooks').delete().eq('user_id', userId).eq('year', year);
   if (error) console.error("Error deleting workbook:", error);
 };

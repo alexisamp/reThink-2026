@@ -10,7 +10,7 @@ import CoachTab from './views/CoachTab';
 import LoginView from './views/LoginView';
 
 interface ErrorBoundaryProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 interface ErrorBoundaryState {
@@ -20,10 +20,14 @@ interface ErrorBoundaryState {
 
 // Internal Error Boundary to prevent white screens
 class AppErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+  readonly props: Readonly<ErrorBoundaryProps>;
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.props = props;
   }
+  
   static getDerivedStateFromError(error: any) {
     return { hasError: true, error };
   }
@@ -110,9 +114,9 @@ const AppContent: React.FC = () => {
       }));
   };
 
-  const deleteWorkbookAction = async (year: string) => {
-      // 1. Call DB Delete
-      await deleteWorkbook(year);
+  const deleteWorkbookAction = async (year: string, deleteGoals: boolean, deleteHabits: boolean) => {
+      // 1. Call DB Delete with flags
+      await deleteWorkbook(year, deleteGoals, deleteHabits);
       
       // 2. Cleanup Local State
       setData(prev => {
@@ -123,10 +127,21 @@ const AppContent: React.FC = () => {
               goalIdsToDelete = workbookToDelete.criticalThree.map(g => g.id);
           }
 
-          // Filter out the deleted goals, and any habits/todos linked to them
-          const newGoals = prev.goals.filter(g => !goalIdsToDelete.includes(g.id));
-          const newHabits = prev.habits.filter(h => !goalIdsToDelete.includes(h.goalId));
-          const newTodos = prev.todos.filter(t => !goalIdsToDelete.includes(t.goalId));
+          let newGoals = prev.goals;
+          let newHabits = prev.habits;
+          let newTodos = prev.todos;
+
+          // If deleting goals, remove goals, habits, and todos linked to them
+          if (deleteGoals && goalIdsToDelete.length > 0) {
+              newGoals = prev.goals.filter(g => !goalIdsToDelete.includes(g.id));
+              newHabits = prev.habits.filter(h => !goalIdsToDelete.includes(h.goalId));
+              newTodos = prev.todos.filter(t => !goalIdsToDelete.includes(t.goalId));
+          } 
+          // If NOT deleting goals but deleting habits, keep goals but remove habits/todos
+          else if (deleteHabits && goalIdsToDelete.length > 0) {
+              newHabits = prev.habits.filter(h => !goalIdsToDelete.includes(h.goalId));
+              newTodos = prev.todos.filter(t => !goalIdsToDelete.includes(t.goalId));
+          }
 
           const newReviews = { ...prev.workbookReviews };
           delete newReviews[year];

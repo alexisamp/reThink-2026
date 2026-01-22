@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 
 interface ErrorBoundaryProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 interface ErrorBoundaryState {
@@ -12,9 +12,13 @@ interface ErrorBoundaryState {
 }
 
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+  // Explicit props declaration to satisfy TS if inheritance fails inference
+  readonly props: Readonly<ErrorBoundaryProps>;
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.props = props;
   }
 
   static getDerivedStateFromError(error: any) {
