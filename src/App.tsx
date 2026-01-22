@@ -95,24 +95,37 @@ const AppContent: React.FC = () => {
   const todayKey = getTodayKey();
 
   // --- ACTIONS ---
-  // (Pass-throughs to storage service with optimistic updates)
 
-  const handleReviewComplete = (wb: WorkbookData, active: Goal[], backlog: Goal[]) => {
-      saveWorkbook(wb);
-      [...active, ...backlog].forEach(g => saveGoal(g));
+  const handleReviewComplete = async (wb: WorkbookData, active: Goal[], backlog: Goal[]) => {
+      setIsLoading(true);
       
-      const newGlobalStrategy: StrategicItem[] = [
-          ...wb.strengths.map(s => ({ id: s.id, type: 'STRENGTH' as const, title: s.strength, tactic: s.application })),
-          ...wb.weaknesses.map(w => ({ id: w.id, type: 'WEAKNESS' as const, title: w.weakness, tactic: w.workaround }))
-      ];
-      
-      setData(prev => ({
-          ...prev,
-          workbookReviews: { ...prev.workbookReviews, [wb.year]: wb },
-          goals: [...active, ...backlog],
-          strategy: newGlobalStrategy,
-          globalRules: { prescriptions: [...wb.rulesProsper, ...wb.rulesProtect, ...wb.rulesLimit], antiGoals: [] }
-      }));
+      try {
+          // 1. Save Workbook
+          await saveWorkbook(wb);
+          
+          // 2. Save Goals (Parallel)
+          await Promise.all([...active, ...backlog].map(g => saveGoal(g)));
+
+          // 3. Update Local State
+          const newGlobalStrategy: StrategicItem[] = [
+              ...wb.strengths.map(s => ({ id: s.id, type: 'STRENGTH' as const, title: s.strength, tactic: s.application })),
+              ...wb.weaknesses.map(w => ({ id: w.id, type: 'WEAKNESS' as const, title: w.weakness, tactic: w.workaround }))
+          ];
+          
+          setData(prev => ({
+              ...prev,
+              workbookReviews: { ...prev.workbookReviews, [wb.year]: wb },
+              goals: [...active, ...backlog],
+              strategy: newGlobalStrategy,
+              globalRules: { prescriptions: [...wb.rulesProsper, ...wb.rulesProtect, ...wb.rulesLimit], antiGoals: [] }
+          }));
+
+      } catch (e) {
+          console.error("Error saving review:", e);
+          alert("Failed to save review. Check console.");
+      } finally {
+          setIsLoading(false);
+      }
   };
 
   const deleteWorkbookAction = async (year: string, deleteGoals: boolean, deleteHabits: boolean) => {
@@ -134,13 +147,11 @@ const AppContent: React.FC = () => {
           let newHabits = prev.habits;
           let newTodos = prev.todos;
 
-          // If deleting goals, remove goals, habits, and todos linked to them
           if (deleteGoals && goalIdsToDelete.length > 0) {
               newGoals = prev.goals.filter(g => !goalIdsToDelete.includes(g.id));
               newHabits = prev.habits.filter(h => !goalIdsToDelete.includes(h.goalId));
               newTodos = prev.todos.filter(t => !goalIdsToDelete.includes(t.goalId));
           } 
-          // If NOT deleting goals but deleting habits, keep goals but remove habits/todos
           else if (deleteHabits && goalIdsToDelete.length > 0) {
               newHabits = prev.habits.filter(h => !goalIdsToDelete.includes(h.goalId));
               newTodos = prev.todos.filter(t => !goalIdsToDelete.includes(t.goalId));
@@ -159,14 +170,14 @@ const AppContent: React.FC = () => {
       });
   };
 
-  const updateGoal = (g: Goal) => {
-    saveGoal(g);
+  const updateGoal = async (g: Goal) => {
+    await saveGoal(g);
     setData(prev => ({ ...prev, goals: prev.goals.map(x => x.id === g.id ? g : x) }));
   };
 
-  const deleteGoalAction = (id: string) => {
+  const deleteGoalAction = async (id: string) => {
     if(!window.confirm("Delete goal permanently?")) return;
-    deleteGoal(id);
+    await deleteGoal(id);
     setData(prev => ({
       ...prev,
       goals: prev.goals.filter(g => g.id !== id),
@@ -175,65 +186,73 @@ const AppContent: React.FC = () => {
     }));
   };
 
-  const addHabitAction = (h: Habit) => {
-    saveHabit(h);
+  const addHabitAction = async (h: Habit) => {
+    await saveHabit(h);
     setData(prev => ({ ...prev, habits: [...prev.habits, h] }));
   };
 
-  const toggleHabitAction = (id: string, value: number) => {
+  const toggleHabitAction = async (id: string, value: number) => {
     const habit = data.habits.find(h => h.id === id);
     if (!habit) return;
     const newContrib = { ...habit.contributions, [todayKey]: value };
     if (value === 0) delete newContrib[todayKey];
     
-    // Update local state with the computed map
     const updated = { ...habit, contributions: newContrib };
     setData(prev => ({ ...prev, habits: prev.habits.map(h => h.id === id ? updated : h) }));
 
-    // Persist log entry (Atomic)
-    saveHabitLog(id, todayKey, value);
+    await saveHabitLog(id, todayKey, value);
   };
 
-  const deleteHabitAction = (id: string) => {
-    deleteHabit(id);
+  const deleteHabitAction = async (id: string) => {
+    await deleteHabit(id);
     setData(prev => ({ ...prev, habits: prev.habits.filter(h => h.id !== id) }));
   };
 
-  const addTodoAction = (text: string, goalId: string, milestoneId?: string, effort?: 'DEEP' | 'SHALLOW') => {
+  const addTodoAction = async (text: string, goalId: string, milestoneId?: string, effort?: 'DEEP' | 'SHALLOW') => {
     const newTodo: Todo = { 
       id: crypto.randomUUID(), goalId, milestoneId, text, effort: effort || 'SHALLOW', completed: false, date: todayKey 
     };
-    saveTodo(newTodo);
+    
+    // UI Optimistic Update
     setData(prev => ({ ...prev, todos: [...prev.todos, newTodo] }));
+    
+    // DB Save
+    await saveTodo(newTodo);
   };
   
-  const toggleTodoAction = (id: string) => {
+  const toggleTodoAction = async (id: string) => {
     const todo = data.todos.find(t => t.id === id);
     if (!todo) return;
     const updated = { ...todo, completed: !todo.completed, completedAt: !todo.completed ? Date.now() : undefined };
-    saveTodo(updated);
+    
+    // Optimistic
     setData(prev => ({ ...prev, todos: prev.todos.map(t => t.id === id ? updated : t) }));
+    
+    // DB
+    await saveTodo(updated);
   };
 
-  const editTodoAction = (id: string, text: string) => {
+  const editTodoAction = async (id: string, text: string) => {
     const todo = data.todos.find(t => t.id === id);
     if (!todo) return;
     const updated = { ...todo, text };
-    saveTodo(updated);
+    
     setData(prev => ({ ...prev, todos: prev.todos.map(t => t.id === id ? updated : t) }));
+    await saveTodo(updated);
   };
 
-  const updateTodoAction = (id: string, updates: Partial<Todo>) => {
+  const updateTodoAction = async (id: string, updates: Partial<Todo>) => {
     const todo = data.todos.find(t => t.id === id);
     if (!todo) return;
     const updated = { ...todo, ...updates };
-    saveTodo(updated);
+    
     setData(prev => ({ ...prev, todos: prev.todos.map(t => t.id === id ? updated : t) }));
+    await saveTodo(updated);
   };
 
-  const deleteTodoAction = (id: string) => {
-    deleteTodo(id);
+  const deleteTodoAction = async (id: string) => {
     setData(prev => ({ ...prev, todos: prev.todos.filter(t => t.id !== id) }));
+    await deleteTodo(id);
   };
 
   // --- RENDER ---

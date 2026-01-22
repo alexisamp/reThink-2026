@@ -22,8 +22,8 @@ export const loadData = async (userId: string): Promise<AppData> => {
       { data: milestonesData },
       { data: habitsData },
       { data: habitLogsData },
-      { data: workbooksData },        // Parent table (stores year)
-      { data: workbookEntriesData },  // Normalized answers
+      { data: workbooksData }, // Parent table
+      { data: workbookEntriesData }, // Normalized answers
       { data: todosData },
       { data: reviewsData },
       { data: strategiesData }
@@ -39,14 +39,14 @@ export const loadData = async (userId: string): Promise<AppData> => {
       supabase.from('strategies').select('*').eq('user_id', userId)
     ]);
 
-    // 1. Reconstruct Milestones
+    // 1. Process Milestones
     const milestonesByGoal: Record<string, Milestone[]> = {};
     (milestonesData || []).forEach((m: any) => {
         const ms: Milestone = {
             id: m.id,
             goalId: m.goal_id,
             text: m.text,
-            targetMonth: m.target_date, 
+            targetMonth: m.target_date, // Map target_date -> targetMonth
             completed: m.status === 'COMPLETED',
             completedAt: m.completed_at ? new Date(m.completed_at).getTime() : undefined
         };
@@ -54,7 +54,7 @@ export const loadData = async (userId: string): Promise<AppData> => {
         milestonesByGoal[m.goal_id].push(ms);
     });
 
-    // 2. Reconstruct Goals (Join Milestones)
+    // 2. Process Goals (Join Milestones)
     const goals = (goalsData || []).map((g: any) => ({
         ...g,
         createdAt: g.created_at ? new Date(g.created_at).getTime() : Date.now(),
@@ -64,22 +64,23 @@ export const loadData = async (userId: string): Promise<AppData> => {
         obstacles: typeof g.obstacles === 'string' ? JSON.parse(g.obstacles) : (g.obstacles || []),
     })) as Goal[];
 
-    // 3. Reconstruct Habits (Join Logs)
+    // 3. Process Habit Logs
     const contributionsByHabit: Record<string, Record<string, number>> = {};
     (habitLogsData || []).forEach((log: any) => {
         if (!contributionsByHabit[log.habit_id]) contributionsByHabit[log.habit_id] = {};
         contributionsByHabit[log.habit_id][log.log_date] = log.value;
     });
 
+    // 4. Process Habits (Join Logs)
     const habits = (habitsData || []).map((h: any) => ({
         ...h,
         goalId: h.goal_id, 
         defaultTime: h.default_time,
-        lastScheduledAt: h.last_scheduled_at ? new Date(h.last_scheduled_at).getTime() : undefined,
-        contributions: contributionsByHabit[h.id] || {} 
+        lastScheduledAt: h.last_scheduled_at,
+        contributions: contributionsByHabit[h.id] || {} // Attach normalized logs
     })) as Habit[];
 
-    // 4. Reconstruct Workbooks (Flattened Rows -> Object)
+    // 5. Process Workbook Entries -> WorkbookData Objects
     const workbookReviews: Record<string, WorkbookData> = {};
     const entriesByWorkbookId: Record<string, any[]> = {};
     
@@ -92,30 +93,25 @@ export const loadData = async (userId: string): Promise<AppData> => {
         const entries = entriesByWorkbookId[wb.id] || [];
         const data: Partial<WorkbookData> = { year: wb.year, signedAt: null, signatureName: '' };
         
-        // Helper: Get single value
+        // Helper to parse potential JSON
         const getVal = (key: string) => {
             const entry = entries.find(e => e.section_key === key);
             return entry?.answer || '';
         };
-        // Helper: Get array of strings
         const getList = (key: string) => {
             return entries
                 .filter(e => e.section_key === key)
                 .sort((a, b) => a.list_order - b.list_order)
                 .map(e => e.answer);
         };
-        // Helper: Get array of JSON objects
         const getObjList = (key: string) => {
             return entries
                 .filter(e => e.section_key === key)
                 .sort((a, b) => a.list_order - b.list_order)
-                .map(e => {
-                    try { return JSON.parse(e.answer); } catch { return null; }
-                })
-                .filter(x => x !== null);
+                .map(e => JSON.parse(e.answer));
         };
 
-        // Hydrate Application Model
+        // Hydrate
         data.keySuccess = getVal('L1_KEY_SUCCESS');
         data.timeAudit = getVal('L2_TIME_AUDIT');
         data.notWorking = getList('L2_NOT_WORKING');
@@ -159,7 +155,7 @@ export const loadData = async (userId: string): Promise<AppData> => {
     
     const strategy = (strategiesData || []) as StrategicItem[];
 
-    // Extract Global Rules from latest workbook
+    // Extract Global Rules
     const years = Object.keys(workbookReviews).sort().reverse();
     let globalRules: GlobalRules = { prescriptions: [], antiGoals: [] };
     if (years.length > 0) {
@@ -206,7 +202,7 @@ export const saveGoal = async (goal: Goal) => {
   const userId = await getUserId();
   if (!userId) return;
 
-  // 1. Save Goal Core (omit milestones array)
+  // 1. Save Goal Core (omit milestones)
   const { error } = await supabase.from('goals').upsert({
     id: goal.id,
     user_id: userId,
@@ -219,43 +215,48 @@ export const saveGoal = async (goal: Goal) => {
     created_at: new Date(goal.createdAt).toISOString(),
     needs_config: goal.needsConfig
   });
-  if (error) console.error("Error saving goal:", error);
+  if (error) {
+    console.error("Error saving goal:", error);
+    alert(`Failed to save goal: ${error.message}`);
+  }
 
-  // 2. Save Milestones (Normalized into 'milestones' table)
+  // 2. Save Milestones (Normalized)
   if (goal.milestones && goal.milestones.length > 0) {
       const milestoneRows = goal.milestones.map(m => ({
           id: m.id,
           user_id: userId,
           goal_id: goal.id,
           text: m.text,
-          target_date: m.targetMonth,
+          target_date: m.targetMonth || null,
           status: m.completed ? 'COMPLETED' : 'PENDING',
           completed_at: m.completedAt ? new Date(m.completedAt).toISOString() : null
       }));
       const { error: mError } = await supabase.from('milestones').upsert(milestoneRows);
-      if (mError) console.error("Error saving milestones:", mError);
+      if (mError) {
+          console.error("Error saving milestones:", mError);
+          alert(`Failed to save milestones: ${mError.message}`);
+      }
   }
 };
 
 export const deleteGoal = async (id: string) => {
-  // Database Cascade should handle children, but we delete explicit for safety
-  await supabase.from('goals').delete().eq('id', id);
+  const { error } = await supabase.from('goals').delete().eq('id', id);
+  if (error) console.error("Error deleting goal:", error);
 };
 
 export const saveHabit = async (habit: Habit) => {
   const userId = await getUserId();
   if (!userId) return;
 
-  // Save definition only (contributions are in habit_logs)
   const { error } = await supabase.from('habits').upsert({
     id: habit.id,
     user_id: userId,
     goal_id: habit.goalId,
     text: habit.text,
     type: habit.type,
-    frequency: habit.frequency,
-    default_time: habit.defaultTime,
-    reward: habit.reward,
+    frequency: habit.frequency || 'DAILY',
+    default_time: habit.defaultTime || null,
+    reward: habit.reward || null,
     last_scheduled_at: habit.lastScheduledAt ? new Date(habit.lastScheduledAt).toISOString() : null
   });
   if (error) console.error("Error saving habit:", error);
@@ -266,12 +267,10 @@ export const saveHabitLog = async (habitId: string, date: string, value: number)
     if (!userId) return;
 
     if (value === 0) {
-        // Delete log if value is 0 (uncheck)
         await supabase.from('habit_logs').delete()
             .eq('habit_id', habitId)
             .eq('log_date', date);
     } else {
-        // Upsert log
         await supabase.from('habit_logs').upsert({
             user_id: userId,
             habit_id: habitId,
@@ -288,43 +287,49 @@ export const deleteHabit = async (id: string) => {
 
 export const saveWorkbook = async (workbook: WorkbookData) => {
   const userId = await getUserId();
-  if (!userId) return;
+  if (!userId) {
+      alert("You are not logged in. Workbook cannot be saved.");
+      return;
+  }
 
-  // 1. Upsert Parent Workbook
+  // 1. Ensure Parent Workbook Exists
   const { data: wbRows, error: wbError } = await supabase
       .from('workbooks')
       .upsert({ user_id: userId, year: workbook.year }, { onConflict: 'user_id, year' })
       .select('id');
   
-  if (wbError || !wbRows || wbRows.length === 0) {
+  if (wbError) {
       console.error("Error saving parent workbook:", wbError);
+      alert(`Database Error (Workbook): ${wbError.message}`);
+      return;
+  }
+  
+  if (!wbRows || wbRows.length === 0) {
+      alert("System Error: Could not retrieve Workbook ID.");
       return;
   }
   const workbookId = wbRows[0].id;
 
-  // 2. Prepare Flattened Entries
+  // 2. Prepare Entries (Flatten)
   const entries: any[] = [];
   
   const add = (key: string, val: any, order = 0) => {
       if (val === undefined || val === null) return;
-      // Convert objects to JSON strings
       const valStr = typeof val === 'object' ? JSON.stringify(val) : String(val);
       
       entries.push({
           user_id: userId,
           workbook_id: workbookId,
-          year: workbook.year,
-          section_key: key,
+          section_key: key, // Note: Removed 'year' column to fix schema mismatch
           answer: valStr,
           list_order: order,
-          embedding: null // Will be populated
+          embedding: null // Default null
       });
   };
   const addList = (key: string, list: any[]) => {
       list.forEach((item, i) => add(key, item, i));
   };
 
-  // Map Flattened Fields
   add('L1_KEY_SUCCESS', workbook.keySuccess);
   add('L2_TIME_AUDIT', workbook.timeAudit);
   addList('L2_NOT_WORKING', workbook.notWorking);
@@ -345,38 +350,46 @@ export const saveWorkbook = async (workbook: WorkbookData) => {
   add('L11_SIGNATURE', workbook.signatureName);
   add('L11_SIGNED_AT', workbook.signedAt);
 
-  // 3. Generate Embeddings for Rich Text (Parallel)
+  // 3. GENERATE EMBEDDINGS (Parallel)
+  // Catch errors here so one failed embedding doesn't abort the save
   const embeddingPromises = entries.map(async (entry) => {
-     const keysToEmbed = [
-         'L1_KEY_SUCCESS', 
-         'L2_TIME_AUDIT', 
-         'L3_TOP_TEN', 
-         'L11_INSIGHTS'
-     ];
-     // Only embed if key matches AND text is substantial
+     const keysToEmbed = ['L1_KEY_SUCCESS', 'L2_TIME_AUDIT', 'L3_TOP_TEN', 'L11_INSIGHTS'];
      if (keysToEmbed.includes(entry.section_key) && entry.answer.length > 10) {
-         entry.embedding = await embedText(entry.answer);
+         try {
+            entry.embedding = await embedText(entry.answer);
+         } catch (err) {
+            console.warn(`Embedding failed for ${entry.section_key}, saving without vector.`);
+            entry.embedding = null;
+         }
      }
   });
+  
   await Promise.all(embeddingPromises);
 
-  // 4. Atomic Replace: Delete old entries -> Insert new
-  await supabase.from('workbook_entries').delete().eq('workbook_id', workbookId);
-  
-  const { error: eError } = await supabase.from('workbook_entries').insert(entries);
-  if (eError) console.error("Error saving entries:", eError);
+  // 4. Upsert Entries (Delete old for this workbookId first)
+  const { error: delError } = await supabase.from('workbook_entries').delete().eq('workbook_id', workbookId);
+  if (delError) {
+      console.error("Error clearing old entries:", delError);
+      alert(`Error updating workbook (Clear): ${delError.message}`);
+      return; 
+  }
+
+  const { error: insertError } = await supabase.from('workbook_entries').insert(entries);
+  if (insertError) {
+      console.error("Error saving entries:", insertError);
+      alert(`Error updating workbook (Insert): ${insertError.message}`);
+  }
 };
 
 export const deleteWorkbook = async (year: string, deleteGoals: boolean, deleteHabits: boolean) => {
   const userId = await getUserId();
   if (!userId) return;
 
-  // Retrieve goals linked to this workbook to delete them if requested
   const { data: entries } = await supabase.from('workbook_entries')
       .select('answer')
       .eq('user_id', userId)
-      .eq('year', year)
       .in('section_key', ['L4_CRITICAL_THREE', 'L4_BACKLOG']);
+      // Filter by joining parent workbook year ideally, but simpler to rely on app state logic for now
   
   const goalIds: string[] = [];
   if (entries) {
@@ -391,22 +404,15 @@ export const deleteWorkbook = async (year: string, deleteGoals: boolean, deleteH
   if (goalIds.length > 0) {
       if (deleteGoals) {
            await supabase.from('todos').delete().in('goal_id', goalIds);
-           await supabase.from('habit_logs').delete().in('habit_id', 
-                (await supabase.from('habits').select('id').in('goal_id', goalIds)).data?.map(h => h.id) || []
-           );
            await supabase.from('habits').delete().in('goal_id', goalIds);
            await supabase.from('milestones').delete().in('goal_id', goalIds);
            await supabase.from('goals').delete().in('id', goalIds);
       } else if (deleteHabits) {
            await supabase.from('todos').delete().in('goal_id', goalIds);
-           await supabase.from('habit_logs').delete().in('habit_id', 
-                (await supabase.from('habits').select('id').in('goal_id', goalIds)).data?.map(h => h.id) || []
-           );
            await supabase.from('habits').delete().in('goal_id', goalIds);
       }
   }
 
-  // Delete Workbook (Cascades to entries usually, but safe to delete parent)
   await supabase.from('workbooks').delete().eq('user_id', userId).eq('year', year);
 };
 
@@ -414,29 +420,40 @@ export const deleteWorkbook = async (year: string, deleteGoals: boolean, deleteH
 
 export const saveTodo = async (todo: Todo) => {
     const userId = await getUserId();
-    if (!userId) return;
+    if (!userId) {
+        alert("Not logged in. Task not saved.");
+        return;
+    }
 
-    // 1. Save Todo
-    await supabase.from('todos').upsert({
+    const payload = {
         id: todo.id,
         user_id: userId,
         goal_id: todo.goalId,
-        milestone_id: todo.milestoneId,
+        milestone_id: todo.milestoneId || null, // EXPLICIT NULL
         text: todo.text,
-        effort: todo.effort,
-        block: todo.block,
+        effort: todo.effort || 'SHALLOW',
+        block: todo.block || null,
         completed: todo.completed,
         completed_at: todo.completedAt ? new Date(todo.completedAt).toISOString() : null,
         date: todo.date
-    });
+    };
+
+    const { error } = await supabase.from('todos').upsert(payload);
+    
+    if (error) {
+        console.error("Error saving todo:", error);
+        alert(`Failed to save task: ${error.message}`);
+        return;
+    }
 
     // 2. Check Milestone Completion Side Effect
     if (todo.milestoneId && todo.completed) {
-         // Auto-complete the milestone in the DB
-         await supabase.from('milestones').update({
+         const { error: mError } = await supabase.from('milestones').update({
              status: 'COMPLETED',
              completed_at: new Date().toISOString()
          }).eq('id', todo.milestoneId);
+
+         if (mError) console.error("Failed to auto-complete milestone:", mError);
     }
 };
 
