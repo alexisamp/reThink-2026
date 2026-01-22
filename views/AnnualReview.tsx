@@ -262,6 +262,7 @@ const AnnualReview: React.FC<AnnualReviewProps> = ({ onComplete, onCancel, initi
           working: working.filter(x => x),
           topTen,
           criticalThree: finalActiveGoals,
+          backlogGoals: finalBacklogGoals, // IMPORTANT: Save backlog goals in workbook for deletion tracking
           momentum: momentum.filter(x => x.item),
           weaknesses: weaknesses.filter(x => x.weakness),
           strengths: [],

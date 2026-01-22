@@ -123,8 +123,10 @@ const AppContent: React.FC = () => {
           const workbookToDelete = prev.workbookReviews[year];
           let goalIdsToDelete: string[] = [];
           
-          if (workbookToDelete && workbookToDelete.criticalThree) {
-              goalIdsToDelete = workbookToDelete.criticalThree.map(g => g.id);
+          if (workbookToDelete) {
+              const activeIds = workbookToDelete.criticalThree?.map(g => g.id) || [];
+              const backlogIds = workbookToDelete.backlogGoals?.map(g => g.id) || [];
+              goalIdsToDelete = [...activeIds, ...backlogIds];
           }
 
           let newGoals = prev.goals;

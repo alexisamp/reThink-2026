@@ -1,3 +1,4 @@
+
 export enum GoalStatus {
   ACTIVE = 'ACTIVE',
   BACKLOG = 'BACKLOG',
@@ -133,6 +134,7 @@ export interface WorkbookData {
   // Level 3 & 4: Horizon & Focus
   topTen: string[];    
   criticalThree: Goal[]; // Stored here for archive, also pushed to AppData.goals
+  backlogGoals?: Goal[]; // Stored here to track IDs for deletion/archive
   
   // Level 5: Momentum
   momentum: { id: string; item: string; step: string }[];

@@ -171,10 +171,13 @@ export const deleteWorkbook = async (year: string, deleteGoals: boolean, deleteH
 
   if (wbRows && wbRows.length > 0) {
       const workbookData = wbRows[0].data as WorkbookData;
-      // Get IDs of goals created during this annual review
-      const goalIds = workbookData.criticalThree?.map(g => g.id) || [];
-      // Note: We only track active goals linked via workbook ID here. Backlog items if not in goals table won't be deleted via this, 
-      // but they are usually string-only in workbook JSON unless activated.
+      
+      // Get IDs of Active goals
+      const activeIds = workbookData.criticalThree?.map(g => g.id) || [];
+      // Get IDs of Backlog goals
+      const backlogIds = workbookData.backlogGoals?.map(g => g.id) || [];
+      
+      const goalIds = [...activeIds, ...backlogIds];
 
       if (goalIds.length > 0) {
           if (deleteGoals) {
