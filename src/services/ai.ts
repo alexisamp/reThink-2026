@@ -27,37 +27,39 @@ export const getCoachFeedback = async (userId: string): Promise<string> => {
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   try {
-    // Query the Database View (Last 30 days)
+    // Query the Database View (Last 14 days as requested)
     const { data: context, error } = await supabase
       .from('view_daily_context')
       .select('*')
       .eq('user_id', userId)
       .order('log_date', { ascending: false })
-      .limit(30);
+      .limit(14);
 
     if (error) throw error;
 
+    // Format the context for the LLM
     const contextStr = context?.map((c: any) => 
-        `[${c.log_date}] Habit: ${c.habit_name} (${c.intensity}), Energy: ${c.energy_level || '-'}, Rating: ${c.day_rating || '-'}, Journal: ${c.journal_entry || ''}`
-    ).join('\n') || "No recent data found.";
+        `Date: ${c.log_date} | Habit: ${c.habit_name} (Value: ${c.intensity}) | Energy: ${c.energy_level ?? '-'} | Rating: ${c.day_rating ?? '-'} | Journal: ${c.journal_entry ?? ''}`
+    ).join('\n') || "No recent activity found.";
 
     const result = await model.generateContent(`
         Act as a tough but motivating performance coach (Farnam Street style). 
-        Here is the user's last 30 days of performance (habits, intensity, energy, journal):
+        Analyze the user's last 14 days of performance based on this data log:
         
         ${contextStr}
         
-        Give 3 short, punchy bullet points of feedback. 
-        1. An observation.
-        2. A hard truth or question.
-        3. A motivation.
+        Provide 3 short, punchy bullet points of feedback:
+        1. An observation (patterns in habits or energy).
+        2. A hard truth or challenging question.
+        3. A motivation for tomorrow.
         
         Keep it under 60 words total. Do not use markdown symbols like * or #, just plain text suitable for speech synthesis.
       `);
-    return result.response.text().trim() || "Keep pushing.";
+      
+    return result.response.text().trim() || "Keep pushing. Consistency is key.";
   } catch (error) {
     console.error("AI Error:", error);
-    return "I couldn't analyze your data right now. Keep pushing.";
+    return "I couldn't analyze your data right now. Check your connection and keep pushing.";
   }
 };
 

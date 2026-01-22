@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Mic, PlayCircle } from '../components/Icon';
 import { getCoachFeedback } from '../services/ai';
@@ -15,7 +16,7 @@ const CoachTab: React.FC<CoachTabProps> = ({ userId }) => {
     setIsLoading(true);
     setFeedback('');
     
-    // 1. Get AI Text using userId
+    // 1. Get AI Text using userId to query DB View
     const text = await getCoachFeedback(userId);
     setFeedback(text);
     setIsLoading(false);
@@ -87,7 +88,7 @@ const CoachTab: React.FC<CoachTabProps> = ({ userId }) => {
              </div>
          ) : (
              <p className="text-notion-dim text-sm italic">
-                "I will analyze your strategy, habits, and results to give you brutal but necessary feedback."
+                "I will analyze your recent habits and journal entries to give you brutal but necessary feedback."
              </p>
          )}
       </div>

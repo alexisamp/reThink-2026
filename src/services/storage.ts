@@ -22,8 +22,8 @@ export const loadData = async (userId: string): Promise<AppData> => {
       { data: milestonesData },
       { data: habitsData },
       { data: habitLogsData },
-      { data: workbooksData }, // Parent table
-      { data: workbookEntriesData }, // Normalized answers
+      { data: workbooksData },        // Parent table (stores year)
+      { data: workbookEntriesData },  // Normalized answers
       { data: todosData },
       { data: reviewsData },
       { data: strategiesData }
@@ -39,14 +39,14 @@ export const loadData = async (userId: string): Promise<AppData> => {
       supabase.from('strategies').select('*').eq('user_id', userId)
     ]);
 
-    // 1. Process Milestones
+    // 1. Reconstruct Milestones
     const milestonesByGoal: Record<string, Milestone[]> = {};
     (milestonesData || []).forEach((m: any) => {
         const ms: Milestone = {
             id: m.id,
             goalId: m.goal_id,
             text: m.text,
-            targetMonth: m.target_date, // Map target_date -> targetMonth
+            targetMonth: m.target_date, 
             completed: m.status === 'COMPLETED',
             completedAt: m.completed_at ? new Date(m.completed_at).getTime() : undefined
         };
@@ -54,7 +54,7 @@ export const loadData = async (userId: string): Promise<AppData> => {
         milestonesByGoal[m.goal_id].push(ms);
     });
 
-    // 2. Process Goals (Join Milestones)
+    // 2. Reconstruct Goals (Join Milestones)
     const goals = (goalsData || []).map((g: any) => ({
         ...g,
         createdAt: g.created_at ? new Date(g.created_at).getTime() : Date.now(),
@@ -64,23 +64,22 @@ export const loadData = async (userId: string): Promise<AppData> => {
         obstacles: typeof g.obstacles === 'string' ? JSON.parse(g.obstacles) : (g.obstacles || []),
     })) as Goal[];
 
-    // 3. Process Habit Logs
+    // 3. Reconstruct Habits (Join Logs)
     const contributionsByHabit: Record<string, Record<string, number>> = {};
     (habitLogsData || []).forEach((log: any) => {
         if (!contributionsByHabit[log.habit_id]) contributionsByHabit[log.habit_id] = {};
         contributionsByHabit[log.habit_id][log.log_date] = log.value;
     });
 
-    // 4. Process Habits (Join Logs)
     const habits = (habitsData || []).map((h: any) => ({
         ...h,
         goalId: h.goal_id, 
         defaultTime: h.default_time,
-        lastScheduledAt: h.last_scheduled_at,
-        contributions: contributionsByHabit[h.id] || {} // Attach normalized logs
+        lastScheduledAt: h.last_scheduled_at ? new Date(h.last_scheduled_at).getTime() : undefined,
+        contributions: contributionsByHabit[h.id] || {} 
     })) as Habit[];
 
-    // 5. Process Workbook Entries -> WorkbookData Objects
+    // 4. Reconstruct Workbooks (Flattened Rows -> Object)
     const workbookReviews: Record<string, WorkbookData> = {};
     const entriesByWorkbookId: Record<string, any[]> = {};
     
@@ -93,25 +92,30 @@ export const loadData = async (userId: string): Promise<AppData> => {
         const entries = entriesByWorkbookId[wb.id] || [];
         const data: Partial<WorkbookData> = { year: wb.year, signedAt: null, signatureName: '' };
         
-        // Helper to parse potential JSON
+        // Helper: Get single value
         const getVal = (key: string) => {
             const entry = entries.find(e => e.section_key === key);
             return entry?.answer || '';
         };
+        // Helper: Get array of strings
         const getList = (key: string) => {
             return entries
                 .filter(e => e.section_key === key)
                 .sort((a, b) => a.list_order - b.list_order)
                 .map(e => e.answer);
         };
+        // Helper: Get array of JSON objects
         const getObjList = (key: string) => {
             return entries
                 .filter(e => e.section_key === key)
                 .sort((a, b) => a.list_order - b.list_order)
-                .map(e => JSON.parse(e.answer));
+                .map(e => {
+                    try { return JSON.parse(e.answer); } catch { return null; }
+                })
+                .filter(x => x !== null);
         };
 
-        // Hydrate
+        // Hydrate Application Model
         data.keySuccess = getVal('L1_KEY_SUCCESS');
         data.timeAudit = getVal('L2_TIME_AUDIT');
         data.notWorking = getList('L2_NOT_WORKING');
@@ -121,7 +125,7 @@ export const loadData = async (userId: string): Promise<AppData> => {
         data.backlogGoals = getObjList('L4_BACKLOG');
         data.momentum = getObjList('L5_MOMENTUM');
         data.weaknesses = getObjList('L6_WEAKNESSES');
-        data.strengths = []; // Deprecated in UI but keep for type safety
+        data.strengths = []; 
         data.easyMode = getObjList('L7_EASY_MODE');
         data.innerCircle = getObjList('L8_INNER_CIRCLE');
         data.rulesProsper = getList('L10_RULES_PROSPER');
@@ -155,7 +159,7 @@ export const loadData = async (userId: string): Promise<AppData> => {
     
     const strategy = (strategiesData || []) as StrategicItem[];
 
-    // Extract Global Rules
+    // Extract Global Rules from latest workbook
     const years = Object.keys(workbookReviews).sort().reverse();
     let globalRules: GlobalRules = { prescriptions: [], antiGoals: [] };
     if (years.length > 0) {
@@ -202,7 +206,7 @@ export const saveGoal = async (goal: Goal) => {
   const userId = await getUserId();
   if (!userId) return;
 
-  // 1. Save Goal Core (omit milestones)
+  // 1. Save Goal Core (omit milestones array)
   const { error } = await supabase.from('goals').upsert({
     id: goal.id,
     user_id: userId,
@@ -217,7 +221,7 @@ export const saveGoal = async (goal: Goal) => {
   });
   if (error) console.error("Error saving goal:", error);
 
-  // 2. Save Milestones (Normalized)
+  // 2. Save Milestones (Normalized into 'milestones' table)
   if (goal.milestones && goal.milestones.length > 0) {
       const milestoneRows = goal.milestones.map(m => ({
           id: m.id,
@@ -234,16 +238,15 @@ export const saveGoal = async (goal: Goal) => {
 };
 
 export const deleteGoal = async (id: string) => {
-  // Cascading delete in SQL handles children (milestones, habits if linked)
-  const { error } = await supabase.from('goals').delete().eq('id', id);
-  if (error) console.error("Error deleting goal:", error);
+  // Database Cascade should handle children, but we delete explicit for safety
+  await supabase.from('goals').delete().eq('id', id);
 };
 
 export const saveHabit = async (habit: Habit) => {
   const userId = await getUserId();
   if (!userId) return;
 
-  // Save definition only (omit contributions)
+  // Save definition only (contributions are in habit_logs)
   const { error } = await supabase.from('habits').upsert({
     id: habit.id,
     user_id: userId,
@@ -253,7 +256,7 @@ export const saveHabit = async (habit: Habit) => {
     frequency: habit.frequency,
     default_time: habit.defaultTime,
     reward: habit.reward,
-    last_scheduled_at: habit.lastScheduledAt
+    last_scheduled_at: habit.lastScheduledAt ? new Date(habit.lastScheduledAt).toISOString() : null
   });
   if (error) console.error("Error saving habit:", error);
 };
@@ -287,7 +290,7 @@ export const saveWorkbook = async (workbook: WorkbookData) => {
   const userId = await getUserId();
   if (!userId) return;
 
-  // 1. Ensure Parent Workbook Exists
+  // 1. Upsert Parent Workbook
   const { data: wbRows, error: wbError } = await supabase
       .from('workbooks')
       .upsert({ user_id: userId, year: workbook.year }, { onConflict: 'user_id, year' })
@@ -299,12 +302,12 @@ export const saveWorkbook = async (workbook: WorkbookData) => {
   }
   const workbookId = wbRows[0].id;
 
-  // 2. Prepare Entries (Flatten)
+  // 2. Prepare Flattened Entries
   const entries: any[] = [];
   
-  // Helper to add entry with potential embedding
   const add = (key: string, val: any, order = 0) => {
       if (val === undefined || val === null) return;
+      // Convert objects to JSON strings
       const valStr = typeof val === 'object' ? JSON.stringify(val) : String(val);
       
       entries.push({
@@ -314,14 +317,14 @@ export const saveWorkbook = async (workbook: WorkbookData) => {
           section_key: key,
           answer: valStr,
           list_order: order,
-          embedding: null // populated below
+          embedding: null // Will be populated
       });
   };
   const addList = (key: string, list: any[]) => {
       list.forEach((item, i) => add(key, item, i));
   };
 
-  // Map fields
+  // Map Flattened Fields
   add('L1_KEY_SUCCESS', workbook.keySuccess);
   add('L2_TIME_AUDIT', workbook.timeAudit);
   addList('L2_NOT_WORKING', workbook.notWorking);
@@ -342,8 +345,7 @@ export const saveWorkbook = async (workbook: WorkbookData) => {
   add('L11_SIGNATURE', workbook.signatureName);
   add('L11_SIGNED_AT', workbook.signedAt);
 
-  // 3. GENERATE EMBEDDINGS (Parallel) for rich text fields
-  // We filter for fields that are likely valuable for RAG (text blocks, not simple IDs)
+  // 3. Generate Embeddings for Rich Text (Parallel)
   const embeddingPromises = entries.map(async (entry) => {
      const keysToEmbed = [
          'L1_KEY_SUCCESS', 
@@ -351,19 +353,17 @@ export const saveWorkbook = async (workbook: WorkbookData) => {
          'L3_TOP_TEN', 
          'L11_INSIGHTS'
      ];
-     // Only embed if key matches AND answer is long enough
+     // Only embed if key matches AND text is substantial
      if (keysToEmbed.includes(entry.section_key) && entry.answer.length > 10) {
          entry.embedding = await embedText(entry.answer);
      }
   });
-  
   await Promise.all(embeddingPromises);
 
-  // 4. Upsert Entries
-  // Clean sweep replacement for simplicity
+  // 4. Atomic Replace: Delete old entries -> Insert new
   await supabase.from('workbook_entries').delete().eq('workbook_id', workbookId);
-  const { error: eError } = await supabase.from('workbook_entries').insert(entries);
   
+  const { error: eError } = await supabase.from('workbook_entries').insert(entries);
   if (eError) console.error("Error saving entries:", eError);
 };
 
@@ -371,6 +371,7 @@ export const deleteWorkbook = async (year: string, deleteGoals: boolean, deleteH
   const userId = await getUserId();
   if (!userId) return;
 
+  // Retrieve goals linked to this workbook to delete them if requested
   const { data: entries } = await supabase.from('workbook_entries')
       .select('answer')
       .eq('user_id', userId)
@@ -390,15 +391,22 @@ export const deleteWorkbook = async (year: string, deleteGoals: boolean, deleteH
   if (goalIds.length > 0) {
       if (deleteGoals) {
            await supabase.from('todos').delete().in('goal_id', goalIds);
-           await supabase.from('habits').delete().in('goal_id', goalIds); // Cascade logs
+           await supabase.from('habit_logs').delete().in('habit_id', 
+                (await supabase.from('habits').select('id').in('goal_id', goalIds)).data?.map(h => h.id) || []
+           );
+           await supabase.from('habits').delete().in('goal_id', goalIds);
            await supabase.from('milestones').delete().in('goal_id', goalIds);
            await supabase.from('goals').delete().in('id', goalIds);
       } else if (deleteHabits) {
            await supabase.from('todos').delete().in('goal_id', goalIds);
-           await supabase.from('habits').delete().in('goal_id', goalIds); // Cascade logs
+           await supabase.from('habit_logs').delete().in('habit_id', 
+                (await supabase.from('habits').select('id').in('goal_id', goalIds)).data?.map(h => h.id) || []
+           );
+           await supabase.from('habits').delete().in('goal_id', goalIds);
       }
   }
 
+  // Delete Workbook (Cascades to entries usually, but safe to delete parent)
   await supabase.from('workbooks').delete().eq('user_id', userId).eq('year', year);
 };
 
@@ -407,6 +415,8 @@ export const deleteWorkbook = async (year: string, deleteGoals: boolean, deleteH
 export const saveTodo = async (todo: Todo) => {
     const userId = await getUserId();
     if (!userId) return;
+
+    // 1. Save Todo
     await supabase.from('todos').upsert({
         id: todo.id,
         user_id: userId,
@@ -419,6 +429,15 @@ export const saveTodo = async (todo: Todo) => {
         completed_at: todo.completedAt ? new Date(todo.completedAt).toISOString() : null,
         date: todo.date
     });
+
+    // 2. Check Milestone Completion Side Effect
+    if (todo.milestoneId && todo.completed) {
+         // Auto-complete the milestone in the DB
+         await supabase.from('milestones').update({
+             status: 'COMPLETED',
+             completed_at: new Date().toISOString()
+         }).eq('id', todo.milestoneId);
+    }
 };
 
 export const deleteTodo = async (id: string) => {

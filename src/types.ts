@@ -7,7 +7,7 @@ export enum GoalStatus {
 
 export interface Milestone {
   id: string;
-  goalId?: string; // Foreign key reference
+  goalId?: string; // Foreign Key to Goal
   text: string;
   targetMonth?: string; 
   completed: boolean;
@@ -35,20 +35,17 @@ export interface Goal {
   nextStep?: string; 
   keySupport?: string;
 
+  // Stored as JSON columns in 'goals' table
   leverage: Leverage[]; 
   obstacles: Obstacle[]; 
   
   status: GoalStatus;
   
-  // Loaded separately/joined in AppData
+  // JOINED: Loaded from 'milestones' table in AppData
   milestones: Milestone[];
   
   createdAt: number;
   needsConfig?: boolean; 
-  
-  // Legacy
-  type?: 'STRENGTH' | 'WEAKNESS'; 
-  workaround?: string;
 }
 
 export interface StrategicItem {
@@ -78,14 +75,14 @@ export interface Habit {
   lastScheduledAt?: number;
   reward?: string;
   
-  // Computed from habit_logs table
+  // COMPUTED: Constructed from 'habit_logs' table
   contributions: ContributionMap;
 }
 
 export interface Todo {
   id: string;
   goalId: string;
-  milestoneId?: string;
+  milestoneId?: string; // Links Todo to a specific Milestone
   text: string;
   effort?: 'DEEP' | 'SHALLOW';
   block?: 'AM' | 'PM';
@@ -104,7 +101,7 @@ export interface ReviewEntry {
   dayRating: DayRating;
 }
 
-// --- NEW: View from SQL ---
+// Database View Mapping
 export interface DailyContextEntry {
   user_id: string;
   log_date: string;
@@ -132,6 +129,7 @@ export interface InnerCircleMember {
   totalScore: number;
 }
 
+// Application Model (Reconstructed from workbook_entries)
 export interface WorkbookData {
   year: string;
   
@@ -162,10 +160,7 @@ export interface WorkbookData {
   signatureName: string;
   
   // Legacy fields
-  stupidestDecision?: string;
-  smartestDecision?: string;
-  prescriptions?: string[]; 
-  antiGoals?: string[]; 
+  antiGoals?: string[];
 }
 
 export interface AppData {
@@ -176,5 +171,4 @@ export interface AppData {
   strategy: StrategicItem[]; 
   globalRules: GlobalRules; 
   workbookReviews: Record<string, WorkbookData>; 
-  workbook?: any; 
 }
