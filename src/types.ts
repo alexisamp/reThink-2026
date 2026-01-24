@@ -7,7 +7,7 @@ export enum GoalStatus {
 
 export interface Milestone {
   id: string;
-  goalId?: string; // Foreign Key to Goal
+  goalId?: string; // Foreign key reference
   text: string;
   targetMonth?: string; 
   completed: boolean;
@@ -35,17 +35,19 @@ export interface Goal {
   nextStep?: string; 
   keySupport?: string;
 
-  // Stored as JSON columns in 'goals' table
   leverage: Leverage[]; 
   obstacles: Obstacle[]; 
   
   status: GoalStatus;
   
-  // JOINED: Loaded from 'milestones' table in AppData
+  // Loaded separately/joined in AppData
   milestones: Milestone[];
   
   createdAt: number;
   needsConfig?: boolean; 
+  
+  // Foreign Key to Workbook (UUID)
+  workbookId?: string;
 }
 
 export interface StrategicItem {
@@ -75,14 +77,17 @@ export interface Habit {
   lastScheduledAt?: number;
   reward?: string;
   
-  // COMPUTED: Constructed from 'habit_logs' table
+  targetValue?: number;
+  unit?: string;
+
+  // Computed from habit_logs table
   contributions: ContributionMap;
 }
 
 export interface Todo {
   id: string;
   goalId: string;
-  milestoneId?: string; // Links Todo to a specific Milestone
+  milestoneId?: string;
   text: string;
   effort?: 'DEEP' | 'SHALLOW';
   block?: 'AM' | 'PM';
@@ -101,7 +106,7 @@ export interface ReviewEntry {
   dayRating: DayRating;
 }
 
-// Database View Mapping
+// --- NEW: View from SQL ---
 export interface DailyContextEntry {
   user_id: string;
   log_date: string;
@@ -129,8 +134,8 @@ export interface InnerCircleMember {
   totalScore: number;
 }
 
-// Application Model (Reconstructed from workbook_entries)
 export interface WorkbookData {
+  id?: string; // Database UUID
   year: string;
   
   keySuccess: string;
@@ -160,7 +165,10 @@ export interface WorkbookData {
   signatureName: string;
   
   // Legacy fields
-  antiGoals?: string[];
+  stupidestDecision?: string;
+  smartestDecision?: string;
+  prescriptions?: string[]; 
+  antiGoals?: string[]; 
 }
 
 export interface AppData {
@@ -171,4 +179,5 @@ export interface AppData {
   strategy: StrategicItem[]; 
   globalRules: GlobalRules; 
   workbookReviews: Record<string, WorkbookData>; 
+  workbook?: any; 
 }

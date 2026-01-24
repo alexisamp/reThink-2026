@@ -1,3 +1,4 @@
+
 // src/services/google.ts
 // GOOGLE INTEGRATIONS PERMANENTLY REMOVED
 

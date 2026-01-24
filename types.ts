@@ -49,6 +49,8 @@ export interface Goal {
   // Legacy
   type?: 'STRENGTH' | 'WEAKNESS'; 
   workaround?: string;
+
+  workbookId?: string;
 }
 
 export interface StrategicItem {
@@ -78,6 +80,9 @@ export interface Habit {
   lastScheduledAt?: number;
   reward?: string;
   
+  targetValue?: number;
+  unit?: string;
+
   // Computed from habit_logs table
   contributions: ContributionMap;
 }
