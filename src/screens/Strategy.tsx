@@ -170,7 +170,7 @@ export default function Strategy() {
                           <ul className="space-y-2 text-sm text-burnham">
                             {getGoalMilestones(goal.id).map(m => (
                               <li key={m.id} className="flex items-center gap-3">
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.status === 'DONE' ? 'bg-pastel' : 'bg-mercury'}`} />
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.status === 'COMPLETE' ? 'bg-pastel' : 'bg-mercury'}`} />
                                 <span className="truncate">{m.text}</span>
                               </li>
                             ))}
