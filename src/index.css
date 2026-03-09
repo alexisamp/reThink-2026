@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+  body { @apply bg-white text-burnham font-sans antialiased; }
+  ::selection { background-color: #E5F9BD; color: #003720; }
+  ::-webkit-scrollbar { width: 0; background: transparent; }
+
+  /* Custom checkbox */
+  .custom-checkbox {
+    appearance: none;
+    width: 1.15em; height: 1.15em;
+    border: 1.5px solid #E3E3E3;
+    border-radius: 0.35em;
+    display: grid; place-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background-color: transparent;
+  }
+  .custom-checkbox::before {
+    content: "";
+    width: 0.65em; height: 0.65em;
+    transform: scale(0);
+    transition: 120ms transform ease-in-out;
+    box-shadow: inset 1em 1em white;
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  }
+  .custom-checkbox:checked {
+    background-color: #1A1A1A;
+    border-color: #1A1A1A;
+  }
+  .custom-checkbox:checked::before { transform: scale(1); }
+  input:focus, textarea:focus, select:focus {
+    box-shadow: none !important;
+    outline: none !important;
+  }
+}

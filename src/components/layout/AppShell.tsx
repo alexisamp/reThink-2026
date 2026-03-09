@@ -1,0 +1,60 @@
+import { type ReactNode } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { House, CalendarBlank, Strategy, ChartPie } from '@phosphor-icons/react'
+import type { User } from '@supabase/supabase-js'
+
+interface NavItem {
+  label: string
+  path: string
+  Icon: React.ElementType
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { label: 'Today',     path: '/today',     Icon: House },
+  { label: 'Monthly',   path: '/monthly',   Icon: CalendarBlank },
+  { label: 'Strategy',  path: '/strategy',  Icon: Strategy },
+  { label: 'Dashboard', path: '/dashboard', Icon: ChartPie },
+]
+
+interface AppShellProps {
+  children: ReactNode
+  user: User
+}
+
+export default function AppShell({ children }: AppShellProps) {
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+
+  return (
+    <div className="min-h-screen bg-white text-burnham font-sans">
+      {/* Main content */}
+      <div className="pb-28">
+        {children}
+      </div>
+
+      {/* Bottom floating pill nav */}
+      <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
+        <div className="flex items-center gap-1 bg-white/90 backdrop-blur-md border border-mercury p-1.5 rounded-full shadow-lg">
+          {NAV_ITEMS.map(({ label, path, Icon }) => {
+            const isActive = pathname === path || (path !== '/today' && pathname.startsWith(path))
+            return (
+              <button
+                key={path}
+                onClick={() => navigate(path)}
+                className={[
+                  'flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all',
+                  isActive
+                    ? 'bg-mercury/30 ring-1 ring-mercury text-burnham shadow-sm'
+                    : 'text-shuttle hover:bg-gray-50 hover:text-burnham',
+                ].join(' ')}
+              >
+                <Icon size={18} />
+                <span>{label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </nav>
+    </div>
+  )
+}
