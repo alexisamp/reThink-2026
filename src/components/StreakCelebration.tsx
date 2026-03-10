@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Flame } from '@phosphor-icons/react'
 
 const MILESTONE_STREAKS = [7, 30, 100, 365]
 
@@ -31,7 +32,7 @@ export default function StreakCelebration({ streak, habitName, onDismiss }: Stre
       onClick={onDismiss}
     >
       <div className="text-center space-y-4">
-        <div className="text-8xl select-none">🔥</div>
+        <div className="text-8xl select-none flex items-center justify-center"><Flame size={96} weight="fill" className="text-pastel" /></div>
         <div className="text-7xl font-bold text-burnham tracking-tight">{streak}</div>
         <div className="text-2xl font-semibold text-burnham">Day Streak</div>
         <div className="text-base text-shuttle">{habitName}</div>
