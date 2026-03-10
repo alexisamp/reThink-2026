@@ -22,7 +22,7 @@ export default function CompactMode() {
         supabase.from('habit_logs').select('*').eq('user_id', user.id).eq('log_date', today),
         supabase.from('milestones').select('*').eq('user_id', user.id)
           .eq('status', 'PENDING').order('target_date').limit(3),
-        supabase.from('reviews').select('*').eq('user_id', user.id).eq('review_date', today).maybeSingle(),
+        supabase.from('reviews').select('*').eq('user_id', user.id).eq('date', today).maybeSingle(),
       ])
       setHabits(habitsRes.data ?? [])
       setLogs(logsRes.data ?? [])

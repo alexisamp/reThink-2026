@@ -63,9 +63,9 @@ export default function AICoach({ goals, habits, habitLogs, milestones, reviews,
       const todayStr = today.toISOString().split('T')[0]
       await supabase.from('reviews').upsert({
         user_id: userId,
-        review_date: todayStr,
+        date: todayStr,
         ai_coach_notes: result.content,
-      }, { onConflict: 'user_id,review_date' })
+      }, { onConflict: 'user_id,date' })
       setSavedAt(new Date())
     } catch (err) {
       setInsight('Unable to generate insight. Please ensure the AI Coach is configured.')

@@ -14,7 +14,7 @@ export function useReview(userId: string | undefined) {
       .from('reviews')
       .select('*')
       .eq('user_id', userId)
-      .eq('review_date', today)
+      .eq('date', today)
       .maybeSingle()
     setReview(data)
     setLoading(false)
@@ -22,12 +22,12 @@ export function useReview(userId: string | undefined) {
 
   useEffect(() => { fetchReview() }, [fetchReview])
 
-  const upsertReview = async (updates: Partial<Omit<Review, 'id' | 'user_id' | 'review_date' | 'created_at'>>) => {
+  const upsertReview = async (updates: Partial<Omit<Review, 'id' | 'user_id' | 'date' | 'created_at'>>) => {
     if (!userId) return
-    const payload = { ...updates, user_id: userId, review_date: today, id: review?.id }
+    const payload = { ...updates, user_id: userId, date: today, id: review?.id }
     const { data } = await supabase
       .from('reviews')
-      .upsert(payload)
+      .upsert(payload, { onConflict: 'user_id,date' })
       .select()
       .single()
     if (data) setReview(data)

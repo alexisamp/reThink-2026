@@ -72,7 +72,7 @@ export default function App() {
         supabase.from('habits').select('*').eq('user_id', user.id).eq('is_active', true),
         supabase.from('habit_logs').select('habit_id,value').eq('user_id', user.id).eq('log_date', today),
         supabase.from('milestones').select('*').eq('user_id', user.id).eq('status', 'PENDING'),
-        supabase.from('reviews').select('*').eq('user_id', user.id).eq('review_date', today).maybeSingle(),
+        supabase.from('reviews').select('*').eq('user_id', user.id).eq('date', today).maybeSingle(),
       ])
 
       const triggers = checkNotificationTriggers({

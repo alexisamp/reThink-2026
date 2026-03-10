@@ -30,7 +30,7 @@ export default function ReflectionLibrary() {
 
       const [reviewsRes, plansRes, workbookRes] = await Promise.all([
         supabase.from('reviews').select('*').eq('user_id', user.id)
-          .order('review_date', { ascending: false }).limit(200),
+          .order('date', { ascending: false }).limit(200),
         supabase.from('monthly_plans').select('*').eq('user_id', user.id).eq('year', year)
           .order('month', { ascending: false }),
         supabase.from('workbook_entries').select('*').eq('user_id', user.id),
@@ -44,8 +44,8 @@ export default function ReflectionLibrary() {
           all.push({
             id: `review-notes-${r.id}`,
             type: 'daily_note',
-            date: r.review_date,
-            title: `Daily Note — ${new Date(r.review_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
+            date: r.date,
+            title: `Daily Note — ${new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
             content: r.notes,
             meta: r.energy_level ? `Energy ${r.energy_level}/10` : undefined,
           })
@@ -54,8 +54,8 @@ export default function ReflectionLibrary() {
           all.push({
             id: `review-weekly-${r.id}`,
             type: 'weekly_insight',
-            date: r.review_date,
-            title: `Weekly Focus — ${new Date(r.review_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+            date: r.date,
+            title: `Weekly Focus — ${new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
             content: r.weekly_one_thing,
           })
         }
@@ -63,8 +63,8 @@ export default function ReflectionLibrary() {
           all.push({
             id: `review-onething-${r.id}`,
             type: 'daily_note',
-            date: r.review_date,
-            title: `One Thing — ${new Date(r.review_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
+            date: r.date,
+            title: `One Thing — ${new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
             content: r.one_thing,
           })
         }

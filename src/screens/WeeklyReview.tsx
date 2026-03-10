@@ -107,7 +107,7 @@ export default function WeeklyReview() {
         supabase.from('leading_indicators').select('*').eq('user_id', user.id).eq('is_active', true),
         supabase.from('monthly_kpi_entries').select('*').eq('user_id', user.id),
         supabase.from('reviews').select('*').eq('user_id', user.id)
-          .order('review_date', { ascending: false }).limit(30),
+          .order('date', { ascending: false }).limit(30),
       ])
 
       setGoals(goalsRes.data ?? [])
@@ -148,12 +148,12 @@ export default function WeeklyReview() {
   const consecutiveReviews = (() => {
     const sorted = recentReviews
       .filter(r => r.weekly_one_thing)
-      .sort((a, b) => b.review_date.localeCompare(a.review_date))
+      .sort((a, b) => b.date.localeCompare(a.date))
     let count = 0
     for (let i = 0; i < sorted.length; i++) {
       count++
       if (i + 1 < sorted.length) {
-        const diff = new Date(sorted[i].review_date).getTime() - new Date(sorted[i + 1].review_date).getTime()
+        const diff = new Date(sorted[i].date).getTime() - new Date(sorted[i + 1].date).getTime()
         if (diff > 10 * 24 * 60 * 60 * 1000) break // > 10-day gap = streak broken
       }
     }
