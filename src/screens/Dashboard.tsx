@@ -5,6 +5,7 @@ import { House, ArrowRight, Lightning, TrendUp, TrendDown, Minus } from '@phosph
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import type { Goal, Milestone, LeadingIndicator, Habit, HabitLog, Review, MonthlyKpiEntry, Todo } from '@/types'
+import { getMomentumScore, getMomentumBadge } from '@/lib/momentum'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DAYS = ['Mon', 'Wed', 'Fri']
@@ -507,7 +508,28 @@ export default function Dashboard() {
                     {/* Left: name + indicators */}
                     <div className="lg:col-span-3 flex flex-col h-full pt-1 pr-4">
                       <div className="mb-6">
-                        <h3 className="text-lg font-bold text-burnham">{goal.text}</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-bold text-burnham">{goal.text}</h3>
+                          {(() => {
+                            const thirtyAgo = new Date()
+                            thirtyAgo.setDate(thirtyAgo.getDate() - 30)
+                            const thirtyStr = thirtyAgo.toISOString().split('T')[0]
+                            const recentLogs = goalLogs.filter(l => l.log_date >= thirtyStr)
+                            const score = getMomentumScore({
+                              habits: goalHabits,
+                              habitLogs: recentLogs,
+                              milestones: goalMilestones,
+                              indicators: goalIndicators,
+                              kpiEntries: monthlyKpiEntries.filter(e => goalIndicators.some(ind => ind.id === e.leading_indicator_id)),
+                            })
+                            const badge = getMomentumBadge(score)
+                            return (
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.className}`}>
+                                {badge.label}
+                              </span>
+                            )
+                          })()}
+                        </div>
                         {goal.metric && <p className="text-xs text-shuttle mt-1">{goal.metric}</p>}
                       </div>
                       <div className="space-y-5">

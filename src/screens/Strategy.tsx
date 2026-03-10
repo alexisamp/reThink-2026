@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { House, PencilSimple, Plus, GearSix } from '@phosphor-icons/react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import type { Goal, Milestone, Habit, WorkbookEntry } from '@/types'
+import type { Goal, Milestone, Habit, HabitLog, LeadingIndicator, MonthlyKpiEntry, WorkbookEntry } from '@/types'
+import { getMomentumScore, getMomentumBadge } from '@/lib/momentum'
 import SystematizeModal from '@/components/SystematizeModal'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -25,6 +26,9 @@ export default function Strategy() {
   const [goals, setGoals] = useState<Goal[]>([])
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [habits, setHabits] = useState<Habit[]>([])
+  const [habitLogs, setHabitLogs] = useState<HabitLog[]>([])
+  const [indicators, setIndicators] = useState<LeadingIndicator[]>([])
+  const [monthlyKpiEntries, setMonthlyKpiEntries] = useState<MonthlyKpiEntry[]>([])
   const [entries, setEntries] = useState<WorkbookEntry[]>([])
   const [editingEntry, setEditingEntry] = useState<string | null>(null)
   const [entryValues, setEntryValues] = useState<Record<string, string>>({})
@@ -51,16 +55,42 @@ export default function Strategy() {
       if (!wb) { setLoading(false); return }
       setWorkbookId(wb.id)
 
-      const [goalsRes, milestonesRes, habitsRes, entriesRes] = await Promise.all([
+      const [goalsRes, milestonesRes, habitsRes, entriesRes, indicatorsRes] = await Promise.all([
         supabase.from('goals').select('*').eq('workbook_id', wb.id).order('position'),
         supabase.from('milestones').select('*').eq('user_id', user.id).order('target_date', { nullsFirst: false }),
         supabase.from('habits').select('*').eq('user_id', user.id).eq('is_active', true).order('created_at'),
         supabase.from('workbook_entries').select('*').eq('workbook_id', wb.id),
+        supabase.from('leading_indicators').select('*').eq('user_id', user.id),
       ])
       setGoals(goalsRes.data ?? [])
       setMilestones(milestonesRes.data ?? [])
       setHabits(habitsRes.data ?? [])
       setEntries(entriesRes.data ?? [])
+      setIndicators(indicatorsRes.data ?? [])
+
+      // Fetch habit logs for last 30 days
+      const habitsData = habitsRes.data ?? []
+      if (habitsData.length > 0) {
+        const thirtyAgo = new Date()
+        thirtyAgo.setDate(thirtyAgo.getDate() - 30)
+        const thirtyStr = thirtyAgo.toISOString().split('T')[0]
+        const habitIds = habitsData.map(h => h.id)
+        const { data: logs } = await supabase.from('habit_logs').select('*')
+          .in('habit_id', habitIds)
+          .gte('log_date', thirtyStr)
+        setHabitLogs(logs ?? [])
+      }
+
+      // Fetch monthly KPI entries for current year
+      const inds = indicatorsRes.data ?? []
+      if (inds.length > 0) {
+        const indIds = inds.map(i => i.id)
+        const { data: kpiData } = await supabase.from('monthly_kpi_entries').select('*')
+          .in('leading_indicator_id', indIds)
+          .eq('year', year)
+        setMonthlyKpiEntries(kpiData ?? [])
+      }
+
       const vals: Record<string, string> = {}
       for (const e of entriesRes.data ?? []) {
         vals[`${e.list_order}_${e.section_key}`] = e.answer ?? ''
@@ -221,12 +251,34 @@ export default function Strategy() {
                     <div className="grid grid-cols-12 gap-6 items-start">
                       <div className="col-span-3 flex flex-col gap-1 pr-2">
                         <div className="flex items-start justify-between">
-                          <h2
-                            className="text-burnham text-lg font-semibold tracking-[-0.02em] leading-snug cursor-pointer hover:underline"
-                            onClick={() => navigate(`/dashboard/goal/${goal.id}`)}
-                          >
-                            {goal.text}
-                          </h2>
+                          <div className="flex items-center gap-2">
+                            <h2
+                              className="text-burnham text-lg font-semibold tracking-[-0.02em] leading-snug cursor-pointer hover:underline"
+                              onClick={() => navigate(`/dashboard/goal/${goal.id}`)}
+                            >
+                              {goal.text}
+                            </h2>
+                            {(() => {
+                              const goalHabits = habits.filter(h => h.goal_id === goal.id)
+                              const goalLogs = habitLogs.filter(l => goalHabits.some(h => h.id === l.habit_id))
+                              const goalMilestones = milestones.filter(m => m.goal_id === goal.id)
+                              const goalIndicators = indicators.filter(ind => ind.goal_id === goal.id)
+                              const goalKpi = monthlyKpiEntries.filter(e => goalIndicators.some(ind => ind.id === e.leading_indicator_id))
+                              const score = getMomentumScore({
+                                habits: goalHabits,
+                                habitLogs: goalLogs,
+                                milestones: goalMilestones,
+                                indicators: goalIndicators,
+                                kpiEntries: goalKpi,
+                              })
+                              const badge = getMomentumBadge(score)
+                              return (
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.className}`}>
+                                  {badge.label}
+                                </span>
+                              )
+                            })()}
+                          </div>
                           <PencilSimple size={14} className="text-shuttle opacity-0 group-hover/card:opacity-100 transition-opacity cursor-pointer mt-1" onClick={() => setSystematizeGoal(goal)} />
                         </div>
                         {goal.metric && <p className="text-shuttle text-xs">{goal.metric}</p>}
