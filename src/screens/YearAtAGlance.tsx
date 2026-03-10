@@ -40,8 +40,8 @@ export default function YearAtAGlance() {
         supabase.from('habits').select('*').eq('user_id', userId).eq('is_active', true),
         supabase.from('habit_logs').select('*').eq('user_id', userId)
           .gte('log_date', `${year}-01-01`).lte('log_date', `${year}-12-31`),
-        supabase.from('reviews').select('review_date, energy_level, one_thing').eq('user_id', userId)
-          .gte('review_date', `${year}-01-01`).lte('review_date', `${year}-12-31`),
+        supabase.from('reviews').select('date, energy_level, one_thing').eq('user_id', userId)
+          .gte('date', `${year}-01-01`).lte('date', `${year}-12-31`),
         supabase.from('milestones').select('*').eq('user_id', userId)
           .eq('status', 'COMPLETE').gte('target_date', `${year}-01-01`).lte('target_date', `${year}-12-31`),
       ])
@@ -68,8 +68,8 @@ export default function YearAtAGlance() {
   const energyMap = new Map<string, number>()
   const oneThingMap = new Map<string, string>()
   reviews.forEach(r => {
-    if (r.review_date && r.energy_level) energyMap.set(r.review_date, r.energy_level)
-    if (r.review_date && r.one_thing) oneThingMap.set(r.review_date, r.one_thing)
+    if (r.date && r.energy_level) energyMap.set(r.date, r.energy_level)
+    if (r.date && r.one_thing) oneThingMap.set(r.date, r.one_thing)
   })
 
   const milestoneSet = new Set<string>()
