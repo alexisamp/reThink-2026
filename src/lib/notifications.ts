@@ -1,47 +1,62 @@
-import type { Habit, HabitLog, Milestone, Review } from '@/types'
+import type { Habit, Milestone, Review } from '@/types'
 
-type TriggerType = 'habits_pending' | 'milestone_due' | 'no_review'
-
-interface NotificationTrigger {
-  type: TriggerType
-  count?: number
+export type NotificationTrigger = {
+  type: 'morning_brief' | 'habit_reminder' | 'streak_at_risk' | 'milestone_approaching' | 'weekly_review'
+  habitName?: string
+  streak?: number
   milestoneName?: string
+  oneThing?: string
+  habitCount?: number
 }
 
-interface CheckInput {
+export function checkNotificationTriggers(opts: {
   habits: Habit[]
-  todayLogs: Pick<HabitLog, 'habit_id' | 'value'>[]
+  todayLogs: { habit_id: string; value: number }[]
   milestones: Milestone[]
   review: Review | null
-}
-
-export function checkNotificationTriggers({ habits, todayLogs, milestones, review }: CheckInput): NotificationTrigger[] {
+  now?: Date
+}): NotificationTrigger[] {
+  const now = opts.now ?? new Date()
+  const hour = now.getHours()
+  const minute = now.getMinutes()
+  const dayOfWeek = now.getDay() // 0=Sun, 6=Sat
   const triggers: NotificationTrigger[] = []
-  const hour = new Date().getHours()
 
-  // After 8pm, nudge if habits are incomplete
-  if (hour >= 20) {
-    const doneIds = new Set(todayLogs.filter(l => l.value === 1).map(l => l.habit_id))
-    const pending = habits.filter(h => !doneIds.has(h.id))
-    if (pending.length > 0) {
-      triggers.push({ type: 'habits_pending', count: pending.length })
+  // Morning brief: 8:00 AM
+  if (hour === 8 && minute === 0) {
+    const undoneCount = opts.habits.filter(h =>
+      !opts.todayLogs.some(l => l.habit_id === h.id && l.value === 1)
+    ).length
+    triggers.push({
+      type: 'morning_brief',
+      habitCount: undoneCount,
+      oneThing: opts.review?.one_thing ?? undefined,
+    })
+  }
+
+  // Streak at risk: 8 PM, habits not logged
+  if (hour === 20 && minute === 0) {
+    for (const habit of opts.habits) {
+      const logged = opts.todayLogs.some(l => l.habit_id === habit.id && l.value === 1)
+      if (!logged) {
+        triggers.push({ type: 'streak_at_risk', habitName: habit.text })
+      }
     }
   }
 
-  // Milestones due within 3 days
-  const now = new Date()
-  for (const m of milestones) {
-    if (!m.target_date) continue
-    const due = new Date(m.target_date + 'T23:59:59')
-    const daysUntil = (due.getTime() - now.getTime()) / 86400000
-    if (daysUntil >= 0 && daysUntil <= 3) {
-      triggers.push({ type: 'milestone_due', milestoneName: m.text })
-    }
+  // Weekly review: Sunday 5 PM
+  if (dayOfWeek === 0 && hour === 17 && minute === 0) {
+    triggers.push({ type: 'weekly_review' })
   }
 
-  // No review yet after 9pm
-  if (hour >= 21 && !review) {
-    triggers.push({ type: 'no_review' })
+  // Milestone approaching: 3 days before target_date
+  const in3Days = new Date(now)
+  in3Days.setDate(in3Days.getDate() + 3)
+  const in3Str = in3Days.toISOString().split('T')[0]
+  for (const m of opts.milestones) {
+    if (m.target_date === in3Str && m.status === 'PENDING') {
+      triggers.push({ type: 'milestone_approaching', milestoneName: m.text })
+    }
   }
 
   return triggers
@@ -49,22 +64,34 @@ export function checkNotificationTriggers({ habits, todayLogs, milestones, revie
 
 export function formatNotificationMessage(trigger: NotificationTrigger): { title: string; body: string } {
   switch (trigger.type) {
-    case 'habits_pending':
+    case 'morning_brief':
       return {
-        title: 'Habits Reminder',
-        body: `You have ${trigger.count} habit${trigger.count !== 1 ? 's' : ''} left today.`,
+        title: 'Good morning - reThink',
+        body: trigger.oneThing
+          ? `Today: "${trigger.oneThing}". ${trigger.habitCount} habits to complete.`
+          : `${trigger.habitCount ?? 0} habits to complete today.`,
       }
-    case 'milestone_due':
+    case 'streak_at_risk':
       return {
-        title: 'Milestone Due Soon',
-        body: `"${trigger.milestoneName}" is due in the next few days.`,
+        title: 'Streak at risk',
+        body: `${trigger.habitName} not logged yet. Don't break your streak!`,
       }
-    case 'no_review':
+    case 'weekly_review':
       return {
-        title: 'Daily Review',
-        body: 'You haven\'t completed your daily review yet.',
+        title: 'Weekly Review time',
+        body: 'Take 20 minutes to review your week and plan ahead.',
+      }
+    case 'milestone_approaching':
+      return {
+        title: 'Milestone due in 3 days',
+        body: `"${trigger.milestoneName}" is approaching.`,
+      }
+    case 'habit_reminder':
+      return {
+        title: 'Habit reminder',
+        body: `Time for ${trigger.habitName}.`,
       }
     default:
-      return { title: '', body: '' }
+      return { title: 'reThink', body: '' }
   }
 }
