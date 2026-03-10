@@ -6,6 +6,7 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import type { Todo, Habit, HabitLog, Review, Milestone } from '@/types'
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 
 type Tab = 'todos' | 'milestones' | 'habits'
 
@@ -27,6 +28,13 @@ export default function Today() {
   const [notesValue, setNotesValue] = useState('')
   const notesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Subtab keyboard shortcuts: 1=Todos, 2=Milestones, 3=Habits
+  useKeyboardShortcuts({
+    '1': () => setTab('todos'),
+    '2': () => setTab('milestones'),
+    '3': () => setTab('habits'),
+  })
 
   useEffect(() => {
     const load = async () => {
@@ -338,17 +346,24 @@ export default function Today() {
         {/* Inner tab nav */}
         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10">
           <div className="bg-white/90 backdrop-blur-md border border-mercury shadow-sm rounded-full p-1.5 flex items-center gap-1">
-            {(['todos', 'milestones', 'habits'] as Tab[]).map(t => (
+            {([
+              { id: 'todos',      label: 'To-Dos',     key: '1' },
+              { id: 'milestones', label: 'Milestones',  key: '2' },
+              { id: 'habits',     label: 'Habits',      key: '3' },
+            ] as { id: Tab; label: string; key: string }[]).map(({ id, label, key }) => (
               <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-5 py-2 rounded-full text-xs font-semibold transition-all ${
-                  tab === t
+                key={id}
+                onClick={() => setTab(id)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all ${
+                  tab === id
                     ? 'bg-mercury/30 ring-1 ring-mercury text-burnham shadow-sm'
                     : 'text-shuttle hover:bg-gray-50 hover:text-burnham font-medium'
                 }`}
               >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
+                {label}
+                <span className={`font-mono text-[9px] px-1 py-0.5 rounded ${
+                  tab === id ? 'text-shuttle/50 bg-white/60' : 'text-shuttle/30 bg-mercury/20'
+                }`}>{key}</span>
               </button>
             ))}
           </div>
