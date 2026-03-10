@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { House, CalendarBlank, Strategy, ChartPie, SignOut } from '@phosphor-icons/react'
+import { House, CalendarBlank, Strategy, ChartPie, SignOut, Repeat } from '@phosphor-icons/react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { useNavShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -17,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Monthly',   path: '/monthly',   Icon: CalendarBlank, shortcut: '⌘2' },
   { label: 'Strategy',  path: '/strategy',  Icon: Strategy,      shortcut: '⌘3' },
   { label: 'Dashboard', path: '/dashboard', Icon: ChartPie,      shortcut: '⌘4' },
+  { label: 'Review',    path: '/weekly-review', Icon: Repeat,   shortcut: '⌘5' },
 ]
 
 interface AppShellProps {

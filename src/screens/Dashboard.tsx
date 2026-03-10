@@ -363,6 +363,24 @@ export default function Dashboard() {
   // System Consistency: % of days with a review since year start
   const reviewDaysPct = Math.round((reviews.length / daysSinceYearStart) * 100)
 
+  // Context Window Warning: count distinct goals touched this week
+  const weekGoalSpread = useMemo(() => {
+    const now = new Date()
+    const dayOfWeek = now.getDay() // 0=Sun
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - mondayOffset)
+    monday.setHours(0, 0, 0, 0)
+    const mondayStr = monday.toISOString().split('T')[0]
+
+    const thisWeekGoalIds = new Set(
+      completedTodos
+        .filter(t => t.goal_id && t.created_at >= mondayStr)
+        .map(t => t.goal_id!)
+    )
+    return thisWeekGoalIds.size
+  }, [completedTodos])
+
   const displayGoals = filteredGoal ? goals.filter(g => g.id === filteredGoal) : goals
 
   if (loading) {
@@ -485,6 +503,16 @@ export default function Dashboard() {
             </div>
           ))}
         </section>
+
+        {/* Context Window Warning */}
+        {weekGoalSpread > 2 && (
+          <div className="mt-8 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <span className="text-amber-500 text-base mt-0.5">&#9888;</span>
+            <p className="text-xs text-amber-800">
+              This week you spread across <strong>{weekGoalSpread} goals</strong>. Your best weeks historically are when you focus on 1-2.
+            </p>
+          </div>
+        )}
 
         {/* Goals Heatmaps */}
         <section className="flex flex-col gap-12 pt-12">

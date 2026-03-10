@@ -53,5 +53,6 @@ export function useNavShortcuts() {
     'cmd+2': () => navigate('/monthly'),
     'cmd+3': () => navigate('/strategy'),
     'cmd+4': () => navigate('/dashboard'),
+    'cmd+5': () => navigate('/weekly-review'),
   })
 }

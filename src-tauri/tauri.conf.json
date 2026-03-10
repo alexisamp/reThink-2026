@@ -20,6 +20,20 @@
         "resizable": true,
         "fullscreen": false,
         "center": true
+      },
+      {
+        "label": "compact",
+        "title": "reThink",
+        "width": 480,
+        "height": 340,
+        "minWidth": 480,
+        "minHeight": 340,
+        "maxWidth": 480,
+        "maxHeight": 340,
+        "alwaysOnTop": true,
+        "decorations": false,
+        "visible": false,
+        "url": "/compact"
       }
     ],
     "security": {

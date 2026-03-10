@@ -5,6 +5,7 @@ import type { User } from '@supabase/supabase-js'
 
 // Screens (lazy-loaded later; for now direct imports)
 import Login from '@/screens/Login'
+import CompactMode from '@/screens/CompactMode'
 import AppShell from '@/components/layout/AppShell'
 import Assessment from '@/screens/Assessment'
 import Strategy from '@/screens/Strategy'
@@ -12,6 +13,8 @@ import Monthly from '@/screens/Monthly'
 import Today from '@/screens/Today'
 import Dashboard from '@/screens/Dashboard'
 import GoalDetail from '@/screens/GoalDetail'
+import WeeklyReview from '@/screens/WeeklyReview'
+import { checkNotificationTriggers, formatNotificationMessage } from '@/lib/notifications'
 
 function Splash() {
   return (
@@ -55,6 +58,39 @@ export default function App() {
       .catch(() => setHasWorkbook(false))
   }, [user])
 
+  // Smart Notifications (Sprint 11)
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+
+    const check = async () => {
+      if (!user || !('Notification' in window) || Notification.permission !== 'granted') return
+      const today = new Date().toISOString().split('T')[0]
+      const [habitsRes, logsRes, msRes, reviewRes] = await Promise.all([
+        supabase.from('habits').select('*').eq('user_id', user.id).eq('is_active', true),
+        supabase.from('habit_logs').select('habit_id,value').eq('user_id', user.id).eq('log_date', today),
+        supabase.from('milestones').select('*').eq('user_id', user.id).eq('status', 'PENDING'),
+        supabase.from('reviews').select('*').eq('user_id', user.id).eq('review_date', today).maybeSingle(),
+      ])
+
+      const triggers = checkNotificationTriggers({
+        habits: habitsRes.data ?? [],
+        todayLogs: logsRes.data ?? [],
+        milestones: msRes.data ?? [],
+        review: reviewRes.data,
+      })
+
+      for (const trigger of triggers) {
+        const { title, body } = formatNotificationMessage(trigger)
+        if (body) new Notification(title, { body, icon: '/favicon.ico' })
+      }
+    }
+
+    const interval = setInterval(check, 60_000) // every minute
+    return () => clearInterval(interval)
+  }, [user])
+
   if (loading) return <Splash />
 
   return (
@@ -62,6 +98,9 @@ export default function App() {
       <Routes>
         {/* Public */}
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
+
+        {/* Compact mode — standalone window, no AppShell */}
+        <Route path="/compact" element={<CompactMode />} />
 
         {/* Assessment (needs auth, no workbook required) */}
         <Route
@@ -89,6 +128,7 @@ export default function App() {
                   <Route path="/monthly/:goalId" element={<Monthly />} />
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/dashboard/goal/:id" element={<GoalDetail />} />
+                  <Route path="/weekly-review" element={<WeeklyReview />} />
                   <Route path="*" element={<Navigate to="/today" replace />} />
                 </Routes>
               </AppShell>

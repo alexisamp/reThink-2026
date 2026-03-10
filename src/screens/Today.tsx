@@ -7,6 +7,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import type { Todo, Habit, HabitLog, Review, Milestone, Goal } from '@/types'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import StreakCelebration from '@/components/StreakCelebration'
 
 type Tab = 'todos' | 'milestones' | 'habits'
 
@@ -57,6 +58,9 @@ export default function Today() {
   const [notesValue, setNotesValue] = useState('')
   const [onethingValue, setOnethingValue] = useState('')
   const [tomorrowValue, setTomorrowValue] = useState('')
+
+  // Streak celebration
+  const [celebrationStreak, setCelebrationStreak] = useState<{ habit: Habit; streak: number } | null>(null)
 
   // Focus timer
   const [showTimer, setShowTimer] = useState(false)
@@ -208,15 +212,28 @@ export default function Today() {
   const toggleHabit = async (habitId: string) => {
     if (!userId) return
     const existing = logs.find(l => l.habit_id === habitId)
+    let justCompleted = false
     if (existing) {
       const newVal = existing.value === 1 ? 0 : 1
       await supabase.from('habit_logs').update({ value: newVal }).eq('id', existing.id)
       setLogs(prev => prev.map(l => l.id === existing.id ? { ...l, value: newVal } : l))
+      justCompleted = newVal === 1
     } else {
       const { data } = await supabase.from('habit_logs')
         .insert({ habit_id: habitId, user_id: userId, log_date: today, value: 1 })
         .select().single()
       if (data) setLogs(prev => [...prev, data])
+      justCompleted = true
+    }
+
+    // Check for milestone streak celebration
+    if (justCompleted) {
+      const streak = getStreak(habitId) + 1 // +1 because today's log just happened
+      const MILESTONE_STREAKS = [7, 30, 100, 365]
+      if (MILESTONE_STREAKS.includes(streak)) {
+        const habit = habits.find(h => h.id === habitId)
+        if (habit) setCelebrationStreak({ habit, streak })
+      }
     }
   }
 
@@ -251,6 +268,13 @@ export default function Today() {
     const payload = { ...review, ...updates, user_id: userId, review_date: today }
     const { data } = await supabase.from('reviews').upsert(payload).select().single()
     if (data) setReview(data)
+  }
+
+  const logFriction = async (habitId: string, reason: string) => {
+    if (!userId) return
+    await supabase.from('friction_logs').upsert({
+      habit_id: habitId, user_id: userId, log_date: today, reason,
+    }, { onConflict: 'habit_id,log_date' })
   }
 
   const startTimer = () => { setTimerRunning(true); setTimerComplete(false) }
@@ -535,12 +559,29 @@ export default function Today() {
                                 <span className="text-base font-medium text-burnham">{habit.text}</span>
                                 <span className="text-[10px] bg-gray-100 text-shuttle px-1.5 py-0.5 rounded">{habit.frequency}</span>
                               </div>
-                              <button
-                                onClick={() => toggleHabit(habit.id)}
-                                className="text-[10px] font-semibold text-burnham bg-gossip hover:brightness-95 px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
-                              >
-                                <Check size={9} weight="bold" /> Done
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <select
+                                  className="text-[9px] text-shuttle/50 bg-transparent border-none cursor-pointer hover:text-shuttle transition-colors focus:outline-none"
+                                  onChange={e => {
+                                    if (e.target.value) logFriction(habit.id, e.target.value)
+                                    e.target.value = ''
+                                  }}
+                                  defaultValue=""
+                                >
+                                  <option value="" disabled>Why not?</option>
+                                  <option value="Travel">Travel</option>
+                                  <option value="Forgot">Forgot</option>
+                                  <option value="Too tired">Too tired</option>
+                                  <option value="External blocker">External blocker</option>
+                                  <option value="Other">Other</option>
+                                </select>
+                                <button
+                                  onClick={() => toggleHabit(habit.id)}
+                                  className="text-[10px] font-semibold text-burnham bg-gossip hover:brightness-95 px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
+                                >
+                                  <Check size={9} weight="bold" /> Done
+                                </button>
+                              </div>
                             </div>
                             <div className="flex items-center gap-3 mt-1">
                               {goalName && (
@@ -794,6 +835,15 @@ export default function Today() {
           </button>
         </div>
       </aside>
+
+      {/* Streak Celebration Overlay */}
+      {celebrationStreak && (
+        <StreakCelebration
+          streak={celebrationStreak.streak}
+          habitName={celebrationStreak.habit.text}
+          onDismiss={() => setCelebrationStreak(null)}
+        />
+      )}
     </div>
   )
 }

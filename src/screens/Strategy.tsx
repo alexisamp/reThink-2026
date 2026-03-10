@@ -41,6 +41,9 @@ export default function Strategy() {
   const [newMilestoneText, setNewMilestoneText] = useState('')
   const [addingHabitFor, setAddingHabitFor] = useState<string | null>(null)
   const [newHabitText, setNewHabitText] = useState('')
+  const [notDoingGoals, setNotDoingGoals] = useState<Goal[]>([])
+  const [addingNotDoing, setAddingNotDoing] = useState(false)
+  const [newNotDoingText, setNewNotDoingText] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -103,6 +106,18 @@ export default function Strategy() {
 
   const activeGoals = goals.filter(g => g.goal_type === 'ACTIVE')
   const backlogGoals = goals.filter(g => g.goal_type === 'BACKLOG')
+
+  // Fetch NOT_DOING goals separately (they may not be in the workbook query)
+  useEffect(() => {
+    if (!userId) return
+    const fetchNotDoing = async () => {
+      const year = new Date().getFullYear()
+      const { data } = await supabase.from('goals').select('*')
+        .eq('user_id', userId).eq('goal_type', 'NOT_DOING').eq('year', year)
+      setNotDoingGoals(data ?? [])
+    }
+    fetchNotDoing()
+  }, [userId])
 
   const getGoalMilestones = (goalId: string) =>
     milestones.filter(m => m.goal_id === goalId).slice(0, 3)
@@ -184,6 +199,24 @@ export default function Strategy() {
     if (data) setHabits(prev => [...prev, data])
     setAddingHabitFor(null)
     setNewHabitText('')
+  }
+
+  const saveNotDoing = async () => {
+    if (!newNotDoingText.trim() || !userId) return
+    const currentYear = new Date().getFullYear()
+    const { data } = await supabase.from('goals').insert({
+      goal_type: 'NOT_DOING',
+      text: newNotDoingText.trim(),
+      user_id: userId,
+      workbook_id: workbookId || null,
+      status: 'NOT_STARTED',
+      year: currentYear,
+      position: 0,
+      needs_config: false,
+    }).select().single()
+    if (data) setNotDoingGoals(prev => [...prev, data])
+    setAddingNotDoing(false)
+    setNewNotDoingText('')
   }
 
   if (loading) return (
@@ -407,6 +440,42 @@ export default function Strategy() {
                 ))}
                 {backlogGoals.length === 0 && (
                   <p className="text-xs text-shuttle/40 italic">No backlog items</p>
+                )}
+              </div>
+
+              {/* Not Doing List */}
+              <div className="mt-8 pt-8 border-t border-mercury">
+                <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-4">
+                  Not Doing This Year
+                </h3>
+                <div className="space-y-3">
+                  {notDoingGoals.map(g => (
+                    <div key={g.id} className="group">
+                      <p className="text-sm text-shuttle line-through">{g.text}</p>
+                      {g.motivation && <p className="text-[10px] text-shuttle/50 italic mt-0.5">{g.motivation}</p>}
+                    </div>
+                  ))}
+                </div>
+                {addingNotDoing ? (
+                  <input
+                    autoFocus
+                    className="mt-3 w-full text-sm text-burnham border-b border-mercury bg-transparent focus:outline-none"
+                    placeholder="What are you consciously not doing?"
+                    value={newNotDoingText}
+                    onChange={e => setNewNotDoingText(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveNotDoing()
+                      if (e.key === 'Escape') { setAddingNotDoing(false); setNewNotDoingText('') }
+                    }}
+                    onBlur={() => { if (!newNotDoingText.trim()) setAddingNotDoing(false) }}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setAddingNotDoing(true)}
+                    className="mt-3 flex items-center gap-1 text-[10px] text-shuttle hover:text-burnham transition-colors"
+                  >
+                    <Plus size={10} /> Add item
+                  </button>
                 )}
               </div>
             </div>
