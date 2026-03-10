@@ -43,7 +43,7 @@ export function useKeyboardShortcuts(shortcuts: ShortcutMap) {
 
 /**
  * App-level navigation shortcuts.
- * ⌘1 → Today, ⌘2 → Monthly, ⌘3 → Strategy, ⌘4 → Dashboard
+ * ⌘1 → Today, ⌘2 → Monthly, ⌘3 → Strategy, ⌘4 → Dashboard, ⌘5 → Review
  */
 export function useNavShortcuts() {
   const navigate = useNavigate()
@@ -54,6 +54,5 @@ export function useNavShortcuts() {
     'cmd+3': () => navigate('/strategy'),
     'cmd+4': () => navigate('/dashboard'),
     'cmd+5': () => navigate('/weekly-review'),
-    'cmd+6': () => navigate('/library'),
   })
 }

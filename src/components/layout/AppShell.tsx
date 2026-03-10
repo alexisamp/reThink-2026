@@ -1,9 +1,10 @@
-import { type ReactNode } from 'react'
+import { Fragment, useState, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { House, CalendarBlank, Strategy, ChartPie, SignOut, Repeat, BookOpen } from '@phosphor-icons/react'
+import { House, CalendarBlank, Strategy, ChartPie, SignOut, Repeat } from '@phosphor-icons/react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { useNavShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { useNavShortcuts, useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import CommandPalette from '@/components/CommandPalette'
 
 interface NavItem {
   label: string
@@ -18,7 +19,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Strategy',  path: '/strategy',  Icon: Strategy,      shortcut: '⌘3' },
   { label: 'Dashboard', path: '/dashboard', Icon: ChartPie,      shortcut: '⌘4' },
   { label: 'Review',    path: '/weekly-review', Icon: Repeat,   shortcut: '⌘5' },
-  { label: 'Library',   path: '/library',       Icon: BookOpen,  shortcut: '⌘6' },
 ]
 
 interface AppShellProps {
@@ -31,6 +31,9 @@ export default function AppShell({ children }: AppShellProps) {
   const { pathname } = useLocation()
   const signOut = () => supabase.auth.signOut()
   useNavShortcuts()
+
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  useKeyboardShortcuts({ 'cmd+k': () => setPaletteOpen(true) })
 
   return (
     <div className="min-h-screen bg-white text-burnham font-sans">
@@ -45,27 +48,21 @@ export default function AppShell({ children }: AppShellProps) {
           {NAV_ITEMS.map(({ label, path, Icon, shortcut }) => {
             const isActive = pathname === path || (path !== '/today' && pathname.startsWith(path))
             return (
-              <button
-                key={path}
-                onClick={() => navigate(path)}
-                className={[
-                  'flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-all',
-                  isActive
-                    ? 'bg-mercury/30 ring-1 ring-mercury text-burnham shadow-sm'
-                    : 'text-shuttle hover:bg-gray-50 hover:text-burnham',
-                ].join(' ')}
-              >
-                <Icon size={18} />
-                <span>{label}</span>
-                <span className={[
-                  'text-[10px] font-mono px-1 py-0.5 rounded',
-                  isActive
-                    ? 'text-shuttle/60 bg-white/60'
-                    : 'text-shuttle/40 bg-mercury/20',
-                ].join(' ')}>
-                  {shortcut}
-                </span>
-              </button>
+              <Fragment key={path}>
+                <button
+                  onClick={() => navigate(path)}
+                  title={`${label} ${shortcut}`}
+                  className={[
+                    'flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-all',
+                    isActive
+                      ? 'bg-mercury/30 ring-1 ring-mercury text-burnham shadow-sm'
+                      : 'text-shuttle hover:bg-gray-50 hover:text-burnham',
+                  ].join(' ')}
+                >
+                  <Icon size={18} />
+                  <span>{label}</span>
+                </button>
+              </Fragment>
             )
           })}
           <div className="w-px h-5 bg-mercury/60 mx-1" />
@@ -78,6 +75,8 @@ export default function AppShell({ children }: AppShellProps) {
           </button>
         </div>
       </nav>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   )
 }

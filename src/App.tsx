@@ -15,6 +15,7 @@ import Dashboard from '@/screens/Dashboard'
 import GoalDetail from '@/screens/GoalDetail'
 import WeeklyReview from '@/screens/WeeklyReview'
 import ReflectionLibrary from '@/screens/ReflectionLibrary'
+import YearAtAGlance from '@/screens/YearAtAGlance'
 import { checkNotificationTriggers, formatNotificationMessage } from '@/lib/notifications'
 
 function Splash() {
@@ -131,6 +132,7 @@ export default function App() {
                   <Route path="/dashboard/goal/:id" element={<GoalDetail />} />
                   <Route path="/weekly-review" element={<WeeklyReview />} />
                   <Route path="/library" element={<ReflectionLibrary />} />
+                  <Route path="/year" element={<YearAtAGlance />} />
                   <Route path="*" element={<Navigate to="/today" replace />} />
                 </Routes>
               </AppShell>

@@ -21,6 +21,14 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
+function getHabitGrade(completedDays: number, daysElapsed: number): { grade: string; color: string } {
+  const pct = daysElapsed > 0 ? (completedDays / daysElapsed) * 100 : 0
+  if (pct >= 90) return { grade: 'A', color: 'text-emerald-700 bg-emerald-50' }
+  if (pct >= 75) return { grade: 'B', color: 'text-blue-700 bg-blue-50' }
+  if (pct >= 60) return { grade: 'C', color: 'text-amber-700 bg-amber-50' }
+  return { grade: 'D', color: 'text-red-700 bg-red-50' }
+}
+
 export default function Monthly() {
   const { user } = useAuth()
   const { goalId } = useParams()
@@ -522,6 +530,17 @@ export default function Monthly() {
                               <span className="text-[9px] bg-gray-100 text-shuttle px-1.5 py-0.5 rounded tracking-wide uppercase">
                                 {habit.frequency}
                               </span>
+                              {(() => {
+                                const currentMonthStr = `${currentYear}-${String(viewMonth).padStart(2, '0')}`
+                                const completedDays = habitLogs.filter(l => l.habit_id === habit.id && l.value === 1 && l.log_date.startsWith(currentMonthStr)).length
+                                const daysElapsed = viewMonth === todayMonth ? new Date().getDate() : getDaysInMonth(viewMonth, currentYear)
+                                const { grade, color } = getHabitGrade(completedDays, daysElapsed)
+                                return (
+                                  <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${color}`}>
+                                    {grade}
+                                  </span>
+                                )
+                              })()}
                             </div>
                             <div className="flex items-center gap-6">
                               <span className="text-[10px] font-mono text-shuttle">

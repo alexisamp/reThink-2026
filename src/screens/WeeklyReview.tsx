@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check, CaretDown, Trophy, Lightning } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { getMomentumScore, getMomentumBadge } from '@/lib/momentum'
@@ -496,6 +496,12 @@ export default function WeeklyReview() {
                 <Trophy size={18} weight="fill" />
                 {committed ? 'Committed!' : 'Commit to This Week'}
               </button>
+
+              <div className="text-center pt-2">
+                <Link to="/library" className="text-xs text-shuttle hover:text-burnham underline">
+                  View Reflection Library →
+                </Link>
+              </div>
             </div>
           )}
         </div>
