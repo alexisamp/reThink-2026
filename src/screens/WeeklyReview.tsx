@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check, CaretDown, Trophy, Lightning } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { getMomentumScore, getMomentumBadge } from '@/lib/momentum'
+import AICoach from '@/components/AICoach'
 import type {
   Goal, Milestone, Habit, HabitLog, Todo, Review,
   LeadingIndicator, MonthlyKpiEntry, FrictionLog,
@@ -475,6 +476,15 @@ export default function WeeklyReview() {
                   </div>
                 )}
               </div>
+
+              <AICoach
+                goals={goals}
+                habits={habits}
+                habitLogs={habitLogs}
+                milestones={milestones}
+                reviews={recentReviews}
+                userId={userId ?? ''}
+              />
 
               <button
                 onClick={handleCommit}

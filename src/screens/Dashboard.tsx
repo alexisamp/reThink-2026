@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import type { Goal, Milestone, LeadingIndicator, Habit, HabitLog, Review, MonthlyKpiEntry, Todo } from '@/types'
 import { getMomentumScore, getMomentumBadge } from '@/lib/momentum'
+import AICoach from '@/components/AICoach'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DAYS = ['Mon', 'Wed', 'Fri']
@@ -663,6 +664,18 @@ export default function Dashboard() {
             </div>
           </div>
         </section>
+
+        {/* AI Coach */}
+        <div className="mt-8">
+          <AICoach
+            goals={goals}
+            habits={habits}
+            habitLogs={habitLogs}
+            milestones={milestones}
+            reviews={reviews}
+            userId={user?.id ?? ''}
+          />
+        </div>
 
       </div>
     </div>

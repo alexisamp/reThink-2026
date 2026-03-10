@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { House, PencilSimple, Plus, GearSix } from '@phosphor-icons/react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
@@ -44,6 +44,9 @@ export default function Strategy() {
   const [notDoingGoals, setNotDoingGoals] = useState<Goal[]>([])
   const [addingNotDoing, setAddingNotDoing] = useState(false)
   const [newNotDoingText, setNewNotDoingText] = useState('')
+  const [annualLetterValue, setAnnualLetterValue] = useState('')
+  const [annualLetterSaved, setAnnualLetterSaved] = useState(false)
+  const annualLetterTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -99,6 +102,10 @@ export default function Strategy() {
         vals[`${e.list_order}_${e.section_key}`] = e.answer ?? ''
       }
       setEntryValues(vals)
+
+      const letterEntry = (entriesRes.data ?? []).find(e => e.section_key === 'annual_letter')
+      if (letterEntry?.answer) setAnnualLetterValue(letterEntry.answer)
+
       setLoading(false)
     }
     load()
@@ -217,6 +224,19 @@ export default function Strategy() {
     if (data) setNotDoingGoals(prev => [...prev, data])
     setAddingNotDoing(false)
     setNewNotDoingText('')
+  }
+
+  const saveAnnualLetter = async (value: string) => {
+    if (!workbookId || !userId) return
+    await supabase.from('workbook_entries').upsert({
+      workbook_id: workbookId,
+      user_id: userId,
+      section_key: 'annual_letter',
+      list_order: 11,
+      answer: value,
+    }, { onConflict: 'workbook_id,section_key' })
+    setAnnualLetterSaved(true)
+    setTimeout(() => setAnnualLetterSaved(false), 2000)
   }
 
   if (loading) return (
@@ -548,6 +568,32 @@ export default function Strategy() {
             )}
           </div>
         </section>
+
+        {/* Annual Letter */}
+        <div className="mt-16 pt-12 border-t border-mercury">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-3 mb-6">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">Annual Letter · 2026</span>
+            </div>
+            <p className="text-xs text-shuttle mb-4 leading-relaxed">
+              Write a letter from December 31, 2026 to yourself today. What would you tell yourself if you achieved everything you set out to do?
+            </p>
+            <textarea
+              value={annualLetterValue}
+              onChange={e => {
+                setAnnualLetterValue(e.target.value)
+                if (annualLetterTimer.current) clearTimeout(annualLetterTimer.current)
+                annualLetterTimer.current = setTimeout(() => saveAnnualLetter(e.target.value), 800)
+              }}
+              placeholder={"Dear [your name],\n\nIt's December 31, 2026, and looking back on this year..."}
+              rows={10}
+              className="w-full text-sm text-burnham bg-transparent border-b border-mercury focus:border-burnham focus:outline-none resize-none leading-relaxed placeholder-shuttle/30 transition-colors"
+            />
+            {annualLetterSaved && (
+              <p className="text-[10px] text-shuttle/40 mt-2">Saved</p>
+            )}
+          </div>
+        </div>
       </main>
 
       {/* Systematize Goal Modal */}
