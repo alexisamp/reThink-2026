@@ -1,7 +1,7 @@
 // src/screens/Monthly.tsx
 import { useState, useEffect } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { House, CaretDown, ArrowRight, ArrowSquareOut } from '@phosphor-icons/react'
+import { House, CaretLeft, CaretRight, ArrowRight, ArrowSquareOut } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import type {
@@ -26,7 +26,8 @@ export default function Monthly() {
   const { goalId } = useParams()
   const navigate = useNavigate()
   const currentYear = new Date().getFullYear()
-  const currentMonth = new Date().getMonth() + 1 // 1-based
+  const todayMonth = new Date().getMonth() + 1 // 1-based, today's actual month
+  const [viewMonth, setViewMonth] = useState<number>(new Date().getMonth() + 1)
 
   const [goals, setGoals] = useState<Goal[]>([])
   const [activeGoal, setActiveGoal] = useState<Goal | null>(null)
@@ -111,9 +112,9 @@ export default function Monthly() {
       }
 
       // Habit logs for current month
-      const startOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`
-      const lastDay = new Date(currentYear, currentMonth, 0).getDate()
-      const endOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      const startOfMonth = `${currentYear}-${String(viewMonth).padStart(2, '0')}-01`
+      const lastDay = new Date(currentYear, viewMonth, 0).getDate()
+      const endOfMonth = `${currentYear}-${String(viewMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       if (habitRes.data && habitRes.data.length > 0) {
         const habitIds = habitRes.data.map(h => h.id)
         const { data: logs } = await supabase
@@ -132,14 +133,14 @@ export default function Monthly() {
         .eq('user_id', user.id)
         .eq('goal_id', activeGoal.id)
         .eq('year', currentYear)
-        .eq('month', currentMonth)
+        .eq('month', viewMonth)
         .maybeSingle()
       setMonthlyPlan(plan)
       setNotes(plan?.reflection || '')
     }
 
     load()
-  }, [activeGoal, user, currentYear, currentMonth])
+  }, [activeGoal, user, currentYear, viewMonth])
 
   const getKpiValue = (indicatorId: string, month: number): number | null => {
     const entry = kpiEntries.find(
@@ -199,7 +200,7 @@ export default function Monthly() {
         user_id: user.id,
         goal_id: activeGoal.id,
         year: currentYear,
-        month: currentMonth,
+        month: viewMonth,
         reflection: notes,
       },
       { onConflict: 'user_id,goal_id,year,month' }
@@ -221,8 +222,8 @@ export default function Monthly() {
     const logs = habitLogs.filter(l => l.habit_id === habit.id && l.value === 1)
     const total =
       habit.frequency === 'WEEKLY'
-        ? Math.ceil(getDaysInMonth(currentMonth, currentYear) / 7)
-        : getDaysInMonth(currentMonth, currentYear)
+        ? Math.ceil(getDaysInMonth(viewMonth, currentYear) / 7)
+        : getDaysInMonth(viewMonth, currentYear)
     return { done: logs.length, total }
   }
 
@@ -302,11 +303,24 @@ export default function Monthly() {
                 )}
               </div>
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-gray-50 border border-transparent hover:bg-gray-100 transition-colors">
-                  <span className="text-[11px] font-semibold text-shuttle tracking-wider uppercase">
-                    {MONTH_NAMES[currentMonth - 1]} {currentYear}
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setViewMonth(m => Math.max(1, m - 1))}
+                    disabled={viewMonth === 1}
+                    className="p-1.5 rounded hover:bg-gray-100 transition-colors disabled:opacity-30"
+                  >
+                    <CaretLeft size={10} weight="bold" className="text-shuttle" />
+                  </button>
+                  <span className="text-[10px] font-semibold text-shuttle tracking-widest uppercase min-w-[110px] text-center">
+                    {MONTH_NAMES[viewMonth - 1]} {currentYear}
                   </span>
-                  <CaretDown size={10} className="text-shuttle" weight="bold" />
+                  <button
+                    onClick={() => setViewMonth(m => Math.min(12, m + 1))}
+                    disabled={viewMonth === 12}
+                    className="p-1.5 rounded hover:bg-gray-100 transition-colors disabled:opacity-30"
+                  >
+                    <CaretRight size={10} weight="bold" className="text-shuttle" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -316,10 +330,10 @@ export default function Monthly() {
               {/* KPI Table */}
               <section>
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-[11px] font-bold text-shuttle uppercase tracking-[0.2em]">
+                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-[0.15em]">
                     Key Performance Indicators
                   </h3>
-                  <span className="text-[11px] font-mono text-shuttle">FY {currentYear}</span>
+                  <span className="text-[10px] font-mono text-shuttle">FY {currentYear}</span>
                 </div>
 
                 {indicators.length === 0 ? (
@@ -374,7 +388,7 @@ export default function Monthly() {
                             {MONTHS.map((_, mIdx) => {
                               const m = mIdx + 1
                               const actual = getKpiValue(ind.id, m)
-                              const isPast = m <= currentMonth
+                              const isPast = m <= todayMonth
                               return (
                                 <div
                                   key={m}
@@ -414,11 +428,11 @@ export default function Monthly() {
               {/* Supporting Habits */}
               <section>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[11px] font-bold text-shuttle uppercase tracking-[0.2em]">
+                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-[0.15em]">
                     Supporting Habits
                   </h3>
-                  <span className="text-[11px] font-mono text-shuttle">
-                    {MONTH_NAMES[currentMonth - 1]}
+                  <span className="text-[10px] font-mono text-shuttle">
+                    {MONTH_NAMES[viewMonth - 1]}
                   </span>
                 </div>
                 <div className="space-y-1">
@@ -467,7 +481,7 @@ export default function Monthly() {
               {/* Milestones Timeline */}
               <section>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[11px] font-bold text-shuttle uppercase tracking-[0.2em]">
+                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-[0.15em]">
                     Milestones Timeline
                   </h3>
                 </div>
@@ -539,7 +553,7 @@ export default function Monthly() {
         <div className="flex-1 overflow-y-auto px-8 py-2 space-y-10 pb-6">
           {/* Progress bars */}
           <div>
-            <h3 className="text-[11px] font-bold text-shuttle uppercase tracking-[0.2em] mb-6">
+            <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-[0.15em] mb-6">
               Progress
             </h3>
             <div className="space-y-6">
@@ -566,8 +580,8 @@ export default function Monthly() {
                 const habitsDone = habitLogs.filter(l => l.value === 1).length
                 const habitsTotal = habits.reduce((sum, h) => {
                   return sum + (h.frequency === 'WEEKLY'
-                    ? Math.ceil(getDaysInMonth(currentMonth, currentYear) / 7)
-                    : getDaysInMonth(currentMonth, currentYear))
+                    ? Math.ceil(getDaysInMonth(viewMonth, currentYear) / 7)
+                    : getDaysInMonth(viewMonth, currentYear))
                 }, 0)
                 const habitsPct = habitsTotal > 0 ? Math.round((habitsDone / habitsTotal) * 100) : 0
                 return (
@@ -589,7 +603,7 @@ export default function Monthly() {
 
           {/* Reflection notes */}
           <div>
-            <h3 className="text-[11px] font-bold text-shuttle uppercase tracking-[0.2em] mb-4">
+            <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-[0.15em] mb-4">
               Notes
             </h3>
             <textarea

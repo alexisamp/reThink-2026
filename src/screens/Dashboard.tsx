@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { House, ArrowRight, Lightning } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import type { Goal, Milestone, LeadingIndicator, Habit, HabitLog, Review } from '@/types'
+import type { Goal, Milestone, LeadingIndicator, Habit, HabitLog, Review, MonthlyKpiEntry } from '@/types'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DAYS = ['Mon', 'Wed', 'Fri']
@@ -111,6 +111,7 @@ export default function Dashboard() {
   const [habits, setHabits] = useState<Habit[]>([])
   const [habitLogs, setHabitLogs] = useState<HabitLog[]>([])
   const [reviews, setReviews] = useState<Review[]>([])
+  const [monthlyKpiEntries, setMonthlyKpiEntries] = useState<MonthlyKpiEntry[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -151,6 +152,17 @@ export default function Dashboard() {
       setIndicators(indRes.data || [])
       setHabits(habitRes.data || [])
       setReviews(reviewRes.data || [])
+
+      // KPI entries for year (for progress bars)
+      if (indRes.data && indRes.data.length > 0) {
+        const indIds = indRes.data.map(i => i.id)
+        const { data: kpiData } = await supabase
+          .from('monthly_kpi_entries')
+          .select('*')
+          .in('leading_indicator_id', indIds)
+          .eq('year', currentYear)
+        setMonthlyKpiEntries(kpiData || [])
+      }
 
       // Habit logs for year
       if (habitRes.data && habitRes.data.length > 0) {
@@ -326,27 +338,35 @@ export default function Dashboard() {
                         {goal.metric && <p className="text-xs text-shuttle mt-1 font-medium">{goal.metric}</p>}
                       </div>
                       <div className="space-y-6">
-                        {goalIndicators.slice(0, 3).map(ind => (
-                          <div key={ind.id} className="flex flex-col gap-1.5">
-                            <div className="flex justify-between items-end">
-                              <span className="text-[11px] text-shuttle">{ind.name}</span>
-                              <span className="text-[10px] font-medium text-shuttle">
-                                {ind.target ? `${ind.target}` : '—'}
-                              </span>
+                        {goalIndicators.slice(0, 3).map(ind => {
+                          const ytdActual = monthlyKpiEntries
+                            .filter(e => e.leading_indicator_id === ind.id)
+                            .reduce((sum, e) => sum + (e.actual_value ?? 0), 0)
+                          const progress = ind.target
+                            ? Math.min(100, Math.round((ytdActual / ind.target) * 100))
+                            : 0
+                          return (
+                            <div key={ind.id} className="flex flex-col gap-1.5">
+                              <div className="flex justify-between items-end">
+                                <span className="text-[10px] text-shuttle">{ind.name}</span>
+                                <span className="text-[10px] font-medium text-shuttle font-mono">
+                                  {progress}%
+                                </span>
+                              </div>
+                              <div className="h-[1px] w-full bg-mercury/50 overflow-hidden">
+                                <div className="h-full bg-[#79D65E] transition-all" style={{ width: `${progress}%` }} />
+                              </div>
                             </div>
-                            <div className="h-[1px] w-full bg-mercury/50 overflow-hidden">
-                              <div className="h-full bg-[#79D65E]" style={{ width: '45%' }} />
-                            </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
 
                     {/* Center: heatmap */}
                     <div className="lg:col-span-6 flex flex-col h-full">
                       <div className="flex justify-between items-end mb-3 px-1">
-                        <span className="text-sm font-semibold text-burnham">
-                          {completedCount} habit completions in {currentYear}
+                        <span className="text-[10px] font-semibold text-shuttle uppercase tracking-widest">
+                          {completedCount} completions in {currentYear}
                         </span>
                       </div>
                       <div className="flex-1 p-4 bg-white/50 rounded-sm">

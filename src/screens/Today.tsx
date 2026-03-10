@@ -149,7 +149,7 @@ export default function Today() {
     <div className="h-screen bg-white text-burnham font-sans flex overflow-hidden">
       {/* Main 70% */}
       <main className="flex-1 h-full flex flex-col relative">
-        <div className="flex-1 overflow-y-auto px-16 py-12 pb-32">
+        <div className="flex-1 overflow-y-auto px-16 py-12 pb-20">
           <div className="max-w-3xl mx-auto w-full mb-6">
             {/* Breadcrumb */}
             <div className="flex items-center gap-2 text-xs font-medium text-shuttle mb-4">
@@ -199,6 +199,30 @@ export default function Today() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Inline tab bar — replaces old floating bottom pill */}
+          <div className="max-w-3xl mx-auto w-full mb-8">
+            <div className="flex border-b border-mercury">
+              {([
+                { id: 'todos',      label: 'To-Dos',    key: '1' },
+                { id: 'milestones', label: 'Milestones', key: '2' },
+                { id: 'habits',     label: 'Habits',     key: '3' },
+              ] as { id: Tab; label: string; key: string }[]).map(({ id, label, key }) => (
+                <button
+                  key={id}
+                  onClick={() => setTab(id)}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 -mb-px transition-all ${
+                    tab === id
+                      ? 'border-burnham text-burnham'
+                      : 'border-transparent text-shuttle hover:text-burnham'
+                  }`}
+                >
+                  {label}
+                  <span className="font-mono text-[9px] opacity-40">{key}</span>
+                </button>
+              ))}
             </div>
           </div>
 
@@ -343,31 +367,6 @@ export default function Today() {
           </div>
         </div>
 
-        {/* Inner tab nav */}
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10">
-          <div className="bg-white/90 backdrop-blur-md border border-mercury shadow-sm rounded-full p-1.5 flex items-center gap-1">
-            {([
-              { id: 'todos',      label: 'To-Dos',     key: '1' },
-              { id: 'milestones', label: 'Milestones',  key: '2' },
-              { id: 'habits',     label: 'Habits',      key: '3' },
-            ] as { id: Tab; label: string; key: string }[]).map(({ id, label, key }) => (
-              <button
-                key={id}
-                onClick={() => setTab(id)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all ${
-                  tab === id
-                    ? 'bg-mercury/30 ring-1 ring-mercury text-burnham shadow-sm'
-                    : 'text-shuttle hover:bg-gray-50 hover:text-burnham font-medium'
-                }`}
-              >
-                {label}
-                <span className={`font-mono text-[9px] px-1 py-0.5 rounded ${
-                  tab === id ? 'text-shuttle/50 bg-white/60' : 'text-shuttle/30 bg-mercury/20'
-                }`}>{key}</span>
-              </button>
-            ))}
-          </div>
-        </div>
       </main>
 
       {/* Right 30% Daily Overview */}

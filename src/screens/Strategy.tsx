@@ -115,7 +115,7 @@ export default function Strategy() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <h1 className="text-4xl font-bold text-burnham tracking-[-0.02em]">Strategy War Map</h1>
+            <h1 className="text-2xl font-bold text-burnham tracking-tight">Strategy War Map</h1>
             <PencilSimple size={20} className="text-shuttle/40 hover:text-burnham transition-colors cursor-pointer mt-1" />
           </div>
         </header>
