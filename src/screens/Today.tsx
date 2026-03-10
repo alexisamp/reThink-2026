@@ -3,7 +3,7 @@ import {
   Lightning, Check, PencilSimple,
   ArrowRight, Question, Play, Pause, Stop,
   CaretDown, Timer, Target, CalendarBlank,
-  CaretRight, CaretLeft, Flame,
+  CaretRight, CaretLeft, Flame, TrashSimple,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Todo, Habit, HabitLog, Review, Milestone, Goal } from '@/types'
@@ -45,6 +45,10 @@ export default function Today() {
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null)
   const [showGoalPicker, setShowGoalPicker] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Add milestone
+  const [newMilestone, setNewMilestone] = useState('')
+  const milestoneInputRef = useRef<HTMLInputElement>(null)
 
   // Inline edit todo
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null)
@@ -134,7 +138,7 @@ export default function Today() {
         supabase.from('habit_logs').select('*').eq('user_id', user.id).eq('log_date', today),
         supabase.from('habit_logs').select('*').eq('user_id', user.id)
           .gte('log_date', thirtyAgoStr).order('log_date', { ascending: false }),
-        supabase.from('reviews').select('*').eq('user_id', user.id).eq('review_date', today).maybeSingle(),
+        supabase.from('reviews').select('*').eq('user_id', user.id).eq('date', today).maybeSingle(),
         supabase.from('goals').select('id, text').eq('user_id', user.id).eq('goal_type', 'ACTIVE'),
         supabase.from('milestones').select('*').eq('user_id', user.id)
           .or(`target_date.is.null,target_date.gte.${today}`).order('target_date', { nullsFirst: true }),
@@ -353,10 +357,24 @@ export default function Today() {
     setEditingTodoId(null)
   }
 
+  const deleteTodo = async (id: string) => {
+    await supabase.from('todos').delete().eq('id', id)
+    setTodos(prev => prev.filter(t => t.id !== id))
+  }
+
+  const addMilestone = async () => {
+    if (!newMilestone.trim() || !userId) return
+    const { data } = await supabase.from('milestones')
+      .insert({ text: newMilestone.trim(), user_id: userId, status: 'PENDING' })
+      .select().single()
+    if (data) setMilestones(prev => [...prev, data])
+    setNewMilestone('')
+  }
+
   const upsertReview = async (updates: Partial<Review>) => {
     if (!userId) return
-    const payload = { ...review, ...updates, user_id: userId, review_date: today }
-    const { data } = await supabase.from('reviews').upsert(payload).select().single()
+    const payload = { ...review, ...updates, user_id: userId, date: today }
+    const { data } = await supabase.from('reviews').upsert(payload, { onConflict: 'user_id,date' }).select().single()
     if (data) setReview(data)
   }
 
@@ -553,24 +571,23 @@ export default function Today() {
               </div>
             </div>
 
-            {/* Inline tab bar */}
-            <div className="flex border-b border-mercury mb-8">
+            {/* Tab switcher */}
+            <div className="flex bg-[#F0F1F1] rounded-xl p-1 mb-8 gap-0.5">
               {([
-                { id: 'todos',      label: 'To-Dos',     key: '1' },
-                { id: 'milestones', label: 'Milestones',  key: '2' },
-                { id: 'habits',     label: 'Habits',      key: '3' },
-              ] as { id: Tab; label: string; key: string }[]).map(({ id, label, key }) => (
+                { id: 'todos',      label: 'To-Dos' },
+                { id: 'milestones', label: 'Milestones' },
+                { id: 'habits',     label: 'Habits' },
+              ] as { id: Tab; label: string }[]).map(({ id, label }) => (
                 <button
                   key={id}
                   onClick={() => setTab(id)}
-                  className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 -mb-px transition-all ${
+                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
                     tab === id
-                      ? 'border-burnham text-burnham'
-                      : 'border-transparent text-shuttle hover:text-burnham'
+                      ? 'bg-white text-burnham shadow-sm'
+                      : 'text-shuttle hover:text-burnham'
                   }`}
                 >
                   {label}
-                  <span className="font-mono text-[9px] opacity-40">{key}</span>
                 </button>
               ))}
             </div>
@@ -617,7 +634,7 @@ export default function Today() {
                                   {todo.text}
                                 </span>
                               )}
-                              <div className="flex gap-1.5 shrink-0">
+                              <div className="flex items-center gap-1.5 shrink-0">
                                 {todo.effort === 'DEEP' && (
                                   <span className="text-[10px] bg-gossip text-burnham px-1.5 py-0.5 rounded flex items-center gap-1">
                                     <Lightning size={9} weight="fill" /> Deep
@@ -626,6 +643,12 @@ export default function Today() {
                                 {todo.block && (
                                   <span className="text-[10px] bg-gray-100 text-shuttle px-1.5 py-0.5 rounded">{todo.block}</span>
                                 )}
+                                <button
+                                  onClick={() => deleteTodo(todo.id)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded"
+                                >
+                                  <TrashSimple size={12} />
+                                </button>
                               </div>
                             </div>
                             {goalName && (
@@ -651,10 +674,18 @@ export default function Today() {
                       <h4 className="text-[10px] font-semibold text-shuttle/60 uppercase tracking-widest mb-3">Done</h4>
                       <div className="space-y-1">
                         {doneTodos.map(todo => (
-                          <div key={todo.id} className="flex items-start gap-3 py-1.5 px-2 -mx-2 opacity-60">
+                          <div key={todo.id} className="group flex items-start gap-3 py-1.5 px-2 -mx-2 opacity-60 hover:opacity-80 transition-opacity">
                             <input type="checkbox" className="custom-checkbox mt-0.5" checked onChange={() => toggleTodo(todo.id)} />
                             <div className="flex-1">
-                              <span className="text-sm text-shuttle line-through decoration-pastel">{todo.text}</span>
+                              <div className="flex items-baseline justify-between gap-2">
+                                <span className="text-sm text-shuttle line-through decoration-pastel">{todo.text}</span>
+                                <button
+                                  onClick={() => deleteTodo(todo.id)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
+                                >
+                                  <TrashSimple size={12} />
+                                </button>
+                              </div>
                               {todo.goal_id && (
                                 <div className="flex items-center gap-1 mt-0.5">
                                   <span className="w-1.5 h-1.5 rounded-full bg-pastel/50 shrink-0" />
@@ -691,9 +722,23 @@ export default function Today() {
                         </div>
                       </div>
                     ))}
-                    <div className="group flex items-center gap-3 py-2 px-2 -mx-2 opacity-40 hover:opacity-80 transition-opacity cursor-text">
-                      <div className="w-[1.15em] h-[1.15em] border border-dashed border-shuttle rounded-[0.35em]" />
-                      <span className="text-sm text-shuttle">Add milestone...</span>
+                    <div
+                      className="flex items-center gap-3 py-2 px-2 -mx-2 opacity-40 hover:opacity-80 focus-within:opacity-100 transition-opacity cursor-text"
+                      onClick={() => milestoneInputRef.current?.focus()}
+                    >
+                      <div className="w-[1.15em] h-[1.15em] border border-dashed border-shuttle rounded-[0.35em] shrink-0" />
+                      <input
+                        ref={milestoneInputRef}
+                        className="flex-1 text-sm text-shuttle bg-transparent border-none focus:outline-none focus:text-burnham placeholder-shuttle/50"
+                        placeholder="Add milestone..."
+                        value={newMilestone}
+                        onChange={e => setNewMilestone(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') addMilestone()
+                          if (e.key === 'Escape') { setNewMilestone(''); milestoneInputRef.current?.blur() }
+                        }}
+                        onBlur={() => { if (newMilestone.trim()) addMilestone() }}
+                      />
                     </div>
                   </div>
                   {doneMilestones.length > 0 && (

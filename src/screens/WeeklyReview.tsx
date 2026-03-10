@@ -186,13 +186,14 @@ export default function WeeklyReview() {
 
   const handleCommit = async () => {
     if (!userId) return
-    // Save weekly_one_thing, wins, and patterns to the review row
+    // Save weekly_one_thing, wins, patterns, and priority_goal_id to the review row
     await supabase.from('reviews').upsert({
       user_id: userId,
-      review_date: today,
+      date: today,
       weekly_one_thing: weeklyOneThing,
       notes: [wins, patterns].filter(Boolean).join('\n\n--- Patterns ---\n\n') || undefined,
-    }, { onConflict: 'user_id,review_date' })
+      priority_goal_id: priorityGoalId ?? null,
+    }, { onConflict: 'user_id,date' })
 
     setCommitted(true)
 

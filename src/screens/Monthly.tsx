@@ -1,7 +1,7 @@
 // src/screens/Monthly.tsx
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { House, CaretLeft, CaretRight, ArrowRight, ArrowSquareOut } from '@phosphor-icons/react'
+import { House, CaretLeft, CaretRight, ArrowRight, ArrowSquareOut, TrashSimple, Star } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import type {
@@ -276,6 +276,28 @@ export default function Monthly() {
     await supabase.from('milestones').update({ status: newStatus }).eq('id', msId)
   }
 
+  const deleteMilestone = async (msId: string) => {
+    await supabase.from('milestones').delete().eq('id', msId)
+    setMilestones(prev => prev.filter(m => m.id !== msId))
+  }
+
+  const todayStr = new Date().toISOString().split('T')[0]
+
+  const toggleHabitToday = async (habitId: string) => {
+    if (!user) return
+    const existing = habitLogs.find(l => l.habit_id === habitId && l.log_date === todayStr)
+    if (existing) {
+      const newVal = existing.value === 1 ? 0 : 1
+      await supabase.from('habit_logs').update({ value: newVal }).eq('id', existing.id)
+      setHabitLogs(prev => prev.map(l => l.id === existing.id ? { ...l, value: newVal } : l))
+    } else {
+      const { data } = await supabase.from('habit_logs')
+        .insert({ habit_id: habitId, user_id: user.id, log_date: todayStr, value: 1 })
+        .select().single()
+      if (data) setHabitLogs(prev => [...prev, data])
+    }
+  }
+
   const getHabitConsistency = (habit: Habit) => {
     const logs = habitLogs.filter(l => l.habit_id === habit.id && l.value === 1)
     const total =
@@ -517,11 +539,21 @@ export default function Monthly() {
                     habits.map(habit => {
                       const { done, total } = getHabitConsistency(habit)
                       const pct = total > 0 ? Math.round((done / total) * 100) : 0
+                      const todayDone = habitLogs.some(l => l.habit_id === habit.id && l.log_date === todayStr && l.value === 1)
                       return (
                         <div
                           key={habit.id}
-                          className="flex items-center gap-4 py-3 border-b border-mercury/50 hover:bg-gray-50 px-2 -mx-2 rounded transition-colors"
+                          className="flex items-center gap-3 py-3 border-b border-mercury/50 hover:bg-gray-50 px-2 -mx-2 rounded transition-colors"
                         >
+                          {viewMonth === todayMonth && (
+                            <input
+                              type="checkbox"
+                              checked={todayDone}
+                              onChange={() => toggleHabitToday(habit.id)}
+                              className="custom-checkbox shrink-0"
+                              title="Mark done today"
+                            />
+                          )}
                           <div className="flex-1 flex items-center justify-between">
                             <div className="flex items-baseline gap-3">
                               <span className="text-sm font-medium text-burnham">
@@ -583,7 +615,7 @@ export default function Monthly() {
                       return (
                         <div
                           key={ms.id}
-                          className={`flex items-start gap-3 py-2 px-2 -mx-2 rounded transition-colors ${
+                          className={`group flex items-start gap-3 py-2 px-2 -mx-2 rounded transition-colors ${
                             ms.status === 'COMPLETE' ? 'opacity-30' : 'hover:bg-gray-50'
                           }`}
                         >
@@ -607,6 +639,12 @@ export default function Monthly() {
                               <span className="text-[10px] font-mono text-shuttle">
                                 {dateStr}
                               </span>
+                              <button
+                                onClick={() => deleteMilestone(ms.id)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded"
+                              >
+                                <TrashSimple size={12} />
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -730,13 +768,13 @@ export default function Monthly() {
                     <button
                       key={n}
                       onClick={() => saveRating(n)}
-                      className={`text-xl transition-colors ${
+                      className={`transition-colors ${
                         rating !== null && rating >= n
                           ? 'text-amber-400'
                           : 'text-mercury hover:text-amber-200'
                       }`}
                     >
-                      &#9733;
+                      <Star size={20} weight={rating !== null && rating >= n ? 'fill' : 'regular'} />
                     </button>
                   ))}
                 </div>

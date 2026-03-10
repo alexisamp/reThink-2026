@@ -168,7 +168,7 @@ function EnergyScatter({ reviews, todos }: { reviews: Review[]; todos: Todo[] })
     .filter(r => r.energy_level && r.energy_level > 0)
     .map(r => ({
       x: r.energy_level!,
-      y: todosByDate.get(r.review_date) ?? 0,
+      y: todosByDate.get(r.date) ?? 0,
     }))
     .filter(p => p.y > 0)
 
@@ -283,7 +283,7 @@ export default function Dashboard() {
         supabase.from('leading_indicators').select('*').in('goal_id', goalIds),
         supabase.from('habits').select('*').in('goal_id', goalIds).eq('is_active', true),
         supabase.from('reviews').select('*').eq('user_id', user.id)
-          .gte('review_date', `${currentYear}-01-01`).lte('review_date', `${currentYear}-12-31`),
+          .gte('date', `${currentYear}-01-01`).lte('date', `${currentYear}-12-31`),
         supabase.from('todos').select('*').eq('user_id', user.id)
           .eq('completed', true).gte('created_at', `${currentYear}-01-01T00:00:00`),
       ])
@@ -321,9 +321,9 @@ export default function Dashboard() {
   const sixtyStr = sixtyDaysAgo.toISOString().split('T')[0]
 
   const recentReviews = useMemo(() =>
-    reviews.filter(r => r.review_date >= thirtyStr), [reviews, thirtyStr])
+    reviews.filter(r => r.date >= thirtyStr), [reviews, thirtyStr])
   const priorReviews = useMemo(() =>
-    reviews.filter(r => r.review_date >= sixtyStr && r.review_date < thirtyStr), [reviews, thirtyStr, sixtyStr])
+    reviews.filter(r => r.date >= sixtyStr && r.date < thirtyStr), [reviews, thirtyStr, sixtyStr])
 
   const avgEnergy = useMemo(() => {
     const valid = recentReviews.filter(r => r.energy_level)

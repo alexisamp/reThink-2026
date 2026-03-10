@@ -116,7 +116,7 @@ export interface Todo {
 export interface Review {
   id: string
   user_id: string
-  review_date: string
+  date: string
   energy_level: number | null
   notes: string | null
   one_thing: string | null

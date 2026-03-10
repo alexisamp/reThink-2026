@@ -18,6 +18,7 @@ export default function ReflectionLibrary() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [typeFilter, setTypeFilter] = useState<LibraryItem['type'] | 'all'>('all')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -203,7 +204,8 @@ export default function ReflectionLibrary() {
           <div className="space-y-3">
             {filtered.map(item => (
               <div key={item.id}
-                className={`p-4 rounded-xl border transition-all hover:border-shuttle/40 cursor-default ${
+                onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                className={`p-4 rounded-xl border transition-all hover:border-shuttle/40 cursor-pointer ${
                   item.type === 'annual_letter'
                     ? 'bg-gossip/20 border-pastel/50'
                     : 'bg-white border-mercury'
@@ -222,7 +224,7 @@ export default function ReflectionLibrary() {
                   </span>
                 </div>
                 <h3 className="text-sm font-semibold text-burnham mb-1">{item.title}</h3>
-                <p className="text-xs text-shuttle leading-relaxed line-clamp-2">{item.content}</p>
+                <p className={`text-xs text-shuttle leading-relaxed whitespace-pre-wrap ${expandedId === item.id ? '' : 'line-clamp-2'}`}>{item.content}</p>
               </div>
             ))}
           </div>

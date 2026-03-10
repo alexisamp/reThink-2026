@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { House, PencilSimple, Plus, GearSix } from '@phosphor-icons/react'
+import { House, PencilSimple, Plus, GearSix, TrashSimple } from '@phosphor-icons/react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import type { Goal, Milestone, Habit, HabitLog, LeadingIndicator, MonthlyKpiEntry, WorkbookEntry } from '@/types'
@@ -233,6 +233,11 @@ export default function Strategy() {
     setNewNotDoingText('')
   }
 
+  const deleteNotDoing = async (id: string) => {
+    await supabase.from('goals').delete().eq('id', id)
+    setNotDoingGoals(prev => prev.filter(g => g.id !== id))
+  }
+
   const saveAnnualLetter = async (value: string) => {
     if (!workbookId || !userId) return
     await supabase.from('workbook_entries').upsert({
@@ -272,7 +277,6 @@ export default function Strategy() {
           </div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-burnham tracking-tight">Strategy War Map</h1>
-            <PencilSimple size={20} className="text-shuttle/40 hover:text-burnham transition-colors cursor-pointer mt-1" />
           </div>
         </header>
 
@@ -477,9 +481,17 @@ export default function Strategy() {
                 </h3>
                 <div className="space-y-3">
                   {notDoingGoals.map(g => (
-                    <div key={g.id} className="group">
-                      <p className="text-sm text-shuttle line-through">{g.text}</p>
-                      {g.motivation && <p className="text-[10px] text-shuttle/50 italic mt-0.5">{g.motivation}</p>}
+                    <div key={g.id} className="group flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm text-shuttle line-through">{g.text}</p>
+                        {g.motivation && <p className="text-[10px] text-shuttle/50 italic mt-0.5">{g.motivation}</p>}
+                      </div>
+                      <button
+                        onClick={() => deleteNotDoing(g.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0 mt-0.5"
+                      >
+                        <TrashSimple size={12} />
+                      </button>
                     </div>
                   ))}
                 </div>
