@@ -234,7 +234,7 @@ export default function Strategy() {
       section_key: 'annual_letter',
       list_order: 11,
       answer: value,
-    }, { onConflict: 'workbook_id,section_key' })
+    }, { onConflict: 'workbook_id,list_order,section_key' })
     setAnnualLetterSaved(true)
     setTimeout(() => setAnnualLetterSaved(false), 2000)
   }
