@@ -25,7 +25,7 @@ export interface WorkbookEntry {
   created_at: string
 }
 
-export type GoalType = 'ACTIVE' | 'BACKLOG' | 'ARCHIVE'
+export type GoalType = 'ACTIVE' | 'BACKLOG' | 'ARCHIVE' | 'NOT_DOING'
 export type GoalStatus = 'NOT_STARTED' | 'ON_TRACK' | 'AT_RISK' | 'BLOCKED' | 'COMPLETE'
 
 export interface Goal {
@@ -120,11 +120,34 @@ export interface Review {
   notes: string | null
   one_thing: string | null
   tomorrow_focus: string | null
+  weekly_one_thing: string | null
+  ai_coach_notes: string | null
   inbox_zero: boolean
   time_logs_updated: boolean
   tomorrow_reviewed: boolean
   created_at: string
   updated_at: string
+}
+
+export interface FrictionLog {
+  id: string
+  habit_id: string
+  user_id: string
+  log_date: string
+  reason: string | null
+  created_at: string
+}
+
+export interface FocusSession {
+  id: string
+  user_id: string
+  goal_id: string | null
+  habit_id: string | null
+  started_at: string
+  ended_at: string | null
+  duration_minutes: number | null
+  session_type: string
+  created_at: string
 }
 
 export interface Strategy {
@@ -164,4 +187,4 @@ export interface MonthlyKpiEntry {
   updated_at: string
 }
 
-export type NavRoute = '/today' | '/monthly' | '/strategy' | '/dashboard'
+export type NavRoute = '/today' | '/monthly' | '/strategy' | '/dashboard' | '/weekly-review' | '/library'
