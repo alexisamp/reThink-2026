@@ -10,25 +10,39 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const DAYS = ['Mon', 'Wed', 'Fri']
 
 // Build 48 weeks × 7 days heatmap data from habit logs
-function buildHeatmap(logs: HabitLog[], _goalId: string, year: number) {
-  // Get start of this year
+function buildHeatmap(logs: HabitLog[], habitCount: number, year: number) {
   const startOfYear = new Date(year, 0, 1)
-  // Build a set of dates with logged completions for this goal's habits
-  const logSet = new Set(logs.filter(l => l.value === 1).map(l => l.log_date))
+  const today = new Date()
+  today.setHours(23, 59, 59, 999)
+
+  // Count completions per date
+  const dateCounts = new Map<string, number>()
+  for (const l of logs) {
+    if (l.value === 1) {
+      dateCounts.set(l.log_date, (dateCounts.get(l.log_date) || 0) + 1)
+    }
+  }
 
   const cells: number[] = [] // 0-4 intensity per day
-  // 48 weeks = 336 days, starting from Jan 1
   for (let week = 0; week < 48; week++) {
     for (let day = 0; day < 7; day++) {
       const date = new Date(startOfYear)
       date.setDate(1 + week * 7 + day)
-      const dateStr = date.toISOString().split('T')[0]
-      if (logSet.has(dateStr)) {
-        cells.push(Math.random() > 0.5 ? 3 : 2) // completed = level 2-3
-      } else if (date > new Date()) {
+      if (date > today) {
         cells.push(-1) // future = empty
       } else {
-        cells.push(0) // missed
+        const count = dateCounts.get(date.toISOString().split('T')[0]) || 0
+        if (count === 0) {
+          cells.push(0) // missed
+        } else if (habitCount <= 1) {
+          cells.push(3) // single habit done
+        } else {
+          const pct = count / habitCount
+          if (pct >= 0.9) cells.push(4)
+          else if (pct >= 0.6) cells.push(3)
+          else if (pct >= 0.3) cells.push(2)
+          else cells.push(1)
+        }
       }
     }
   }
@@ -247,10 +261,10 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            <div className="text-shuttle text-[10px] font-bold tracking-widest uppercase">Deep Work</div>
+            <div className="text-shuttle text-[10px] font-bold tracking-widest uppercase">Active Days</div>
             <div className="flex items-baseline gap-2">
               <p className="text-burnham text-4xl font-bold tracking-tight">{reviews.length}</p>
-              <span className="text-shuttle text-sm font-normal">days</span>
+              <span className="text-shuttle text-sm font-normal">reviews</span>
             </div>
           </div>
         </section>
@@ -299,7 +313,7 @@ export default function Dashboard() {
               const goalLogs = habitLogs.filter(l => goalHabits.some(h => h.id === l.habit_id))
               const goalMilestones = milestones.filter(m => m.goal_id === goal.id)
               const goalIndicators = indicators.filter(ind => ind.goal_id === goal.id)
-              const heatmapCells = buildHeatmap(goalLogs, goal.id, currentYear)
+              const heatmapCells = buildHeatmap(goalLogs, goalHabits.length, currentYear)
               const completedCount = goalLogs.filter(l => l.value === 1).length
 
               return (

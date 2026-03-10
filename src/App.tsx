@@ -52,6 +52,7 @@ export default function App() {
       .eq('year', year)
       .maybeSingle()
       .then(({ data }) => setHasWorkbook(!!data))
+      .catch(() => setHasWorkbook(false))
   }, [user])
 
   if (loading) return <Splash />

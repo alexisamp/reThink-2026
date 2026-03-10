@@ -127,7 +127,7 @@ export default function Assessment({ onComplete }: AssessmentProps) {
     }
 
     onComplete()
-    navigate('/today')
+    navigate('/strategy')
   }
 
   const progress = ((step - 1) / TOTAL_STEPS) * 100

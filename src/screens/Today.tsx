@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   House, Lightning, X, Check, PencilSimple,
   ArrowRight, Question
@@ -23,6 +23,9 @@ export default function Today() {
   const [newTask, setNewTask] = useState('')
   const [taskType, setTaskType] = useState<'To-Do' | 'Milestone'>('To-Do')
   const [taskDeep, setTaskDeep] = useState(false)
+  const [todoBlock, setTodoBlock] = useState<'AM' | 'PM' | null>(null)
+  const [notesValue, setNotesValue] = useState('')
+  const notesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -49,6 +52,19 @@ export default function Today() {
     }
     load()
   }, [today])
+
+  // Sync notesValue with review when it loads
+  useEffect(() => {
+    setNotesValue(review?.notes ?? '')
+  }, [review?.notes])
+
+  const handleNotesChange = useCallback((value: string) => {
+    setNotesValue(value)
+    if (notesTimerRef.current) clearTimeout(notesTimerRef.current)
+    notesTimerRef.current = setTimeout(() => {
+      upsertReview({ notes: value })
+    }, 800)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pendingTodos = todos.filter(t => !t.completed)
   const doneTodos = todos.filter(t => t.completed)
@@ -99,10 +115,12 @@ export default function Today() {
         user_id: user.id,
         effort: taskDeep ? 'DEEP' : 'NORMAL',
         date: today,
+        block: todoBlock,
       })
       .select().single()
     if (data) setTodos(prev => [...prev, data])
     setNewTask('')
+    setTodoBlock(null)
   }
 
   const upsertReview = async (updates: Partial<Review>) => {
@@ -151,8 +169,15 @@ export default function Today() {
                   <button className="px-2 py-0.5 rounded text-[10px] font-semibold text-shuttle bg-white border border-mercury hover:border-shuttle hover:text-burnham transition-colors">
                     # Add Goal
                   </button>
-                  <button className="px-2 py-0.5 rounded text-[10px] font-semibold text-shuttle bg-white border border-mercury hover:border-shuttle hover:text-burnham transition-colors">
-                    AM / PM
+                  <button
+                    onClick={() => setTodoBlock(b => b === null ? 'AM' : b === 'AM' ? 'PM' : null)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                      todoBlock
+                        ? 'text-burnham bg-mercury/40 border border-mercury'
+                        : 'text-shuttle bg-white border border-mercury hover:border-shuttle hover:text-burnham'
+                    }`}
+                  >
+                    {todoBlock ?? 'AM / PM'}
                   </button>
                   <button
                     onClick={() => setTaskDeep(p => !p)}
@@ -410,8 +435,8 @@ export default function Today() {
             <textarea
               className="w-full bg-white border border-mercury rounded-lg p-3 text-sm text-burnham h-32 resize-none placeholder-gray-400 focus:border-shuttle focus:ring-0"
               placeholder="Any blockers or quick thoughts?"
-              value={review?.notes ?? ''}
-              onChange={e => upsertReview({ notes: e.target.value })}
+              value={notesValue}
+              onChange={e => handleNotesChange(e.target.value)}
             />
           </div>
         </div>

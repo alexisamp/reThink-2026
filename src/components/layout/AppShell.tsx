@@ -1,7 +1,8 @@
 import { type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { House, CalendarBlank, Strategy, ChartPie } from '@phosphor-icons/react'
+import { House, CalendarBlank, Strategy, ChartPie, SignOut } from '@phosphor-icons/react'
 import type { User } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase'
 
 interface NavItem {
   label: string
@@ -24,6 +25,7 @@ interface AppShellProps {
 export default function AppShell({ children }: AppShellProps) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const signOut = () => supabase.auth.signOut()
 
   return (
     <div className="min-h-screen bg-white text-burnham font-sans">
@@ -53,6 +55,14 @@ export default function AppShell({ children }: AppShellProps) {
               </button>
             )
           })}
+          <div className="w-px h-5 bg-mercury/60 mx-1" />
+          <button
+            onClick={signOut}
+            title="Sign out"
+            className="flex items-center justify-center w-9 h-9 rounded-full text-shuttle hover:text-burnham hover:bg-gray-100 transition-all"
+          >
+            <SignOut size={16} />
+          </button>
         </div>
       </nav>
     </div>

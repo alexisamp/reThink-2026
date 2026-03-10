@@ -112,7 +112,8 @@ export default function Monthly() {
 
       // Habit logs for current month
       const startOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`
-      const endOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`
+      const lastDay = new Date(currentYear, currentMonth, 0).getDate()
+      const endOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       if (habitRes.data && habitRes.data.length > 0) {
         const habitIds = habitRes.data.map(h => h.id)
         const { data: logs } = await supabase
@@ -207,6 +208,14 @@ export default function Monthly() {
   }
 
   const getDaysInMonth = (month: number, year: number) => new Date(year, month, 0).getDate()
+
+  const toggleMilestone = async (msId: string) => {
+    const ms = milestones.find(m => m.id === msId)
+    if (!ms) return
+    const newStatus = ms.status === 'COMPLETE' ? 'PENDING' : 'COMPLETE'
+    setMilestones(prev => prev.map(m => m.id === msId ? { ...m, status: newStatus } : m))
+    await supabase.from('milestones').update({ status: newStatus }).eq('id', msId)
+  }
 
   const getHabitConsistency = (habit: Habit) => {
     const logs = habitLogs.filter(l => l.habit_id === habit.id && l.value === 1)
@@ -483,8 +492,8 @@ export default function Monthly() {
                           <input
                             type="checkbox"
                             checked={ms.status === 'COMPLETE'}
-                            readOnly
-                            className="custom-checkbox mt-0.5 focus:ring-0"
+                            onChange={() => toggleMilestone(ms.id)}
+                            className="custom-checkbox mt-0.5 focus:ring-0 cursor-pointer"
                           />
                           <div className="flex-1 flex justify-between items-baseline">
                             <span
@@ -553,17 +562,28 @@ export default function Monthly() {
                   />
                 </div>
               </div>
-              <div>
-                <div className="flex justify-between items-end mb-2">
-                  <span className="text-xs font-medium text-burnham">Habits</span>
-                  <span className="text-[10px] font-mono text-shuttle">
-                    {habitLogs.filter(l => l.value === 1).length} completions
-                  </span>
-                </div>
-                <div className="h-[3px] w-full bg-mercury rounded-full overflow-hidden">
-                  <div className="h-full bg-pastel w-[75%]" />
-                </div>
-              </div>
+              {(() => {
+                const habitsDone = habitLogs.filter(l => l.value === 1).length
+                const habitsTotal = habits.reduce((sum, h) => {
+                  return sum + (h.frequency === 'WEEKLY'
+                    ? Math.ceil(getDaysInMonth(currentMonth, currentYear) / 7)
+                    : getDaysInMonth(currentMonth, currentYear))
+                }, 0)
+                const habitsPct = habitsTotal > 0 ? Math.round((habitsDone / habitsTotal) * 100) : 0
+                return (
+                  <div>
+                    <div className="flex justify-between items-end mb-2">
+                      <span className="text-xs font-medium text-burnham">Habits</span>
+                      <span className="text-[10px] font-mono text-shuttle">
+                        {habitsDone}/{habitsTotal}
+                      </span>
+                    </div>
+                    <div className="h-[3px] w-full bg-mercury rounded-full overflow-hidden">
+                      <div className="h-full bg-pastel transition-all" style={{ width: `${habitsPct}%` }} />
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           </div>
 
