@@ -53,9 +53,9 @@ export default function Monthly() {
   const [habitLogs, setHabitLogs] = useState<HabitLog[]>([])
 
   // Autosave debounce refs
-  const retroReflectionTimer = useRef<ReturnType<typeof setTimeout>>()
-  const retroHighlightsTimer = useRef<ReturnType<typeof setTimeout>>()
-  const notesTimer = useRef<ReturnType<typeof setTimeout>>()
+  const retroReflectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const retroHighlightsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const notesTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   // Load goals
   useEffect(() => {
@@ -195,7 +195,7 @@ export default function Monthly() {
           actual_value: numVal,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        },
+        } as MonthlyKpiEntry,
       ]
     })
 

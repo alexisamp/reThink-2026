@@ -47,7 +47,7 @@ export default function YearAtAGlance() {
       ])
       setHabits(habitsRes.data ?? [])
       setHabitLogs(logsRes.data ?? [])
-      setReviews(reviewsRes.data ?? [])
+      setReviews((reviewsRes.data ?? []) as Review[])
       setMilestones(milestonesRes.data ?? [])
       setLoading(false)
     }

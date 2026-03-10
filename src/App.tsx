@@ -56,8 +56,7 @@ export default function App() {
       .eq('user_id', user.id)
       .eq('year', year)
       .maybeSingle()
-      .then(({ data }) => setHasWorkbook(!!data))
-      .catch(() => setHasWorkbook(false))
+      .then(({ data, error }) => setHasWorkbook(!error && !!data))
   }, [user])
 
   // Smart Notifications (Sprint 11)
