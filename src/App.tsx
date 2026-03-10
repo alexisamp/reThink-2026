@@ -17,6 +17,7 @@ import WeeklyReview from '@/screens/WeeklyReview'
 import ReflectionLibrary from '@/screens/ReflectionLibrary'
 import YearAtAGlance from '@/screens/YearAtAGlance'
 import { checkNotificationTriggers, formatNotificationMessage } from '@/lib/notifications'
+import { check } from '@tauri-apps/plugin-updater'
 
 function Splash() {
   return (
@@ -32,6 +33,13 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [hasWorkbook, setHasWorkbook] = useState<boolean | null>(null)
+
+  // Check for updates on startup (Tauri only)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && '__TAURI__' in window) {
+      setTimeout(() => check().catch(console.error), 3000)
+    }
+  }, [])
 
   useEffect(() => {
     supabase.auth.getSession()
