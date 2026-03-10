@@ -118,6 +118,8 @@ export interface Review {
   review_date: string
   energy_level: number | null
   notes: string | null
+  one_thing: string | null
+  tomorrow_focus: string | null
   inbox_zero: boolean
   time_logs_updated: boolean
   tomorrow_reviewed: boolean
