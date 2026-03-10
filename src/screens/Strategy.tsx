@@ -32,6 +32,11 @@ export default function Strategy() {
   const [workbookId, setWorkbookId] = useState<string>('')
   const [userId, setUserId] = useState<string>('')
   const [systematizeGoal, setSystematizeGoal] = useState<Goal | null>(null)
+  const [showManifesto, setShowManifesto] = useState(false)
+  const [addingMilestoneFor, setAddingMilestoneFor] = useState<string | null>(null)
+  const [newMilestoneText, setNewMilestoneText] = useState('')
+  const [addingHabitFor, setAddingHabitFor] = useState<string | null>(null)
+  const [newHabitText, setNewHabitText] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -122,6 +127,35 @@ export default function Strategy() {
     reload()
   }
 
+  const saveInlineMilestone = async (goalId: string) => {
+    if (!newMilestoneText.trim() || !userId) return
+    const year = new Date().getFullYear()
+    const { data } = await supabase.from('milestones').insert({
+      goal_id: goalId,
+      user_id: userId,
+      text: newMilestoneText.trim(),
+      target_date: `${year}-12-31`,
+      status: 'PENDING',
+    }).select().single()
+    if (data) setMilestones(prev => [...prev, data])
+    setAddingMilestoneFor(null)
+    setNewMilestoneText('')
+  }
+
+  const saveInlineHabit = async (goalId: string) => {
+    if (!newHabitText.trim() || !userId) return
+    const { data } = await supabase.from('habits').insert({
+      goal_id: goalId,
+      user_id: userId,
+      text: newHabitText.trim(),
+      frequency: 'DAILY',
+      is_active: true,
+    }).select().single()
+    if (data) setHabits(prev => [...prev, data])
+    setAddingHabitFor(null)
+    setNewHabitText('')
+  }
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="w-5 h-5 border-2 border-mercury border-t-burnham rounded-full animate-spin" />
@@ -193,29 +227,48 @@ export default function Strategy() {
                           >
                             {goal.text}
                           </h2>
-                          <PencilSimple size={14} className="text-shuttle opacity-0 group-hover/card:opacity-100 transition-opacity cursor-pointer mt-1" />
+                          <PencilSimple size={14} className="text-shuttle opacity-0 group-hover/card:opacity-100 transition-opacity cursor-pointer mt-1" onClick={() => setSystematizeGoal(goal)} />
                         </div>
                         {goal.metric && <p className="text-shuttle text-xs">{goal.metric}</p>}
                       </div>
                       <div className="col-span-4">
                         <div className="flex flex-col gap-3">
-                          <ul className="space-y-2 text-sm text-burnham">
+                          <ul className="space-y-2">
                             {getGoalMilestones(goal.id).map(m => (
                               <li key={m.id} className="flex items-center gap-3">
                                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.status === 'COMPLETE' ? 'bg-pastel' : 'bg-mercury'}`} />
-                                <span className="truncate">{m.text}</span>
+                                <span className="text-sm text-burnham truncate flex-1">{m.text}</span>
+                                {m.target_date && (
+                                  <span className="text-[9px] font-mono text-shuttle/50 shrink-0">
+                                    {MONTHS[new Date(m.target_date + 'T12:00:00').getMonth()]}
+                                  </span>
+                                )}
                               </li>
                             ))}
                           </ul>
                           {getExtra(goal.id) > 0 && (
-                            <p className="text-[10px] text-shuttle pl-4">+ {getExtra(goal.id)} remaining</p>
+                            <p className="text-[10px] text-shuttle pl-4">+ {getExtra(goal.id)} more</p>
                           )}
-                          {getGoalMilestones(goal.id).length === 0 && (
+                          {/* Inline add milestone */}
+                          {addingMilestoneFor === goal.id ? (
+                            <input
+                              autoFocus
+                              className="text-xs text-burnham border-b border-mercury bg-transparent focus:outline-none focus:border-burnham pl-4 pb-0.5 transition-colors"
+                              placeholder="Milestone text, then Enter…"
+                              value={newMilestoneText}
+                              onChange={e => setNewMilestoneText(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') saveInlineMilestone(goal.id)
+                                if (e.key === 'Escape') { setAddingMilestoneFor(null); setNewMilestoneText('') }
+                              }}
+                              onBlur={() => { if (!newMilestoneText.trim()) setAddingMilestoneFor(null) }}
+                            />
+                          ) : (
                             <button
-                              onClick={() => setSystematizeGoal(goal)}
-                              className="flex items-center gap-2 text-xs text-shuttle hover:text-burnham transition-colors"
+                              onClick={() => setAddingMilestoneFor(goal.id)}
+                              className="flex items-center gap-2 text-[10px] text-shuttle hover:text-burnham transition-colors pl-4"
                             >
-                              <Plus size={12} /> Add milestone
+                              <Plus size={10} /> Add milestone
                             </button>
                           )}
                         </div>
@@ -225,15 +278,29 @@ export default function Strategy() {
                           {getGoalHabits(goal.id).map(h => (
                             <div key={h.id} className="flex flex-col">
                               <span className="text-sm font-medium text-burnham">{h.text}</span>
-                              <span className="text-shuttle text-[10px] uppercase tracking-wide">{h.frequency}</span>
+                              <span className="text-shuttle text-[9px] uppercase tracking-wider">{h.frequency.replace('_', '×').replace('3×WEEK','3×/wk').replace('WEEKDAYS','Wkdays')}</span>
                             </div>
                           ))}
-                          {getGoalHabits(goal.id).length === 0 && (
+                          {/* Inline add habit */}
+                          {addingHabitFor === goal.id ? (
+                            <input
+                              autoFocus
+                              className="text-xs text-burnham border-b border-mercury bg-transparent focus:outline-none focus:border-burnham pb-0.5 transition-colors w-full"
+                              placeholder="Habit, then Enter…"
+                              value={newHabitText}
+                              onChange={e => setNewHabitText(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') saveInlineHabit(goal.id)
+                                if (e.key === 'Escape') { setAddingHabitFor(null); setNewHabitText('') }
+                              }}
+                              onBlur={() => { if (!newHabitText.trim()) setAddingHabitFor(null) }}
+                            />
+                          ) : (
                             <button
-                              onClick={() => setSystematizeGoal(goal)}
-                              className="flex items-center gap-2 text-xs text-shuttle hover:text-burnham transition-colors"
+                              onClick={() => setAddingHabitFor(goal.id)}
+                              className="flex items-center gap-2 text-[10px] text-shuttle hover:text-burnham transition-colors"
                             >
-                              <Plus size={12} /> Add habit
+                              <Plus size={10} /> Add habit
                             </button>
                           )}
                         </div>
@@ -295,58 +362,69 @@ export default function Strategy() {
         </div>
 
         {/* Manifesto */}
-        <section className="mt-8 border-t border-mercury pt-12">
+        <section className="mt-8 border-t border-mercury pt-8">
           <div className="max-w-4xl mx-auto">
-            <h3 className="text-[10px] font-bold text-shuttle uppercase tracking-widest mb-12 pl-14">
-              Manifesto 2026
-            </h3>
-            <div className="relative pl-4">
-              <div className="absolute left-[27px] top-3 bottom-8 w-px bg-mercury/40" />
-              <div className="space-y-12">
-                {Array.from({ length: 10 }, (_, i) => i + 1).map(level => {
-                  const key = `${level}_l${level}_1`
-                  const val = entryValues[`${level}_l${level}_1`] ?? ''
-                  const isEditing = editingEntry === key
-                  return (
-                    <div key={level} className="relative flex gap-8 items-start group">
-                      <div className="relative z-10 flex-shrink-0 w-6 h-6 rounded-full bg-white border border-mercury text-pastel text-[10px] flex items-center justify-center font-bold mt-1">
-                        {level}
-                      </div>
-                      <div className="flex-1 pt-1">
-                        <div className="text-[10px] font-bold text-shuttle uppercase tracking-widest mb-2.5">
-                          {LEVEL_LABELS[level]}
+            <button
+              onClick={() => setShowManifesto(v => !v)}
+              className="flex items-center gap-3 group mb-4 pl-14"
+            >
+              <span className="text-[10px] font-semibold text-shuttle uppercase tracking-widest group-hover:text-burnham transition-colors">
+                Manifesto 2026
+              </span>
+              <span className="text-[10px] text-shuttle/50 group-hover:text-shuttle transition-colors">
+                {showManifesto ? '— hide' : '+ show'}
+              </span>
+            </button>
+
+            {showManifesto && (
+              <div className="relative pl-4 pt-4">
+                <div className="absolute left-[27px] top-7 bottom-8 w-px bg-mercury/40" />
+                <div className="space-y-12">
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map(level => {
+                    const key = `${level}_l${level}_1`
+                    const val = entryValues[`${level}_l${level}_1`] ?? ''
+                    const isEditing = editingEntry === key
+                    return (
+                      <div key={level} className="relative flex gap-8 items-start group">
+                        <div className="relative z-10 flex-shrink-0 w-6 h-6 rounded-full bg-white border border-mercury text-pastel text-[10px] flex items-center justify-center font-bold mt-1">
+                          {level}
                         </div>
-                        <div className="relative">
-                          {isEditing ? (
-                            <textarea
-                              autoFocus
-                              className="w-full text-sm leading-relaxed text-burnham border-b border-mercury pb-4 pr-8 bg-transparent resize-none focus:outline-none focus:border-black"
-                              value={val}
-                              rows={3}
-                              onChange={e => setEntryValues(prev => ({ ...prev, [key]: e.target.value }))}
-                              onBlur={() => saveEntry(level, `l${level}_1`, val)}
-                            />
-                          ) : (
-                            <p
-                              className="font-sans text-sm leading-relaxed text-burnham border-b border-mercury/50 pb-4 pr-8 cursor-text min-h-[2.5rem]"
+                        <div className="flex-1 pt-1">
+                          <div className="text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-2.5">
+                            {LEVEL_LABELS[level]}
+                          </div>
+                          <div className="relative">
+                            {isEditing ? (
+                              <textarea
+                                autoFocus
+                                className="w-full text-sm leading-relaxed text-burnham border-b border-mercury pb-4 pr-8 bg-transparent resize-none focus:outline-none focus:border-black"
+                                value={val}
+                                rows={3}
+                                onChange={e => setEntryValues(prev => ({ ...prev, [key]: e.target.value }))}
+                                onBlur={() => saveEntry(level, `l${level}_1`, val)}
+                              />
+                            ) : (
+                              <p
+                                className="font-sans text-sm leading-relaxed text-burnham border-b border-mercury/50 pb-4 pr-8 cursor-text min-h-[2.5rem]"
+                                onClick={() => setEditingEntry(key)}
+                              >
+                                {val || <span className="text-mercury">Click to add...</span>}
+                              </p>
+                            )}
+                            <button
+                              className="absolute bottom-4 right-0 text-shuttle opacity-0 group-hover:opacity-100 transition-opacity"
                               onClick={() => setEditingEntry(key)}
                             >
-                              {val || <span className="text-mercury">Click to add...</span>}
-                            </p>
-                          )}
-                          <button
-                            className="absolute bottom-4 right-0 text-shuttle opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => setEditingEntry(key)}
-                          >
-                            <PencilSimple size={14} />
-                          </button>
+                              <PencilSimple size={14} />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </section>
       </main>
