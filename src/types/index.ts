@@ -148,6 +148,8 @@ export interface FocusSession {
   ended_at: string | null
   duration_minutes: number | null
   session_type: string
+  intention: string | null
+  completion_status: string | null
   created_at: string
 }
 
