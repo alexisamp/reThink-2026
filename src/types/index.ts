@@ -83,6 +83,7 @@ export interface Habit {
   target_value: number | null
   unit: string | null
   is_active: boolean
+  calendar_event_id: string | null
   created_at: string
   updated_at: string
 }

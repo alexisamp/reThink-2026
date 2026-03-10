@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   House, Lightning, Check, PencilSimple,
   ArrowRight, Question, Play, Pause, Stop,
-  CaretDown, Timer, Target,
+  CaretDown, Timer, Target, CalendarBlank,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Todo, Habit, HabitLog, Review, Milestone, Goal } from '@/types'
@@ -61,6 +61,14 @@ export default function Today() {
 
   // Streak celebration
   const [celebrationStreak, setCelebrationStreak] = useState<{ habit: Habit; streak: number } | null>(null)
+
+  // Calendar dialog
+  const [calendarDialogHabitId, setCalendarDialogHabitId] = useState<string | null>(null)
+  const [calWhen, setCalWhen] = useState('tomorrow')
+  const [calTime, setCalTime] = useState('09:00')
+  const [calDuration, setCalDuration] = useState('30')
+  const [calSaving, setCalSaving] = useState(false)
+  const [calToast, setCalToast] = useState<string | null>(null)
 
   // Focus timer
   const [showTimer, setShowTimer] = useState(false)
@@ -275,6 +283,61 @@ export default function Today() {
     await supabase.from('friction_logs').upsert({
       habit_id: habitId, user_id: userId, log_date: today, reason,
     }, { onConflict: 'habit_id,log_date' })
+  }
+
+  const blockHabitTime = async (habit: Habit) => {
+    setCalSaving(true)
+    try {
+      const base = new Date()
+      if (calWhen === 'tomorrow') base.setDate(base.getDate() + 1)
+      else if (calWhen === 'next_monday') {
+        const daysUntilMon = (8 - base.getDay()) % 7 || 7
+        base.setDate(base.getDate() + daysUntilMon)
+      }
+      const [h, m] = calTime.split(':')
+      base.setHours(parseInt(h), parseInt(m), 0, 0)
+      const endDate = new Date(base.getTime() + parseInt(calDuration) * 60 * 1000)
+
+      const { data: { session } } = await supabase.auth.getSession()
+      const providerToken = session?.provider_token
+
+      if (providerToken) {
+        const event = {
+          summary: habit.text,
+          description: `Habit block — reThink 2026`,
+          start: { dateTime: base.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+          end: { dateTime: endDate.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+        }
+        const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${providerToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(event),
+        })
+
+        if (res.ok) {
+          const created = await res.json()
+          await supabase.from('habits').update({ calendar_event_id: created.id }).eq('id', habit.id)
+          setHabits(prev => prev.map(h => h.id === habit.id ? { ...h, calendar_event_id: created.id } : h))
+          setCalendarDialogHabitId(null)
+          setCalToast(`Blocked for ${base.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at ${calTime}`)
+          setTimeout(() => setCalToast(null), 3000)
+        } else {
+          setCalToast('Calendar permission needed. Re-sign in with calendar access.')
+          setTimeout(() => setCalToast(null), 4000)
+        }
+      } else {
+        setCalToast('Calendar access not enabled. Re-sign in with calendar permission.')
+        setTimeout(() => setCalToast(null), 4000)
+      }
+    } catch {
+      setCalToast('Could not connect to Google Calendar.')
+      setTimeout(() => setCalToast(null), 3000)
+    } finally {
+      setCalSaving(false)
+    }
   }
 
   const startTimer = () => { setTimerRunning(true); setTimerComplete(false) }
@@ -560,6 +623,13 @@ export default function Today() {
                                 <span className="text-[10px] bg-gray-100 text-shuttle px-1.5 py-0.5 rounded">{habit.frequency}</span>
                               </div>
                               <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => setCalendarDialogHabitId(prev => prev === habit.id ? null : habit.id)}
+                                  className={`text-shuttle hover:text-burnham transition-colors ${habit.calendar_event_id ? 'opacity-50' : ''}`}
+                                  title={habit.calendar_event_id ? 'Time already blocked' : 'Block time in calendar'}
+                                >
+                                  <CalendarBlank size={12} />
+                                </button>
                                 <select
                                   className="text-[9px] text-shuttle/50 bg-transparent border-none cursor-pointer hover:text-shuttle transition-colors focus:outline-none"
                                   onChange={e => {
@@ -596,7 +666,45 @@ export default function Today() {
                               {streak > 0 && (
                                 <span className="text-[10px] text-shuttle">🔥 {streak}d streak</span>
                               )}
+                              {habit.calendar_event_id && (
+                                <span className="text-[10px] text-shuttle/60">📅 Blocked</span>
+                              )}
                             </div>
+                            {calendarDialogHabitId === habit.id && (
+                              <div className="mt-2 p-3 bg-[#F8F9F9] border border-mercury rounded-lg space-y-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle mb-2">Block time in calendar</p>
+                                <div className="flex items-center gap-2">
+                                  <select value={calWhen} onChange={e => setCalWhen(e.target.value)}
+                                    className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none focus:border-shuttle">
+                                    <option value="today">Today</option>
+                                    <option value="tomorrow">Tomorrow</option>
+                                    <option value="next_monday">Next Monday</option>
+                                  </select>
+                                  <span className="text-xs text-shuttle">at</span>
+                                  <input type="time" value={calTime} onChange={e => setCalTime(e.target.value)}
+                                    className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none focus:border-shuttle" />
+                                  <select value={calDuration} onChange={e => setCalDuration(e.target.value)}
+                                    className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none focus:border-shuttle">
+                                    <option value="15">15 min</option>
+                                    <option value="30">30 min</option>
+                                    <option value="45">45 min</option>
+                                    <option value="60">1 hour</option>
+                                  </select>
+                                </div>
+                                <div className="flex items-center gap-2 pt-1">
+                                  <button
+                                    onClick={() => blockHabitTime(habit)}
+                                    disabled={calSaving}
+                                    className="text-xs bg-burnham text-white px-3 py-1.5 rounded hover:bg-burnham/90 disabled:opacity-50 transition-colors"
+                                  >
+                                    {calSaving ? 'Blocking...' : 'Block time'}
+                                  </button>
+                                  <button onClick={() => setCalendarDialogHabitId(null)} className="text-xs text-shuttle hover:text-burnham transition-colors">
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )
@@ -835,6 +943,13 @@ export default function Today() {
           </button>
         </div>
       </aside>
+
+      {/* Calendar Toast */}
+      {calToast && (
+        <div className="fixed bottom-24 right-4 bg-burnham text-white text-xs px-4 py-2.5 rounded-lg shadow-lg z-50 max-w-xs">
+          {calToast}
+        </div>
+      )}
 
       {/* Streak Celebration Overlay */}
       {celebrationStreak && (
