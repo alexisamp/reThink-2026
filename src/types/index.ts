@@ -147,6 +147,7 @@ export interface MonthlyPlan {
   focus: string | null
   reflection: string | null
   highlights: string | null
+  rating: number | null
   created_at: string
   updated_at: string
 }

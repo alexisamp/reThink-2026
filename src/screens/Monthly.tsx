@@ -1,5 +1,5 @@
 // src/screens/Monthly.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { House, CaretLeft, CaretRight, ArrowRight, ArrowSquareOut } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
@@ -37,9 +37,17 @@ export default function Monthly() {
   const [kpiEntries, setKpiEntries] = useState<MonthlyKpiEntry[]>([])
   const [monthlyPlan, setMonthlyPlan] = useState<MonthlyPlan | null>(null)
   const [notes, setNotes] = useState('')
+  const [retroReflection, setRetroReflection] = useState('')
+  const [retroHighlights, setRetroHighlights] = useState('')
+  const [rating, setRating] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [habitLogs, setHabitLogs] = useState<HabitLog[]>([])
+
+  // Autosave debounce refs
+  const retroReflectionTimer = useRef<ReturnType<typeof setTimeout>>()
+  const retroHighlightsTimer = useRef<ReturnType<typeof setTimeout>>()
+  const notesTimer = useRef<ReturnType<typeof setTimeout>>()
 
   // Load goals
   useEffect(() => {
@@ -136,7 +144,10 @@ export default function Monthly() {
         .eq('month', viewMonth)
         .maybeSingle()
       setMonthlyPlan(plan)
-      setNotes(plan?.reflection || '')
+      setNotes(plan?.focus || '')
+      setRetroReflection(plan?.reflection || '')
+      setRetroHighlights(plan?.highlights || '')
+      setRating(plan?.rating ?? null)
     }
 
     load()
@@ -192,7 +203,7 @@ export default function Monthly() {
     )
   }
 
-  const handleSaveNotes = async () => {
+  const upsertPlanField = useCallback(async (fields: Record<string, unknown>) => {
     if (!user || !activeGoal) return
     setSaving(true)
     await supabase.from('monthly_plans').upsert(
@@ -201,11 +212,50 @@ export default function Monthly() {
         goal_id: activeGoal.id,
         year: currentYear,
         month: viewMonth,
-        reflection: notes,
+        ...fields,
       },
       { onConflict: 'user_id,goal_id,year,month' }
     )
     setSaving(false)
+  }, [user, activeGoal, currentYear, viewMonth])
+
+  const handleSaveNotes = async () => {
+    await upsertPlanField({ focus: notes })
+  }
+
+  const handleRetroReflectionChange = (val: string) => {
+    setRetroReflection(val)
+    if (retroReflectionTimer.current) clearTimeout(retroReflectionTimer.current)
+    retroReflectionTimer.current = setTimeout(() => {
+      upsertPlanField({ reflection: val })
+    }, 800)
+  }
+
+  const handleRetroHighlightsChange = (val: string) => {
+    setRetroHighlights(val)
+    if (retroHighlightsTimer.current) clearTimeout(retroHighlightsTimer.current)
+    retroHighlightsTimer.current = setTimeout(() => {
+      upsertPlanField({ highlights: val })
+    }, 800)
+  }
+
+  const handleNotesChange = (val: string) => {
+    setNotes(val)
+    if (notesTimer.current) clearTimeout(notesTimer.current)
+    notesTimer.current = setTimeout(() => {
+      upsertPlanField({ focus: val })
+    }, 800)
+  }
+
+  const saveRating = async (n: number) => {
+    setRating(n)
+    await upsertPlanField({ rating: n })
+  }
+
+  const getYtd = (indicatorId: string): number => {
+    return kpiEntries
+      .filter(e => e.leading_indicator_id === indicatorId && e.actual_value != null)
+      .reduce((sum, e) => sum + (e.actual_value ?? 0), 0)
   }
 
   const getDaysInMonth = (month: number, year: number) => new Date(year, month, 0).getDate()
@@ -341,11 +391,11 @@ export default function Monthly() {
                     No leading indicators added yet. Set them up in Strategy.
                   </p>
                 ) : (
-                  <div className="w-full text-xs overflow-x-auto">
+                  <div className="w-full text-xs overflow-x-auto" title="Leading = inputs you control · Lagging = the outcome that follows">
                     {/* Header row */}
                     <div
                       className="grid gap-1 mb-4 text-shuttle font-mono text-[10px] uppercase"
-                      style={{ gridTemplateColumns: '140px repeat(12, 1fr)' }}
+                      style={{ gridTemplateColumns: '140px repeat(12, 1fr) 56px' }}
                     >
                       <div className="font-semibold text-shuttle pl-2">Metric</div>
                       {MONTHS.map(m => (
@@ -353,37 +403,49 @@ export default function Monthly() {
                           {m}
                         </div>
                       ))}
+                      <div className="text-center font-semibold">YTD</div>
                     </div>
 
                     {/* Data rows */}
                     <div className="space-y-1">
-                      {indicators.map((ind, idx) => {
+                      {/* OUTCOME row — goal's lagging metric */}
+                      {activeGoal.metric && (
+                        <div
+                          className="grid gap-1 items-center py-3 -mx-2 px-2 border-t border-b border-mercury/50 bg-mercury/10"
+                          style={{ gridTemplateColumns: '140px repeat(12, 1fr) 56px' }}
+                        >
+                          <div className="pl-2">
+                            <span className="block text-sm font-semibold text-burnham">
+                              {activeGoal.metric}
+                            </span>
+                            <span className="text-[8px] text-shuttle/50 uppercase mt-0.5 block">Outcome</span>
+                          </div>
+                          {MONTHS.map((_, mIdx) => (
+                            <div key={mIdx} className="text-center text-[10px] text-shuttle/40 font-mono">
+                              —
+                            </div>
+                          ))}
+                          <div className="text-center text-[10px] text-shuttle/40 font-mono">—</div>
+                        </div>
+                      )}
+
+                      {/* Leading indicator rows */}
+                      {indicators.map(ind => {
                         const monthlyTarget = ind.target
                           ? Math.round(ind.target / 12)
                           : null
+                        const ytd = getYtd(ind.id)
                         return (
                           <div
                             key={ind.id}
-                            className={`grid gap-1 items-center py-3 -mx-2 px-2 ${
-                              idx === 0
-                                ? 'border-t border-b border-mercury/50 bg-mercury/10'
-                                : 'border-b border-mercury/30'
-                            }`}
-                            style={{ gridTemplateColumns: '140px repeat(12, 1fr)' }}
+                            className="grid gap-1 items-center py-3 -mx-2 px-2 border-b border-mercury/30"
+                            style={{ gridTemplateColumns: '140px repeat(12, 1fr) 56px' }}
                           >
                             <div className="pl-2">
-                              <span
-                                className={`block ${
-                                  idx === 0
-                                    ? 'text-sm font-semibold text-burnham'
-                                    : 'text-xs font-medium text-burnham'
-                                }`}
-                              >
+                              <span className="block text-xs font-medium text-burnham">
                                 {ind.name}
                               </span>
-                              <span className="text-[10px] text-shuttle mt-0.5 block">
-                                {idx === 0 ? 'Primary' : 'Leading'}
-                              </span>
+                              <span className="text-[8px] text-shuttle/50 uppercase mt-0.5 block">Lead</span>
                             </div>
                             {MONTHS.map((_, mIdx) => {
                               const m = mIdx + 1
@@ -417,6 +479,9 @@ export default function Monthly() {
                                 </div>
                               )
                             })}
+                            <div className="text-center font-mono text-[11px] font-semibold text-burnham">
+                              {ytd || '-'}
+                            </div>
                           </div>
                         )
                       })}
@@ -601,19 +666,64 @@ export default function Monthly() {
             </div>
           </div>
 
-          {/* Reflection notes */}
+          {/* Focus notes */}
           <div>
             <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-[0.15em] mb-4">
               Notes
             </h3>
             <textarea
               value={notes}
-              onChange={e => setNotes(e.target.value)}
+              onChange={e => handleNotesChange(e.target.value)}
               onBlur={handleSaveNotes}
-              placeholder="Reflections on this month's progress..."
+              placeholder="Focus and notes for this month..."
               className="w-full bg-white border border-mercury rounded-lg p-4 text-xs leading-relaxed text-burnham h-40 resize-none placeholder-gray-400 focus:border-mercury focus:ring-1 focus:ring-mercury outline-none"
             />
           </div>
+
+          {/* Retrospective — past months only */}
+          {viewMonth < todayMonth && (
+            <div className="mt-8 pt-8 border-t border-mercury">
+              <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-6">Retrospective</h3>
+              <div className="grid grid-cols-2 gap-6 mb-6">
+                <div>
+                  <p className="text-[10px] text-shuttle uppercase tracking-widest mb-2">What Worked</p>
+                  <textarea
+                    value={retroReflection}
+                    onChange={e => handleRetroReflectionChange(e.target.value)}
+                    placeholder="What went well this month..."
+                    className="w-full bg-white border border-mercury rounded-lg p-3 text-xs leading-relaxed text-burnham h-28 resize-none placeholder-gray-400 focus:border-mercury focus:ring-1 focus:ring-mercury outline-none"
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-shuttle uppercase tracking-widest mb-2">What to Change</p>
+                  <textarea
+                    value={retroHighlights}
+                    onChange={e => handleRetroHighlightsChange(e.target.value)}
+                    placeholder="What to do differently..."
+                    className="w-full bg-white border border-mercury rounded-lg p-3 text-xs leading-relaxed text-burnham h-28 resize-none placeholder-gray-400 focus:border-mercury focus:ring-1 focus:ring-mercury outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] text-shuttle uppercase tracking-widest mb-2">Month Rating</p>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <button
+                      key={n}
+                      onClick={() => saveRating(n)}
+                      className={`text-xl transition-colors ${
+                        rating !== null && rating >= n
+                          ? 'text-amber-400'
+                          : 'text-mercury hover:text-amber-200'
+                      }`}
+                    >
+                      &#9733;
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Confirm CTA */}
