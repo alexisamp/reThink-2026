@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { House, PencilSimple, Plus } from '@phosphor-icons/react'
+import { House, PencilSimple, Plus, GearSix } from '@phosphor-icons/react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import type { Goal, Milestone, Habit, WorkbookEntry } from '@/types'
+import SystematizeModal from '@/components/SystematizeModal'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -28,17 +29,22 @@ export default function Strategy() {
   const [editingEntry, setEditingEntry] = useState<string | null>(null)
   const [entryValues, setEntryValues] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
+  const [workbookId, setWorkbookId] = useState<string>('')
+  const [userId, setUserId] = useState<string>('')
+  const [systematizeGoal, setSystematizeGoal] = useState<Goal | null>(null)
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      setUserId(user.id)
       const year = new Date().getFullYear()
 
       const { data: wb } = await supabase
         .from('workbooks').select('id')
         .eq('user_id', user.id).eq('year', year).maybeSingle()
       if (!wb) { setLoading(false); return }
+      setWorkbookId(wb.id)
 
       const [goalsRes, milestonesRes, habitsRes, entriesRes] = await Promise.all([
         supabase.from('goals').select('*').eq('workbook_id', wb.id).order('position'),
@@ -88,6 +94,32 @@ export default function Strategy() {
     if (goalType === 'ACTIVE') return 'bg-gossip text-burnham'
     if (goalType === 'BACKLOG') return 'bg-gray-50 border border-mercury text-shuttle'
     return 'bg-gray-50 border border-mercury text-shuttle'
+  }
+
+  const needsSetup = (goal: Goal) =>
+    goal.needs_config ||
+    habits.filter(h => h.goal_id === goal.id).length === 0
+
+  const handleModalSave = () => {
+    setSystematizeGoal(null)
+    // Refresh goals, habits, milestones
+    const reload = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const year = new Date().getFullYear()
+      const { data: wb } = await supabase
+        .from('workbooks').select('id').eq('user_id', user.id).eq('year', year).maybeSingle()
+      if (!wb) return
+      const [goalsRes, milestonesRes, habitsRes] = await Promise.all([
+        supabase.from('goals').select('*').eq('workbook_id', wb.id).order('position'),
+        supabase.from('milestones').select('*').eq('user_id', user.id).order('target_date', { nullsFirst: false }),
+        supabase.from('habits').select('*').eq('user_id', user.id).eq('is_active', true).order('created_at'),
+      ])
+      setGoals(goalsRes.data ?? [])
+      setMilestones(milestonesRes.data ?? [])
+      setHabits(habitsRes.data ?? [])
+    }
+    reload()
   }
 
   if (loading) return (
@@ -179,7 +211,10 @@ export default function Strategy() {
                             <p className="text-[10px] text-shuttle pl-4">+ {getExtra(goal.id)} remaining</p>
                           )}
                           {getGoalMilestones(goal.id).length === 0 && (
-                            <button className="flex items-center gap-2 text-xs text-shuttle hover:text-burnham transition-colors">
+                            <button
+                              onClick={() => setSystematizeGoal(goal)}
+                              className="flex items-center gap-2 text-xs text-shuttle hover:text-burnham transition-colors"
+                            >
                               <Plus size={12} /> Add milestone
                             </button>
                           )}
@@ -194,16 +229,37 @@ export default function Strategy() {
                             </div>
                           ))}
                           {getGoalHabits(goal.id).length === 0 && (
-                            <button className="flex items-center gap-2 text-xs text-shuttle hover:text-burnham transition-colors">
+                            <button
+                              onClick={() => setSystematizeGoal(goal)}
+                              className="flex items-center gap-2 text-xs text-shuttle hover:text-burnham transition-colors"
+                            >
                               <Plus size={12} /> Add habit
                             </button>
                           )}
                         </div>
                       </div>
-                      <div className="col-span-2 flex justify-end">
+                      <div className="col-span-2 flex flex-col items-end gap-2">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider h-fit ${statusBadge(goal.status, goal.goal_type)}`}>
                           {goal.goal_type === 'ACTIVE' ? 'Active' : 'Planned'}
                         </span>
+                        {needsSetup(goal) && (
+                          <button
+                            onClick={() => setSystematizeGoal(goal)}
+                            className="flex items-center gap-1.5 px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+                          >
+                            <GearSix size={10} weight="fill" />
+                            Needs Setup
+                          </button>
+                        )}
+                        {!needsSetup(goal) && (
+                          <button
+                            onClick={() => setSystematizeGoal(goal)}
+                            className="opacity-0 group-hover/card:opacity-100 flex items-center gap-1.5 px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider text-shuttle hover:text-burnham transition-all"
+                          >
+                            <GearSix size={10} />
+                            Edit System
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="w-full h-px bg-mercury mt-8" />
@@ -294,6 +350,17 @@ export default function Strategy() {
           </div>
         </section>
       </main>
+
+      {/* Systematize Goal Modal */}
+      {systematizeGoal && workbookId && userId && (
+        <SystematizeModal
+          goal={systematizeGoal}
+          workbookId={workbookId}
+          userId={userId}
+          onClose={() => setSystematizeGoal(null)}
+          onSave={handleModalSave}
+        />
+      )}
     </div>
   )
 }
