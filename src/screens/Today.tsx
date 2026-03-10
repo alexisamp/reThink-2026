@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   House, Lightning, Check, PencilSimple,
   ArrowRight, Question, Play, Pause, Stop,
@@ -69,6 +69,7 @@ export default function Today() {
   const [calDuration, setCalDuration] = useState('30')
   const [calSaving, setCalSaving] = useState(false)
   const [calToast, setCalToast] = useState<string | null>(null)
+  const calToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Focus timer
   const [showTimer, setShowTimer] = useState(false)
@@ -142,23 +143,33 @@ export default function Today() {
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [timerRunning, timerDuration])
 
-  const handleNotesChange = useCallback((value: string) => {
+  // Cleanup debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      if (notesTimerRef.current) clearTimeout(notesTimerRef.current)
+      if (onethingTimerRef.current) clearTimeout(onethingTimerRef.current)
+      if (tomorrowTimerRef.current) clearTimeout(tomorrowTimerRef.current)
+      if (calToastTimerRef.current) clearTimeout(calToastTimerRef.current)
+    }
+  }, [])
+
+  const handleNotesChange = (value: string) => {
     setNotesValue(value)
     if (notesTimerRef.current) clearTimeout(notesTimerRef.current)
     notesTimerRef.current = setTimeout(() => upsertReview({ notes: value }), 800)
-  }, []) // eslint-disable-line
+  }
 
-  const handleOnethingChange = useCallback((value: string) => {
+  const handleOnethingChange = (value: string) => {
     setOnethingValue(value)
     if (onethingTimerRef.current) clearTimeout(onethingTimerRef.current)
     onethingTimerRef.current = setTimeout(() => upsertReview({ one_thing: value }), 800)
-  }, []) // eslint-disable-line
+  }
 
-  const handleTomorrowChange = useCallback((value: string) => {
+  const handleTomorrowChange = (value: string) => {
     setTomorrowValue(value)
     if (tomorrowTimerRef.current) clearTimeout(tomorrowTimerRef.current)
     tomorrowTimerRef.current = setTimeout(() => upsertReview({ tomorrow_focus: value }), 800)
-  }, []) // eslint-disable-line
+  }
 
   // Computed
   const pendingTodos = todos.filter(t => !t.completed)
@@ -202,18 +213,20 @@ export default function Today() {
   }
 
   const toggleTodo = async (id: string) => {
+    if (!userId) return
     const t = todos.find(t => t.id === id)
     if (!t) return
     const newVal = !t.completed
-    await supabase.from('todos').update({ completed: newVal }).eq('id', id)
+    await supabase.from('todos').update({ completed: newVal }).eq('id', id).eq('user_id', userId)
     setTodos(prev => prev.map(t => t.id === id ? { ...t, completed: newVal } : t))
   }
 
   const toggleMilestone = async (id: string) => {
+    if (!userId) return
     const m = milestones.find(m => m.id === id)
     if (!m) return
     const newStatus = m.status === 'COMPLETE' ? 'PENDING' : 'COMPLETE'
-    await supabase.from('milestones').update({ status: newStatus }).eq('id', id)
+    await supabase.from('milestones').update({ status: newStatus }).eq('id', id).eq('user_id', userId)
     setMilestones(prev => prev.map(m => m.id === id ? { ...m, status: newStatus } : m))
   }
 
@@ -323,18 +336,22 @@ export default function Today() {
           setHabits(prev => prev.map(h => h.id === habit.id ? { ...h, calendar_event_id: created.id } : h))
           setCalendarDialogHabitId(null)
           setCalToast(`Blocked for ${base.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at ${calTime}`)
-          setTimeout(() => setCalToast(null), 3000)
+          if (calToastTimerRef.current) clearTimeout(calToastTimerRef.current)
+          calToastTimerRef.current = setTimeout(() => setCalToast(null), 3000)
         } else {
           setCalToast('Calendar permission needed. Re-sign in with calendar access.')
-          setTimeout(() => setCalToast(null), 4000)
+          if (calToastTimerRef.current) clearTimeout(calToastTimerRef.current)
+          calToastTimerRef.current = setTimeout(() => setCalToast(null), 4000)
         }
       } else {
         setCalToast('Calendar access not enabled. Re-sign in with calendar permission.')
-        setTimeout(() => setCalToast(null), 4000)
+        if (calToastTimerRef.current) clearTimeout(calToastTimerRef.current)
+        calToastTimerRef.current = setTimeout(() => setCalToast(null), 4000)
       }
     } catch {
       setCalToast('Could not connect to Google Calendar.')
-      setTimeout(() => setCalToast(null), 3000)
+      if (calToastTimerRef.current) clearTimeout(calToastTimerRef.current)
+      calToastTimerRef.current = setTimeout(() => setCalToast(null), 3000)
     } finally {
       setCalSaving(false)
     }

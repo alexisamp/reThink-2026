@@ -25,17 +25,19 @@ function weekRange() {
 }
 
 // ── Confetti ──
+// Dots are memoized at module level so Math.random() runs once per mount, not per re-render
+const CONFETTI_DOTS = Array.from({ length: 20 }, (_, i) => ({
+  id: i,
+  left: Math.random() * 100,
+  delay: Math.random() * 2,
+  color: ['#79D65E', '#E5F9BD', '#003720', '#536471', '#E3E3E3'][i % 5],
+  size: 6 + Math.random() * 6,
+}))
+
 function Confetti() {
-  const dots = Array.from({ length: 20 }, (_, i) => ({
-    id: i,
-    left: Math.random() * 100,
-    delay: Math.random() * 2,
-    color: ['#79D65E', '#E5F9BD', '#003720', '#536471', '#E3E3E3'][i % 5],
-    size: 6 + Math.random() * 6,
-  }))
   return (
     <div className="fixed inset-0 z-[100] pointer-events-none overflow-hidden">
-      {dots.map(d => (
+      {CONFETTI_DOTS.map(d => (
         <div
           key={d.id}
           className="absolute rounded-full animate-confetti-fall"
@@ -48,15 +50,6 @@ function Confetti() {
           }}
         />
       ))}
-      <style>{`
-        @keyframes confetti-fall {
-          0% { top: -10%; opacity: 1; transform: rotate(0deg) scale(1); }
-          100% { top: 110%; opacity: 0; transform: rotate(720deg) scale(0.3); }
-        }
-        .animate-confetti-fall {
-          animation: confetti-fall 3s ease-in forwards;
-        }
-      `}</style>
     </div>
   )
 }
@@ -151,18 +144,17 @@ export default function WeeklyReview() {
   const todayLogs = habitLogs.filter(l => l.log_date === today && l.value === 1)
   const unloggedHabits = habits.filter(h => !todayLogs.some(l => l.habit_id === h.id))
 
-  // Consecutive weekly reviews count
+  // Consecutive weekly reviews count (uses explicit index, not loop variable)
   const consecutiveReviews = (() => {
-    let count = 0
     const sorted = recentReviews
       .filter(r => r.weekly_one_thing)
       .sort((a, b) => b.review_date.localeCompare(a.review_date))
-    for (const r of sorted) {
-      // Each weekly review should be roughly 7 days apart
+    let count = 0
+    for (let i = 0; i < sorted.length; i++) {
       count++
-      if (count > 0 && sorted[count]) {
-        const diff = new Date(sorted[count - 1].review_date).getTime() - new Date(sorted[count].review_date).getTime()
-        if (diff > 10 * 24 * 60 * 60 * 1000) break // more than 10 days gap = not consecutive
+      if (i + 1 < sorted.length) {
+        const diff = new Date(sorted[i].review_date).getTime() - new Date(sorted[i + 1].review_date).getTime()
+        if (diff > 10 * 24 * 60 * 60 * 1000) break // > 10-day gap = streak broken
       }
     }
     return count
@@ -183,26 +175,36 @@ export default function WeeklyReview() {
   }
 
   // ── commit ──
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Clean up timers on unmount to avoid navigate-after-unmount
+  useEffect(() => {
+    return () => {
+      if (commitTimerRef.current) clearTimeout(commitTimerRef.current)
+    }
+  }, [])
+
   const handleCommit = async () => {
     if (!userId) return
-    // Upsert review with weekly_one_thing
+    // Save weekly_one_thing, wins, and patterns to the review row
     await supabase.from('reviews').upsert({
       user_id: userId,
       review_date: today,
       weekly_one_thing: weeklyOneThing,
+      notes: [wins, patterns].filter(Boolean).join('\n\n--- Patterns ---\n\n') || undefined,
     }, { onConflict: 'user_id,review_date' })
 
     setCommitted(true)
 
-    // 3rd+ consecutive weekly review → confetti
-    if (consecutiveReviews >= 2) {
+    // 3rd+ consecutive weekly review (consecutiveReviews counts previous ones, +1 = this commit)
+    if (consecutiveReviews + 1 >= 3) {
       setShowConfetti(true)
-      setTimeout(() => {
+      commitTimerRef.current = setTimeout(() => {
         setShowConfetti(false)
         navigate('/today')
       }, 3000)
     } else {
-      setTimeout(() => navigate('/today'), 800)
+      commitTimerRef.current = setTimeout(() => navigate('/today'), 800)
     }
   }
 

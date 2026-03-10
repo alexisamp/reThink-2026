@@ -9,9 +9,11 @@ interface StreakCelebrationProps {
 }
 
 export default function StreakCelebration({ streak, habitName, onDismiss }: StreakCelebrationProps) {
-  if (!MILESTONE_STREAKS.includes(streak)) return null
+  const isMilestone = MILESTONE_STREAKS.includes(streak)
 
+  // Hooks must always be called — guard is inside, not before
   useEffect(() => {
+    if (!isMilestone) return
     const timer = setTimeout(onDismiss, 3000)
     const handleKey = () => onDismiss()
     window.addEventListener('keydown', handleKey)
@@ -19,7 +21,9 @@ export default function StreakCelebration({ streak, habitName, onDismiss }: Stre
       clearTimeout(timer)
       window.removeEventListener('keydown', handleKey)
     }
-  }, [onDismiss])
+  }, [onDismiss, isMilestone])
+
+  if (!isMilestone) return null
 
   return (
     <div

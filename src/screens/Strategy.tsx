@@ -48,6 +48,13 @@ export default function Strategy() {
   const [annualLetterSaved, setAnnualLetterSaved] = useState(false)
   const annualLetterTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Cleanup annual letter debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (annualLetterTimer.current) clearTimeout(annualLetterTimer.current)
+    }
+  }, [])
+
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -236,7 +243,7 @@ export default function Strategy() {
       answer: value,
     }, { onConflict: 'workbook_id,list_order,section_key' })
     setAnnualLetterSaved(true)
-    setTimeout(() => setAnnualLetterSaved(false), 2000)
+    annualLetterTimer.current = setTimeout(() => setAnnualLetterSaved(false), 2000)
   }
 
   if (loading) return (

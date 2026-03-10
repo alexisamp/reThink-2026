@@ -376,7 +376,7 @@ export default function Dashboard() {
 
     const thisWeekGoalIds = new Set(
       completedTodos
-        .filter(t => t.goal_id && t.created_at >= mondayStr)
+        .filter(t => t.goal_id && t.created_at && t.created_at.split('T')[0] >= mondayStr)
         .map(t => t.goal_id!)
     )
     return thisWeekGoalIds.size
