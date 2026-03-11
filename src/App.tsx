@@ -18,6 +18,7 @@ import ReflectionLibrary from '@/screens/ReflectionLibrary'
 import YearAtAGlance from '@/screens/YearAtAGlance'
 import { checkNotificationTriggers, formatNotificationMessage } from '@/lib/notifications'
 import { check } from '@tauri-apps/plugin-updater'
+import { relaunch } from '@tauri-apps/plugin-process'
 
 function Splash() {
   return (
@@ -36,9 +37,21 @@ export default function App() {
 
   // Check for updates on startup (Tauri only)
   useEffect(() => {
-    if (typeof window !== 'undefined' && '__TAURI__' in window) {
-      setTimeout(() => check().catch(console.error), 3000)
-    }
+    if (typeof window === 'undefined' || !('__TAURI__' in window)) return
+    setTimeout(async () => {
+      try {
+        const update = await check()
+        if (!update) return
+        const yes = window.confirm(
+          `reThink ${update.version} está disponible (tienes ${update.currentVersion}).\n\n¿Instalar ahora?`
+        )
+        if (!yes) return
+        await update.downloadAndInstall()
+        await relaunch()
+      } catch (e) {
+        console.error('Update check failed:', e)
+      }
+    }, 3000)
   }, [])
 
   useEffect(() => {
