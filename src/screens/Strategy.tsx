@@ -377,7 +377,7 @@ export default function Strategy() {
                                 if (e.key === 'Enter') saveInlineMilestone(goal.id)
                                 if (e.key === 'Escape') { setAddingMilestoneFor(null); setNewMilestoneText('') }
                               }}
-                              onBlur={() => { if (!newMilestoneText.trim()) setAddingMilestoneFor(null) }}
+                              onBlur={() => { if (newMilestoneText.trim()) saveInlineMilestone(goal.id); else setAddingMilestoneFor(null) }}
                             />
                           ) : (
                             <button
@@ -409,7 +409,7 @@ export default function Strategy() {
                                 if (e.key === 'Enter') saveInlineHabit(goal.id)
                                 if (e.key === 'Escape') { setAddingHabitFor(null); setNewHabitText('') }
                               }}
-                              onBlur={() => { if (!newHabitText.trim()) setAddingHabitFor(null) }}
+                              onBlur={() => { if (newHabitText.trim()) saveInlineHabit(goal.id); else setAddingHabitFor(null) }}
                             />
                           ) : (
                             <button
@@ -506,7 +506,7 @@ export default function Strategy() {
                       if (e.key === 'Enter') saveNotDoing()
                       if (e.key === 'Escape') { setAddingNotDoing(false); setNewNotDoingText('') }
                     }}
-                    onBlur={() => { if (!newNotDoingText.trim()) setAddingNotDoing(false) }}
+                    onBlur={() => { if (newNotDoingText.trim()) saveNotDoing(); else setAddingNotDoing(false) }}
                   />
                 ) : (
                   <button
