@@ -51,6 +51,6 @@ jobs:
           releaseName: 'reThink ${{ github.ref_name }}'
           releaseBody: |
             See the [CHANGELOG](https://github.com/alexisamp/reThink-2026/blob/main/CHANGELOG.md) for details.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
