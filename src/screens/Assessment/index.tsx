@@ -72,13 +72,14 @@ export default function Assessment({ onComplete }: AssessmentProps) {
   }
 
   const saveEntry = async (wbId: string, userId: string, level: number, field: string, value: string) => {
-    await supabase.from('workbook_entries').upsert({
+    const { error } = await supabase.from('workbook_entries').upsert({
       workbook_id: wbId,
       user_id: userId,
       list_order: level,
       section_key: field,
       answer: value,
     }, { onConflict: 'workbook_id,list_order,section_key' })
+    if (error) console.error('[Assessment] saveEntry error:', error)
   }
 
   const handleNext = async (levelAnswers: Record<string, string>) => {
