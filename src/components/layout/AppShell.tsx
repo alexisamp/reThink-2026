@@ -1,6 +1,6 @@
 import { Fragment, useState, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { House, CalendarBlank, Strategy, ChartPie, SignOut, Repeat } from '@phosphor-icons/react'
+import { House, CalendarBlank, ChartPie, SignOut } from '@phosphor-icons/react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { useNavShortcuts, useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -16,9 +16,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Today',     path: '/today',     Icon: House,         shortcut: '⌘1' },
   { label: 'Monthly',   path: '/monthly',   Icon: CalendarBlank, shortcut: '⌘2' },
-  { label: 'Strategy',  path: '/strategy',  Icon: Strategy,      shortcut: '⌘3' },
-  { label: 'Dashboard', path: '/dashboard', Icon: ChartPie,      shortcut: '⌘4' },
-  { label: 'Review',    path: '/weekly-review', Icon: Repeat,   shortcut: '⌘5' },
+  { label: 'Dashboard', path: '/dashboard', Icon: ChartPie,      shortcut: '⌘3' },
 ]
 
 interface AppShellProps {
@@ -49,19 +47,24 @@ export default function AppShell({ children }: AppShellProps) {
             const isActive = pathname === path || (path !== '/today' && pathname.startsWith(path))
             return (
               <Fragment key={path}>
-                <button
-                  onClick={() => navigate(path)}
-                  title={`${label} ${shortcut}`}
-                  className={[
-                    'flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-all',
-                    isActive
-                      ? 'bg-mercury/30 ring-1 ring-mercury text-burnham shadow-sm'
-                      : 'text-shuttle hover:bg-gray-50 hover:text-burnham',
-                  ].join(' ')}
-                >
-                  <Icon size={18} />
-                  <span>{label}</span>
-                </button>
+                <div className="relative group">
+                  {/* Shortcut hint tooltip */}
+                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 text-[9px] font-mono bg-burnham text-white px-1.5 py-0.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-sm">
+                    {shortcut}
+                  </span>
+                  <button
+                    onClick={() => navigate(path)}
+                    className={[
+                      'flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-all',
+                      isActive
+                        ? 'bg-mercury/30 ring-1 ring-mercury text-burnham shadow-sm'
+                        : 'text-shuttle hover:bg-gray-50 hover:text-burnham',
+                    ].join(' ')}
+                  >
+                    <Icon size={18} />
+                    <span>{label}</span>
+                  </button>
+                </div>
               </Fragment>
             )
           })}
