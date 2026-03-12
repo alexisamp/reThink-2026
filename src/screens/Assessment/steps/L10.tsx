@@ -5,13 +5,14 @@ interface StepProps {
   onNext: (answers: Record<string, string>) => void
   onBack?: () => void
   saving?: boolean
+  initialValues?: Record<string, string>
   progress: number
   step: number
   totalSteps: number
 }
 
-export default function L10({ onNext, onBack, saving, progress, step, totalSteps }: StepProps) {
-  const [values, setValues] = useState<Record<string, string>>({})
+export default function L10({ onNext, onBack, saving, progress, step, totalSteps, initialValues }: StepProps) {
+  const [values, setValues] = useState<Record<string, string>>(initialValues ?? {})
   return (
     <StepLayout
       step={step} totalSteps={totalSteps} progress={progress}

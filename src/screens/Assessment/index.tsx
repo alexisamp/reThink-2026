@@ -26,7 +26,6 @@ export default function Assessment({ onComplete }: AssessmentProps) {
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Create or get workbook
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
@@ -45,7 +44,18 @@ export default function Assessment({ onComplete }: AssessmentProps) {
           .single()
         wb = newWb
       }
-      if (wb) setWorkbookId(wb.id)
+      if (!wb) return
+      setWorkbookId(wb.id)
+      // Load existing entries to restore answers on Back navigation
+      const { data: entries } = await supabase
+        .from('workbook_entries')
+        .select('section_key, answer')
+        .eq('workbook_id', wb.id)
+      if (entries && entries.length > 0) {
+        const restored: Record<string, string> = {}
+        entries.forEach(e => { restored[e.section_key] = e.answer ?? '' })
+        setAnswers(restored)
+      }
     }
     init()
   }, [])
@@ -84,29 +94,33 @@ export default function Assessment({ onComplete }: AssessmentProps) {
 
   const handleNext = async (levelAnswers: Record<string, string>) => {
     setSaving(true)
-    const updated = { ...answers, ...levelAnswers }
-    setAnswers(updated)
+    try {
+      const updated = { ...answers, ...levelAnswers }
+      setAnswers(updated)
 
-    // Ensure workbook exists before saving (guards against race condition on first step)
-    const { data: { user } } = await supabase.auth.getUser()
-    const wbId = user ? await getOrCreateWorkbookId(user.id) : null
+      // Ensure workbook exists before saving (guards against race condition on first step)
+      const { data: { user } } = await supabase.auth.getUser()
+      const wbId = user ? await getOrCreateWorkbookId(user.id) : null
 
-    // Save each answer to Supabase
-    if (wbId && user) {
-      await Promise.all(
-        Object.entries(levelAnswers).map(([field, value]) =>
-          saveEntry(wbId, user.id, step, field, value)
+      // Save each answer to Supabase
+      if (wbId && user) {
+        await Promise.all(
+          Object.entries(levelAnswers).map(([field, value]) =>
+            saveEntry(wbId, user.id, step, field, value)
+          )
         )
-      )
-    }
+      }
 
-    if (step === TOTAL_STEPS) {
-      // Create goals from L8 answers (the 1-Year Plan)
-      await finalize(updated)
-    } else {
-      setStep(s => s + 1)
+      if (step === TOTAL_STEPS) {
+        await finalize(updated)
+      } else {
+        setStep(s => s + 1)
+      }
+    } catch (err) {
+      console.error('[Assessment] handleNext error:', err)
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const finalize = async (allAnswers: Record<string, string>) => {
@@ -170,6 +184,7 @@ export default function Assessment({ onComplete }: AssessmentProps) {
     progress,
     step,
     totalSteps: TOTAL_STEPS,
+    initialValues: answers,
   }
 
   const steps: Record<number, React.ReactElement> = {
