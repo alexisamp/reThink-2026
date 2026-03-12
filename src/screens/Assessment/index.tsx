@@ -50,12 +50,31 @@ export default function Assessment({ onComplete }: AssessmentProps) {
     init()
   }, [])
 
-  const saveEntry = async (level: number, field: string, value: string) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user || !workbookId) return
+  const getOrCreateWorkbookId = async (userId: string): Promise<string | null> => {
+    if (workbookId) return workbookId
+    const year = new Date().getFullYear()
+    let { data: wb } = await supabase
+      .from('workbooks')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('year', year)
+      .maybeSingle()
+    if (!wb) {
+      const { data: newWb } = await supabase
+        .from('workbooks')
+        .insert({ user_id: userId, year })
+        .select('id')
+        .single()
+      wb = newWb
+    }
+    if (wb) setWorkbookId(wb.id)
+    return wb?.id ?? null
+  }
+
+  const saveEntry = async (wbId: string, userId: string, level: number, field: string, value: string) => {
     await supabase.from('workbook_entries').upsert({
-      workbook_id: workbookId,
-      user_id: user.id,
+      workbook_id: wbId,
+      user_id: userId,
       list_order: level,
       section_key: field,
       answer: value,
@@ -67,12 +86,18 @@ export default function Assessment({ onComplete }: AssessmentProps) {
     const updated = { ...answers, ...levelAnswers }
     setAnswers(updated)
 
+    // Ensure workbook exists before saving (guards against race condition on first step)
+    const { data: { user } } = await supabase.auth.getUser()
+    const wbId = user ? await getOrCreateWorkbookId(user.id) : null
+
     // Save each answer to Supabase
-    await Promise.all(
-      Object.entries(levelAnswers).map(([field, value]) =>
-        saveEntry(step, field, value)
+    if (wbId && user) {
+      await Promise.all(
+        Object.entries(levelAnswers).map(([field, value]) =>
+          saveEntry(wbId, user.id, step, field, value)
+        )
       )
-    )
+    }
 
     if (step === TOTAL_STEPS) {
       // Create goals from L8 answers (the 1-Year Plan)
