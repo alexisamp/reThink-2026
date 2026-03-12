@@ -11,8 +11,9 @@ import L7 from './steps/L7'
 import L8 from './steps/L8'
 import L9 from './steps/L9'
 import L10 from './steps/L10'
+import L11 from './steps/L11'
 
-const TOTAL_STEPS = 10
+const TOTAL_STEPS = 11
 
 interface AssessmentProps {
   onComplete: () => void
@@ -127,18 +128,18 @@ export default function Assessment({ onComplete }: AssessmentProps) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user || !workbookId) return
 
-    // Create active goals from L8 (up to 3 items)
+    // First 3 from L3 "Map Your Horizon" become ACTIVE goals
     const activeGoalTitles = [
-      allAnswers['l8_1'],
-      allAnswers['l8_2'],
-      allAnswers['l8_3'],
+      allAnswers['l3_1'],
+      allAnswers['l3_2'],
+      allAnswers['l3_3'],
     ].filter(Boolean)
 
-    // Backlog goals from L1 (what they really want) - anything beyond first 3 active ones
-    const allWants = [
-      allAnswers['l1_1'],
-      allAnswers['l1_2'],
-      allAnswers['l1_3'],
+    // Goals 4-10 from L3 become BACKLOG
+    const backlogGoalTitles = [
+      allAnswers['l3_4'], allAnswers['l3_5'], allAnswers['l3_6'],
+      allAnswers['l3_7'], allAnswers['l3_8'], allAnswers['l3_9'],
+      allAnswers['l3_10'],
     ].filter(Boolean)
 
     const year = new Date().getFullYear()
@@ -153,18 +154,16 @@ export default function Assessment({ onComplete }: AssessmentProps) {
         position: i,
         needs_config: true,
       })),
-      ...allWants
-        .filter(t => !activeGoalTitles.includes(t))
-        .map((text, i) => ({
-          workbook_id: workbookId,
-          user_id: user.id,
-          text,
-          year,
-          goal_type: 'BACKLOG' as const,
-          status: 'NOT_STARTED' as const,
-          position: i + 10,
-          needs_config: true,
-        })),
+      ...backlogGoalTitles.map((text, i) => ({
+        workbook_id: workbookId,
+        user_id: user.id,
+        text,
+        year,
+        goal_type: 'BACKLOG' as const,
+        status: 'NOT_STARTED' as const,
+        position: i + 10,
+        needs_config: true,
+      })),
     ]
 
     if (goalInserts.length > 0) {
@@ -185,6 +184,7 @@ export default function Assessment({ onComplete }: AssessmentProps) {
     step,
     totalSteps: TOTAL_STEPS,
     initialValues: answers,
+    isLastStep: step === TOTAL_STEPS,
   }
 
   const steps: Record<number, React.ReactElement> = {
@@ -198,6 +198,7 @@ export default function Assessment({ onComplete }: AssessmentProps) {
     8: <L8 {...stepProps} />,
     9: <L9 {...stepProps} />,
     10: <L10 {...stepProps} />,
+    11: <L11 {...stepProps} />,
   }
 
   return steps[step] ?? null

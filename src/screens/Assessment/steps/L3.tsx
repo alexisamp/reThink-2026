@@ -5,30 +5,32 @@ interface StepProps {
   onNext: (answers: Record<string, string>) => void
   onBack?: () => void
   saving?: boolean
+  isLastStep?: boolean
   initialValues?: Record<string, string>
   progress: number
   step: number
   totalSteps: number
 }
 
-export default function L3({ onNext, onBack, saving, progress, step, totalSteps, initialValues }: StepProps) {
+export default function L3({ onNext, onBack, saving, isLastStep, progress, step, totalSteps, initialValues }: StepProps) {
   const [values, setValues] = useState<Record<string, string>>(initialValues ?? {})
   return (
     <StepLayout
       step={step} totalSteps={totalSteps} progress={progress}
-      tagline="Rethink Workbook"
-      title="The Audience"
-      subtitle="Know who you serve, and you'll know what to build."
-      prompt="Who I serve and create for..."
-      fields={[
-        { key: 'l3_1', placeholder: 'e.g. Founders who have outgrown hustle culture' },
-        { key: 'l3_2', placeholder: 'e.g. Senior operators who want clarity' },
-      ]}
+      tagline="Level 3 of 11 — Map Your Horizon"
+      title="Map Your Horizon"
+      subtitle="Dream big. Constraint comes later — for now, list everything you want to achieve this year."
+      prompt="My top 10 goals for 2026 are..."
+      fields={Array.from({ length: 10 }, (_, i) => ({
+        key: `l3_${i + 1}`,
+        placeholder: 'I want to...',
+      }))}
       values={values}
       onChange={(k, v) => setValues(p => ({ ...p, [k]: v }))}
       onNext={() => onNext(values)}
       onBack={onBack}
       saving={saving}
+      isLastStep={isLastStep}
     />
   )
 }

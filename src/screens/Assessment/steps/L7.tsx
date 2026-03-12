@@ -1,33 +1,108 @@
 import { useState } from 'react'
-import StepLayout from './StepLayout'
+import { House } from '@phosphor-icons/react'
 
 interface StepProps {
   onNext: (answers: Record<string, string>) => void
   onBack?: () => void
   saving?: boolean
+  isLastStep?: boolean
   initialValues?: Record<string, string>
   progress: number
   step: number
   totalSteps: number
 }
 
-export default function L7({ onNext, onBack, saving, progress, step, totalSteps, initialValues }: StepProps) {
+export default function L7({ onNext, onBack, saving, isLastStep, progress, step, totalSteps, initialValues }: StepProps) {
   const [values, setValues] = useState<Record<string, string>>(initialValues ?? {})
+  const change = (k: string, v: string) => setValues(p => ({ ...p, [k]: v }))
+
   return (
-    <StepLayout
-      step={step} totalSteps={totalSteps} progress={progress}
-      tagline="Rethink Workbook"
-      title="3-Year Picture"
-      subtitle="The checkpoint that keeps your 10-year vision honest."
-      prompt="In 3 years, I will..."
-      fields={[
-        { key: 'l7_1', type: 'textarea', placeholder: 'e.g. Market leader in my niche. $5M ARR. Team of 20.' },
-      ]}
-      values={values}
-      onChange={(k, v) => setValues(p => ({ ...p, [k]: v }))}
-      onNext={() => onNext(values)}
-      onBack={onBack}
-      saving={saving}
-    />
+    <div className="min-h-screen bg-white text-burnham font-sans">
+      <main className="w-full max-w-2xl mx-auto px-8 pt-12 md:pt-20 pb-12 flex flex-col min-h-screen">
+
+        <header className="mb-12">
+          <div className="flex justify-between items-center text-xs font-medium mb-4">
+            <div className="flex items-center gap-2 text-shuttle">
+              <House size={14} />
+              <span>/</span>
+              <span>Annual Review 2026</span>
+            </div>
+            <span className="text-mercury font-mono text-[10px]">{step} / {totalSteps}</span>
+          </div>
+          <div className="h-px w-full bg-mercury relative">
+            <div className="absolute left-0 top-0 h-full bg-pastel transition-all duration-500" style={{ width: `${progress}%` }} />
+          </div>
+        </header>
+
+        <div className="flex-1">
+          <div className="mb-10">
+            <span className="text-[10px] uppercase tracking-[0.1em] text-shuttle block mb-4 font-medium">
+              Level 7 of 11 — Find Your Easy Mode
+            </span>
+            <h1 className="text-2xl md:text-3xl font-semibold text-burnham tracking-[-0.02em] mb-3">
+              Find Your Easy Mode
+            </h1>
+            <p className="text-shuttle italic font-serif text-sm">
+              Hard mode is doing things the hard way. Easy mode is designing systems that work with you, not against you.
+            </p>
+          </div>
+
+          <div className="space-y-10">
+            {[1, 2, 3].map(i => (
+              <div key={i}>
+                <span className="text-mercury font-mono text-xs block mb-4">{String(i).padStart(2, '0')}</span>
+                <div className="space-y-5">
+                  <div className="group border-b border-mercury pb-1 transition-all duration-200 focus-within:border-black focus-within:border-b-[1.5px]">
+                    <label className="block text-[11px] text-shuttle uppercase tracking-wider mb-1.5 font-medium">
+                      When I'm in hard mode, I...
+                    </label>
+                    <input
+                      type="text"
+                      autoFocus={i === 1}
+                      className="w-full text-base text-burnham bg-transparent border-none p-0 focus:ring-0 placeholder-mercury font-normal"
+                      placeholder="Describe a pattern where you make things harder than needed"
+                      value={values[`l7_hard${i}`] ?? ''}
+                      onChange={e => change(`l7_hard${i}`, e.target.value)}
+                    />
+                  </div>
+                  <div className="group border-b border-mercury pb-1 transition-all duration-200 focus-within:border-black focus-within:border-b-[1.5px]">
+                    <label className="block text-[11px] text-shuttle uppercase tracking-wider mb-1.5 font-medium">
+                      My easy mode version is...
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full text-base text-burnham bg-transparent border-none p-0 focus:ring-0 placeholder-mercury font-normal"
+                      placeholder="How would this look if it were easy?"
+                      value={values[`l7_easy${i}`] ?? ''}
+                      onChange={e => change(`l7_easy${i}`, e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <footer className="mt-16 pt-6 flex justify-between items-center">
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-sm text-shuttle hover:text-burnham transition-colors font-medium"
+            style={{ opacity: onBack ? 1 : 0, pointerEvents: onBack ? 'auto' : 'none' }}
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            onClick={() => onNext(values)}
+            disabled={saving}
+            className="text-sm font-bold text-burnham flex items-center gap-2 hover:opacity-80 transition-opacity disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : isLastStep ? 'Finish' : 'Next'}
+            {!saving && <span className="text-pastel text-lg leading-none">→</span>}
+          </button>
+        </footer>
+      </main>
+    </div>
   )
 }

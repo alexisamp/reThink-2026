@@ -5,20 +5,21 @@ interface StepProps {
   onNext: (answers: Record<string, string>) => void
   onBack?: () => void
   saving?: boolean
+  isLastStep?: boolean
   initialValues?: Record<string, string>
   progress: number
   step: number
   totalSteps: number
 }
 
-export default function L1({ onNext, onBack, saving, progress, step, totalSteps, initialValues }: StepProps) {
+export default function L1({ onNext, onBack, saving, isLastStep, progress, step, totalSteps, initialValues }: StepProps) {
   const [values, setValues] = useState<Record<string, string>>(initialValues ?? {})
   return (
     <StepLayout
       step={step} totalSteps={totalSteps} progress={progress}
-      tagline="Rethink Workbook"
+      tagline="Level 1 of 11 — The Key to Success"
       title="The Key to Success"
-      subtitle="Every breakthrough starts from knowing what you want to achieve."
+      subtitle="Before we look at where you've been, let's get clear on where you want to go."
       prompt="What I really want is..."
       fields={[
         { key: 'l1_1', placeholder: 'I want to...' },
@@ -30,6 +31,7 @@ export default function L1({ onNext, onBack, saving, progress, step, totalSteps,
       onNext={() => onNext(values)}
       onBack={onBack}
       saving={saving}
+      isLastStep={isLastStep}
     />
   )
 }
