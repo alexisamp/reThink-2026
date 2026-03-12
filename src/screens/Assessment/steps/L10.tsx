@@ -19,7 +19,7 @@ export default function L10({ onNext, onBack, saving, isLastStep, progress, step
       step={step} totalSteps={totalSteps} progress={progress}
       tagline="Level 10 of 11 — Set the Rules"
       title="Set the Rules"
-      subtitle="The rules you live by shape the life you create. Make them explicit."
+      subtitle="Automatic rules turn desired behaviors into default behaviors."
       sections={[
         {
           prompt: 'Rules that propel — Automate progress toward your goals',

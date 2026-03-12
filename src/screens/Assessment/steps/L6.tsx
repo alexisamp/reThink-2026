@@ -43,7 +43,10 @@ export default function L6({ onNext, onBack, saving, isLastStep, progress, step,
               Play to Your Strengths
             </h1>
             <p className="text-shuttle italic font-serif text-sm">
-              You don't need to fix every weakness. You need a workaround for each one.
+              2026 is the year you find a workaround to weaknesses.
+            </p>
+            <p className="text-burnham text-sm font-medium mt-4">
+              List three areas where others would say you're weak. For each one, write down a practical way to work around it — who could help, what could change, or how you might approach things differently:
             </p>
           </div>
 
@@ -54,7 +57,7 @@ export default function L6({ onNext, onBack, saving, isLastStep, progress, step,
                 <div className="space-y-5">
                   <div className="group border-b border-mercury pb-1 transition-all duration-200 focus-within:border-black focus-within:border-b-[1.5px]">
                     <label className="block text-[11px] text-shuttle uppercase tracking-wider mb-1.5 font-medium">
-                      A weakness I have is...
+                      Weakness
                     </label>
                     <input
                       type="text"
@@ -67,7 +70,7 @@ export default function L6({ onNext, onBack, saving, isLastStep, progress, step,
                   </div>
                   <div className="group border-b border-mercury pb-1 transition-all duration-200 focus-within:border-black focus-within:border-b-[1.5px]">
                     <label className="block text-[11px] text-shuttle uppercase tracking-wider mb-1.5 font-medium">
-                      My workaround is...
+                      Workaround
                     </label>
                     <input
                       type="text"

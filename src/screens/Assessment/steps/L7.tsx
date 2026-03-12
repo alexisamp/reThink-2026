@@ -43,7 +43,10 @@ export default function L7({ onNext, onBack, saving, isLastStep, progress, step,
               Find Your Easy Mode
             </h1>
             <p className="text-shuttle italic font-serif text-sm">
-              Hard mode is doing things the hard way. Easy mode is designing systems that work with you, not against you.
+              Where are you playing on hard mode? What are the things you can do to put yourself in easy mode?
+            </p>
+            <p className="text-burnham text-sm font-medium mt-4">
+              Identify three areas where you're choosing the difficult path by default. For each one, find and describe your easy mode.
             </p>
           </div>
 
@@ -54,7 +57,7 @@ export default function L7({ onNext, onBack, saving, isLastStep, progress, step,
                 <div className="space-y-5">
                   <div className="group border-b border-mercury pb-1 transition-all duration-200 focus-within:border-black focus-within:border-b-[1.5px]">
                     <label className="block text-[11px] text-shuttle uppercase tracking-wider mb-1.5 font-medium">
-                      When I'm in hard mode, I...
+                      Hard mode
                     </label>
                     <input
                       type="text"
@@ -67,7 +70,7 @@ export default function L7({ onNext, onBack, saving, isLastStep, progress, step,
                   </div>
                   <div className="group border-b border-mercury pb-1 transition-all duration-200 focus-within:border-black focus-within:border-b-[1.5px]">
                     <label className="block text-[11px] text-shuttle uppercase tracking-wider mb-1.5 font-medium">
-                      My easy mode version is...
+                      Easy mode
                     </label>
                     <input
                       type="text"

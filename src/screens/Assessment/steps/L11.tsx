@@ -19,7 +19,7 @@ export default function L11({ onNext, onBack, saving, isLastStep, progress, step
       step={step} totalSteps={totalSteps} progress={progress}
       tagline="Level 11 of 11 — Commit to Your Path"
       title="Commit to Your Path"
-      subtitle="The review only matters if it changes something. Make a real commitment before you close this."
+      subtitle="Clear thinking leads to better decisions. Better decisions compound into extraordinary results."
       sections={[
         {
           prompt: 'What three insights from this review will most transform your next year?',

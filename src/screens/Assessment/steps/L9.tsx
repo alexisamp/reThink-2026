@@ -69,13 +69,13 @@ export default function L9({ onNext, onBack, saving, isLastStep, progress, step,
         <div className="flex-1">
           <div className="mb-8">
             <span className="text-[10px] uppercase tracking-[0.1em] text-shuttle block mb-4 font-medium">
-              Level 9 of 11 — Score Your Circle
+              Level 9 of 11 — The Inner Circle
             </span>
             <h1 className="text-2xl md:text-3xl font-semibold text-burnham tracking-[-0.02em] mb-3">
-              Score Your Circle
+              The Inner Circle
             </h1>
             <p className="text-shuttle italic font-serif text-sm">
-              Rate each person: + positive, ~ neutral, − negative. Be honest — this is for your eyes only.
+              Consider each person from your list on the previous page and score their impact (+1 for positive, 0 for neutral, -1 for negative). Use the insights to strengthen relationships that elevate you and thoughtfully adjust those that don't.
             </p>
           </div>
 

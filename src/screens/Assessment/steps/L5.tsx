@@ -65,7 +65,10 @@ export default function L5({ onNext, onBack, saving, isLastStep, progress, step,
               Small Steps for Momentum
             </h1>
             <p className="text-shuttle italic font-serif text-sm">
-              Procrastination lives in vagueness. The smallest possible step is always doable.
+              Action creates momentum, and momentum reveals opportunities that standing still never could.
+            </p>
+            <p className="text-burnham text-sm font-medium mt-4">
+              Identify three things you're avoiding or putting off — either from your chosen goals or other important areas — and write down the smallest possible first step for each:
             </p>
           </div>
 
