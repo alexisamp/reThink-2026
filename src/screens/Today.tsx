@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Lightning, Check, Play, Pause, Stop,
-  Timer, CalendarBlank, CaretLeft, CaretRight,
+  Timer, CalendarBlank, SidebarSimple,
   Flame, TrashSimple, NotePencil, GearSix,
   TextB, TextItalic, TextStrikethrough,
 } from '@phosphor-icons/react'
@@ -830,15 +830,15 @@ export default function Today() {
         </div>
       </main>
 
-      {/* ─── Right Sidebar 30% ────────────────────────────────────────── */}
-      <aside className={`${sidebarOpen ? 'w-[30%] min-w-[280px] max-w-[360px]' : 'w-10'} bg-white border-l border-mercury h-full flex flex-col relative z-10 transition-all duration-300 overflow-hidden`}>
+      {/* ─── Left Sidebar 30% ─────────────────────────────────────────── */}
+      <aside className={`${sidebarOpen ? 'w-[30%] min-w-[280px] max-w-[360px]' : 'w-10'} bg-white border-r border-mercury h-full flex flex-col relative z-10 transition-all duration-300 overflow-hidden order-first`}>
         {/* Collapse toggle */}
         <button
           onClick={() => setSidebarOpen(v => !v)}
-          className="absolute -left-3 top-8 w-6 h-6 bg-white border border-mercury rounded-full flex items-center justify-center text-shuttle hover:text-burnham hover:border-shuttle transition-all shadow-sm z-20"
+          className="absolute -right-3 top-8 w-6 h-6 bg-white border border-mercury rounded-full flex items-center justify-center text-shuttle hover:text-burnham hover:border-shuttle transition-all shadow-sm z-20"
           title={sidebarOpen ? 'Collapse ⌘B' : 'Expand ⌘B'}
         >
-          {sidebarOpen ? <CaretRight size={10} weight="bold" /> : <CaretLeft size={10} weight="bold" />}
+          <SidebarSimple size={12} weight={sidebarOpen ? 'fill' : 'regular'} />
         </button>
 
         {sidebarOpen && (
@@ -875,161 +875,6 @@ export default function Today() {
                     </div>
                   ))}
                 </div>
-              </div>
-
-              {/* FOCUS TIMER — compact */}
-              <div>
-                {/* Header row: label + timer + controls + gear */}
-                <div className="flex items-center gap-2">
-                  <h3 className="text-[10px] font-semibold text-shuttle/70 uppercase tracking-widest flex items-center gap-1.5 flex-1">
-                    <Timer size={11} /> Focus
-                  </h3>
-                  <span className="text-xs font-mono font-bold text-burnham tabular-nums">
-                    {formatTime(timerRemaining)}
-                  </span>
-                  {timerComplete ? null : !timerRunning ? (
-                    <button
-                      onClick={() => { if (timerElapsed === 0) setShowIntentionInput(true); else setTimerRunning(true) }}
-                      className="w-6 h-6 rounded-full bg-burnham flex items-center justify-center hover:bg-burnham/80 transition-colors"
-                    >
-                      <Play size={9} weight="fill" className="text-white" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={pauseTimer}
-                      className="w-6 h-6 rounded-full bg-burnham/10 border border-burnham/20 flex items-center justify-center hover:bg-burnham/20 transition-colors"
-                    >
-                      <Pause size={9} weight="fill" className="text-burnham" />
-                    </button>
-                  )}
-                  {timerElapsed > 0 && !timerComplete && (
-                    <button
-                      onClick={resetTimer}
-                      className="w-6 h-6 rounded-full border border-mercury flex items-center justify-center text-shuttle hover:border-shuttle transition-colors"
-                    >
-                      <Stop size={9} />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setShowPomSettings(v => !v)}
-                    className={`w-6 h-6 rounded-full border flex items-center justify-center transition-colors ${
-                      showPomSettings ? 'border-burnham text-burnham bg-burnham/5' : 'border-mercury text-shuttle/50 hover:text-shuttle hover:border-shuttle'
-                    }`}
-                    title="Settings"
-                  >
-                    <GearSix size={10} />
-                  </button>
-                </div>
-
-                {/* Progress bar when running */}
-                {timerRunning && (
-                  <div className="w-full bg-mercury rounded-full h-0.5 mt-2">
-                    <div className="bg-pastel h-0.5 rounded-full transition-all" style={{ width: `${timerPct}%` }} />
-                  </div>
-                )}
-
-                {/* Settings panel */}
-                {showPomSettings && (
-                  <div className="mt-2 p-2.5 rounded-lg border border-mercury/60 space-y-2 bg-mercury/10">
-                    <div className="flex gap-1">
-                      {FOCUS_DURATIONS.map(d => (
-                        <button
-                          key={d.minutes}
-                          onClick={() => { setTimerDuration(d.minutes); resetTimer() }}
-                          disabled={timerRunning}
-                          className={`flex-1 py-1 rounded text-[10px] font-bold transition-all disabled:opacity-50 ${
-                            timerDuration === d.minutes
-                              ? 'bg-burnham text-white'
-                              : 'border border-mercury text-shuttle hover:border-shuttle bg-white'
-                          }`}
-                          title={d.desc}
-                        >
-                          {d.label}m
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex gap-1">
-                      {(['none', 'brown', 'rain'] as const).map(s => (
-                        <button
-                          key={s}
-                          onClick={() => setAmbientSound(s)}
-                          className={[
-                            'flex-1 text-[10px] py-0.5 rounded border transition-colors',
-                            ambientSound === s
-                              ? 'border-burnham text-burnham bg-burnham/5'
-                              : 'border-mercury text-shuttle hover:border-burnham/30',
-                          ].join(' ')}
-                        >
-                          {s === 'none' ? 'Off' : s === 'brown' ? 'Brown' : 'Rain'}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex gap-1.5">
-                      <select
-                        className="flex-1 text-[10px] border border-mercury rounded px-1 py-0.5 bg-white text-burnham outline-none disabled:opacity-50"
-                        value={timerGoalId ?? ''}
-                        onChange={e => setTimerGoalId(e.target.value || null)}
-                        disabled={timerRunning}
-                      >
-                        <option value="">No goal</option>
-                        {goals.map(g => <option key={g.id} value={g.id}>{g.text}</option>)}
-                      </select>
-                      <select
-                        value={timerHabitId ?? ''}
-                        onChange={e => setTimerHabitId(e.target.value || null)}
-                        disabled={timerRunning}
-                        className="flex-1 text-[10px] border border-mercury rounded px-1 py-0.5 bg-white text-burnham outline-none disabled:opacity-50"
-                      >
-                        <option value="">No habit</option>
-                        {habits
-                          .filter(h => !timerGoalId || h.goal_id === timerGoalId)
-                          .map(h => <option key={h.id} value={h.id}>{h.text}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                {/* Intention input */}
-                {showIntentionInput && (
-                  <div className="mt-2 space-y-1.5">
-                    <input
-                      autoFocus
-                      value={timerIntention}
-                      onChange={e => setTimerIntention(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          setShowIntentionInput(false)
-                          setTimerStartedAt(new Date().toISOString())
-                          setTimerRunning(true)
-                        }
-                      }}
-                      placeholder="Session intention…"
-                      className="w-full text-xs border-b border-mercury outline-none bg-transparent pb-1 text-burnham placeholder-shuttle/40"
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => { setShowIntentionInput(false); setTimerStartedAt(new Date().toISOString()); startTimer() }}
-                        className="text-[10px] font-semibold text-white bg-burnham px-2 py-0.5 rounded"
-                      >Begin</button>
-                      <button
-                        onClick={() => { setShowIntentionInput(false); setTimerIntention(''); setTimerStartedAt(new Date().toISOString()); startTimer() }}
-                        className="text-[10px] text-shuttle"
-                      >Skip</button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Post-session check */}
-                {timerComplete && (
-                  <div className="mt-2 space-y-1.5">
-                    <p className="text-[10px] uppercase tracking-widest text-shuttle text-center">Did you finish?</p>
-                    <div className="flex gap-1">
-                      <button onClick={() => saveSession('COMPLETE')} className="flex-1 text-[10px] font-semibold text-white bg-burnham py-1 rounded">Yes</button>
-                      <button onClick={() => saveSession('CARRIED_OVER')} className="flex-1 text-[10px] text-shuttle border border-mercury py-1 rounded">Carry</button>
-                      <button onClick={() => saveSession('INCOMPLETE')} className="flex-1 text-[10px] text-shuttle border border-mercury py-1 rounded">No</button>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* JOURNALING — rich text with markdown storage */}
@@ -1107,6 +952,158 @@ export default function Today() {
           </>
         )}
       </aside>
+
+      {/* ─── Floating Pomodoro Widget ────────────────────────────────── */}
+      <div className="fixed top-4 right-14 z-40 flex flex-col items-end gap-1.5">
+        {/* Pill: icon + time + controls + gear */}
+        <div className={`flex items-center gap-1.5 bg-white border rounded-full px-2.5 py-1.5 shadow-md transition-colors ${timerRunning ? 'border-pastel/70' : 'border-mercury'}`}>
+          <Timer size={11} className="text-shuttle/60 shrink-0" />
+          <span className={`text-[11px] font-mono font-bold tabular-nums w-10 text-center ${timerRunning ? 'text-burnham' : 'text-shuttle'}`}>
+            {formatTime(timerRemaining)}
+          </span>
+          {timerComplete ? null : !timerRunning ? (
+            <button
+              onClick={() => { if (timerElapsed === 0) setShowIntentionInput(true); else setTimerRunning(true) }}
+              className="w-5 h-5 rounded-full bg-burnham flex items-center justify-center hover:bg-burnham/80 transition-colors"
+            >
+              <Play size={8} weight="fill" className="text-white" />
+            </button>
+          ) : (
+            <button
+              onClick={pauseTimer}
+              className="w-5 h-5 rounded-full bg-burnham/10 border border-burnham/20 flex items-center justify-center hover:bg-burnham/20 transition-colors"
+            >
+              <Pause size={8} weight="fill" className="text-burnham" />
+            </button>
+          )}
+          {timerElapsed > 0 && !timerComplete && (
+            <button
+              onClick={resetTimer}
+              className="w-5 h-5 rounded-full border border-mercury flex items-center justify-center text-shuttle hover:border-shuttle transition-colors"
+            >
+              <Stop size={8} />
+            </button>
+          )}
+          <button
+            onClick={() => setShowPomSettings(v => !v)}
+            className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+              showPomSettings ? 'border-burnham text-burnham bg-burnham/5' : 'border-mercury text-shuttle/40 hover:text-shuttle hover:border-shuttle'
+            }`}
+          >
+            <GearSix size={9} />
+          </button>
+        </div>
+
+        {/* Progress bar when running */}
+        {timerRunning && (
+          <div className="w-full bg-mercury rounded-full h-0.5">
+            <div className="bg-pastel h-0.5 rounded-full transition-all" style={{ width: `${timerPct}%` }} />
+          </div>
+        )}
+
+        {/* Settings panel */}
+        {showPomSettings && (
+          <div className="bg-white border border-mercury rounded-xl shadow-lg p-3 space-y-2 w-52">
+            <div className="flex gap-1">
+              {FOCUS_DURATIONS.map(d => (
+                <button
+                  key={d.minutes}
+                  onClick={() => { setTimerDuration(d.minutes); resetTimer() }}
+                  disabled={timerRunning}
+                  className={`flex-1 py-1 rounded text-[10px] font-bold transition-all disabled:opacity-50 ${
+                    timerDuration === d.minutes
+                      ? 'bg-burnham text-white'
+                      : 'border border-mercury text-shuttle hover:border-shuttle bg-white'
+                  }`}
+                  title={d.desc}
+                >
+                  {d.label}m
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1">
+              {(['none', 'brown', 'rain'] as const).map(s => (
+                <button
+                  key={s}
+                  onClick={() => setAmbientSound(s)}
+                  className={[
+                    'flex-1 text-[10px] py-0.5 rounded border transition-colors',
+                    ambientSound === s
+                      ? 'border-burnham text-burnham bg-burnham/5'
+                      : 'border-mercury text-shuttle hover:border-burnham/30',
+                  ].join(' ')}
+                >
+                  {s === 'none' ? 'Off' : s === 'brown' ? 'Brown' : 'Rain'}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5">
+              <select
+                className="flex-1 text-[10px] border border-mercury rounded px-1 py-0.5 bg-white text-burnham outline-none disabled:opacity-50"
+                value={timerGoalId ?? ''}
+                onChange={e => setTimerGoalId(e.target.value || null)}
+                disabled={timerRunning}
+              >
+                <option value="">No goal</option>
+                {goals.map(g => <option key={g.id} value={g.id}>{g.text}</option>)}
+              </select>
+              <select
+                value={timerHabitId ?? ''}
+                onChange={e => setTimerHabitId(e.target.value || null)}
+                disabled={timerRunning}
+                className="flex-1 text-[10px] border border-mercury rounded px-1 py-0.5 bg-white text-burnham outline-none disabled:opacity-50"
+              >
+                <option value="">No habit</option>
+                {habits
+                  .filter(h => !timerGoalId || h.goal_id === timerGoalId)
+                  .map(h => <option key={h.id} value={h.id}>{h.text}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Intention input */}
+        {showIntentionInput && (
+          <div className="bg-white border border-mercury rounded-xl shadow-lg p-3 space-y-2 w-52">
+            <input
+              autoFocus
+              value={timerIntention}
+              onChange={e => setTimerIntention(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  setShowIntentionInput(false)
+                  setTimerStartedAt(new Date().toISOString())
+                  setTimerRunning(true)
+                }
+              }}
+              placeholder="Session intention…"
+              className="w-full text-xs border-b border-mercury outline-none bg-transparent pb-1 text-burnham placeholder-shuttle/40"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowIntentionInput(false); setTimerStartedAt(new Date().toISOString()); startTimer() }}
+                className="text-[10px] font-semibold text-white bg-burnham px-2 py-1 rounded"
+              >Begin</button>
+              <button
+                onClick={() => { setShowIntentionInput(false); setTimerIntention(''); setTimerStartedAt(new Date().toISOString()); startTimer() }}
+                className="text-[10px] text-shuttle"
+              >Skip</button>
+            </div>
+          </div>
+        )}
+
+        {/* Post-session check */}
+        {timerComplete && (
+          <div className="bg-white border border-mercury rounded-xl shadow-lg p-3 space-y-2 w-52">
+            <p className="text-[10px] uppercase tracking-widest text-shuttle text-center">Did you finish?</p>
+            <div className="flex gap-1">
+              <button onClick={() => saveSession('COMPLETE')} className="flex-1 text-[10px] font-semibold text-white bg-burnham py-1 rounded">Yes</button>
+              <button onClick={() => saveSession('CARRIED_OVER')} className="flex-1 text-[10px] text-shuttle border border-mercury py-1 rounded">Carry</button>
+              <button onClick={() => saveSession('INCOMPLETE')} className="flex-1 text-[10px] text-shuttle border border-mercury py-1 rounded">No</button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ─── Morning Ritual Overlay (Sprint 19) ─────────────────────── */}
       {ritualStep >= 1 && (

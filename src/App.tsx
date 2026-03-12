@@ -68,16 +68,18 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // hasWorkbook = user has completed onboarding (has at least 1 active goal)
+  // Using goals instead of workbooks because workbook row is created at Assessment *mount*
+  // (before completion), so workbook existence alone doesn't mean setup is done.
   useEffect(() => {
     if (!user) return
-    const year = new Date().getFullYear()
     supabase
-      .from('workbooks')
+      .from('goals')
       .select('id')
       .eq('user_id', user.id)
-      .eq('year', year)
-      .maybeSingle()
-      .then(({ data, error }) => setHasWorkbook(!error && !!data))
+      .eq('goal_type', 'ACTIVE')
+      .limit(1)
+      .then(({ data, error }) => setHasWorkbook(!error && (data?.length ?? 0) > 0))
   }, [user])
 
   // Smart Notifications (Sprint 11)
