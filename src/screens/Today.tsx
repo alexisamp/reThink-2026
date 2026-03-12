@@ -786,7 +786,7 @@ export default function Today() {
         <button
           onClick={() => setSidebarOpen(v => !v)}
           className="absolute -left-3 top-8 w-6 h-6 bg-white border border-mercury rounded-full flex items-center justify-center text-shuttle hover:text-burnham hover:border-shuttle transition-all shadow-sm z-20"
-          title={sidebarOpen ? 'Collapse ⌘.' : 'Expand ⌘.'}
+          title={sidebarOpen ? 'Collapse ⌘B' : 'Expand ⌘B'}
         >
           <SquareHalf size={12} weight={sidebarOpen ? 'fill' : 'regular'} />
         </button>
@@ -794,10 +794,10 @@ export default function Today() {
         {sidebarOpen && (
           <>
             <div className="px-6 pt-6 pb-3 border-b border-mercury">
-              <p className="text-[10px] uppercase tracking-widest text-shuttle/60 mb-2">Objetivo del día</p>
+              <p className="text-[10px] uppercase tracking-widest text-shuttle/60 mb-2">Today's objective</p>
               <input
                 className="w-full text-base font-semibold text-burnham border-b border-mercury focus:border-burnham outline-none bg-transparent pb-1 placeholder-mercury/80 transition-colors"
-                placeholder="¿Qué haría hoy un éxito?"
+                placeholder="What would make today a win?"
                 value={onethingValue}
                 onChange={e => handleOnethingChange(e.target.value)}
               />
@@ -823,22 +823,6 @@ export default function Today() {
                         <div className="h-1 rounded-full bg-pastel transition-all" style={{ width: `${item.pct}%` }} />
                       </div>
                     </div>
-                  ))}
-                </div>
-                {/* Energy */}
-                <div className="grid grid-cols-10 gap-1 mt-3">
-                  {[1,2,3,4,5,6,7,8,9,10].map(n => (
-                    <button
-                      key={n}
-                      onClick={() => upsertReview({ energy_level: n })}
-                      className={`h-6 rounded text-[9px] font-medium transition-all ${
-                        review?.energy_level === n
-                          ? 'bg-gossip border border-pastel text-burnham font-bold'
-                          : 'bg-white border border-mercury text-shuttle hover:border-pastel'
-                      }`}
-                    >
-                      {n}
-                    </button>
                   ))}
                 </div>
               </div>
@@ -1037,13 +1021,13 @@ export default function Today() {
 
             </div>
 
-            {/* Listo por hoy CTA */}
+            {/* End of day CTA */}
             <div className="px-6 py-5 border-t border-mercury">
               <button
                 onClick={() => setShowEndOfDay(true)}
                 className="w-full flex items-center justify-center gap-2 bg-burnham hover:bg-burnham/90 text-white py-3 rounded-lg text-xs font-medium transition-all"
               >
-                <span>Listo por hoy</span>
+                <span>Done for today</span>
                 <span className="opacity-60">→</span>
               </button>
             </div>
@@ -1097,8 +1081,8 @@ export default function Today() {
 
             {ritualStep === 2 && (
               <div className="space-y-6">
-                <h2 className="text-xl font-semibold text-burnham">¿Cuál es tu objetivo de hoy?</h2>
-                <p className="text-sm text-shuttle">Lo que haría hoy un éxito.</p>
+                <h2 className="text-xl font-semibold text-burnham">What's your one thing today?</h2>
+                <p className="text-sm text-shuttle">The one thing that would make today a win.</p>
                 <input
                   autoFocus
                   value={onethingValue}
@@ -1125,7 +1109,7 @@ export default function Today() {
                 <h2 className="text-xl font-semibold text-burnham">Today's plan</h2>
                 <div className="space-y-3 text-sm">
                   <div className="flex items-start gap-3">
-                    <span className="text-[10px] uppercase tracking-widest text-shuttle w-20 shrink-0 pt-0.5">Objetivo</span>
+                    <span className="text-[10px] uppercase tracking-widest text-shuttle w-20 shrink-0 pt-0.5">Objective</span>
                     <span className="text-burnham font-medium">{onethingValue}</span>
                   </div>
                   <div className="flex items-start gap-3">

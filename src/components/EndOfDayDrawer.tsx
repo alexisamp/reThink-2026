@@ -15,6 +15,7 @@ export default function EndOfDayDrawer({ todos, today, userId, onClose, onComple
   const pending = todos.filter(t => !t.completed)
   const [carry, setCarry] = useState<Record<string, boolean>>({})
   const [tomorrowObjective, setTomorrowObjective] = useState('')
+  const [energyLevel, setEnergyLevel] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -47,9 +48,9 @@ export default function EndOfDayDrawer({ todos, today, userId, onClose, onComple
           { onConflict: 'user_id,date' }
         )
       }
-      // Mark today as complete (tomorrow_reviewed)
+      // Mark today as complete (tomorrow_reviewed) + save energy level
       await supabase.from('reviews').upsert(
-        { user_id: userId, date: today, tomorrow_reviewed: true },
+        { user_id: userId, date: today, tomorrow_reviewed: true, ...(energyLevel !== null ? { energy_level: energyLevel } : {}) },
         { onConflict: 'user_id,date' }
       )
     } catch (err) {
@@ -115,6 +116,28 @@ export default function EndOfDayDrawer({ todos, today, userId, onClose, onComple
               <p className="text-sm font-medium text-burnham">All todos done today!</p>
             </div>
           )}
+
+          {/* Energy level */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/60 mb-3">
+              Today's energy level
+            </p>
+            <div className="grid grid-cols-10 gap-1">
+              {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setEnergyLevel(prev => prev === n ? null : n)}
+                  className={`h-7 rounded text-[9px] font-medium transition-all ${
+                    energyLevel === n
+                      ? 'bg-gossip border border-pastel text-burnham font-bold'
+                      : 'bg-white border border-mercury text-shuttle hover:border-pastel'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Tomorrow's objective */}
           <div>
