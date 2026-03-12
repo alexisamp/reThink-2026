@@ -56,25 +56,25 @@ export default function StepLayout({
             <span className="text-[10px] uppercase tracking-[0.1em] text-shuttle block mb-4 font-medium">
               {tagline}
             </span>
-            <h1 className="text-4xl md:text-5xl font-semibold text-burnham tracking-[-0.02em] mb-4">
+            <h1 className="text-2xl md:text-3xl font-semibold text-burnham tracking-[-0.02em] mb-3">
               {title}
             </h1>
-            <p className="text-shuttle italic font-serif text-lg">{subtitle}</p>
+            <p className="text-shuttle italic font-serif text-sm">{subtitle}</p>
           </div>
 
-          <div className="mb-10">
-            <h2 className="text-2xl font-bold text-burnham">{prompt}</h2>
+          <div className="mb-8">
+            <h2 className="text-lg font-bold text-burnham">{prompt}</h2>
           </div>
 
-          <form className="space-y-8" onSubmit={e => { e.preventDefault(); onNext() }}>
+          <form className="space-y-6" onSubmit={e => { e.preventDefault(); onNext() }}>
             {fields.map((field, i) => (
               <div key={field.key} className="group relative border-b border-mercury pb-1 flex items-baseline gap-4 transition-all duration-200 focus-within:border-black focus-within:border-b-[1.5px]">
-                <span className="text-mercury font-mono text-sm group-focus-within:text-pastel transition-colors flex-shrink-0">
+                <span className="text-mercury font-mono text-xs group-focus-within:text-pastel transition-colors flex-shrink-0">
                   {i + 1}
                 </span>
                 {field.type === 'textarea' ? (
                   <textarea
-                    className="w-full text-xl text-burnham bg-transparent border-none p-0 focus:ring-0 placeholder-mercury font-normal resize-none min-h-[80px]"
+                    className="w-full text-base text-burnham bg-transparent border-none p-0 focus:ring-0 placeholder-mercury font-normal resize-none min-h-[64px]"
                     placeholder={field.placeholder ?? 'Write here...'}
                     value={values[field.key] ?? ''}
                     onChange={e => onChange(field.key, e.target.value)}
@@ -85,7 +85,7 @@ export default function StepLayout({
                   <input
                     type="text"
                     autoFocus={i === 0}
-                    className="peer w-full text-xl text-burnham bg-transparent border-none p-0 focus:ring-0 placeholder-mercury font-normal"
+                    className="peer w-full text-base text-burnham bg-transparent border-none p-0 focus:ring-0 placeholder-mercury font-normal"
                     placeholder={field.placeholder ?? 'I want to...'}
                     value={values[field.key] ?? ''}
                     onChange={e => onChange(field.key, e.target.value)}
