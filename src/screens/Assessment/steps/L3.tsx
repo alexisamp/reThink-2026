@@ -19,8 +19,8 @@ export default function L3({ onNext, onBack, saving, isLastStep, progress, step,
       step={step} totalSteps={totalSteps} progress={progress}
       tagline="Level 3 of 11 — Map Your Horizon"
       title="Map Your Horizon"
-      subtitle="Dream big. Constraint comes later — for now, list everything you want to achieve this year."
-      prompt="My top 10 goals for 2026 are..."
+      subtitle="From strategic initiatives to personal growth, capture what could define your success in 2026."
+      prompt="List your top 10 goals for 2026:"
       fields={Array.from({ length: 10 }, (_, i) => ({
         key: `l3_${i + 1}`,
         placeholder: 'I want to...',
