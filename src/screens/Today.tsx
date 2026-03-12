@@ -1011,7 +1011,7 @@ export default function Today() {
                 ) : (
                   <textarea
                     className="w-full bg-white border border-mercury rounded-lg p-2.5 text-xs text-burnham min-h-[80px] resize-none placeholder-gray-300 focus:border-shuttle focus:ring-0 outline-none leading-relaxed"
-                    placeholder={`…Soporta **negrita**, *cursiva*, ~~tachado~~\n- y listas`}
+                    placeholder={`…Supports **bold**, *italic*, ~~strikethrough~~\n- and lists`}
                     value={journalValue}
                     onChange={e => handleJournalChange(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Escape') setShowJournalPreview(true) }}
