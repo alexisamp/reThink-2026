@@ -55,6 +55,7 @@ export default function Today() {
   const [newTask, setNewTask] = useState('')
   const [todoBlock, setTodoBlock] = useState<'AM' | 'PM' | null>(null)
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null)
+  const [suggestionIndex, setSuggestionIndex] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Inline edit todo
@@ -110,18 +111,29 @@ export default function Today() {
 
   useKeyboardShortcuts({
     'cmd+b': () => setSidebarOpen(p => !p),
+    'cmd+.': () => setSidebarOpen(p => !p),
+    'cmd+n': () => { inputRef.current?.focus(); inputRef.current?.select() },
+    'cmd+e': () => setShowEndOfDay(true),
   })
 
+  // Space → play/pause timer; Escape → close drawers/suggestions
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === '.') {
+      const target = e.target as HTMLElement
+      const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true'
+      if (e.key === ' ' && !inInput && !timerComplete) {
         e.preventDefault()
-        setSidebarOpen(v => !v)
+        if (timerRunning) pauseTimer()
+        else if (timerElapsed === 0) setShowIntentionInput(true)
+        else setTimerRunning(true)
+      }
+      if (e.key === 'Escape') {
+        if (showEndOfDay) { setShowEndOfDay(false); return }
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [])
+  }, [timerRunning, timerComplete, timerElapsed, showEndOfDay])
 
   useEffect(() => {
     const load = async () => {
@@ -475,9 +487,13 @@ export default function Today() {
     ? (atQuery ? goals.filter(g => g.text.toLowerCase().includes(atQuery)) : goals.slice(0, 5))
     : []
 
+  // Reset suggestion index when list changes
+  useEffect(() => { setSuggestionIndex(-1) }, [atQuery])
+
   const selectGoalSuggestion = (goal: Pick<Goal, 'id' | 'text'>) => {
     setNewTask(prev => prev.replace(/@[^\s]*$/, '').trim())
     setSelectedGoalId(goal.id)
+    setSuggestionIndex(-1)
     inputRef.current?.focus()
   }
 
@@ -501,9 +517,20 @@ export default function Today() {
                   value={newTask}
                   onChange={e => setNewTask(e.target.value)}
                   onKeyDown={e => {
-                    if (e.key === 'Enter' && !showAtSuggestions) parseAndAddTodo()
-                    if (e.key === 'Escape' && showAtSuggestions) {
+                    if (e.key === 'ArrowDown' && showAtSuggestions) {
+                      e.preventDefault()
+                      setSuggestionIndex(i => Math.min(i + 1, goalSuggestions.length - 1))
+                    } else if (e.key === 'ArrowUp' && showAtSuggestions) {
+                      e.preventDefault()
+                      setSuggestionIndex(i => Math.max(i - 1, -1))
+                    } else if (e.key === 'Enter' && showAtSuggestions && suggestionIndex >= 0) {
+                      e.preventDefault()
+                      selectGoalSuggestion(goalSuggestions[suggestionIndex])
+                    } else if (e.key === 'Enter' && !showAtSuggestions) {
+                      parseAndAddTodo()
+                    } else if (e.key === 'Escape' && showAtSuggestions) {
                       setNewTask(prev => prev.replace(/@[^\s]*$/, '').trim())
+                      setSuggestionIndex(-1)
                     }
                   }}
                 />
@@ -529,11 +556,13 @@ export default function Today() {
               {/* @ goal suggestions dropdown */}
               {showAtSuggestions && goalSuggestions.length > 0 && (
                 <div className="absolute top-full left-0 right-0 bg-white border border-mercury rounded-lg shadow-lg z-50 py-1 mt-1">
-                  {goalSuggestions.map(g => (
+                  {goalSuggestions.map((g, i) => (
                     <button
                       key={g.id}
                       onMouseDown={e => { e.preventDefault(); selectGoalSuggestion(g) }}
-                      className="w-full text-left px-3 py-1.5 text-xs text-burnham hover:bg-gray-50 truncate"
+                      className={`w-full text-left px-3 py-1.5 text-xs text-burnham truncate transition-colors ${
+                        i === suggestionIndex ? 'bg-gossip' : 'hover:bg-mercury/10'
+                      }`}
                     >
                       {g.text}
                     </button>

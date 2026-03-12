@@ -1,9 +1,10 @@
 // src/screens/Monthly.tsx
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
-import { House, CaretLeft, CaretRight, ArrowRight, ArrowSquareOut, TrashSimple, Star } from '@phosphor-icons/react'
+import { House, CaretLeft, CaretRight, ArrowSquareOut, TrashSimple } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import type {
   Goal,
   LeadingIndicator,
@@ -23,10 +24,10 @@ const MONTH_NAMES = [
 
 function getHabitGrade(completedDays: number, daysElapsed: number): { grade: string; color: string } {
   const pct = daysElapsed > 0 ? (completedDays / daysElapsed) * 100 : 0
-  if (pct >= 90) return { grade: 'A', color: 'text-emerald-700 bg-emerald-50' }
-  if (pct >= 75) return { grade: 'B', color: 'text-blue-700 bg-blue-50' }
-  if (pct >= 60) return { grade: 'C', color: 'text-amber-700 bg-amber-50' }
-  return { grade: 'D', color: 'text-red-700 bg-red-50' }
+  if (pct >= 90) return { grade: 'A', color: 'text-burnham bg-gossip' }
+  if (pct >= 75) return { grade: 'B', color: 'text-burnham bg-pastel/30' }
+  if (pct >= 60) return { grade: 'C', color: 'text-shuttle bg-mercury/40' }
+  return { grade: 'D', color: 'text-shuttle bg-mercury/20' }
 }
 
 export default function Monthly() {
@@ -53,68 +54,69 @@ export default function Monthly() {
   const [habitLogs, setHabitLogs] = useState<HabitLog[]>([])
 
   // Autosave debounce refs
-  const retroReflectionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const retroHighlightsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const notesTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const retroReflectionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retroHighlightsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Keyboard shortcuts — must be before early returns
+  useKeyboardShortcuts({
+    'cmd+arrowleft': () => setViewMonth(m => Math.max(1, m - 1)),
+    'cmd+arrowright': () => setViewMonth(m => Math.min(12, m + 1)),
+    'cmd+[': () => {
+      const idx = goals.findIndex(g => g.id === activeGoal?.id)
+      if (idx > 0) { const g = goals[idx - 1]; setActiveGoal(g); navigate(`/monthly/${g.id}`) }
+    },
+    'cmd+]': () => {
+      const idx = goals.findIndex(g => g.id === activeGoal?.id)
+      if (idx < goals.length - 1) { const g = goals[idx + 1]; setActiveGoal(g); navigate(`/monthly/${g.id}`) }
+    },
+  })
 
   // Load goals
   useEffect(() => {
     if (!user) return
-    supabase
-      .from('workbooks')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('year', currentYear)
-      .maybeSingle()
-      .then(({ data: wb }) => {
-        if (!wb) {
-          setLoading(false)
-          return
-        }
-        supabase
-          .from('goals')
-          .select('*')
-          .eq('workbook_id', wb.id)
-          .eq('goal_type', 'ACTIVE')
-          .order('position')
-          .then(({ data }) => {
-            if (data) {
-              setGoals(data)
-              const found = goalId ? data.find(g => g.id === goalId) : data[0]
-              setActiveGoal(found || data[0] || null)
-            }
-            setLoading(false)
-          })
-      })
+    const load = async () => {
+      const { data: wb } = await supabase
+        .from('workbooks')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('year', currentYear)
+        .maybeSingle()
+
+      if (!wb) { setLoading(false); return }
+
+      const { data } = await supabase
+        .from('goals')
+        .select('*')
+        .eq('workbook_id', wb.id)
+        .eq('goal_type', 'ACTIVE')
+        .order('position')
+
+      if (data) {
+        setGoals(data)
+        const found = goalId ? data.find(g => g.id === goalId) : data[0]
+        setActiveGoal(found || data[0] || null)
+      }
+      setLoading(false)
+    }
+    load()
   }, [user, currentYear, goalId])
 
-  // Load data for active goal
+  // Load goal-level data (indicators, habits, milestones, KPI entries) — only on activeGoal change
   useEffect(() => {
     if (!activeGoal || !user) return
 
     const load = async () => {
       const [indRes, habitRes, msRes] = await Promise.all([
-        supabase
-          .from('leading_indicators')
-          .select('*')
-          .eq('goal_id', activeGoal.id),
-        supabase
-          .from('habits')
-          .select('*')
-          .eq('goal_id', activeGoal.id)
-          .eq('is_active', true),
-        supabase
-          .from('milestones')
-          .select('*')
-          .eq('goal_id', activeGoal.id)
-          .order('target_date'),
+        supabase.from('leading_indicators').select('*').eq('goal_id', activeGoal.id),
+        supabase.from('habits').select('*').eq('goal_id', activeGoal.id).eq('is_active', true),
+        supabase.from('milestones').select('*').eq('goal_id', activeGoal.id).order('target_date'),
       ])
 
       setIndicators(indRes.data || [])
       setHabits(habitRes.data || [])
       setMilestones(msRes.data || [])
 
-      // KPI entries for this year
       if (indRes.data && indRes.data.length > 0) {
         const ids = indRes.data.map(i => i.id)
         const { data: kpis } = await supabase
@@ -126,38 +128,44 @@ export default function Monthly() {
       } else {
         setKpiEntries([])
       }
+    }
+    load()
+  }, [activeGoal, user, currentYear])
 
-      // Habit logs for current month
+  // Load month-level data (habit logs + monthly plan) — reloads when month or goal changes
+  useEffect(() => {
+    if (!activeGoal || !user) return
+
+    const load = async () => {
       const startOfMonth = `${currentYear}-${String(viewMonth).padStart(2, '0')}-01`
       const lastDay = new Date(currentYear, viewMonth, 0).getDate()
       const endOfMonth = `${currentYear}-${String(viewMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-      if (habitRes.data && habitRes.data.length > 0) {
-        const habitIds = habitRes.data.map(h => h.id)
-        const { data: logs } = await supabase
+
+      const [logsRes, planRes] = await Promise.all([
+        // Habit logs — fetch even if habits not loaded yet (joined by habit_id filter below)
+        supabase
           .from('habit_logs')
           .select('*')
-          .in('habit_id', habitIds)
+          .eq('user_id', user.id)
           .gte('log_date', startOfMonth)
-          .lte('log_date', endOfMonth)
-        setHabitLogs(logs || [])
-      }
+          .lte('log_date', endOfMonth),
+        supabase
+          .from('monthly_plans')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('goal_id', activeGoal.id)
+          .eq('year', currentYear)
+          .eq('month', viewMonth)
+          .maybeSingle(),
+      ])
 
-      // Monthly plan
-      const { data: plan } = await supabase
-        .from('monthly_plans')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('goal_id', activeGoal.id)
-        .eq('year', currentYear)
-        .eq('month', viewMonth)
-        .maybeSingle()
-      setMonthlyPlan(plan)
-      setNotes(plan?.focus || '')
-      setRetroReflection(plan?.reflection || '')
-      setRetroHighlights(plan?.highlights || '')
-      setRating(plan?.rating ?? null)
+      setHabitLogs(logsRes.data || [])
+      setMonthlyPlan(planRes.data)
+      setNotes(planRes.data?.focus || '')
+      setRetroReflection(planRes.data?.reflection || '')
+      setRetroHighlights(planRes.data?.highlights || '')
+      setRating(planRes.data?.rating ?? null)
     }
-
     load()
   }, [activeGoal, user, currentYear, viewMonth])
 
@@ -227,32 +235,22 @@ export default function Monthly() {
     setSaving(false)
   }, [user, activeGoal, currentYear, viewMonth])
 
-  const handleSaveNotes = async () => {
-    await upsertPlanField({ focus: notes })
-  }
-
   const handleRetroReflectionChange = (val: string) => {
     setRetroReflection(val)
     if (retroReflectionTimer.current) clearTimeout(retroReflectionTimer.current)
-    retroReflectionTimer.current = setTimeout(() => {
-      upsertPlanField({ reflection: val })
-    }, 800)
+    retroReflectionTimer.current = setTimeout(() => upsertPlanField({ reflection: val }), 800)
   }
 
   const handleRetroHighlightsChange = (val: string) => {
     setRetroHighlights(val)
     if (retroHighlightsTimer.current) clearTimeout(retroHighlightsTimer.current)
-    retroHighlightsTimer.current = setTimeout(() => {
-      upsertPlanField({ highlights: val })
-    }, 800)
+    retroHighlightsTimer.current = setTimeout(() => upsertPlanField({ highlights: val }), 800)
   }
 
   const handleNotesChange = (val: string) => {
     setNotes(val)
     if (notesTimer.current) clearTimeout(notesTimer.current)
-    notesTimer.current = setTimeout(() => {
-      upsertPlanField({ focus: val })
-    }, 800)
+    notesTimer.current = setTimeout(() => upsertPlanField({ focus: val }), 800)
   }
 
   const saveRating = async (n: number) => {
@@ -336,10 +334,11 @@ export default function Monthly() {
       {/* Goal switcher pill — floats above the AppShell nav */}
       <div className="fixed bottom-[76px] left-1/2 -translate-x-1/2 z-40">
         <div className="bg-white/90 backdrop-blur-md border border-mercury shadow-sm rounded-full p-1 flex items-center gap-1">
-          {goals.map(goal => (
+          {goals.map((goal, idx) => (
             <button
               key={goal.id}
               onClick={() => switchGoal(goal)}
+              title={`⌘${idx === 0 ? '[' : ']'} to switch goals`}
               className={`px-5 py-2 rounded-full text-[11px] font-semibold tracking-wide transition-all ${
                 activeGoal?.id === goal.id
                   ? 'bg-mercury/30 ring-1 ring-mercury text-burnham shadow-sm'
@@ -367,10 +366,6 @@ export default function Monthly() {
                 <House size={12} />
               </Link>
               <span>/</span>
-              <Link to="/strategy" className="hover:text-burnham transition-colors">
-                Strategy
-              </Link>
-              <span>/</span>
               <span className="text-burnham">{activeGoal.text}</span>
             </div>
 
@@ -387,7 +382,8 @@ export default function Monthly() {
                   <button
                     onClick={() => setViewMonth(m => Math.max(1, m - 1))}
                     disabled={viewMonth === 1}
-                    className="p-1.5 rounded hover:bg-gray-100 transition-colors disabled:opacity-30"
+                    title="⌘←"
+                    className="p-1.5 rounded hover:bg-mercury/10 transition-colors disabled:opacity-30"
                   >
                     <CaretLeft size={10} weight="bold" className="text-shuttle" />
                   </button>
@@ -397,10 +393,19 @@ export default function Monthly() {
                   <button
                     onClick={() => setViewMonth(m => Math.min(12, m + 1))}
                     disabled={viewMonth === 12}
-                    className="p-1.5 rounded hover:bg-gray-100 transition-colors disabled:opacity-30"
+                    title="⌘→"
+                    className="p-1.5 rounded hover:bg-mercury/10 transition-colors disabled:opacity-30"
                   >
                     <CaretRight size={10} weight="bold" className="text-shuttle" />
                   </button>
+                  {viewMonth !== todayMonth && (
+                    <button
+                      onClick={() => setViewMonth(todayMonth)}
+                      className="ml-1 text-[9px] font-semibold text-shuttle hover:text-burnham px-2 py-1 rounded border border-mercury hover:border-burnham transition-colors uppercase tracking-wide"
+                    >
+                      Today
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -410,7 +415,7 @@ export default function Monthly() {
               {/* KPI Table */}
               <section>
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-[0.15em]">
+                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest">
                     Key Performance Indicators
                   </h3>
                   <span className="text-[10px] font-mono text-shuttle">FY {currentYear}</span>
@@ -503,7 +508,7 @@ export default function Monthly() {
                                       -
                                     </div>
                                   )}
-                                  <div className="text-[9px] text-gray-300 mt-0.5 group-hover:text-shuttle transition-colors">
+                                  <div className="text-[9px] text-mercury/60 mt-0.5 group-hover:text-shuttle transition-colors">
                                     {monthlyTarget ?? '-'}
                                   </div>
                                 </div>
@@ -523,7 +528,7 @@ export default function Monthly() {
               {/* Supporting Habits */}
               <section>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-[0.15em]">
+                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest">
                     Supporting Habits
                   </h3>
                   <span className="text-[10px] font-mono text-shuttle">
@@ -543,7 +548,7 @@ export default function Monthly() {
                       return (
                         <div
                           key={habit.id}
-                          className="flex items-center gap-3 py-3 border-b border-mercury/50 hover:bg-gray-50 px-2 -mx-2 rounded transition-colors"
+                          className="flex items-center gap-3 py-3 border-b border-mercury/50 hover:bg-mercury/10 px-2 -mx-2 rounded transition-colors"
                         >
                           {viewMonth === todayMonth && (
                             <input
@@ -559,7 +564,7 @@ export default function Monthly() {
                               <span className="text-sm font-medium text-burnham">
                                 {habit.text}
                               </span>
-                              <span className="text-[9px] bg-gray-100 text-shuttle px-1.5 py-0.5 rounded tracking-wide uppercase">
+                              <span className="text-[9px] bg-mercury/40 text-shuttle px-1.5 py-0.5 rounded tracking-wide uppercase">
                                 {habit.frequency}
                               </span>
                               {(() => {
@@ -597,7 +602,7 @@ export default function Monthly() {
               {/* Milestones Timeline */}
               <section>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-[0.15em]">
+                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest">
                     Milestones Timeline
                   </h3>
                 </div>
@@ -616,7 +621,7 @@ export default function Monthly() {
                         <div
                           key={ms.id}
                           className={`group flex items-start gap-3 py-2 px-2 -mx-2 rounded transition-colors ${
-                            ms.status === 'COMPLETE' ? 'opacity-30' : 'hover:bg-gray-50'
+                            ms.status === 'COMPLETE' ? 'opacity-30' : 'hover:bg-mercury/10'
                           }`}
                         >
                           <input
@@ -641,7 +646,7 @@ export default function Monthly() {
                               </span>
                               <button
                                 onClick={() => deleteMilestone(ms.id)}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-burnham p-0.5 rounded"
                               >
                                 <TrashSimple size={12} />
                               </button>
@@ -662,10 +667,15 @@ export default function Monthly() {
       <aside className="w-[30%] min-w-[280px] bg-white border-l border-mercury h-full flex flex-col">
         {/* Header */}
         <div className="px-8 pt-8 pb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-burnham">Monthly Recap</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-burnham">Monthly Recap</h2>
+            {saving && (
+              <span className="text-[10px] text-shuttle">Saving...</span>
+            )}
+          </div>
           <Link
             to={`/dashboard/goal/${activeGoal.id}`}
-            className="text-shuttle hover:text-burnham transition-colors p-1 hover:bg-gray-100 rounded-full"
+            className="text-shuttle hover:text-burnham transition-colors p-1 hover:bg-mercury/10 rounded-full"
           >
             <ArrowSquareOut size={16} />
           </Link>
@@ -675,7 +685,7 @@ export default function Monthly() {
         <div className="flex-1 overflow-y-auto px-8 py-2 space-y-10 pb-6">
           {/* Progress bars */}
           <div>
-            <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-[0.15em] mb-6">
+            <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-6">
               Progress
             </h3>
             <div className="space-y-6">
@@ -723,17 +733,17 @@ export default function Monthly() {
             </div>
           </div>
 
-          {/* Focus notes */}
+          {/* Monthly Focus */}
           <div>
-            <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-[0.15em] mb-4">
-              Notes
+            <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-4">
+              Monthly Focus
             </h3>
             <textarea
               value={notes}
               onChange={e => handleNotesChange(e.target.value)}
-              onBlur={handleSaveNotes}
+              onBlur={() => upsertPlanField({ focus: notes })}
               placeholder="Focus and notes for this month..."
-              className="w-full bg-white border border-mercury rounded-lg p-4 text-xs leading-relaxed text-burnham h-40 resize-none placeholder-gray-400 focus:border-mercury focus:ring-1 focus:ring-mercury outline-none"
+              className="w-full bg-white border border-mercury rounded-lg p-4 text-xs leading-relaxed text-burnham h-40 resize-none placeholder-mercury focus:border-burnham focus:ring-1 focus:ring-burnham/20 outline-none"
             />
           </div>
 
@@ -748,7 +758,7 @@ export default function Monthly() {
                     value={retroReflection}
                     onChange={e => handleRetroReflectionChange(e.target.value)}
                     placeholder="What went well this month..."
-                    className="w-full bg-white border border-mercury rounded-lg p-3 text-xs leading-relaxed text-burnham h-28 resize-none placeholder-gray-400 focus:border-mercury focus:ring-1 focus:ring-mercury outline-none"
+                    className="w-full bg-white border border-mercury rounded-lg p-3 text-xs leading-relaxed text-burnham h-28 resize-none placeholder-mercury focus:border-burnham focus:ring-1 focus:ring-burnham/20 outline-none"
                   />
                 </div>
                 <div>
@@ -757,42 +767,30 @@ export default function Monthly() {
                     value={retroHighlights}
                     onChange={e => handleRetroHighlightsChange(e.target.value)}
                     placeholder="What to do differently..."
-                    className="w-full bg-white border border-mercury rounded-lg p-3 text-xs leading-relaxed text-burnham h-28 resize-none placeholder-gray-400 focus:border-mercury focus:ring-1 focus:ring-mercury outline-none"
+                    className="w-full bg-white border border-mercury rounded-lg p-3 text-xs leading-relaxed text-burnham h-28 resize-none placeholder-mercury focus:border-burnham focus:ring-1 focus:ring-burnham/20 outline-none"
                   />
                 </div>
               </div>
               <div>
-                <p className="text-[10px] text-shuttle uppercase tracking-widest mb-2">Month Rating</p>
+                <p className="text-[10px] text-shuttle uppercase tracking-widest mb-3">Month Rating</p>
                 <div className="flex gap-2">
                   {[1, 2, 3, 4, 5].map(n => (
                     <button
                       key={n}
                       onClick={() => saveRating(n)}
-                      className={`transition-colors ${
+                      className={`w-8 h-8 rounded-full text-xs font-semibold transition-all border ${
                         rating !== null && rating >= n
-                          ? 'text-amber-400'
-                          : 'text-mercury hover:text-amber-200'
+                          ? 'bg-burnham text-white border-burnham'
+                          : 'bg-white text-shuttle border-mercury hover:border-burnham hover:text-burnham'
                       }`}
                     >
-                      <Star size={20} weight={rating !== null && rating >= n ? 'fill' : 'regular'} />
+                      {n}
                     </button>
                   ))}
                 </div>
               </div>
             </div>
           )}
-        </div>
-
-        {/* Confirm CTA */}
-        <div className="p-8 border-t border-mercury bg-white">
-          <button
-            onClick={handleSaveNotes}
-            disabled={saving}
-            className="w-full flex items-center justify-center gap-2 bg-burnham hover:bg-[#002817] text-white py-4 rounded-lg text-[13px] font-semibold tracking-wide transition-all shadow-sm hover:shadow-md disabled:opacity-60"
-          >
-            <span>{saving ? 'SAVING\u2026' : 'CONFIRM & COMMIT'}</span>
-            <ArrowRight size={14} weight="bold" />
-          </button>
         </div>
       </aside>
     </div>

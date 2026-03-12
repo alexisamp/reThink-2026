@@ -101,14 +101,17 @@ export default function Assessment({ onComplete }: AssessmentProps) {
       allAnswers['l1_3'],
     ].filter(Boolean)
 
+    const year = new Date().getFullYear()
     const goalInserts = [
       ...activeGoalTitles.map((text, i) => ({
         workbook_id: workbookId,
         user_id: user.id,
         text,
+        year,
         goal_type: 'ACTIVE' as const,
         status: 'NOT_STARTED' as const,
         position: i,
+        needs_config: true,
       })),
       ...allWants
         .filter(t => !activeGoalTitles.includes(t))
@@ -116,9 +119,11 @@ export default function Assessment({ onComplete }: AssessmentProps) {
           workbook_id: workbookId,
           user_id: user.id,
           text,
+          year,
           goal_type: 'BACKLOG' as const,
           status: 'NOT_STARTED' as const,
           position: i + 10,
+          needs_config: true,
         })),
     ]
 
