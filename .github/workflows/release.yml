@@ -63,7 +63,7 @@ jobs:
 
           SIG_FILE="${TAR_FILE}.sig"
           if [ ! -f "$SIG_FILE" ]; then echo "ERROR: .sig not produced" && exit 1; fi
-          echo "Signed OK: $SIG_FILE"
+          echo "Signed: $SIG_FILE"
 
           TAR_BASENAME=$(basename "$TAR_FILE")
           DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${TAR_BASENAME}"
@@ -71,13 +71,19 @@ jobs:
 
           gh release upload "$TAG" "$SIG_FILE" --clobber
 
-          python3 << PYEOF
-import json
-sig = open("$SIG_FILE").read().strip()
-data = {"version":"${VERSION}","notes":"reThink ${TAG}","pub_date":"${PUB_DATE}","platforms":{"darwin-aarch64":{"signature":sig,"url":"${DOWNLOAD_URL}"}}}
-with open("latest.json","w") as f: json.dump(data,f,indent=2)
-print(json.dumps(data,indent=2))
-PYEOF
+          export SIG_FILE VERSION TAG PUB_DATE DOWNLOAD_URL
+          python3 -c "
+import json, os
+sig = open(os.environ['SIG_FILE']).read().strip()
+data = {
+  'version': os.environ['VERSION'],
+  'notes': 'reThink ' + os.environ['TAG'],
+  'pub_date': os.environ['PUB_DATE'],
+  'platforms': {'darwin-aarch64': {'signature': sig, 'url': os.environ['DOWNLOAD_URL']}}
+}
+open('latest.json', 'w').write(json.dumps(data, indent=2))
+print(json.dumps(data, indent=2))
+"
 
           gh release upload "$TAG" latest.json --clobber
           echo "done: latest.json uploaded for ${TAG}"
