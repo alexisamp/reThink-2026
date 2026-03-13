@@ -17,8 +17,7 @@ import WeeklyReview from '@/screens/WeeklyReview'
 import ReflectionLibrary from '@/screens/ReflectionLibrary'
 import YearAtAGlance from '@/screens/YearAtAGlance'
 import { checkNotificationTriggers, formatNotificationMessage } from '@/lib/notifications'
-import { check } from '@tauri-apps/plugin-updater'
-import { relaunch } from '@tauri-apps/plugin-process'
+import { useUpdater } from '@/hooks/useUpdater'
 
 function Splash() {
   return (
@@ -34,24 +33,14 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [hasWorkbook, setHasWorkbook] = useState<boolean | null>(null)
+  const updater = useUpdater()
 
-  // Check for updates on startup (Tauri only)
+  // Check for updates silently on startup (Tauri only)
   useEffect(() => {
-    if (typeof window === 'undefined' || !('__TAURI__' in window)) return
-    setTimeout(async () => {
-      try {
-        const update = await check()
-        if (!update) return
-        const yes = window.confirm(
-          `reThink ${update.version} está disponible (tienes ${update.currentVersion}).\n\n¿Instalar ahora?`
-        )
-        if (!yes) return
-        await update.downloadAndInstall()
-        await relaunch()
-      } catch (e) {
-        console.error('Update check failed:', e)
-      }
-    }, 3000)
+    if (!updater.isTauri) return
+    const t = setTimeout(() => updater.checkForUpdates(), 5000)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -143,7 +132,7 @@ export default function App() {
             ) : !hasWorkbook ? (
               <Navigate to="/assessment" replace />
             ) : (
-              <AppShell user={user}>
+              <AppShell user={user} updater={updater}>
                 <Routes>
                   <Route path="/" element={<Navigate to="/today" replace />} />
                   <Route path="/today" element={<Today />} />

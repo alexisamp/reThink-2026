@@ -1,10 +1,12 @@
 import { Fragment, useState, useRef, useEffect, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { House, CalendarBlank, ChartPie } from '@phosphor-icons/react'
+import { House, CalendarBlank, ChartPie, Gear } from '@phosphor-icons/react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { useNavShortcuts, useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import CommandPalette from '@/components/CommandPalette'
+import SettingsModal from '@/components/SettingsModal'
+import type { UpdaterState } from '@/hooks/useUpdater'
 
 interface NavItem {
   label: string
@@ -22,13 +24,20 @@ const NAV_ITEMS: NavItem[] = [
 interface AppShellProps {
   children: ReactNode
   user: User
+  updater: UpdaterState & {
+    isTauri: boolean
+    checkForUpdates: () => Promise<void>
+    downloadAndInstall: () => Promise<void>
+    restartApp: () => Promise<void>
+  }
 }
 
-export default function AppShell({ children, user }: AppShellProps) {
+export default function AppShell({ children, user, updater }: AppShellProps) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const profileRef = useRef<HTMLDivElement>(null)
 
   useNavShortcuts()
@@ -50,6 +59,9 @@ export default function AppShell({ children, user }: AppShellProps) {
   const fullName = user.user_metadata?.full_name as string | undefined
   const initials = (fullName || user.email || 'U')[0].toUpperCase()
 
+  // Show a dot on avatar when an update is available or ready
+  const showUpdateDot = updater.status === 'available' || updater.status === 'ready'
+
   return (
     <div className="min-h-screen bg-white text-burnham font-sans">
       {/* Main content */}
@@ -61,7 +73,7 @@ export default function AppShell({ children, user }: AppShellProps) {
       <div ref={profileRef} className="fixed top-4 right-4 z-50 flex flex-col items-end gap-2">
         <button
           onClick={() => setProfileOpen(v => !v)}
-          className="w-8 h-8 rounded-full overflow-hidden border-2 border-white shadow-md hover:shadow-lg transition-all ring-1 ring-mercury"
+          className="relative w-8 h-8 rounded-full overflow-hidden border-2 border-white shadow-md hover:shadow-lg transition-all ring-1 ring-mercury"
           title="Profile"
         >
           {avatarUrl ? (
@@ -70,6 +82,10 @@ export default function AppShell({ children, user }: AppShellProps) {
             <div className="w-full h-full bg-burnham flex items-center justify-center text-white text-xs font-bold">
               {initials}
             </div>
+          )}
+          {/* Update available dot */}
+          {showUpdateDot && (
+            <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-pastel border-2 border-white rounded-full" />
           )}
         </button>
 
@@ -97,6 +113,18 @@ export default function AppShell({ children, user }: AppShellProps) {
                 className="w-full text-left text-xs text-burnham hover:bg-mercury/20 px-2 py-1.5 rounded-lg transition-colors"
               >
                 Strategy & Goals
+              </button>
+              <button
+                onClick={() => { setSettingsOpen(true); setProfileOpen(false) }}
+                className="w-full text-left text-xs text-burnham hover:bg-mercury/20 px-2 py-1.5 rounded-lg transition-colors flex items-center gap-2"
+              >
+                <Gear size={12} className="text-shuttle" />
+                Settings
+                {showUpdateDot && (
+                  <span className="ml-auto text-[10px] font-medium text-pastel bg-gossip/40 px-1.5 py-0.5 rounded-full">
+                    update
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => { supabase.auth.signOut(); setProfileOpen(false) }}
@@ -141,6 +169,12 @@ export default function AppShell({ children, user }: AppShellProps) {
       </nav>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        updater={updater}
+      />
     </div>
   )
 }
