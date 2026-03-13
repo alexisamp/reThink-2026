@@ -31,15 +31,13 @@ jobs:
       - name: Install frontend deps
         run: npm install
 
-      # includeUpdaterJson:true is needed to trigger signing (.sig file creation).
-      # The action will say "Signature not found" and skip latest.json — that's OK,
-      # we generate latest.json ourselves in the next step.
-      - name: Build Tauri app (aarch64) — signs .app.tar.gz
+      # Build and publish release + DMG. We skip updater JSON here because
+      # tauri-action re-packs the .app.tar.gz after signing, invalidating the .sig.
+      # We sign the final tar.gz ourselves in the next step.
+      - name: Build Tauri app (aarch64)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'reThink ${{ github.ref_name }}'
@@ -47,58 +45,63 @@ jobs:
             See the [CHANGELOG](https://github.com/alexisamp/reThink-2026/blob/main/CHANGELOG.md) for details.
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: true
+          includeUpdaterJson: false
           args: --target aarch64-apple-darwin
 
-      - name: Generate and upload latest.json
+      # Sign the final .app.tar.gz (produced by tauri-action) and upload latest.json
+      - name: Sign bundle and upload latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#v}"
           REPO="${{ github.repository }}"
 
-          echo "=== Bundle artifacts ==="
-          find src-tauri/target -name "*.tar.gz" -o -name "*.sig" 2>/dev/null | sort
-
-          SIG_FILE=$(find src-tauri/target -name "*.app.tar.gz.sig" 2>/dev/null | head -1)
           TAR_FILE=$(find src-tauri/target -name "*.app.tar.gz" 2>/dev/null | grep -v "\.sig$" | head -1)
 
-          if [ -z "$SIG_FILE" ]; then
-            echo "ERROR: .sig not found — signing may have failed"
+          if [ -z "$TAR_FILE" ]; then
+            echo "ERROR: .app.tar.gz not found"
             exit 1
           fi
 
-          echo "sig:  $SIG_FILE"
-          echo "tar:  $TAR_FILE"
+          echo "Signing: $TAR_FILE"
+          npm run tauri -- signer sign "$TAR_FILE"
 
-          SIG_CONTENT=$(cat "$SIG_FILE")
+          SIG_FILE="${TAR_FILE}.sig"
+
+          if [ ! -f "$SIG_FILE" ]; then
+            echo "ERROR: signing failed — .sig not produced"
+            exit 1
+          fi
+
+          echo "✓ Signed: $SIG_FILE"
+
           TAR_BASENAME=$(basename "$TAR_FILE")
           DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${TAR_BASENAME}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          # Upload .sig to release
           gh release upload "$TAG" "$SIG_FILE" --clobber
 
-          # Generate latest.json via Python (safe JSON encoding)
           python3 -c "
-          import json, sys
-          sig = open('$SIG_FILE').read().strip()
-          data = {
-            'version': '${VERSION}',
-            'notes': 'reThink ${TAG}',
-            'pub_date': '${PUB_DATE}',
-            'platforms': {
-              'darwin-aarch64': {
-                'signature': sig,
-                'url': '${DOWNLOAD_URL}'
-              }
-            }
-          }
-          with open('latest.json', 'w') as f:
-            json.dump(data, f, indent=2)
-          print(json.dumps(data, indent=2))
-          "
+import json
+sig = open('$SIG_FILE').read().strip()
+data = {
+  'version': '${VERSION}',
+  'notes': 'reThink ${TAG}',
+  'pub_date': '${PUB_DATE}',
+  'platforms': {
+    'darwin-aarch64': {
+      'signature': sig,
+      'url': '${DOWNLOAD_URL}'
+    }
+  }
+}
+with open('latest.json', 'w') as f:
+  json.dump(data, f, indent=2)
+print(json.dumps(data, indent=2))
+"
 
           gh release upload "$TAG" latest.json --clobber
           echo "✓ latest.json uploaded for ${TAG}"
