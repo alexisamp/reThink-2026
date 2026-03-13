@@ -65,9 +65,10 @@ jobs:
           if [ ! -f "$SIG_FILE" ]; then echo "ERROR: .sig not produced" && exit 1; fi
           echo "Signed: $SIG_FILE"
 
-          TAR_BASENAME=$(basename "$TAR_FILE")
-          DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${TAR_BASENAME}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          DOWNLOAD_URL=$(gh release view "$TAG" --json assets -q '[.assets[] | select(.name | (endswith(".app.tar.gz") and (endswith(".sig") | not))) | .browserDownloadUrl][0]')
+          if [ -z "$DOWNLOAD_URL" ]; then echo "ERROR: could not find .app.tar.gz asset URL in release" && exit 1; fi
+          echo "Download URL: $DOWNLOAD_URL"
 
           gh release upload "$TAG" "$SIG_FILE" --clobber
 
