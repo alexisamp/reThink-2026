@@ -72,18 +72,7 @@ jobs:
           gh release upload "$TAG" "$SIG_FILE" --clobber
 
           export SIG_FILE VERSION TAG PUB_DATE DOWNLOAD_URL
-          python3 -c "
-import json, os
-sig = open(os.environ['SIG_FILE']).read().strip()
-data = {
-  'version': os.environ['VERSION'],
-  'notes': 'reThink ' + os.environ['TAG'],
-  'pub_date': os.environ['PUB_DATE'],
-  'platforms': {'darwin-aarch64': {'signature': sig, 'url': os.environ['DOWNLOAD_URL']}}
-}
-open('latest.json', 'w').write(json.dumps(data, indent=2))
-print(json.dumps(data, indent=2))
-"
+          python3 -c "import json,os; sig=open(os.environ['SIG_FILE']).read().strip(); data={'version':os.environ['VERSION'],'notes':'reThink '+os.environ['TAG'],'pub_date':os.environ['PUB_DATE'],'platforms':{'darwin-aarch64':{'signature':sig,'url':os.environ['DOWNLOAD_URL']}}}; open('latest.json','w').write(json.dumps(data,indent=2)); print(json.dumps(data,indent=2))"
 
           gh release upload "$TAG" latest.json --clobber
           echo "done: latest.json uploaded for ${TAG}"
