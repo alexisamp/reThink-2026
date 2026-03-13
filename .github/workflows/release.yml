@@ -31,7 +31,10 @@ jobs:
       - name: Install frontend deps
         run: npm install
 
-      - name: Build Tauri app (aarch64)
+      # includeUpdaterJson:true is needed to trigger signing (.sig file creation).
+      # The action will say "Signature not found" and skip latest.json — that's OK,
+      # we generate latest.json ourselves in the next step.
+      - name: Build Tauri app (aarch64) — signs .app.tar.gz
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -44,10 +47,10 @@ jobs:
             See the [CHANGELOG](https://github.com/alexisamp/reThink-2026/blob/main/CHANGELOG.md) for details.
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: false
+          includeUpdaterJson: true
           args: --target aarch64-apple-darwin
 
-      - name: Find build artifacts and generate latest.json
+      - name: Generate and upload latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -55,54 +58,47 @@ jobs:
           VERSION="${TAG#v}"
           REPO="${{ github.repository }}"
 
-          echo "=== Listing all bundle artifacts ==="
-          find src-tauri/target -name "*.tar.gz" -o -name "*.sig" -o -name "*.dmg" 2>/dev/null | sort
+          echo "=== Bundle artifacts ==="
+          find src-tauri/target -name "*.tar.gz" -o -name "*.sig" 2>/dev/null | sort
 
-          echo "=== Searching for .sig file ==="
           SIG_FILE=$(find src-tauri/target -name "*.app.tar.gz.sig" 2>/dev/null | head -1)
           TAR_FILE=$(find src-tauri/target -name "*.app.tar.gz" 2>/dev/null | grep -v "\.sig$" | head -1)
 
           if [ -z "$SIG_FILE" ]; then
-            echo "ERROR: No .app.tar.gz.sig file found anywhere in src-tauri/target"
-            echo "Full target listing:"
-            find src-tauri/target/aarch64-apple-darwin/release/bundle -type f 2>/dev/null | sort
+            echo "ERROR: .sig not found — signing may have failed"
             exit 1
           fi
 
-          echo "Found sig: $SIG_FILE"
-          echo "Found tar: $TAR_FILE"
+          echo "sig:  $SIG_FILE"
+          echo "tar:  $TAR_FILE"
 
-          # Upload the .sig file to the release
-          gh release upload "$TAG" "$SIG_FILE" --clobber
-
-          # Read signature content (single line, no newlines)
           SIG_CONTENT=$(cat "$SIG_FILE")
-
-          # Build the Tauri v2 updater latest.json
           TAR_BASENAME=$(basename "$TAR_FILE")
           DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${TAR_BASENAME}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          # Use python to safely build JSON (avoids shell escaping issues with sig content)
-          python3 - <<PYEOF
-          import json, os
+          # Upload .sig to release
+          gh release upload "$TAG" "$SIG_FILE" --clobber
+
+          # Generate latest.json via Python (safe JSON encoding)
+          python3 -c "
+          import json, sys
+          sig = open('$SIG_FILE').read().strip()
           data = {
-            "version": "${VERSION}",
-            "notes": "reThink ${TAG}",
-            "pub_date": "${PUB_DATE}",
-            "platforms": {
-              "darwin-aarch64": {
-                "signature": """${SIG_CONTENT}""",
-                "url": "${DOWNLOAD_URL}"
+            'version': '${VERSION}',
+            'notes': 'reThink ${TAG}',
+            'pub_date': '${PUB_DATE}',
+            'platforms': {
+              'darwin-aarch64': {
+                'signature': sig,
+                'url': '${DOWNLOAD_URL}'
               }
             }
           }
-          with open("latest.json", "w") as f:
+          with open('latest.json', 'w') as f:
             json.dump(data, f, indent=2)
-          print("Generated latest.json:")
           print(json.dumps(data, indent=2))
-          PYEOF
+          "
 
-          # Upload latest.json to the release
           gh release upload "$TAG" latest.json --clobber
-          echo "Done! latest.json uploaded to release ${TAG}"
+          echo "✓ latest.json uploaded for ${TAG}"
