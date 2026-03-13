@@ -47,7 +47,7 @@ jobs:
           includeUpdaterJson: false
           args: --target aarch64-apple-darwin
 
-      - name: Upload .sig and generate latest.json
+      - name: Find build artifacts and generate latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -55,14 +55,17 @@ jobs:
           VERSION="${TAG#v}"
           REPO="${{ github.repository }}"
 
-          # Find the .sig file produced by the build
-          SIG_FILE=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/macos \
-            -name "*.app.tar.gz.sig" | head -1)
-          TAR_FILE=$(find src-tauri/target/aarch64-apple-darwin/release/bundle/macos \
-            -name "*.app.tar.gz" | head -1)
+          echo "=== Listing all bundle artifacts ==="
+          find src-tauri/target -name "*.tar.gz" -o -name "*.sig" -o -name "*.dmg" 2>/dev/null | sort
+
+          echo "=== Searching for .sig file ==="
+          SIG_FILE=$(find src-tauri/target -name "*.app.tar.gz.sig" 2>/dev/null | head -1)
+          TAR_FILE=$(find src-tauri/target -name "*.app.tar.gz" 2>/dev/null | grep -v "\.sig$" | head -1)
 
           if [ -z "$SIG_FILE" ]; then
-            echo "ERROR: .sig file not found"
+            echo "ERROR: No .app.tar.gz.sig file found anywhere in src-tauri/target"
+            echo "Full target listing:"
+            find src-tauri/target/aarch64-apple-darwin/release/bundle -type f 2>/dev/null | sort
             exit 1
           fi
 
@@ -71,31 +74,35 @@ jobs:
 
           # Upload the .sig file to the release
           gh release upload "$TAG" "$SIG_FILE" --clobber
-          gh release upload "$TAG" "$TAR_FILE" --clobber 2>/dev/null || true
 
-          # Read signature content
+          # Read signature content (single line, no newlines)
           SIG_CONTENT=$(cat "$SIG_FILE")
 
           # Build the Tauri v2 updater latest.json
-          DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/$(basename "$TAR_FILE")"
+          TAR_BASENAME=$(basename "$TAR_FILE")
+          DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${TAR_BASENAME}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          cat > latest.json <<EOF
-          {
+          # Use python to safely build JSON (avoids shell escaping issues with sig content)
+          python3 - <<PYEOF
+          import json, os
+          data = {
             "version": "${VERSION}",
             "notes": "reThink ${TAG}",
             "pub_date": "${PUB_DATE}",
             "platforms": {
               "darwin-aarch64": {
-                "signature": "${SIG_CONTENT}",
+                "signature": """${SIG_CONTENT}""",
                 "url": "${DOWNLOAD_URL}"
               }
             }
           }
-          EOF
-
-          echo "Generated latest.json:"
-          cat latest.json
+          with open("latest.json", "w") as f:
+            json.dump(data, f, indent=2)
+          print("Generated latest.json:")
+          print(json.dumps(data, indent=2))
+          PYEOF
 
           # Upload latest.json to the release
           gh release upload "$TAG" latest.json --clobber
+          echo "Done! latest.json uploaded to release ${TAG}"
