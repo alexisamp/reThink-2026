@@ -876,20 +876,39 @@ export default function Today() {
       </main>
 
       {/* ─── Left Sidebar 30% ─────────────────────────────────────────── */}
-      <aside className={`${sidebarOpen ? 'w-[30%] min-w-[280px] max-w-[360px]' : 'w-10'} bg-white border-r border-mercury h-full flex flex-col relative z-10 transition-all duration-300 overflow-hidden order-first`}>
-        {/* Collapse toggle — tab shape sticking out from sidebar edge */}
-        <button
-          onClick={() => setSidebarOpen(v => !v)}
-          className="absolute -right-[20px] top-5 w-5 h-8 bg-white border border-l-0 border-mercury rounded-r flex items-center justify-center text-shuttle/50 hover:text-burnham transition-colors z-20"
-          title={sidebarOpen ? 'Collapse ⌘B' : 'Expand ⌘B'}
-        >
-          <SidebarSimple size={11} weight={sidebarOpen ? 'fill' : 'regular'} />
-        </button>
+      <aside className={`${sidebarOpen ? 'w-[30%] min-w-[280px] max-w-[360px]' : 'w-10'} bg-white border-r border-mercury h-full flex flex-col relative z-10 transition-all duration-300 overflow-visible order-first`}>
+        {/* ─── Sidebar header: logo + name + toggle ─── */}
+        {sidebarOpen ? (
+          <div className="flex items-center justify-between px-4 pt-4 pb-3 shrink-0">
+            <div className="flex items-center gap-2">
+              <img src="/logo-sm.png" alt="reThink" className="w-6 h-6 rounded-md object-cover shrink-0" />
+              <span className="text-sm font-semibold text-burnham tracking-tight">reThink</span>
+            </div>
+            <button
+              onClick={() => setSidebarOpen(v => !v)}
+              className="p-1.5 rounded hover:bg-mercury/60 text-shuttle/50 hover:text-burnham transition-colors"
+              title="Collapse ⌘B"
+            >
+              <SidebarSimple size={14} weight="regular" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center pt-4 pb-3 gap-3 shrink-0">
+            <img src="/logo-sm.png" alt="reThink" className="w-6 h-6 rounded-md object-cover" />
+            <button
+              onClick={() => setSidebarOpen(v => !v)}
+              className="p-1 rounded hover:bg-mercury/60 text-shuttle/50 hover:text-burnham transition-colors"
+              title="Expand ⌘B"
+            >
+              <SidebarSimple size={14} weight="regular" />
+            </button>
+          </div>
+        )}
 
         {sidebarOpen && (
           <>
-            <div className="px-6 pt-6 pb-3 border-b border-mercury">
-              <p className="text-[10px] uppercase tracking-widest text-shuttle/60 mb-2">Today's objective</p>
+            <div className="px-6 pt-5 pb-4 border-b border-mercury">
+              <p className="text-[10px] uppercase tracking-widest text-shuttle/60 mb-3">Today's objective</p>
               <input
                 className="w-full text-base font-semibold text-burnham border-b border-mercury focus:border-burnham outline-none bg-transparent pb-1 placeholder-mercury/80 transition-colors"
                 placeholder="What would make today a win?"
