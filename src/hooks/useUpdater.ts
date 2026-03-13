@@ -28,7 +28,7 @@ export function useUpdater() {
     lastChecked: null,
   })
 
-  const isTauri = typeof window !== 'undefined' && '__TAURI__' in window
+  const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
   const checkForUpdates = useCallback(async () => {
     if (!isTauri) return
