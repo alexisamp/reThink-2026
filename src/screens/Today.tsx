@@ -117,6 +117,7 @@ export default function Today() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [habitPanelOpen, setHabitPanelOpen] = useState(false)
 
   // Pomodoro Enhanced (Sprint 16)
   const [timerIntention, setTimerIntention] = useState('')
@@ -137,24 +138,44 @@ export default function Today() {
     'cmd+e': () => setShowEndOfDay(true),
   })
 
-  // Space → play/pause timer; Escape → close drawers/suggestions
+  // Space → play/pause; H → habit panel; 1-9 → mark habit; Escape → close
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
       const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true'
+
+      if (e.key === 'Escape') {
+        if (habitPanelOpen) { setHabitPanelOpen(false); return }
+        if (showEndOfDay) { setShowEndOfDay(false); return }
+      }
+
+      if ((e.key === 'h' || e.key === 'H') && !inInput && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setHabitPanelOpen(v => !v)
+        return
+      }
+
+      if (habitPanelOpen && !inInput && e.key >= '1' && e.key <= '9') {
+        e.preventDefault()
+        const idx = parseInt(e.key) - 1
+        const pending = habits.filter(h => !logs.some(l => l.habit_id === h.id && l.value === 1))
+        if (pending[idx]) {
+          toggleHabit(pending[idx].id)
+          if (pending.length <= 1) setHabitPanelOpen(false)
+        }
+        return
+      }
+
       if (e.key === ' ' && !inInput && !timerComplete) {
         e.preventDefault()
         if (timerRunning) pauseTimer()
         else if (timerElapsed === 0) setShowIntentionInput(true)
         else setTimerRunning(true)
       }
-      if (e.key === 'Escape') {
-        if (showEndOfDay) { setShowEndOfDay(false); return }
-      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [timerRunning, timerComplete, timerElapsed, showEndOfDay])
+  }, [timerRunning, timerComplete, timerElapsed, showEndOfDay, habitPanelOpen, habits, logs])
 
   useEffect(() => {
     const load = async () => {
@@ -243,6 +264,17 @@ export default function Today() {
       if (journalTimerRef.current) clearTimeout(journalTimerRef.current)
       if (onethingTimerRef.current) clearTimeout(onethingTimerRef.current)
       if (calToastTimerRef.current) clearTimeout(calToastTimerRef.current)
+    }
+  }, [])
+
+  // Global shortcut ⌘⇧Space — Rust calls window.rethinkFocusQuickAdd()
+  useEffect(() => {
+    (window as Window & { rethinkFocusQuickAdd?: () => void }).rethinkFocusQuickAdd = () => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }
+    return () => {
+      delete (window as Window & { rethinkFocusQuickAdd?: () => void }).rethinkFocusQuickAdd
     }
   }, [])
 
@@ -528,76 +560,80 @@ export default function Today() {
 
             <p className="text-[10px] font-mono text-shuttle/50 mb-8">{monthStr}</p>
 
-            {/* Quick-add task input */}
-            <div className="mb-10 relative">
-              <div className="flex items-center gap-3 border-b border-mercury pb-3 group focus-within:border-shuttle transition-colors">
-                <input
-                  ref={inputRef}
-                  className="flex-1 text-base font-medium placeholder-gray-300 text-burnham bg-transparent border-none p-0 focus:ring-0 outline-none"
-                  placeholder="Add task…  @goal  /am  /pm"
-                  value={newTask}
-                  onChange={e => setNewTask(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'ArrowDown' && showAtSuggestions) {
-                      e.preventDefault()
-                      setSuggestionIndex(i => Math.min(i + 1, goalSuggestions.length - 1))
-                    } else if (e.key === 'ArrowUp' && showAtSuggestions) {
-                      e.preventDefault()
-                      setSuggestionIndex(i => Math.max(i - 1, -1))
-                    } else if (e.key === 'Enter' && showAtSuggestions && suggestionIndex >= 0) {
-                      e.preventDefault()
-                      selectGoalSuggestion(goalSuggestions[suggestionIndex])
-                    } else if (e.key === 'Enter' && !showAtSuggestions) {
-                      parseAndAddTodo()
-                    } else if (e.key === 'Escape' && showAtSuggestions) {
-                      setNewTask(prev => prev.replace(/@[^\s]*$/, '').trim())
-                      setSuggestionIndex(-1)
-                    }
-                  }}
-                />
-                {selectedGoalId && (
-                  <button
-                    onClick={() => setSelectedGoalId(null)}
-                    className="text-[10px] bg-gossip text-burnham px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 hover:bg-gossip/70 transition-colors"
-                  >
-                    {goals.find(g => g.id === selectedGoalId)?.text?.slice(0, 22)}
-                    <span className="opacity-60">×</span>
-                  </button>
-                )}
-                {todoBlock && (
-                  <button
-                    onClick={() => setTodoBlock(null)}
-                    className="text-[10px] bg-mercury/40 text-burnham px-2 py-0.5 rounded-full border border-mercury hover:bg-mercury/80 transition-colors shrink-0"
-                  >
-                    {todoBlock} ×
-                  </button>
-                )}
-              </div>
-
-              {/* @ goal suggestions dropdown */}
-              {showAtSuggestions && goalSuggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 bg-white border border-mercury rounded-lg shadow-lg z-50 py-1 mt-1">
-                  {goalSuggestions.map((g, i) => (
-                    <button
-                      key={g.id}
-                      onMouseDown={e => { e.preventDefault(); selectGoalSuggestion(g) }}
-                      className={`w-full text-left px-3 py-1.5 text-xs text-burnham truncate transition-colors ${
-                        i === suggestionIndex ? 'bg-gossip' : 'hover:bg-mercury/10'
-                      }`}
-                    >
-                      {g.text}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {/* ── To-Dos ─────────────────────────────────────────────── */}
             <section className="mb-10">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest">To-Dos</h3>
-                <span className="text-xs font-mono text-shuttle">{pendingTodos.length} pending</span>
+              {/* Ghost inline input — canvas feel */}
+              <div className="relative mb-4">
+                <div className="flex items-center gap-2 group">
+                  <input
+                    ref={inputRef}
+                    className="flex-1 text-sm placeholder-mercury text-burnham bg-transparent border-none p-0 focus:ring-0 outline-none focus:placeholder-shuttle/40 transition-colors"
+                    placeholder={newTask ? '' : 'Add a task…'}
+                    value={newTask}
+                    onChange={e => setNewTask(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'ArrowDown' && showAtSuggestions) {
+                        e.preventDefault()
+                        setSuggestionIndex(i => Math.min(i + 1, goalSuggestions.length - 1))
+                      } else if (e.key === 'ArrowUp' && showAtSuggestions) {
+                        e.preventDefault()
+                        setSuggestionIndex(i => Math.max(i - 1, -1))
+                      } else if (e.key === 'Enter' && showAtSuggestions && suggestionIndex >= 0) {
+                        e.preventDefault()
+                        selectGoalSuggestion(goalSuggestions[suggestionIndex])
+                      } else if (e.key === 'Enter' && !showAtSuggestions) {
+                        parseAndAddTodo()
+                      } else if (e.key === 'Escape' && showAtSuggestions) {
+                        setNewTask(prev => prev.replace(/@[^\s]*$/, '').trim())
+                        setSuggestionIndex(-1)
+                      }
+                    }}
+                  />
+                  {/* Tags appear only when typing */}
+                  {newTask && (
+                    <span className="text-[10px] text-shuttle/40 shrink-0 pointer-events-none">
+                      {!newTask.includes('@') && '@goal'} {!newTask.includes('/am') && !newTask.includes('/pm') && '/am /pm'}
+                    </span>
+                  )}
+                  {selectedGoalId && (
+                    <button
+                      onClick={() => setSelectedGoalId(null)}
+                      className="text-[10px] bg-gossip text-burnham px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 hover:bg-gossip/70 transition-colors"
+                    >
+                      {goals.find(g => g.id === selectedGoalId)?.text?.slice(0, 22)}
+                      <span className="opacity-60">×</span>
+                    </button>
+                  )}
+                  {todoBlock && (
+                    <button
+                      onClick={() => setTodoBlock(null)}
+                      className="text-[10px] bg-mercury/40 text-burnham px-2 py-0.5 rounded-full border border-mercury hover:bg-mercury/80 transition-colors shrink-0"
+                    >
+                      {todoBlock} ×
+                    </button>
+                  )}
+                </div>
+                {/* Subtle underline only when focused */}
+                <div className="h-px bg-mercury mt-2 opacity-0 group-focus-within:opacity-100 transition-opacity" />
+
+                {/* @ goal suggestions dropdown */}
+                {showAtSuggestions && goalSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 bg-white border border-mercury rounded-lg shadow-lg z-50 py-1 mt-1">
+                    {goalSuggestions.map((g, i) => (
+                      <button
+                        key={g.id}
+                        onMouseDown={e => { e.preventDefault(); selectGoalSuggestion(g) }}
+                        className={`w-full text-left px-3 py-1.5 text-xs text-burnham truncate transition-colors ${
+                          i === suggestionIndex ? 'bg-gossip' : 'hover:bg-mercury/10'
+                        }`}
+                      >
+                        {g.text}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
+
               <div className="space-y-1 mb-6">
                 {pendingTodos.map(todo => {
                   const goalName = todo.goal_id ? goals.find(g => g.id === todo.goal_id)?.text : null
@@ -699,10 +735,19 @@ export default function Today() {
             </section>
 
             {/* ── Habits ─────────────────────────────────────────────── */}
-            <section>
+            <section className="pt-8 border-t border-mercury/60">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest">Habits</h3>
-                <span className="text-xs font-mono text-shuttle">{pendingHabits.length} pending</span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setHabitPanelOpen(v => !v)}
+                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors ${habitPanelOpen ? 'border-burnham text-burnham bg-burnham/5' : 'border-mercury text-shuttle/50 hover:border-shuttle hover:text-shuttle'}`}
+                    title="Quick-mark habits (H)"
+                  >
+                    H
+                  </button>
+                  <span className="text-xs font-mono text-shuttle">{pendingHabits.length} pending</span>
+                </div>
               </div>
               <div className="space-y-1 mb-6">
                 {pendingHabits.map(habit => {
@@ -832,13 +877,13 @@ export default function Today() {
 
       {/* ─── Left Sidebar 30% ─────────────────────────────────────────── */}
       <aside className={`${sidebarOpen ? 'w-[30%] min-w-[280px] max-w-[360px]' : 'w-10'} bg-white border-r border-mercury h-full flex flex-col relative z-10 transition-all duration-300 overflow-hidden order-first`}>
-        {/* Collapse toggle */}
+        {/* Collapse toggle — tab shape sticking out from sidebar edge */}
         <button
           onClick={() => setSidebarOpen(v => !v)}
-          className="absolute -right-3 top-8 w-6 h-6 bg-white border border-mercury rounded-full flex items-center justify-center text-shuttle hover:text-burnham hover:border-shuttle transition-all shadow-sm z-20"
+          className="absolute -right-[20px] top-5 w-5 h-8 bg-white border border-l-0 border-mercury rounded-r flex items-center justify-center text-shuttle/50 hover:text-burnham transition-colors z-20"
           title={sidebarOpen ? 'Collapse ⌘B' : 'Expand ⌘B'}
         >
-          <SidebarSimple size={12} weight={sidebarOpen ? 'fill' : 'regular'} />
+          <SidebarSimple size={11} weight={sidebarOpen ? 'fill' : 'regular'} />
         </button>
 
         {sidebarOpen && (
@@ -1104,6 +1149,47 @@ export default function Today() {
           </div>
         )}
       </div>
+
+      {/* ─── Habit Quick-Mark Panel (H shortcut) ────────────────────── */}
+      {habitPanelOpen && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-white border border-mercury rounded-xl shadow-xl px-5 py-4 w-80">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">Habits · press number to mark</span>
+            <button onClick={() => setHabitPanelOpen(false)} className="text-shuttle/40 hover:text-shuttle text-xs">Esc</button>
+          </div>
+          <div className="space-y-1">
+            {habits.filter(h => !logs.some(l => l.habit_id === h.id && l.value === 1)).map((habit, idx) => (
+              <button
+                key={habit.id}
+                onClick={() => { toggleHabit(habit.id); if (pendingHabits.length <= 1) setHabitPanelOpen(false) }}
+                className="w-full flex items-center gap-3 px-2 py-1.5 rounded hover:bg-gossip/30 transition-colors text-left group"
+              >
+                <span className="text-[10px] font-mono w-4 text-shuttle/50 shrink-0 group-hover:text-burnham">{idx + 1}</span>
+                <span className="text-sm text-burnham truncate">{habit.text}</span>
+                {getStreak(habit.id) > 0 && (
+                  <span className="flex items-center gap-0.5 text-[10px] text-shuttle/50 ml-auto shrink-0">
+                    <Flame size={9} weight="fill" className="text-pastel/70" />
+                    {getStreak(habit.id)}
+                  </span>
+                )}
+              </button>
+            ))}
+            {habits.filter(h => logs.some(l => l.habit_id === h.id && l.value === 1)).length > 0 && (
+              <div className="pt-2 border-t border-mercury/60 mt-1 space-y-1">
+                {habits.filter(h => logs.some(l => l.habit_id === h.id && l.value === 1)).map(habit => (
+                  <div key={habit.id} className="flex items-center gap-3 px-2 py-1 opacity-40">
+                    <Check size={11} weight="bold" className="text-pastel shrink-0" />
+                    <span className="text-xs text-shuttle line-through">{habit.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {habits.length === 0 && (
+              <p className="text-xs text-shuttle/40 text-center py-2">No habits for today</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ─── Morning Ritual Overlay (Sprint 19) ─────────────────────── */}
       {ritualStep >= 1 && (

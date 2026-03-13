@@ -6,6 +6,12 @@
       "runtimeExecutable": "sh",
       "runtimeArgs": ["-c", "cd /Users/alexi/Documents/reThink-2026 && node_modules/.bin/vite build && node_modules/.bin/vite preview --port 4173"],
       "port": 4173
+    },
+    {
+      "name": "reThink Dev",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd /Users/alexi/Documents/reThink-2026 && node_modules/.bin/vite --port 5173"],
+      "port": 5173
     }
   ]
 }
