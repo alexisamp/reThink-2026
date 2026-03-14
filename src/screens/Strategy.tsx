@@ -47,6 +47,8 @@ export default function Strategy() {
   const [annualLetterValue, setAnnualLetterValue] = useState('')
   const [annualLetterSaved, setAnnualLetterSaved] = useState(false)
   const annualLetterTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [editingGoalPill, setEditingGoalPill] = useState<string | null>(null)
+  const [pillDraft, setPillDraft] = useState<{ emoji: string; alias: string; color: string }>({ emoji: '', alias: '', color: '#79D65E' })
 
   // Cleanup annual letter debounce timer on unmount
   useEffect(() => {
@@ -233,6 +235,22 @@ export default function Strategy() {
     setNewNotDoingText('')
   }
 
+  const openGoalPillEdit = (goal: Goal) => {
+    setPillDraft({ emoji: goal.emoji ?? '', alias: goal.alias ?? '', color: goal.color ?? '#79D65E' })
+    setEditingGoalPill(goal.id)
+  }
+
+  const saveGoalPill = async (goalId: string) => {
+    setEditingGoalPill(null)
+    const updates = {
+      emoji: pillDraft.emoji.trim() || null,
+      alias: pillDraft.alias.trim().slice(0, 6) || null,
+      color: pillDraft.color || null,
+    }
+    await supabase.from('goals').update(updates).eq('id', goalId)
+    setGoals(prev => prev.map(g => g.id === goalId ? { ...g, ...updates } : g))
+  }
+
   const deleteNotDoing = async (id: string) => {
     await supabase.from('goals').delete().eq('id', id)
     setNotDoingGoals(prev => prev.filter(g => g.id !== id))
@@ -346,6 +364,55 @@ export default function Strategy() {
                           <PencilSimple size={14} className="text-shuttle opacity-0 group-hover/card:opacity-100 transition-opacity cursor-pointer mt-1" onClick={() => setSystematizeGoal(goal)} />
                         </div>
                         {goal.metric && <p className="text-shuttle text-xs">{goal.metric}</p>}
+                        {/* Alias / emoji / color pill */}
+                        {editingGoalPill === goal.id ? (
+                          <div className="flex items-center gap-1.5 mt-1" onKeyDown={e => { if (e.key === 'Escape') setEditingGoalPill(null) }}>
+                            <input
+                              autoFocus
+                              type="text"
+                              value={pillDraft.emoji}
+                              onChange={e => setPillDraft(p => ({ ...p, emoji: e.target.value }))}
+                              placeholder="😀"
+                              maxLength={2}
+                              className="w-8 text-xs text-center border-b border-mercury bg-transparent focus:outline-none focus:border-burnham"
+                            />
+                            <input
+                              type="text"
+                              value={pillDraft.alias}
+                              onChange={e => setPillDraft(p => ({ ...p, alias: e.target.value.slice(0, 6) }))}
+                              placeholder="Label"
+                              maxLength={6}
+                              className="w-14 text-xs border-b border-mercury bg-transparent focus:outline-none focus:border-burnham"
+                            />
+                            <input
+                              type="color"
+                              value={pillDraft.color}
+                              onChange={e => setPillDraft(p => ({ ...p, color: e.target.value }))}
+                              className="w-5 h-5 rounded cursor-pointer border-0 p-0 bg-transparent"
+                            />
+                            <button onClick={() => saveGoalPill(goal.id)} className="text-[10px] text-pastel font-semibold hover:text-burnham transition-colors">Save</button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => openGoalPillEdit(goal)}
+                            className="mt-1 flex items-center gap-1"
+                          >
+                            {(goal.alias || goal.emoji || goal.color) ? (
+                              <span
+                                className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none"
+                                style={{
+                                  backgroundColor: goal.color ? `${goal.color}25` : '#E5F9BD',
+                                  color: goal.color ?? '#003720',
+                                  border: `1px solid ${goal.color ? `${goal.color}40` : '#79D65E40'}`,
+                                }}
+                              >
+                                {goal.emoji ? `${goal.emoji} ` : ''}{goal.alias ?? goal.text.slice(0, 6)}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] text-shuttle/40 hover:text-shuttle transition-colors opacity-0 group-hover/card:opacity-100">+ tag</span>
+                            )}
+                          </button>
+                        )}
                       </div>
                       <div className="col-span-4">
                         <div className="flex flex-col gap-3">
