@@ -43,6 +43,9 @@ export interface Goal {
   key_support: string | null
   notes: string | null
   needs_config: boolean
+  alias: string | null   // short label ≤6 chars shown as pill on todos
+  color: string | null   // hex color for the pill e.g. '#79D65E'
+  emoji: string | null   // optional emoji icon
   created_at: string
   updated_at: string
 }
@@ -110,6 +113,7 @@ export interface Todo {
   completed: boolean
   completed_at: string | null
   date: string | null
+  sort_order: number
   created_at: string
 }
 

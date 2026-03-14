@@ -3,8 +3,16 @@ import {
   Lightning, Check, Play, Pause, Stop,
   Timer, CalendarBlank, SidebarSimple,
   Flame, TrashSimple, NotePencil, GearSix,
-  TextB, TextItalic, TextStrikethrough,
+  TextB, TextItalic, TextStrikethrough, DotsSixVertical,
 } from '@phosphor-icons/react'
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
 import type { Todo, Habit, HabitLog, Review, Milestone, Goal } from '@/types'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -61,6 +69,89 @@ function localDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+interface SortableTodoRowProps {
+  todo: Todo
+  goal: Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'> | null | undefined
+  isEditing: boolean
+  editingText: string
+  onEditStart: () => void
+  onEditChange: (text: string) => void
+  onEditSave: () => void
+  onEditCancel: () => void
+  onToggle: () => void
+  onDelete: () => void
+}
+
+function SortableTodoRow({ todo, goal, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete }: SortableTodoRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: todo.id })
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
+
+  return (
+    <div ref={setNodeRef} style={style} className="group flex items-center gap-2 py-1.5 hover:bg-gray-50/50 px-2 -mx-2 rounded transition-colors">
+      {/* Drag handle */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="opacity-0 group-hover:opacity-25 hover:!opacity-60 cursor-grab active:cursor-grabbing text-shuttle shrink-0 transition-opacity touch-none"
+        title="Drag to reorder"
+      >
+        <DotsSixVertical size={13} />
+      </div>
+      <input
+        type="checkbox"
+        className="custom-checkbox shrink-0"
+        checked={false}
+        onChange={onToggle}
+      />
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        {isEditing ? (
+          <input
+            autoFocus
+            className="flex-1 text-sm font-medium text-burnham bg-transparent border-b border-burnham focus:outline-none"
+            value={editingText}
+            onChange={e => onEditChange(e.target.value)}
+            onBlur={onEditSave}
+            onKeyDown={e => {
+              if (e.key === 'Enter') onEditSave()
+              if (e.key === 'Escape') onEditCancel()
+            }}
+          />
+        ) : (
+          <span
+            className="text-sm font-medium text-burnham truncate cursor-text flex-1"
+            onClick={onEditStart}
+          >
+            {todo.text}
+          </span>
+        )}
+        {goal && (
+          <span
+            className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 leading-none"
+            style={{
+              backgroundColor: goal.color ? `${goal.color}25` : '#E5F9BD',
+              color: goal.color ?? '#003720',
+              border: `1px solid ${goal.color ? `${goal.color}40` : '#79D65E40'}`,
+            }}
+          >
+            {goal.emoji ? `${goal.emoji} ` : ''}{goal.alias ?? goal.text.slice(0, 6)}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        {todo.block && (
+          <span className="text-[9px] font-mono text-shuttle/40">{todo.block}</span>
+        )}
+        <button
+          onClick={onDelete}
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded"
+        >
+          <TrashSimple size={12} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function Today() {
   const today = localDate()
   const yesterdayDate = new Date()
@@ -75,7 +166,7 @@ export default function Today() {
   const [logs, setLogs] = useState<HabitLog[]>([])
   const [recentLogs, setRecentLogs] = useState<HabitLog[]>([])
   const [review, setReview] = useState<Review | null>(null)
-  const [goals, setGoals] = useState<Pick<Goal, 'id' | 'text'>[]>([])
+  const [goals, setGoals] = useState<Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'>[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [dataLoaded, setDataLoaded] = useState(false)
 
@@ -214,7 +305,7 @@ export default function Today() {
 
       const [todosRes, yesterdayTodosRes, habitsRes, logsRes, recentLogsRes, reviewRes, goalsRes, milestonesRes] = await Promise.all([
         supabase.from('todos').select('*').eq('user_id', user.id)
-          .or(`date.is.null,date.eq.${today}`),
+          .or(`date.is.null,date.eq.${today}`).order('sort_order', { ascending: true }),
         supabase.from('todos').select('*').eq('user_id', user.id)
           .lt('date', today).eq('completed', false).order('date', { ascending: false }),
         supabase.from('habits').select('*').eq('user_id', user.id).eq('is_active', true),
@@ -222,7 +313,7 @@ export default function Today() {
         supabase.from('habit_logs').select('*').eq('user_id', user.id)
           .gte('log_date', thirtyAgoStr).order('log_date', { ascending: false }),
         supabase.from('reviews').select('*').eq('user_id', user.id).eq('date', today).maybeSingle(),
-        supabase.from('goals').select('id, text').eq('user_id', user.id).eq('goal_type', 'ACTIVE'),
+        supabase.from('goals').select('id, text, alias, color, emoji').eq('user_id', user.id).eq('goal_type', 'ACTIVE'),
         supabase.from('milestones').select('*').eq('user_id', user.id)
           .or(`target_date.is.null,target_date.gte.${today}`).order('target_date', { nullsFirst: true }),
       ])
@@ -470,6 +561,23 @@ export default function Today() {
     setTodos(prev => prev.filter(t => t.id !== id))
   }
 
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+
+  const reorderTodos = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setTodos(prev => {
+      const pending = prev.filter(t => !t.completed)
+      const done = prev.filter(t => t.completed)
+      const oldIdx = pending.findIndex(t => t.id === active.id)
+      const newIdx = pending.findIndex(t => t.id === over.id)
+      if (oldIdx === -1 || newIdx === -1) return prev
+      const reordered = arrayMove(pending, oldIdx, newIdx).map((t, i) => ({ ...t, sort_order: i }))
+      Promise.all(reordered.map(t => supabase.from('todos').update({ sort_order: t.sort_order }).eq('id', t.id)))
+      return [...reordered, ...done]
+    })
+  }
+
   const upsertReview = async (updates: Partial<Review>) => {
     if (!userId) return
     const payload = { ...review, ...updates, user_id: userId, date: today }
@@ -548,7 +656,7 @@ export default function Today() {
           started_at: timerStartedAt,
           ended_at: new Date().toISOString(),
           duration_minutes: timerDuration,
-          session_type: timerDuration === 25 ? 'pomodoro' : timerDuration === 52 ? 'ultradian' : 'deep_work',
+          session_type: timerDuration === 25 ? 'POMODORO' : timerDuration === 52 ? 'ULTRADIAN' : 'DEEP_WORK',
           intention: timerIntention || null,
           completion_status: completionStatus,
         })
@@ -708,101 +816,61 @@ export default function Today() {
                 </div>
               </div>
 
-              <div className="space-y-1 mb-6">
-                {pendingTodos.map(todo => {
-                  const goalName = todo.goal_id ? goals.find(g => g.id === todo.goal_id)?.text : null
-                  const isEditing = editingTodoId === todo.id
-                  return (
-                    <div key={todo.id} className="group flex items-start gap-3 py-1.5 hover:bg-gray-50/50 px-2 -mx-2 rounded transition-colors">
-                      <input
-                        type="checkbox"
-                        className="custom-checkbox mt-0.5"
-                        checked={false}
-                        onChange={() => toggleTodo(todo.id)}
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorderTodos}>
+                <SortableContext items={pendingTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-0.5 mb-6">
+                    {pendingTodos.map(todo => (
+                      <SortableTodoRow
+                        key={todo.id}
+                        todo={todo}
+                        goal={todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null}
+                        isEditing={editingTodoId === todo.id}
+                        editingText={editingTodoText}
+                        onEditStart={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text) }}
+                        onEditChange={setEditingTodoText}
+                        onEditSave={() => saveTodoText(todo.id)}
+                        onEditCancel={() => setEditingTodoId(null)}
+                        onToggle={() => toggleTodo(todo.id)}
+                        onDelete={() => deleteTodo(todo.id)}
                       />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline justify-between gap-2">
-                          {isEditing ? (
-                            <input
-                              autoFocus
-                              className="flex-1 text-sm font-medium text-burnham bg-transparent border-b border-burnham focus:outline-none"
-                              value={editingTodoText}
-                              onChange={e => setEditingTodoText(e.target.value)}
-                              onBlur={() => saveTodoText(todo.id)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') saveTodoText(todo.id)
-                                if (e.key === 'Escape') setEditingTodoId(null)
-                              }}
-                            />
-                          ) : (
-                            <span
-                              className="text-sm font-medium text-burnham truncate cursor-text"
-                              onClick={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text) }}
-                            >
-                              {todo.text}
-                            </span>
-                          )}
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {todo.effort === 'DEEP' && (
-                              <span className="text-[10px] bg-gossip text-burnham px-1.5 py-0.5 rounded flex items-center gap-1">
-                                <Lightning size={9} weight="fill" /> Deep
-                              </span>
-                            )}
-                            {todo.block && (
-                              <span className="text-[10px] bg-gray-100 text-shuttle px-1.5 py-0.5 rounded">{todo.block}</span>
-                            )}
-                            <button
-                              onClick={() => deleteTodo(todo.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded"
-                            >
-                              <TrashSimple size={12} />
-                            </button>
-                          </div>
-                        </div>
-                        {goalName && (
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-pastel shrink-0" />
-                            <span className="text-[10px] font-semibold text-shuttle truncate">{goalName}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-                <button
-                  className="flex items-center gap-2 py-2 px-2 -mx-2 opacity-30 hover:opacity-70 transition-opacity"
-                  onClick={() => setQuickAddOpen(true)}
-                >
-                  <div className="w-[1.15em] h-[1.15em] border border-dashed border-shuttle/60 rounded-[0.35em]" />
-                  <span className="text-xs text-shuttle font-mono">⌘N to add a task</span>
-                </button>
-              </div>
+                    ))}
+                    <button
+                      className="flex items-center gap-2 py-2 px-2 -mx-2 opacity-30 hover:opacity-70 transition-opacity"
+                      onClick={() => setQuickAddOpen(true)}
+                    >
+                      <div className="w-[1.15em] h-[1.15em] border border-dashed border-shuttle/60 rounded-[0.35em]" />
+                      <span className="text-xs text-shuttle font-mono">⌘N to add a task</span>
+                    </button>
+                  </div>
+                </SortableContext>
+              </DndContext>
               {doneTodos.length > 0 && (
                 <div className="pt-5 border-t border-dashed border-mercury">
                   <h4 className="text-[10px] font-semibold text-shuttle/60 uppercase tracking-widest mb-3">Done</h4>
                   <div className="space-y-1">
-                    {doneTodos.map(todo => (
-                      <div key={todo.id} className="group flex items-start gap-3 py-1.5 px-2 -mx-2 opacity-60 hover:opacity-80 transition-opacity">
-                        <input type="checkbox" className="custom-checkbox mt-0.5" checked onChange={() => toggleTodo(todo.id)} />
-                        <div className="flex-1">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="text-sm text-shuttle line-through decoration-pastel">{todo.text}</span>
-                            <button
-                              onClick={() => deleteTodo(todo.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
+                    {doneTodos.map(todo => {
+                      const goal = todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null
+                      return (
+                        <div key={todo.id} className="group flex items-center gap-3 py-1.5 px-2 -mx-2 opacity-50 hover:opacity-70 transition-opacity">
+                          <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleTodo(todo.id)} />
+                          <span className="text-sm text-shuttle line-through decoration-pastel flex-1 truncate">{todo.text}</span>
+                          {goal && (
+                            <span
+                              className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 opacity-60"
+                              style={{ backgroundColor: goal.color ? `${goal.color}20` : '#E5F9BD', color: goal.color ?? '#003720' }}
                             >
-                              <TrashSimple size={12} />
-                            </button>
-                          </div>
-                          {todo.goal_id && (
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-pastel/50 shrink-0" />
-                              <span className="text-[10px] text-shuttle/60 truncate">{goals.find(g => g.id === todo.goal_id)?.text}</span>
-                            </div>
+                              {goal.alias ?? goal.text.slice(0, 6)}
+                            </span>
                           )}
+                          <button
+                            onClick={() => deleteTodo(todo.id)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
+                          >
+                            <TrashSimple size={12} />
+                          </button>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}
