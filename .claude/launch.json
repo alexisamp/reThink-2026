@@ -2,15 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "reThink Preview",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "cd /Users/alexi/Documents/reThink-2026 && node_modules/.bin/vite build && node_modules/.bin/vite preview --port 4173"],
-      "port": 4173
-    },
-    {
-      "name": "reThink Dev",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "cd /Users/alexi/Documents/reThink-2026 && node_modules/.bin/vite --port 5173"],
+      "name": "dev",
+      "runtimeExecutable": "node_modules/.bin/vite",
+      "runtimeArgs": ["preview", "--port", "5173", "--host", "localhost"],
       "port": 5173
     }
   ]

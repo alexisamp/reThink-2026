@@ -56,11 +56,16 @@ function wrapSelection(
   }, 0)
 }
 
+/** Local YYYY-MM-DD (avoids UTC offset shifting date at night) */
+function localDate(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export default function Today() {
-  const today = new Date().toISOString().split('T')[0]
+  const today = localDate()
   const yesterdayDate = new Date()
   yesterdayDate.setDate(yesterdayDate.getDate() - 1)
-  const yesterdayStr = yesterdayDate.toISOString().split('T')[0]
+  const yesterdayStr = localDate(yesterdayDate)
 
   // Data
   const [todos, setTodos] = useState<Todo[]>([])
@@ -95,8 +100,9 @@ export default function Today() {
   const [journalEditing, setJournalEditing] = useState(false)
   const journalRef = useRef<HTMLTextAreaElement>(null)
 
-  // Mandatory objective drawer
+  // Mandatory objective drawer — always shows on first load, even if pre-filled
   const [objectiveDraft, setObjectiveDraft] = useState('')
+  const [dayStarted, setDayStarted] = useState(false)
 
   // Pomodoro settings panel
   const [showPomSettings, setShowPomSettings] = useState(false)
@@ -210,7 +216,7 @@ export default function Today() {
         supabase.from('todos').select('*').eq('user_id', user.id)
           .or(`date.is.null,date.eq.${today}`),
         supabase.from('todos').select('*').eq('user_id', user.id)
-          .eq('date', yesterdayStr).eq('completed', false),
+          .lt('date', today).eq('completed', false).order('date', { ascending: false }),
         supabase.from('habits').select('*').eq('user_id', user.id).eq('is_active', true),
         supabase.from('habit_logs').select('*').eq('user_id', user.id).eq('log_date', today),
         supabase.from('habit_logs').select('*').eq('user_id', user.id)
@@ -234,7 +240,11 @@ export default function Today() {
   }, [today])
 
   useEffect(() => { setJournalValue(review?.notes ?? '') }, [review?.notes])
-  useEffect(() => { setOnethingValue(review?.one_thing ?? '') }, [review?.one_thing])
+  useEffect(() => {
+    const val = review?.one_thing ?? ''
+    setOnethingValue(val)
+    if (val && !objectiveDraft) setObjectiveDraft(val) // pre-fill drawer if set from yesterday
+  }, [review?.one_thing])
 
   // Focus timer tick
   useEffect(() => {
@@ -372,17 +382,22 @@ export default function Today() {
 
   const toggleHabit = async (habitId: string) => {
     if (!userId) return
-    const existing = logs.find(l => l.habit_id === habitId)
+    const existing = logs.find(l => l.habit_id === habitId && l.log_date === today)
     let justCompleted = false
     if (existing) {
       const newVal = existing.value === 1 ? 0 : 1
-      await supabase.from('habit_logs').update({ value: newVal }).eq('id', existing.id)
+      const { error } = await supabase.from('habit_logs')
+        .update({ value: newVal })
+        .eq('id', existing.id)
+        .eq('user_id', userId)
+      if (error) { console.error('toggleHabit update failed:', error); return }
       setLogs(prev => prev.map(l => l.id === existing.id ? { ...l, value: newVal } : l))
       justCompleted = newVal === 1
     } else {
-      const { data } = await supabase.from('habit_logs')
+      const { data, error } = await supabase.from('habit_logs')
         .insert({ habit_id: habitId, user_id: userId, log_date: today, value: 1 })
         .select().single()
+      if (error) { console.error('toggleHabit insert failed:', error); return }
       if (data) setLogs(prev => [...prev, data])
       justCompleted = true
     }
@@ -608,57 +623,52 @@ export default function Today() {
 
             <p className="text-[10px] font-mono text-shuttle/40 mb-7">{monthStr}</p>
 
-            {/* ── Yesterday's unfinished tasks ────────────────────── */}
+            {/* ── Backlog (all past incomplete todos) ─────────────── */}
             {yesterdayTodos.length > 0 && (
               <section className="mb-8">
                 <h3 className="text-[9px] font-semibold text-shuttle/40 uppercase tracking-widest mb-3 flex items-center gap-2">
                   <span className="w-4 h-px bg-shuttle/20" />
-                  Carried forward from yesterday
+                  Backlog · {yesterdayTodos.length} unfinished
                 </h3>
-                <div className="space-y-1">
-                  {yesterdayTodos.map(todo => (
-                    <div key={todo.id} className="group flex items-start gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-amber-50/30 transition-colors">
-                      <input
-                        type="checkbox"
-                        className="custom-checkbox mt-0.5 opacity-60"
-                        checked={false}
-                        onChange={async () => {
-                          await supabase.from('todos').update({ completed: true }).eq('id', todo.id)
-                          setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
-                        }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-sm text-shuttle">{todo.text}</span>
-                        {todo.goal_id && (
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-pastel/50 shrink-0" />
-                            <span className="text-[10px] text-shuttle/50 truncate">{goals.find(g => g.id === todo.goal_id)?.text}</span>
-                          </div>
-                        )}
+                <div className="space-y-0.5">
+                  {yesterdayTodos.map(todo => {
+                    const daysAgo = Math.round((new Date(today).getTime() - new Date(todo.date ?? today).getTime()) / 86400000)
+                    const ageLabel = daysAgo === 1 ? 'yesterday' : daysAgo <= 7 ? `${daysAgo}d ago` : `${todo.date}`
+                    return (
+                      <div key={todo.id} className="group flex items-center gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-amber-50/30 transition-colors">
+                        <input
+                          type="checkbox"
+                          className="custom-checkbox shrink-0 opacity-60"
+                          checked={false}
+                          onChange={async () => {
+                            await supabase.from('todos').update({ completed: true }).eq('id', todo.id)
+                            setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                          }}
+                        />
+                        <span className="flex-1 text-sm text-shuttle/70 min-w-0 truncate">{todo.text}</span>
+                        <span className="text-[9px] font-mono text-shuttle/25 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">{ageLabel}</span>
+                        <button
+                          onClick={async () => {
+                            await supabase.from('todos').update({ date: today }).eq('id', todo.id)
+                            setTodos(prev => [...prev, { ...todo, date: today }])
+                            setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                          }}
+                          className="opacity-0 group-hover:opacity-100 text-[10px] text-shuttle/50 hover:text-burnham transition-all px-2 py-0.5 rounded border border-mercury/50 hover:border-burnham/30 shrink-0"
+                        >
+                          →today
+                        </button>
+                        <button
+                          onClick={async () => {
+                            await supabase.from('todos').delete().eq('id', todo.id)
+                            setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
+                        >
+                          <TrashSimple size={12} />
+                        </button>
                       </div>
-                      <button
-                        onClick={async () => {
-                          // Move to today
-                          await supabase.from('todos').update({ date: today }).eq('id', todo.id)
-                          const moved = { ...todo, date: today }
-                          setTodos(prev => [...prev, moved])
-                          setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
-                        }}
-                        className="opacity-0 group-hover:opacity-100 text-[10px] text-shuttle/50 hover:text-burnham transition-all px-2 py-0.5 rounded border border-mercury/50 hover:border-burnham/30 shrink-0"
-                      >
-                        move to today
-                      </button>
-                      <button
-                        onClick={async () => {
-                          await supabase.from('todos').delete().eq('id', todo.id)
-                          setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
-                        }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
-                      >
-                        <TrashSimple size={12} />
-                      </button>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
                 <div className="h-px bg-mercury/30 mt-5" />
               </section>
@@ -666,76 +676,36 @@ export default function Today() {
 
             {/* ── To-Dos ─────────────────────────────────────────────── */}
             <section className="mb-10">
-              {/* Ghost inline input — canvas feel */}
-              <div className="relative mb-4">
+              {/* Hidden input — only used programmatically by ⌘N overlay */}
+              <input
+                ref={inputRef}
+                className="sr-only"
+                value={newTask}
+                onChange={e => setNewTask(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'ArrowDown' && showAtSuggestions) {
+                    e.preventDefault()
+                    setSuggestionIndex(i => Math.min(i + 1, goalSuggestions.length - 1))
+                  } else if (e.key === 'ArrowUp' && showAtSuggestions) {
+                    e.preventDefault()
+                    setSuggestionIndex(i => Math.max(i - 1, -1))
+                  } else if (e.key === 'Enter' && showAtSuggestions && suggestionIndex >= 0) {
+                    e.preventDefault()
+                    selectGoalSuggestion(goalSuggestions[suggestionIndex])
+                  } else if (e.key === 'Enter' && !showAtSuggestions) {
+                    parseAndAddTodo()
+                  } else if (e.key === 'Escape' && showAtSuggestions) {
+                    setNewTask(prev => prev.replace(/@[^\s]*$/, '').trim())
+                    setSuggestionIndex(-1)
+                  }
+                }}
+              />
+              {/* Placeholder section — not needed but keep structure */}
+              <div className="relative">
                 <div className="flex items-center gap-2 group">
-                  <input
-                    ref={inputRef}
-                    className="flex-1 text-sm placeholder-mercury text-burnham bg-transparent border-none p-0 focus:ring-0 outline-none focus:placeholder-shuttle/40 transition-colors"
-                    placeholder={newTask ? '' : 'Add a task…'}
-                    value={newTask}
-                    onChange={e => setNewTask(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'ArrowDown' && showAtSuggestions) {
-                        e.preventDefault()
-                        setSuggestionIndex(i => Math.min(i + 1, goalSuggestions.length - 1))
-                      } else if (e.key === 'ArrowUp' && showAtSuggestions) {
-                        e.preventDefault()
-                        setSuggestionIndex(i => Math.max(i - 1, -1))
-                      } else if (e.key === 'Enter' && showAtSuggestions && suggestionIndex >= 0) {
-                        e.preventDefault()
-                        selectGoalSuggestion(goalSuggestions[suggestionIndex])
-                      } else if (e.key === 'Enter' && !showAtSuggestions) {
-                        parseAndAddTodo()
-                      } else if (e.key === 'Escape' && showAtSuggestions) {
-                        setNewTask(prev => prev.replace(/@[^\s]*$/, '').trim())
-                        setSuggestionIndex(-1)
-                      }
-                    }}
-                  />
+                  <span />
                   {/* Tags appear only when typing */}
-                  {newTask && (
-                    <span className="text-[10px] text-shuttle/40 shrink-0 pointer-events-none">
-                      {!newTask.includes('@') && '@goal'} {!newTask.includes('/am') && !newTask.includes('/pm') && '/am /pm'}
-                    </span>
-                  )}
-                  {selectedGoalId && (
-                    <button
-                      onClick={() => setSelectedGoalId(null)}
-                      className="text-[10px] bg-gossip text-burnham px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0 hover:bg-gossip/70 transition-colors"
-                    >
-                      {goals.find(g => g.id === selectedGoalId)?.text?.slice(0, 22)}
-                      <span className="opacity-60">×</span>
-                    </button>
-                  )}
-                  {todoBlock && (
-                    <button
-                      onClick={() => setTodoBlock(null)}
-                      className="text-[10px] bg-mercury/40 text-burnham px-2 py-0.5 rounded-full border border-mercury hover:bg-mercury/80 transition-colors shrink-0"
-                    >
-                      {todoBlock} ×
-                    </button>
-                  )}
                 </div>
-                {/* Subtle underline only when focused */}
-                <div className="h-px bg-mercury mt-2 opacity-0 group-focus-within:opacity-100 transition-opacity" />
-
-                {/* @ goal suggestions dropdown */}
-                {showAtSuggestions && goalSuggestions.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 bg-white border border-mercury rounded-lg shadow-lg z-50 py-1 mt-1">
-                    {goalSuggestions.map((g, i) => (
-                      <button
-                        key={g.id}
-                        onMouseDown={e => { e.preventDefault(); selectGoalSuggestion(g) }}
-                        className={`w-full text-left px-3 py-1.5 text-xs text-burnham truncate transition-colors ${
-                          i === suggestionIndex ? 'bg-gossip' : 'hover:bg-mercury/10'
-                        }`}
-                      >
-                        {g.text}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <div className="space-y-1 mb-6">
@@ -799,13 +769,13 @@ export default function Today() {
                     </div>
                   )
                 })}
-                <div
-                  className="group flex items-center gap-3 py-2 px-2 -mx-2 opacity-40 hover:opacity-80 transition-opacity cursor-text"
-                  onClick={() => inputRef.current?.focus()}
+                <button
+                  className="flex items-center gap-2 py-2 px-2 -mx-2 opacity-30 hover:opacity-70 transition-opacity"
+                  onClick={() => setQuickAddOpen(true)}
                 >
-                  <div className="w-[1.15em] h-[1.15em] border border-dashed border-shuttle rounded-[0.35em]" />
-                  <span className="text-sm text-shuttle">Add task...</span>
-                </div>
+                  <div className="w-[1.15em] h-[1.15em] border border-dashed border-shuttle/60 rounded-[0.35em]" />
+                  <span className="text-xs text-shuttle font-mono">⌘N to add a task</span>
+                </button>
               </div>
               {doneTodos.length > 0 && (
                 <div className="pt-5 border-t border-dashed border-mercury">
@@ -1121,9 +1091,9 @@ export default function Today() {
       {/* ─── Floating Pomodoro Widget ────────────────────────────────── */}
       <div className="fixed top-4 right-14 z-40 flex flex-col items-end gap-1.5">
         {/* Pill: icon + time + controls + gear */}
-        <div className={`flex items-center gap-1.5 bg-white border rounded-full px-2.5 py-1.5 shadow-md transition-colors ${timerRunning ? 'border-pastel/70' : 'border-mercury'}`}>
-          <Timer size={11} className="text-shuttle/60 shrink-0" />
-          <span className={`text-[11px] font-mono font-bold tabular-nums w-10 text-center ${timerRunning ? 'text-burnham' : 'text-shuttle'}`}>
+        <div className={`flex items-center gap-1.5 border rounded-full px-2.5 py-1.5 shadow-md transition-all duration-300 ${timerRunning ? 'bg-gossip/60 border-pastel/50 shadow-pastel/20' : 'bg-white border-mercury'}`}>
+          <Timer size={11} className={`shrink-0 transition-colors ${timerRunning ? 'text-burnham' : 'text-shuttle/60'}`} />
+          <span className={`text-[11px] font-mono font-bold tabular-nums w-10 text-center transition-colors ${timerRunning ? 'text-burnham' : 'text-shuttle'}`}>
             {formatTime(timerRemaining)}
           </span>
           {timerComplete ? null : !timerRunning ? (
@@ -1388,16 +1358,27 @@ export default function Today() {
       )}
 
       {/* ─── Mandatory Objective Drawer ───────────────────────────────── */}
-      {dataLoaded && !onethingValue && (
+      {dataLoaded && !dayStarted && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-burnham">
           <div className="w-full max-w-md px-8">
             <p className="text-[9px] uppercase tracking-[0.2em] text-white/25 mb-10 font-mono">{monthStr}</p>
-            <h1 className="text-2xl font-semibold text-white mb-3 leading-tight">
-              What's your one thing today?
-            </h1>
-            <p className="text-sm text-white/35 mb-10 leading-relaxed">
-              The single outcome that makes today a win.<br />Everything else is secondary.
-            </p>
+            {onethingValue ? (
+              <>
+                <h1 className="text-2xl font-semibold text-white mb-3 leading-tight">
+                  Good morning. Ready to focus?
+                </h1>
+                <p className="text-[10px] uppercase tracking-widest text-white/30 mb-3 font-mono">Today's one thing</p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-2xl font-semibold text-white mb-3 leading-tight">
+                  What's your one thing today?
+                </h1>
+                <p className="text-sm text-white/35 mb-8 leading-relaxed">
+                  The single outcome that makes today a win.
+                </p>
+              </>
+            )}
             <input
               autoFocus
               value={objectiveDraft}
@@ -1405,17 +1386,21 @@ export default function Today() {
               onKeyDown={e => {
                 if (e.key === 'Enter' && objectiveDraft.trim()) {
                   handleOnethingChange(objectiveDraft)
+                  setDayStarted(true)
                 }
               }}
               placeholder="e.g. Ship the auth integration"
               className="w-full bg-transparent border-b border-white/20 focus:border-white/50 outline-none text-xl text-white placeholder-white/15 pb-3 transition-colors"
             />
             <button
-              onClick={() => { if (objectiveDraft.trim()) handleOnethingChange(objectiveDraft) }}
+              onClick={() => {
+                if (objectiveDraft.trim()) handleOnethingChange(objectiveDraft)
+                setDayStarted(true)
+              }}
               disabled={!objectiveDraft.trim()}
               className="mt-10 px-8 py-3 bg-white text-burnham font-semibold rounded-xl text-sm disabled:opacity-20 transition-opacity hover:bg-gossip"
             >
-              Begin the day →
+              {onethingValue ? 'Begin the day →' : 'Set & Begin →'}
             </button>
           </div>
         </div>
