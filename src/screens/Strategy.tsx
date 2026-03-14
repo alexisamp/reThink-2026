@@ -49,6 +49,8 @@ export default function Strategy() {
   const annualLetterTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editingGoalPill, setEditingGoalPill] = useState<string | null>(null)
   const [pillDraft, setPillDraft] = useState<{ emoji: string; alias: string; color: string }>({ emoji: '', alias: '', color: '#79D65E' })
+  const [editingHabitPill, setEditingHabitPill] = useState<string | null>(null)
+  const [habitPillDraft, setHabitPillDraft] = useState<{ emoji: string; alias: string }>({ emoji: '', alias: '' })
 
   // Cleanup annual letter debounce timer on unmount
   useEffect(() => {
@@ -249,6 +251,16 @@ export default function Strategy() {
     }
     await supabase.from('goals').update(updates).eq('id', goalId)
     setGoals(prev => prev.map(g => g.id === goalId ? { ...g, ...updates } : g))
+  }
+
+  const saveHabitMeta = async (habitId: string) => {
+    setEditingHabitPill(null)
+    const updates = {
+      emoji: habitPillDraft.emoji.trim() || null,
+      alias: habitPillDraft.alias.trim().slice(0, 20) || null,
+    }
+    await supabase.from('habits').update(updates).eq('id', habitId)
+    setHabits(prev => prev.map(h => h.id === habitId ? { ...h, ...updates } : h))
   }
 
   const deleteNotDoing = async (id: string) => {
@@ -459,8 +471,51 @@ export default function Strategy() {
                       <div className="col-span-3 border-l border-mercury/30 pl-6">
                         <div className="space-y-3">
                           {getGoalHabits(goal.id).map(h => (
-                            <div key={h.id} className="flex flex-col">
-                              <span className="text-sm font-medium text-burnham">{h.text}</span>
+                            <div key={h.id} className="flex flex-col gap-0.5">
+                              <div className="group flex items-start gap-1.5">
+                                <div className="flex-1 min-w-0">
+                                  {/* Alias/emoji pill or edit form */}
+                                  {editingHabitPill === h.id ? (
+                                    <div className="flex items-center gap-1.5 mb-1" onKeyDown={e => { if (e.key === 'Escape') setEditingHabitPill(null) }}>
+                                      <input
+                                        autoFocus
+                                        type="text"
+                                        value={habitPillDraft.emoji}
+                                        onChange={e => setHabitPillDraft(p => ({ ...p, emoji: e.target.value }))}
+                                        placeholder="🏃"
+                                        maxLength={2}
+                                        className="w-7 text-center text-sm border-b border-mercury bg-transparent focus:outline-none focus:border-burnham"
+                                      />
+                                      <input
+                                        type="text"
+                                        value={habitPillDraft.alias}
+                                        onChange={e => setHabitPillDraft(p => ({ ...p, alias: e.target.value.slice(0, 20) }))}
+                                        placeholder="Short alias"
+                                        maxLength={20}
+                                        className="text-[11px] border-b border-mercury bg-transparent focus:outline-none focus:border-burnham w-28"
+                                        onKeyDown={e => { if (e.key === 'Enter') saveHabitMeta(h.id) }}
+                                      />
+                                      <button onClick={() => saveHabitMeta(h.id)} className="text-[10px] text-pastel font-semibold hover:text-burnham transition-colors">Save</button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5">
+                                      {(h.emoji || h.alias) && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-mercury/40 text-shuttle font-medium shrink-0">
+                                          {h.emoji ? `${h.emoji} ` : ''}{h.alias}
+                                        </span>
+                                      )}
+                                      <button
+                                        onClick={() => { setEditingHabitPill(h.id); setHabitPillDraft({ emoji: h.emoji ?? '', alias: h.alias ?? '' }) }}
+                                        className="opacity-0 group-hover:opacity-40 hover:!opacity-100 text-shuttle transition-opacity"
+                                        title="Set emoji & alias"
+                                      >
+                                        <PencilSimple size={10} />
+                                      </button>
+                                    </div>
+                                  )}
+                                  <span className="text-sm font-medium text-burnham">{h.text}</span>
+                                </div>
+                              </div>
                               <span className="text-shuttle text-[9px] uppercase tracking-wider">{h.frequency.replace('_', '×').replace('3×WEEK','3×/wk').replace('WEEKDAYS','Wkdays')}</span>
                             </div>
                           ))}

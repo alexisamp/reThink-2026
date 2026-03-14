@@ -87,6 +87,8 @@ export interface Habit {
   unit: string | null
   is_active: boolean
   calendar_event_id: string | null
+  alias: string | null   // short label ≤20 chars shown in habit chip strip
+  emoji: string | null   // optional emoji icon for habit chip
   created_at: string
   updated_at: string
 }

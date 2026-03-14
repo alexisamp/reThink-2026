@@ -880,88 +880,84 @@ export default function Today() {
               )}
             </section>
 
-            {/* ── Habits ─────────────────────────────────────────────── */}
+            {/* ── Habits — horizontal chip strip ──────────────────────── */}
             <section className="pt-8 border-t border-mercury/60">
-              {/* Collapsible header */}
-              <button
-                className="flex items-center justify-between w-full mb-3 group"
-                onClick={() => setHabitsCollapsed(v => !v)}
-              >
-                <div className="flex items-center gap-3">
-                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest">Habits</h3>
-                  <span className="text-[10px] font-mono text-shuttle/40">
-                    {doneHabits.length}/{habits.length}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span className="text-[9px] font-mono text-shuttle/30 border border-mercury/50 rounded px-1">H</span>
-                  <span className="text-[10px] text-shuttle/30">{habitsCollapsed ? '↓' : '↑'}</span>
-                </div>
-              </button>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest flex items-center gap-2">
+                  Habits
+                  <span className="font-mono font-normal text-shuttle/40 normal-case">{doneHabits.length}/{habits.length}</span>
+                </h3>
+                <span className="text-[9px] font-mono text-shuttle/25 border border-mercury/50 rounded px-1">H</span>
+              </div>
 
-              {!habitsCollapsed && (
-                <>
-                  <div className="space-y-0.5 mb-4">
-                    {pendingHabits.map(habit => {
-                      const streak = getStreak(habit.id)
-                      const goalName = habit.goal_id ? goals.find(g => g.id === habit.goal_id)?.text : null
-                      const isExpanded = expandedHabitId === habit.id
-                      return (
-                        <div key={habit.id}>
-                          <div className="group flex items-center gap-3 py-2 px-2 -mx-2 rounded hover:bg-gray-50/60 transition-colors">
-                            <input
-                              type="checkbox"
-                              className="custom-checkbox shrink-0"
-                              checked={false}
-                              onChange={() => toggleHabit(habit.id)}
-                            />
-                            <span
-                              className="flex-1 text-sm font-medium text-burnham cursor-pointer select-none"
-                              onClick={() => setExpandedHabitId(isExpanded ? null : habit.id)}
-                            >
-                              {habit.text}
+              {/* Chip strip — all habits always visible */}
+              <div className="flex flex-wrap gap-2 mb-2">
+                {habits.map(habit => {
+                  const done = doneHabits.some(h => h.id === habit.id)
+                  const streak = getStreak(habit.id)
+                  const isExpanded = expandedHabitId === habit.id
+                  const label = habit.alias ?? habit.text.split(' ').slice(0, 3).join(' ')
+                  return (
+                    <div key={habit.id} className="flex flex-col items-start">
+                      {/* The pill itself */}
+                      <div className={`flex items-center gap-1.5 rounded-full border text-xs font-medium transition-all duration-200 ${done ? 'bg-gossip/60 border-pastel/50 text-burnham' : 'bg-white border-mercury text-shuttle hover:border-shuttle/30'}`}>
+                        {/* Toggle area */}
+                        <button
+                          onClick={() => toggleHabit(habit.id)}
+                          className="flex items-center gap-1.5 pl-3 pr-1 py-1.5 rounded-full"
+                          title={habit.text}
+                        >
+                          {habit.emoji && <span className="leading-none">{habit.emoji}</span>}
+                          <span>{label}</span>
+                          {done
+                            ? <Check size={10} weight="bold" className="text-pastel shrink-0" />
+                            : <span className="w-1.5 h-1.5 rounded-full bg-mercury/80 shrink-0" />
+                          }
+                          {streak > 0 && (
+                            <span className="flex items-center gap-0.5 text-[9px] opacity-60">
+                              <Flame size={8} weight="fill" className="text-pastel" />
+                              {streak}
                             </span>
-                            {streak > 0 && (
-                              <span className="flex items-center gap-1 text-[10px] text-shuttle/50 shrink-0">
-                                <Flame size={10} weight="fill" className="text-pastel" />
-                                {streak}d
-                              </span>
-                            )}
-                            {goalName && (
-                              <span className="hidden group-hover:block text-[10px] text-shuttle/40 truncate max-w-[80px] shrink-0">{goalName}</span>
-                            )}
-                          </div>
+                          )}
+                        </button>
+                        {/* Expand toggle — visible on hover */}
+                        <button
+                          onClick={() => setExpandedHabitId(isExpanded ? null : habit.id)}
+                          className={`pr-2 py-1.5 text-[10px] transition-colors rounded-r-full ${isExpanded ? 'text-shuttle/60' : 'text-shuttle/20 hover:text-shuttle/50'}`}
+                          title="Details"
+                        >
+                          {isExpanded ? '↑' : '↓'}
+                        </button>
+                      </div>
 
-                          {/* Expanded controls — secondary, clean */}
-                          {isExpanded && (
-                            <div className="ml-7 mb-1 flex items-center gap-4 py-1.5 text-[10px] text-shuttle/50">
-                              {habit.default_time && (
-                                <span className="font-mono">{habit.default_time}</span>
-                              )}
-                              {(() => { const adh = getAdherence(habit.id); return adh < 90 ? <span>{adh}% this month</span> : null })()}
-                              <button
-                                onClick={() => setCalendarDialogHabitId(prev => prev === habit.id ? null : habit.id)}
-                                className="flex items-center gap-1 hover:text-burnham transition-colors"
-                              >
-                                <CalendarBlank size={11} /> block time
-                              </button>
-                              <select
-                                className="bg-transparent border-0 cursor-pointer hover:text-shuttle transition-colors focus:outline-none text-[10px]"
-                                onChange={e => { if (e.target.value) logFriction(habit.id, e.target.value); e.target.value = '' }}
-                                defaultValue=""
-                              >
-                                <option value="" disabled>why not?</option>
-                                <option value="Travel">Travel</option>
-                                <option value="Forgot">Forgot</option>
-                                <option value="Too tired">Too tired</option>
-                                <option value="External blocker">External blocker</option>
-                                <option value="Other">Other</option>
-                              </select>
-                            </div>
+                      {/* Expanded details — shown below the chip */}
+                      {isExpanded && (
+                        <div className="mt-1.5 ml-1 flex items-center flex-wrap gap-3 text-[10px] text-shuttle/50">
+                          {habit.default_time && <span className="font-mono">{habit.default_time}</span>}
+                          {(() => { const adh = getAdherence(habit.id); return adh < 90 ? <span>{adh}% adherence</span> : null })()}
+                          <button
+                            onClick={() => setCalendarDialogHabitId(prev => prev === habit.id ? null : habit.id)}
+                            className="flex items-center gap-1 hover:text-burnham transition-colors"
+                          >
+                            <CalendarBlank size={10} /> schedule
+                          </button>
+                          {!done && (
+                            <select
+                              className="bg-transparent border-0 cursor-pointer hover:text-shuttle transition-colors focus:outline-none text-[10px]"
+                              onChange={e => { if (e.target.value) logFriction(habit.id, e.target.value); e.target.value = '' }}
+                              defaultValue=""
+                            >
+                              <option value="" disabled>why not?</option>
+                              <option value="Travel">Travel</option>
+                              <option value="Forgot">Forgot</option>
+                              <option value="Too tired">Too tired</option>
+                              <option value="External blocker">External blocker</option>
+                              <option value="Other">Other</option>
+                            </select>
                           )}
 
                           {calendarDialogHabitId === habit.id && (
-                            <div className="ml-7 mb-2 p-3 bg-[#F8F9F9] border border-mercury rounded-lg space-y-2">
+                            <div className="mt-1.5 w-full p-3 bg-[#F8F9F9] border border-mercury rounded-lg space-y-2">
                               <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle mb-2">Block time in calendar</p>
                               <div className="flex items-center gap-2 flex-wrap">
                                 <select value={calWhen} onChange={e => setCalWhen(e.target.value)}
@@ -996,22 +992,11 @@ export default function Today() {
                             </div>
                           )}
                         </div>
-                      )
-                    })}
-                  </div>
-
-                  {/* Done habits — minimal */}
-                  {doneHabits.length > 0 && (
-                    <div className="flex items-center gap-2 py-2 border-t border-dashed border-mercury">
-                      <Check size={11} weight="bold" className="text-pastel" />
-                      <span className="text-[10px] text-shuttle/50">
-                        {doneHabits.length} habit{doneHabits.length > 1 ? 's' : ''} done
-                        {doneHabits.map(h => ` · ${h.text}`).join('')}
-                      </span>
+                      )}
                     </div>
-                  )}
-                </>
-              )}
+                  )
+                })}
+              </div>
             </section>
 
           </div>
