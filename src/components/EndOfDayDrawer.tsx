@@ -28,9 +28,9 @@ export default function EndOfDayDrawer({ todos, today, userId, onClose, onComple
   }, [])
 
   const tomorrow = (() => {
-    const d = new Date(today)
-    d.setDate(d.getDate() + 1)
-    return d.toISOString().split('T')[0]
+    const [y, m, day] = today.split('-').map(Number)
+    const d = new Date(y, m - 1, day + 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   })()
 
   const handleClose = async () => {

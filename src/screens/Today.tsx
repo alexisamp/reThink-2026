@@ -301,7 +301,7 @@ export default function Today() {
 
       const thirtyDaysAgo = new Date()
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-      const thirtyAgoStr = thirtyDaysAgo.toISOString().split('T')[0]
+      const thirtyAgoStr = localDate(thirtyDaysAgo)
 
       const [todosRes, yesterdayTodosRes, habitsRes, logsRes, recentLogsRes, reviewRes, goalsRes, milestonesRes] = await Promise.all([
         supabase.from('todos').select('*').eq('user_id', user.id)
@@ -335,6 +335,7 @@ export default function Today() {
     const val = review?.one_thing ?? ''
     setOnethingValue(val)
     if (val && !objectiveDraft) setObjectiveDraft(val) // pre-fill drawer if set from yesterday
+    if (val) setDayStarted(true) // already set today's objective — skip morning overlay
   }, [review?.one_thing])
 
   // Focus timer tick
@@ -429,7 +430,7 @@ export default function Today() {
 
     for (const log of habitLogs) {
       const logDate = log.log_date
-      const expected = checkDate.toISOString().split('T')[0]
+      const expected = localDate(checkDate)
       if (logDate === expected && log.value === 1) {
         streak++
         checkDate.setDate(checkDate.getDate() - 1)
@@ -589,7 +590,7 @@ export default function Today() {
     if (!userId) return
     await supabase.from('friction_logs').upsert({
       habit_id: habitId, user_id: userId, log_date: today, reason,
-    }, { onConflict: 'habit_id,log_date' })
+    }, { onConflict: 'habit_id,user_id,log_date' })
   }
 
   const blockHabitTime = async (habit: Habit) => {
