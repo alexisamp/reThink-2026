@@ -58,9 +58,13 @@ function wrapSelection(
 
 export default function Today() {
   const today = new Date().toISOString().split('T')[0]
+  const yesterdayDate = new Date()
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+  const yesterdayStr = yesterdayDate.toISOString().split('T')[0]
 
   // Data
   const [todos, setTodos] = useState<Todo[]>([])
+  const [yesterdayTodos, setYesterdayTodos] = useState<Todo[]>([])
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [habits, setHabits] = useState<Habit[]>([])
   const [logs, setLogs] = useState<HabitLog[]>([])
@@ -68,6 +72,7 @@ export default function Today() {
   const [review, setReview] = useState<Review | null>(null)
   const [goals, setGoals] = useState<Pick<Goal, 'id' | 'text'>[]>([])
   const [userId, setUserId] = useState<string | null>(null)
+  const [dataLoaded, setDataLoaded] = useState(false)
 
   // Add task
   const [newTask, setNewTask] = useState('')
@@ -89,6 +94,9 @@ export default function Today() {
   const [onethingValue, setOnethingValue] = useState('')
   const [journalEditing, setJournalEditing] = useState(false)
   const journalRef = useRef<HTMLTextAreaElement>(null)
+
+  // Mandatory objective drawer
+  const [objectiveDraft, setObjectiveDraft] = useState('')
 
   // Pomodoro settings panel
   const [showPomSettings, setShowPomSettings] = useState(false)
@@ -116,8 +124,16 @@ export default function Today() {
   const [timerComplete, setTimerComplete] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [habitPanelOpen, setHabitPanelOpen] = useState(false)
+  const [habitsCollapsed, setHabitsCollapsed] = useState(false)
+  const [expandedHabitId, setExpandedHabitId] = useState<string | null>(null)
+  const [milestonesOpen, setMilestonesOpen] = useState(false)
+
+  // Quick-add overlay (⌘N — works from anywhere)
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [quickAddText, setQuickAddText] = useState('')
+  const quickAddRef = useRef<HTMLInputElement>(null)
 
   // Pomodoro Enhanced (Sprint 16)
   const [timerIntention, setTimerIntention] = useState('')
@@ -127,14 +143,11 @@ export default function Today() {
   const [timerStartedAt, setTimerStartedAt] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Morning Ritual (Sprint 19)
-  const [ritualStep, setRitualStep] = useState<0 | 1 | 2 | 3 | 4>(0)
-  const [ritualYesterdayReview, setRitualYesterdayReview] = useState<'done' | 'carried' | 'missed' | null>(null)
 
   useKeyboardShortcuts({
     'cmd+b': () => setSidebarOpen(p => !p),
     'cmd+.': () => setSidebarOpen(p => !p),
-    'cmd+n': () => { inputRef.current?.focus(); inputRef.current?.select() },
+    'cmd+n': () => setQuickAddOpen(true),
     'cmd+e': () => setShowEndOfDay(true),
   })
 
@@ -152,6 +165,12 @@ export default function Today() {
       if ((e.key === 'h' || e.key === 'H') && !inInput && !e.metaKey && !e.ctrlKey) {
         e.preventDefault()
         setHabitPanelOpen(v => !v)
+        return
+      }
+
+      if ((e.key === 'm' || e.key === 'M') && !inInput && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setMilestonesOpen(v => !v)
         return
       }
 
@@ -187,9 +206,11 @@ export default function Today() {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
       const thirtyAgoStr = thirtyDaysAgo.toISOString().split('T')[0]
 
-      const [todosRes, habitsRes, logsRes, recentLogsRes, reviewRes, goalsRes, milestonesRes] = await Promise.all([
+      const [todosRes, yesterdayTodosRes, habitsRes, logsRes, recentLogsRes, reviewRes, goalsRes, milestonesRes] = await Promise.all([
         supabase.from('todos').select('*').eq('user_id', user.id)
           .or(`date.is.null,date.eq.${today}`),
+        supabase.from('todos').select('*').eq('user_id', user.id)
+          .eq('date', yesterdayStr).eq('completed', false),
         supabase.from('habits').select('*').eq('user_id', user.id).eq('is_active', true),
         supabase.from('habit_logs').select('*').eq('user_id', user.id).eq('log_date', today),
         supabase.from('habit_logs').select('*').eq('user_id', user.id)
@@ -200,22 +221,14 @@ export default function Today() {
           .or(`target_date.is.null,target_date.gte.${today}`).order('target_date', { nullsFirst: true }),
       ])
       setTodos(todosRes.data ?? [])
+      setYesterdayTodos(yesterdayTodosRes.data ?? [])
       setHabits(habitsRes.data ?? [])
       setLogs(logsRes.data ?? [])
       setRecentLogs(recentLogsRes.data ?? [])
       setReview(reviewRes.data)
       setGoals(goalsRes.data ?? [])
       setMilestones((milestonesRes.data ?? []).slice(0, 10))
-
-      // Morning ritual trigger (Sprint 19)
-      const hour = new Date().getHours()
-      const isMorning = hour >= 5 && hour < 10
-      const loadedReview = reviewRes.data
-      const loadedTodos = todosRes.data ?? []
-      const hasPlannedToday = !!loadedReview?.one_thing || loadedTodos.filter(t => t.date === today).length > 0
-      if (isMorning && !hasPlannedToday) {
-        setRitualStep(1)
-      }
+      setDataLoaded(true)
     }
     load()
   }, [today])
@@ -384,21 +397,19 @@ export default function Today() {
     }
   }
 
-  // Parse @goal and /am /pm inline from input, then add todo
-  const parseAndAddTodo = async () => {
-    if (!newTask.trim() || !userId) return
-    let text = newTask.trim()
+  // Core todo submission (used by inline input and quick-add overlay)
+  const submitTodo = async (rawText: string, blockOverride?: 'AM' | 'PM' | null) => {
+    if (!rawText.trim() || !userId) return
+    let text = rawText.trim()
     let goalId = selectedGoalId
-    let block: 'AM' | 'PM' | null = todoBlock
+    let block: 'AM' | 'PM' | null = blockOverride !== undefined ? blockOverride : todoBlock
 
-    // Parse /am or /pm
     const blockMatch = text.match(/\/\s*(am|pm)\b/i)
     if (blockMatch) {
       block = blockMatch[1].toUpperCase() as 'AM' | 'PM'
       text = text.replace(blockMatch[0], '').trim()
     }
 
-    // Parse @goal if no goalId already selected
     if (!goalId) {
       const goalMatch = text.match(/@(\S+)/)
       if (goalMatch) {
@@ -407,18 +418,29 @@ export default function Today() {
       }
     }
 
-    // Clean @mentions from text
     text = text.replace(/@\S+/g, '').replace(/\s+/g, ' ').trim()
-
     if (!text) return
 
     const { data } = await supabase.from('todos')
       .insert({ text, user_id: userId, effort: 'NORMAL', date: today, block, goal_id: goalId })
       .select().single()
     if (data) setTodos(prev => [...prev, data])
+  }
+
+  // Parse @goal and /am /pm inline from input, then add todo
+  const parseAndAddTodo = async () => {
+    await submitTodo(newTask)
     setNewTask('')
     setTodoBlock(null)
     setSelectedGoalId(null)
+  }
+
+  // Quick-add from overlay
+  const submitQuickAdd = async () => {
+    if (!quickAddText.trim()) return
+    await submitTodo(quickAddText, null)
+    setQuickAddText('')
+    setQuickAddOpen(false)
   }
 
   const saveTodoText = async (id: string) => {
@@ -553,12 +575,94 @@ export default function Today() {
   return (
     <div className="h-screen bg-white text-burnham font-sans flex overflow-hidden">
 
-      {/* ─── Main 70% ─────────────────────────────────────────────────── */}
+      {/* ─── Main content ──────────────────────────────────────────────── */}
       <main className="flex-1 h-full flex flex-col relative">
-        <div className="flex-1 overflow-y-auto px-16 py-12 pb-20">
-          <div className="max-w-3xl mx-auto w-full">
 
-            <p className="text-[10px] font-mono text-shuttle/50 mb-8">{monthStr}</p>
+        {/* ── One Thing header ──────────────────────────────────────── */}
+        {onethingValue && (
+          <div className="px-10 pt-7 pb-4 flex items-baseline gap-4 border-b border-mercury/30 shrink-0">
+            <span className="text-[9px] font-mono text-shuttle/30 uppercase tracking-[0.15em] whitespace-nowrap">one thing</span>
+            <span className="text-sm font-semibold text-burnham leading-snug">{onethingValue}</span>
+          </div>
+        )}
+
+        {/* ── Shortcut hints ────────────────────────────────────────── */}
+        <div className="px-10 pt-3 pb-1 flex items-center gap-5 shrink-0">
+          {[
+            { key: '⌘N', label: 'add task' },
+            { key: 'H', label: 'habits' },
+            { key: 'M', label: 'milestones' },
+            { key: '⌘B', label: 'sidebar' },
+            { key: '⌘E', label: 'end day' },
+            { key: '⎵', label: 'focus' },
+          ].map(s => (
+            <span key={s.key} className="flex items-center gap-1 text-[9px] text-shuttle/25 font-mono">
+              <kbd className="px-1 py-0.5 bg-mercury/20 rounded text-[8px] border border-mercury/40">{s.key}</kbd>
+              <span>{s.label}</span>
+            </span>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-10 py-6 pb-32">
+          <div className="max-w-2xl w-full">
+
+            <p className="text-[10px] font-mono text-shuttle/40 mb-7">{monthStr}</p>
+
+            {/* ── Yesterday's unfinished tasks ────────────────────── */}
+            {yesterdayTodos.length > 0 && (
+              <section className="mb-8">
+                <h3 className="text-[9px] font-semibold text-shuttle/40 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <span className="w-4 h-px bg-shuttle/20" />
+                  Carried forward from yesterday
+                </h3>
+                <div className="space-y-1">
+                  {yesterdayTodos.map(todo => (
+                    <div key={todo.id} className="group flex items-start gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-amber-50/30 transition-colors">
+                      <input
+                        type="checkbox"
+                        className="custom-checkbox mt-0.5 opacity-60"
+                        checked={false}
+                        onChange={async () => {
+                          await supabase.from('todos').update({ completed: true }).eq('id', todo.id)
+                          setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm text-shuttle">{todo.text}</span>
+                        {todo.goal_id && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-pastel/50 shrink-0" />
+                            <span className="text-[10px] text-shuttle/50 truncate">{goals.find(g => g.id === todo.goal_id)?.text}</span>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          // Move to today
+                          await supabase.from('todos').update({ date: today }).eq('id', todo.id)
+                          const moved = { ...todo, date: today }
+                          setTodos(prev => [...prev, moved])
+                          setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                        }}
+                        className="opacity-0 group-hover:opacity-100 text-[10px] text-shuttle/50 hover:text-burnham transition-all px-2 py-0.5 rounded border border-mercury/50 hover:border-burnham/30 shrink-0"
+                      >
+                        move to today
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await supabase.from('todos').delete().eq('id', todo.id)
+                          setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                        }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
+                      >
+                        <TrashSimple size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="h-px bg-mercury/30 mt-5" />
+              </section>
+            )}
 
             {/* ── To-Dos ─────────────────────────────────────────────── */}
             <section className="mb-10">
@@ -736,138 +840,135 @@ export default function Today() {
 
             {/* ── Habits ─────────────────────────────────────────────── */}
             <section className="pt-8 border-t border-mercury/60">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest">Habits</h3>
+              {/* Collapsible header */}
+              <button
+                className="flex items-center justify-between w-full mb-3 group"
+                onClick={() => setHabitsCollapsed(v => !v)}
+              >
                 <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setHabitPanelOpen(v => !v)}
-                    className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors ${habitPanelOpen ? 'border-burnham text-burnham bg-burnham/5' : 'border-mercury text-shuttle/50 hover:border-shuttle hover:text-shuttle'}`}
-                    title="Quick-mark habits (H)"
-                  >
-                    H
-                  </button>
-                  <span className="text-xs font-mono text-shuttle">{pendingHabits.length} pending</span>
+                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest">Habits</h3>
+                  <span className="text-[10px] font-mono text-shuttle/40">
+                    {doneHabits.length}/{habits.length}
+                  </span>
                 </div>
-              </div>
-              <div className="space-y-1 mb-6">
-                {pendingHabits.map(habit => {
-                  const goalName = habit.goal_id ? goals.find(g => g.id === habit.goal_id)?.text : null
-                  const streak = getStreak(habit.id)
-                  return (
-                    <div key={habit.id} className="group flex items-start gap-3 py-1.5 hover:bg-gray-50/50 px-2 -mx-2 rounded transition-colors">
-                      <input type="checkbox" className="custom-checkbox mt-0.5" checked={false} onChange={() => toggleHabit(habit.id)} />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-sm font-medium text-burnham">{habit.text}</span>
-                            <span className="text-[10px] bg-gray-100 text-shuttle px-1.5 py-0.5 rounded">{habit.frequency}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => setCalendarDialogHabitId(prev => prev === habit.id ? null : habit.id)}
-                              className={`text-shuttle hover:text-burnham transition-colors ${habit.calendar_event_id ? 'opacity-50' : ''}`}
-                              title={habit.calendar_event_id ? 'Time already blocked' : 'Block time in calendar'}
+                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="text-[9px] font-mono text-shuttle/30 border border-mercury/50 rounded px-1">H</span>
+                  <span className="text-[10px] text-shuttle/30">{habitsCollapsed ? '↓' : '↑'}</span>
+                </div>
+              </button>
+
+              {!habitsCollapsed && (
+                <>
+                  <div className="space-y-0.5 mb-4">
+                    {pendingHabits.map(habit => {
+                      const streak = getStreak(habit.id)
+                      const goalName = habit.goal_id ? goals.find(g => g.id === habit.goal_id)?.text : null
+                      const isExpanded = expandedHabitId === habit.id
+                      return (
+                        <div key={habit.id}>
+                          <div className="group flex items-center gap-3 py-2 px-2 -mx-2 rounded hover:bg-gray-50/60 transition-colors">
+                            <input
+                              type="checkbox"
+                              className="custom-checkbox shrink-0"
+                              checked={false}
+                              onChange={() => toggleHabit(habit.id)}
+                            />
+                            <span
+                              className="flex-1 text-sm font-medium text-burnham cursor-pointer select-none"
+                              onClick={() => setExpandedHabitId(isExpanded ? null : habit.id)}
                             >
-                              <CalendarBlank size={12} />
-                            </button>
-                            <select
-                              className="text-[10px] text-shuttle/50 border border-mercury rounded px-1 py-0.5 bg-white cursor-pointer hover:text-shuttle transition-colors focus:outline-none"
-                              onChange={e => { if (e.target.value) logFriction(habit.id, e.target.value); e.target.value = '' }}
-                              defaultValue=""
-                            >
-                              <option value="" disabled>Why not?</option>
-                              <option value="Travel">Travel</option>
-                              <option value="Forgot">Forgot</option>
-                              <option value="Too tired">Too tired</option>
-                              <option value="External blocker">External blocker</option>
-                              <option value="Other">Other</option>
-                            </select>
-                            <button
-                              onClick={() => toggleHabit(habit.id)}
-                              className="text-[10px] font-semibold text-burnham bg-gossip hover:brightness-95 px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
-                            >
-                              <Check size={9} weight="bold" /> Done
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 mt-1">
-                          {goalName && (
-                            <div className="flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-pastel shrink-0" />
-                              <span className="text-[10px] font-semibold text-shuttle">{goalName}</span>
-                            </div>
-                          )}
-                          {habit.default_time && (
-                            <span className="text-[10px] font-mono text-shuttle/60">{habit.default_time}</span>
-                          )}
-                          {streak > 0 && (
-                            <span className="flex items-center gap-1 text-[10px] text-shuttle">
-                              <Flame size={10} weight="fill" className="text-pastel" />
-                              {streak}d
-                              {(() => { const adh = getAdherence(habit.id); return adh < 90 ? ` · ${adh}%` : '' })()}
+                              {habit.text}
                             </span>
+                            {streak > 0 && (
+                              <span className="flex items-center gap-1 text-[10px] text-shuttle/50 shrink-0">
+                                <Flame size={10} weight="fill" className="text-pastel" />
+                                {streak}d
+                              </span>
+                            )}
+                            {goalName && (
+                              <span className="hidden group-hover:block text-[10px] text-shuttle/40 truncate max-w-[80px] shrink-0">{goalName}</span>
+                            )}
+                          </div>
+
+                          {/* Expanded controls — secondary, clean */}
+                          {isExpanded && (
+                            <div className="ml-7 mb-1 flex items-center gap-4 py-1.5 text-[10px] text-shuttle/50">
+                              {habit.default_time && (
+                                <span className="font-mono">{habit.default_time}</span>
+                              )}
+                              {(() => { const adh = getAdherence(habit.id); return adh < 90 ? <span>{adh}% this month</span> : null })()}
+                              <button
+                                onClick={() => setCalendarDialogHabitId(prev => prev === habit.id ? null : habit.id)}
+                                className="flex items-center gap-1 hover:text-burnham transition-colors"
+                              >
+                                <CalendarBlank size={11} /> block time
+                              </button>
+                              <select
+                                className="bg-transparent border-0 cursor-pointer hover:text-shuttle transition-colors focus:outline-none text-[10px]"
+                                onChange={e => { if (e.target.value) logFriction(habit.id, e.target.value); e.target.value = '' }}
+                                defaultValue=""
+                              >
+                                <option value="" disabled>why not?</option>
+                                <option value="Travel">Travel</option>
+                                <option value="Forgot">Forgot</option>
+                                <option value="Too tired">Too tired</option>
+                                <option value="External blocker">External blocker</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {calendarDialogHabitId === habit.id && (
+                            <div className="ml-7 mb-2 p-3 bg-[#F8F9F9] border border-mercury rounded-lg space-y-2">
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle mb-2">Block time in calendar</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <select value={calWhen} onChange={e => setCalWhen(e.target.value)}
+                                  className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none">
+                                  <option value="today">Today</option>
+                                  <option value="tomorrow">Tomorrow</option>
+                                  <option value="next_monday">Next Monday</option>
+                                </select>
+                                <span className="text-xs text-shuttle">at</span>
+                                <input type="time" value={calTime} onChange={e => setCalTime(e.target.value)}
+                                  className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none" />
+                                <select value={calDuration} onChange={e => setCalDuration(e.target.value)}
+                                  className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none">
+                                  <option value="15">15 min</option>
+                                  <option value="30">30 min</option>
+                                  <option value="45">45 min</option>
+                                  <option value="60">1 hour</option>
+                                </select>
+                              </div>
+                              <div className="flex items-center gap-2 pt-1">
+                                <button
+                                  onClick={() => blockHabitTime(habit)}
+                                  disabled={calSaving}
+                                  className="text-xs bg-burnham text-white px-3 py-1.5 rounded hover:bg-burnham/90 disabled:opacity-50 transition-colors"
+                                >
+                                  {calSaving ? 'Blocking...' : 'Block time'}
+                                </button>
+                                <button onClick={() => setCalendarDialogHabitId(null)} className="text-xs text-shuttle hover:text-burnham transition-colors">
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
                           )}
                         </div>
-                        {calendarDialogHabitId === habit.id && (
-                          <div className="mt-2 p-3 bg-[#F8F9F9] border border-mercury rounded-lg space-y-2">
-                            <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle mb-2">Block time in calendar</p>
-                            <div className="flex items-center gap-2">
-                              <select value={calWhen} onChange={e => setCalWhen(e.target.value)}
-                                className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none focus:border-shuttle">
-                                <option value="today">Today</option>
-                                <option value="tomorrow">Tomorrow</option>
-                                <option value="next_monday">Next Monday</option>
-                              </select>
-                              <span className="text-xs text-shuttle">at</span>
-                              <input type="time" value={calTime} onChange={e => setCalTime(e.target.value)}
-                                className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none focus:border-shuttle" />
-                              <select value={calDuration} onChange={e => setCalDuration(e.target.value)}
-                                className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none focus:border-shuttle">
-                                <option value="15">15 min</option>
-                                <option value="30">30 min</option>
-                                <option value="45">45 min</option>
-                                <option value="60">1 hour</option>
-                              </select>
-                            </div>
-                            <div className="flex items-center gap-2 pt-1">
-                              <button
-                                onClick={() => blockHabitTime(habit)}
-                                disabled={calSaving}
-                                className="text-xs bg-burnham text-white px-3 py-1.5 rounded hover:bg-burnham/90 disabled:opacity-50 transition-colors"
-                              >
-                                {calSaving ? 'Blocking...' : 'Block time'}
-                              </button>
-                              <button onClick={() => setCalendarDialogHabitId(null)} className="text-xs text-shuttle hover:text-burnham transition-colors">
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Done habits — minimal */}
+                  {doneHabits.length > 0 && (
+                    <div className="flex items-center gap-2 py-2 border-t border-dashed border-mercury">
+                      <Check size={11} weight="bold" className="text-pastel" />
+                      <span className="text-[10px] text-shuttle/50">
+                        {doneHabits.length} habit{doneHabits.length > 1 ? 's' : ''} done
+                        {doneHabits.map(h => ` · ${h.text}`).join('')}
+                      </span>
                     </div>
-                  )
-                })}
-              </div>
-              {doneHabits.length > 0 && (
-                <div className="pt-5 border-t border-dashed border-mercury">
-                  <h4 className="text-[10px] font-semibold text-shuttle/60 uppercase tracking-widest mb-3">Done</h4>
-                  {doneHabits.map(h => {
-                    const streak = getStreak(h.id)
-                    return (
-                      <div key={h.id} className="flex items-center gap-3 py-1.5 px-2 -mx-2 opacity-60">
-                        <input type="checkbox" className="custom-checkbox" checked onChange={() => toggleHabit(h.id)} />
-                        <span className="text-sm text-shuttle line-through decoration-pastel flex-1">{h.text}</span>
-                        {streak > 0 && (
-                          <span className="flex items-center gap-1 text-[10px] text-shuttle/60">
-                            <Flame size={10} weight="fill" className="text-pastel/70" />
-                            {streak}d
-                            {(() => { const adh = getAdherence(h.id); return adh < 90 ? ` · ${adh}%` : '' })()}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                  )}
+                </>
               )}
             </section>
 
@@ -1210,93 +1311,112 @@ export default function Today() {
         </div>
       )}
 
-      {/* ─── Morning Ritual Overlay (Sprint 19) ─────────────────────── */}
-      {ritualStep >= 1 && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-white/95 backdrop-blur-sm">
-          <div className="w-full max-w-lg px-8 py-10 space-y-8">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] uppercase tracking-widest text-shuttle">
-                Morning Planning · Step {ritualStep} of 3
-              </p>
-              <button onClick={() => setRitualStep(0)} className="text-xs text-shuttle hover:text-burnham">
-                Skip
-              </button>
+      {/* ─── Milestones Bottom Panel ──────────────────────────────────── */}
+      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center" style={{ width: 'min(600px, calc(100vw - 80px))' }}>
+        {milestonesOpen && (
+          <div className="w-full bg-white border border-mercury rounded-2xl shadow-xl p-4 mb-2 max-h-64 overflow-y-auto">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">Milestones</span>
+              <button onClick={() => setMilestonesOpen(false)} className="text-shuttle/40 hover:text-shuttle text-xs">Esc</button>
             </div>
-
-            {ritualStep === 1 && (
-              <div className="space-y-6">
-                <h2 className="text-xl font-semibold text-burnham">Yesterday's recap</h2>
-                <div className="space-y-2 text-sm text-shuttle">
-                  <p>One thing was: <span className="text-burnham font-medium">{onethingValue || 'not set'}</span></p>
+            {pendingMilestones.map(m => (
+              <div key={m.id} className="flex items-start gap-3 py-1.5 hover:bg-gray-50/60 px-1 -mx-1 rounded transition-colors">
+                <input type="checkbox" className="custom-checkbox mt-0.5 shrink-0" checked={false} onChange={() => toggleMilestone(m.id)} />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm text-burnham">{m.text}</span>
+                  {m.target_date && (
+                    <span className="text-[10px] text-shuttle/40 font-mono ml-2">{m.target_date}</span>
+                  )}
                 </div>
-                <div>
-                  <p className="text-sm text-burnham mb-3">Did you accomplish it?</p>
-                  <div className="flex gap-2">
-                    {([['done', 'Yes'], ['carried', 'Carried over'], ['missed', 'No']] as const).map(([v, label]) => (
-                      <button
-                        key={v}
-                        onClick={() => setRitualYesterdayReview(v)}
-                        className={[
-                          'flex-1 py-2 text-xs rounded border transition-colors',
-                          ritualYesterdayReview === v
-                            ? 'border-burnham text-burnham bg-burnham/5'
-                            : 'border-mercury text-shuttle hover:border-burnham/30',
-                        ].join(' ')}
-                      >
-                        {label}
-                      </button>
-                    ))}
+              </div>
+            ))}
+            {doneMilestones.length > 0 && (
+              <div className="pt-2 mt-2 border-t border-dashed border-mercury">
+                {doneMilestones.map(m => (
+                  <div key={m.id} className="flex items-center gap-3 py-1.5 px-1 -mx-1 opacity-50">
+                    <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleMilestone(m.id)} />
+                    <span className="text-sm text-shuttle line-through decoration-pastel">{m.text}</span>
                   </div>
-                </div>
-                <button onClick={() => setRitualStep(2)} className="w-full py-2.5 text-sm font-semibold text-white bg-burnham rounded-lg">
-                  Next
-                </button>
+                ))}
               </div>
             )}
-
-            {ritualStep === 2 && (
-              <div className="space-y-6">
-                <h2 className="text-xl font-semibold text-burnham">What's your one thing today?</h2>
-                <p className="text-sm text-shuttle">The one thing that would make today a win.</p>
-                <input
-                  autoFocus
-                  value={onethingValue}
-                  onChange={e => {
-                    setOnethingValue(e.target.value)
-                    if (onethingTimerRef.current) clearTimeout(onethingTimerRef.current)
-                    onethingTimerRef.current = setTimeout(() => upsertReview({ one_thing: e.target.value }), 800)
-                  }}
-                  placeholder="e.g. Finish the auth integration"
-                  className="w-full text-lg font-medium border-b-2 border-mercury focus:border-burnham outline-none bg-transparent pb-2 text-burnham placeholder-shuttle/30"
-                />
-                <button
-                  onClick={() => setRitualStep(3)}
-                  disabled={!onethingValue.trim()}
-                  className="w-full py-2.5 text-sm font-semibold text-white bg-burnham rounded-lg disabled:opacity-40"
-                >
-                  Next
-                </button>
-              </div>
+            {milestones.length === 0 && (
+              <p className="text-xs text-shuttle/40 text-center py-4">No milestones yet</p>
             )}
+          </div>
+        )}
+        <button
+          onClick={() => setMilestonesOpen(v => !v)}
+          className="flex items-center gap-3 bg-white border border-mercury rounded-full px-4 py-2 shadow-md hover:shadow-lg transition-all text-[11px] group"
+        >
+          <span className="font-mono text-shuttle/30 border border-mercury/50 rounded px-1 py-0.5 text-[9px] group-hover:text-shuttle/60 transition-colors">M</span>
+          <span className="text-burnham font-medium">Milestones</span>
+          <span className="text-shuttle/40">{pendingMilestones.length} pending</span>
+          <span className="text-shuttle/25 text-[10px]">{milestonesOpen ? '↓' : '↑'}</span>
+        </button>
+      </div>
 
-            {ritualStep === 3 && (
-              <div className="space-y-6">
-                <h2 className="text-xl font-semibold text-burnham">Today's plan</h2>
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-start gap-3">
-                    <span className="text-[10px] uppercase tracking-widest text-shuttle w-20 shrink-0 pt-0.5">Objective</span>
-                    <span className="text-burnham font-medium">{onethingValue}</span>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <span className="text-[10px] uppercase tracking-widest text-shuttle w-20 shrink-0 pt-0.5">Habits</span>
-                    <span className="text-burnham">{habits.length} to track today</span>
-                  </div>
-                </div>
-                <button onClick={() => setRitualStep(0)} className="w-full py-2.5 text-sm font-semibold text-white bg-burnham rounded-lg">
-                  Begin the Day
-                </button>
-              </div>
-            )}
+      {/* ─── Quick-Add Overlay (⌘N — from anywhere) ──────────────────── */}
+      {quickAddOpen && (
+        <div
+          className="fixed inset-0 z-[200] flex items-start justify-center pt-40 bg-black/10 backdrop-blur-[2px]"
+          onClick={e => { if (e.target === e.currentTarget) setQuickAddOpen(false) }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl border border-mercury p-6 w-full max-w-lg mx-4">
+            <p className="text-[9px] uppercase tracking-[0.15em] text-shuttle/30 mb-4 font-mono">Quick Add Task · ⌘N</p>
+            <input
+              ref={quickAddRef}
+              autoFocus
+              value={quickAddText}
+              onChange={e => setQuickAddText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { submitQuickAdd() }
+                if (e.key === 'Escape') { setQuickAddOpen(false); setQuickAddText('') }
+              }}
+              placeholder="What needs to get done?"
+              className="w-full text-lg text-burnham placeholder-shuttle/20 border-none outline-none bg-transparent"
+            />
+            <div className="flex items-center justify-between mt-5 pt-4 border-t border-mercury">
+              <span className="text-[9px] text-shuttle/25 font-mono flex items-center gap-3">
+                <span>↵ add</span>
+                <span>Esc close</span>
+              </span>
+              <span className="text-[9px] text-shuttle/20 font-mono">supports @goal /am /pm</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Mandatory Objective Drawer ───────────────────────────────── */}
+      {dataLoaded && !onethingValue && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-burnham">
+          <div className="w-full max-w-md px-8">
+            <p className="text-[9px] uppercase tracking-[0.2em] text-white/25 mb-10 font-mono">{monthStr}</p>
+            <h1 className="text-2xl font-semibold text-white mb-3 leading-tight">
+              What's your one thing today?
+            </h1>
+            <p className="text-sm text-white/35 mb-10 leading-relaxed">
+              The single outcome that makes today a win.<br />Everything else is secondary.
+            </p>
+            <input
+              autoFocus
+              value={objectiveDraft}
+              onChange={e => setObjectiveDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && objectiveDraft.trim()) {
+                  handleOnethingChange(objectiveDraft)
+                }
+              }}
+              placeholder="e.g. Ship the auth integration"
+              className="w-full bg-transparent border-b border-white/20 focus:border-white/50 outline-none text-xl text-white placeholder-white/15 pb-3 transition-colors"
+            />
+            <button
+              onClick={() => { if (objectiveDraft.trim()) handleOnethingChange(objectiveDraft) }}
+              disabled={!objectiveDraft.trim()}
+              className="mt-10 px-8 py-3 bg-white text-burnham font-semibold rounded-xl text-sm disabled:opacity-20 transition-opacity hover:bg-gossip"
+            >
+              Begin the day →
+            </button>
           </div>
         </div>
       )}
