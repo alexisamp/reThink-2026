@@ -697,10 +697,13 @@ export default function Today() {
   }
 
   return (
-    <div className="h-screen bg-white text-burnham font-sans flex overflow-hidden">
+    <div className="h-screen bg-white text-burnham font-sans">
 
       {/* ─── Main content ──────────────────────────────────────────────── */}
-      <main className="flex-1 h-full flex flex-col relative">
+      <main
+        className="h-screen flex flex-col relative overflow-hidden transition-all duration-300"
+        style={{ marginLeft: sidebarOpen ? 'clamp(280px, 30%, 360px)' : '2.5rem' }}
+      >
 
         {/* ── One Thing header ──────────────────────────────────────── */}
         {onethingValue && (
@@ -1015,8 +1018,8 @@ export default function Today() {
         </div>
       </main>
 
-      {/* ─── Left Sidebar 30% ─────────────────────────────────────────── */}
-      <aside className={`${sidebarOpen ? 'w-[30%] min-w-[280px] max-w-[360px]' : 'w-10'} bg-white border-r border-mercury h-full flex flex-col relative z-10 transition-all duration-300 overflow-visible order-first`}>
+      {/* ─── Left Sidebar — fixed so it never scrolls away ────────────── */}
+      <aside className={`${sidebarOpen ? 'w-[clamp(280px,30%,360px)]' : 'w-10'} fixed top-0 left-0 h-screen bg-white border-r border-mercury flex flex-col z-20 transition-all duration-300 overflow-visible`}>
         {/* ─── Sidebar header: logo + name + toggle ─── */}
         {sidebarOpen ? (
           <div className="flex items-center justify-between px-4 pt-4 pb-3 shrink-0">
@@ -1350,25 +1353,53 @@ export default function Today() {
         </div>
       )}
 
-      {/* ─── Milestones Bottom Panel ──────────────────────────────────── */}
-      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center" style={{ width: 'min(600px, calc(100vw - 80px))' }}>
+      {/* ─── Milestones — bottom-right floating panel ─────────────────── */}
+      <div className="fixed bottom-6 right-6 z-30 flex flex-col items-end gap-2" style={{ maxWidth: 'min(400px, calc(100vw - 6rem))' }}>
         {milestonesOpen && (
-          <div className="w-full bg-white border border-mercury rounded-2xl shadow-xl p-4 mb-2 max-h-64 overflow-y-auto">
+          <div className="w-full bg-white border border-mercury rounded-2xl shadow-xl p-4 max-h-72 overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
               <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">Milestones</span>
               <button onClick={() => setMilestonesOpen(false)} className="text-shuttle/40 hover:text-shuttle text-xs">Esc</button>
             </div>
-            {pendingMilestones.map(m => (
-              <div key={m.id} className="flex items-start gap-3 py-1.5 hover:bg-gray-50/60 px-1 -mx-1 rounded transition-colors">
-                <input type="checkbox" className="custom-checkbox mt-0.5 shrink-0" checked={false} onChange={() => toggleMilestone(m.id)} />
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm text-burnham">{m.text}</span>
-                  {m.target_date && (
-                    <span className="text-[10px] text-shuttle/40 font-mono ml-2">{m.target_date}</span>
-                  )}
-                </div>
-              </div>
-            ))}
+
+            {/* Pending — grouped by goal */}
+            {(() => {
+              const goalOrder = goals.map(g => g.id)
+              const grouped = pendingMilestones.reduce<Record<string, typeof pendingMilestones>>((acc, m) => {
+                const key = m.goal_id ?? '__none__'
+                ;(acc[key] ??= []).push(m)
+                return acc
+              }, {})
+              const sortedKeys = Object.keys(grouped).sort((a, b) => {
+                const ai = goalOrder.indexOf(a), bi = goalOrder.indexOf(b)
+                return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+              })
+              if (sortedKeys.length === 0) return <p className="text-xs text-shuttle/40 text-center py-3">No pending milestones</p>
+              return sortedKeys.map(key => {
+                const goal = goals.find(g => g.id === key)
+                const label = goal ? (goal.emoji ? `${goal.emoji} ` : '') + (goal.alias ?? goal.text.slice(0, 20)) : null
+                return (
+                  <div key={key} className="mb-3 last:mb-0">
+                    {label && (
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-shuttle/40 mb-1.5">{label}</p>
+                    )}
+                    {grouped[key].map(m => (
+                      <div key={m.id} className="flex items-start gap-3 py-1.5 hover:bg-gray-50/60 px-1 -mx-1 rounded transition-colors">
+                        <input type="checkbox" className="custom-checkbox mt-0.5 shrink-0" checked={false} onChange={() => toggleMilestone(m.id)} />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm text-burnham">{m.text}</span>
+                          {m.target_date && (
+                            <span className="text-[10px] text-shuttle/40 font-mono ml-2">{m.target_date}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })
+            })()}
+
+            {/* Done milestones */}
             {doneMilestones.length > 0 && (
               <div className="pt-2 mt-2 border-t border-dashed border-mercury">
                 {doneMilestones.map(m => (
@@ -1378,9 +1409,6 @@ export default function Today() {
                   </div>
                 ))}
               </div>
-            )}
-            {milestones.length === 0 && (
-              <p className="text-xs text-shuttle/40 text-center py-4">No milestones yet</p>
             )}
           </div>
         )}
