@@ -1117,7 +1117,7 @@ export default function Today() {
 
                 {/* Chip strip — all habits always visible */}
                 <div className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1 mb-2" style={{ scrollbarWidth: 'none' }}>
-                  {habits.map(habit => {
+                  {[...pendingHabits, ...doneHabits].map(habit => {
                     const currentLog = logs.find(l => l.habit_id === habit.id)
                     const currentVal = currentLog?.value ?? 0
                     const isDone = isHabitDone(habit)
@@ -1155,7 +1155,7 @@ export default function Today() {
                               className="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full"
                               title={habit.text}
                             >
-                              {habit.emoji && <span className="leading-none">{habit.emoji}</span>}
+                              {habit.emoji && <span className="leading-none text-[13px]">{habit.emoji}</span>}
                               {editingQuantifiedHabitId === habit.id ? (
                                 <input
                                   autoFocus
@@ -1181,9 +1181,9 @@ export default function Today() {
                                   }}
                                 />
                               ) : (
-                                <span>{label}</span>
+                                <span className="whitespace-nowrap">{label}</span>
                               )}
-                              <span className="text-[9px] font-mono opacity-60">{currentVal}/{habit.daily_target}</span>
+                              <span className="text-[9px] font-mono opacity-60 whitespace-nowrap">{currentVal}/{habit.daily_target}</span>
                               {isDone
                                 ? <Check size={10} weight="bold" className="text-pastel shrink-0" />
                                 : <span className="w-1.5 h-1.5 rounded-full bg-mercury/80 shrink-0" />
@@ -1202,8 +1202,8 @@ export default function Today() {
                               className="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full"
                               title={habit.text}
                             >
-                              {habit.emoji && <span className="leading-none">{habit.emoji}</span>}
-                              <span>{label}</span>
+                              {habit.emoji && <span className="leading-none text-[13px]">{habit.emoji}</span>}
+                              <span className="whitespace-nowrap">{label}</span>
                               {isDone
                                 ? <Check size={10} weight="bold" className="text-pastel shrink-0" />
                                 : <span className="w-1.5 h-1.5 rounded-full bg-mercury/80 shrink-0" />
