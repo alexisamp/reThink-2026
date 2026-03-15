@@ -211,3 +211,19 @@ export interface MonthlyKpiEntry {
 }
 
 export type NavRoute = '/today' | '/monthly' | '/strategy' | '/dashboard' | '/weekly-review' | '/library'
+
+export type CaptureType = 'idea' | 'learning' | 'reflection' | 'decision' | 'win' | 'question'
+
+export interface Capture {
+  id: string
+  user_id: string
+  type: CaptureType
+  title: string
+  body: string | null
+  url: string | null
+  linked_goal_id: string | null
+  linked_milestone_id: string | null
+  captured_date: string
+  created_at: string
+  updated_at: string
+}

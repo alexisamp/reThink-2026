@@ -1,4 +1,4 @@
-import { Fragment, useState, useRef, useEffect, type ReactNode } from 'react'
+import { Fragment, useState, useRef, useEffect, type ReactNode, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { House, CalendarBlank, ChartPie, Gear } from '@phosphor-icons/react'
 import type { User } from '@supabase/supabase-js'
@@ -7,6 +7,7 @@ import { useNavShortcuts, useKeyboardShortcuts } from '@/hooks/useKeyboardShortc
 import CommandPalette from '@/components/CommandPalette'
 import SettingsModal from '@/components/SettingsModal'
 import type { UpdaterState } from '@/hooks/useUpdater'
+import type { Capture } from '@/types'
 
 interface NavItem {
   label: string
@@ -38,6 +39,10 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [_captureToOpen, setCaptureToOpen] = useState<Capture | null>(null)
+  const handleOpenCapture = useCallback((capture: Capture) => {
+    setCaptureToOpen(capture)
+  }, [])
   const profileRef = useRef<HTMLDivElement>(null)
 
   useNavShortcuts()
@@ -168,7 +173,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         </div>
       </nav>
 
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onOpenCapture={handleOpenCapture} />
 
       <SettingsModal
         open={settingsOpen}
