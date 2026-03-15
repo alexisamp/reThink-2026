@@ -4,7 +4,10 @@ import {
   ArrowSquareOut, X, Link, Target
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
-import type { Capture, CaptureType, Goal, Milestone } from '@/types'
+import type { Capture, CaptureType } from '@/types'
+
+type GoalOption = { id: string; text: string; alias?: string | null }
+type MilestoneOption = { id: string; text: string }
 
 // ── Capture type config ──────────────────────────────────────────────
 const CAPTURE_CONFIG: Record<CaptureType, {
@@ -73,8 +76,8 @@ export function CaptureChip({ type, title, onClick }: {
 interface CaptureModalProps {
   capture: Capture | null          // null = not open
   onClose: () => void
-  goals: Goal[]
-  milestones: Milestone[]
+  goals: GoalOption[]
+  milestones: MilestoneOption[]
   onUpdate: (updated: Capture) => void
 }
 
