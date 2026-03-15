@@ -565,7 +565,7 @@ export default function Today() {
     .sort((a, b) => a.daysLeft - b.daysLeft)[0] ?? null
 
   const unloggedIndicatorsCount = indicators.filter(ind =>
-    !indicatorLogs.some(l => l.indicator_id === ind.id && l.log_date === today)
+    !indicatorLogs.some(l => l.leading_indicator_id === ind.id && l.log_date === today)
   ).length
 
   // BINARY / QUANTIFIED habit helpers
