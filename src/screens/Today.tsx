@@ -1629,9 +1629,9 @@ export default function Today() {
                 </div>
 
                 <div className="relative flex-1 flex flex-col min-h-0">
-                {/* Journal capture autocomplete */}
+                {/* Journal capture autocomplete — inline (no absolute, avoids overflow-y-auto clipping) */}
                 {journalEditing && journalDropdown && journalDropdown.items.length > 0 && (
-                  <div className="absolute left-0 right-0 bottom-full mb-1 bg-white border border-mercury rounded-xl shadow-lg z-20 overflow-hidden">
+                  <div className="mb-1 bg-white border border-mercury rounded-xl shadow-sm overflow-hidden">
                     <div className="px-3 py-1.5 border-b border-mercury/40">
                       <span className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono">Tipo de captura</span>
                     </div>
