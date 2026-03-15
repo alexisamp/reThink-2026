@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useNavShortcuts, useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import CommandPalette from '@/components/CommandPalette'
 import SettingsModal from '@/components/SettingsModal'
+import CaptureModal from '@/components/CaptureModal'
 import type { UpdaterState } from '@/hooks/useUpdater'
 import type { Capture } from '@/types'
 
@@ -39,7 +40,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [_captureToOpen, setCaptureToOpen] = useState<Capture | null>(null)
+  const [captureToOpen, setCaptureToOpen] = useState<Capture | null>(null)
   const handleOpenCapture = useCallback((capture: Capture) => {
     setCaptureToOpen(capture)
   }, [])
@@ -179,6 +180,14 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         updater={updater}
+      />
+
+      <CaptureModal
+        capture={captureToOpen}
+        onClose={() => setCaptureToOpen(null)}
+        goals={[]}
+        milestones={[]}
+        onUpdate={() => {}}
       />
     </div>
   )
