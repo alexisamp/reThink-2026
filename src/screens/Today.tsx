@@ -120,12 +120,12 @@ function SortableTodoRow({ todo, goal, isEditing, editingText, onEditStart, onEd
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
 
   return (
-    <div ref={setNodeRef} style={style} className="group flex items-center gap-2 py-1.5 hover:bg-gray-50/50 px-2 -mx-2 rounded transition-colors">
-      {/* Drag handle */}
+    <div ref={setNodeRef} style={style} className="relative group flex items-center gap-2 py-1.5 hover:bg-gray-50/50 px-2 -mx-2 rounded transition-colors">
+      {/* Drag handle — absolute so it doesn't shift the checkbox */}
       <div
         {...attributes}
         {...listeners}
-        className="opacity-0 group-hover:opacity-25 hover:!opacity-60 cursor-grab active:cursor-grabbing text-shuttle shrink-0 transition-opacity touch-none"
+        className="absolute -left-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-25 hover:!opacity-60 cursor-grab active:cursor-grabbing text-shuttle transition-opacity touch-none"
         title="Drag to reorder"
       >
         <DotsSixVertical size={13} />
@@ -1418,7 +1418,7 @@ export default function Today() {
                       {doneTodos.map(todo => {
                         const goal = todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null
                         return (
-                          <div key={todo.id} className="group flex items-center gap-3 py-1.5 px-2 -mx-2 opacity-50 hover:opacity-70 transition-opacity">
+                          <div key={todo.id} className="group flex items-center gap-2 py-1.5 px-2 -mx-2 opacity-50 hover:opacity-70 transition-opacity">
                             <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleTodo(todo.id)} />
                             <span className="text-[13px] text-shuttle line-through decoration-pastel flex-1 truncate">{todo.text}</span>
                             {goal && (
