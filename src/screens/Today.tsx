@@ -1036,7 +1036,7 @@ export default function Today() {
 
         {/* ── One Thing header ──────────────────────────────────────── */}
         {onethingValue && (
-          <div className="px-10 pt-7 pb-4 flex items-baseline gap-4 border-b border-mercury/30 shrink-0">
+          <div className="px-10 pt-7 pb-4 flex items-baseline gap-4 border-b border-mercury/30 shrink-0 sticky top-0 z-10 bg-white">
             <span className="text-[9px] font-mono text-shuttle/30 uppercase tracking-[0.15em] whitespace-nowrap">one thing</span>
             <span className="text-sm font-semibold text-burnham leading-snug">{onethingValue}</span>
           </div>
