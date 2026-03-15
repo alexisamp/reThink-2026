@@ -70,8 +70,18 @@ export interface LeadingIndicator {
   target: number | null
   frequency: string | null
   is_active: boolean
+  habit_id: string | null  // if set, auto-fed from habit logs
   created_at: string
   updated_at: string
+}
+
+export interface IndicatorDailyLog {
+  id: string
+  user_id: string
+  leading_indicator_id: string
+  log_date: string
+  value: number
+  created_at: string
 }
 
 export interface Habit {
@@ -87,8 +97,11 @@ export interface Habit {
   unit: string | null
   is_active: boolean
   calendar_event_id: string | null
-  alias: string | null   // short label ≤20 chars shown in habit chip strip
-  emoji: string | null   // optional emoji icon for habit chip
+  alias: string | null            // short label ≤20 chars shown in habit chip strip
+  emoji: string | null            // optional emoji icon for habit chip
+  habit_type: 'BINARY' | 'QUANTIFIED'  // default 'BINARY'
+  daily_target: number | null     // target value per day (QUANTIFIED only)
+  linked_indicator_id: string | null   // optional link to leading indicator
   created_at: string
   updated_at: string
 }

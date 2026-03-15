@@ -4,6 +4,7 @@ import {
   Timer, CalendarBlank, SidebarSimple,
   Flame, TrashSimple, NotePencil, GearSix,
   TextB, TextItalic, TextStrikethrough, DotsSixVertical,
+  X, ListBullets, ListNumbers,
 } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -14,7 +15,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
-import type { Todo, Habit, HabitLog, Review, Milestone, Goal } from '@/types'
+import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog } from '@/types'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import StreakCelebration from '@/components/StreakCelebration'
 import EndOfDayDrawer from '@/components/EndOfDayDrawer'
@@ -44,6 +45,7 @@ function renderMarkdown(text: string): string {
     .replace(/^# (.+)$/gm, '<div class="font-semibold text-burnham text-sm mt-2 mb-0.5">$1</div>')
     .replace(/^## (.+)$/gm, '<div class="font-medium text-burnham text-xs mt-1.5">$1</div>')
     .replace(/^[-*] (.+)$/gm, '<div class="ml-3 before:content-[\'·\'] before:mr-1.5 before:text-shuttle">$1</div>')
+    .replace(/^(\d+)\. (.+)$/gm, '<div class="flex gap-1.5 items-start"><span class="font-mono text-shuttle/40 shrink-0 text-[10px] pt-px">$1.</span><span>$2</span></div>')
     .replace(/\n/g, '<br>')
 }
 
@@ -154,9 +156,19 @@ function SortableTodoRow({ todo, goal, isEditing, editingText, onEditStart, onEd
 
 export default function Today() {
   const today = localDate()
+  const tomorrow = localDate(new Date(new Date().getTime() + 86400000))
   const yesterdayDate = new Date()
   yesterdayDate.setDate(yesterdayDate.getDate() - 1)
   const yesterdayStr = localDate(yesterdayDate)
+
+  const startOfWeek = (() => {
+    const d = new Date()
+    const day = d.getDay()
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+    const monday = new Date(d)
+    monday.setDate(diff)
+    return localDate(monday)
+  })()
 
   // Data
   const [todos, setTodos] = useState<Todo[]>([])
@@ -166,9 +178,17 @@ export default function Today() {
   const [logs, setLogs] = useState<HabitLog[]>([])
   const [recentLogs, setRecentLogs] = useState<HabitLog[]>([])
   const [review, setReview] = useState<Review | null>(null)
+  const [tomorrowReview, setTomorrowReview] = useState<Review | null>(null)
   const [goals, setGoals] = useState<Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'>[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [dataLoaded, setDataLoaded] = useState(false)
+
+  // Leading Indicators
+  const [indicators, setIndicators] = useState<LeadingIndicator[]>([])
+  const [indicatorLogs, setIndicatorLogs] = useState<IndicatorDailyLog[]>([])
+  const [weekIndicatorLogs, setWeekIndicatorLogs] = useState<IndicatorDailyLog[]>([])
+  const [liPanelOpen, setLiPanelOpen] = useState(false)
+  const [liDraftValues, setLiDraftValues] = useState<Record<string, string>>({})
 
   // Add task
   const [newTask, setNewTask] = useState('')
@@ -191,9 +211,21 @@ export default function Today() {
   const [journalEditing, setJournalEditing] = useState(false)
   const journalRef = useRef<HTMLTextAreaElement>(null)
 
-  // Mandatory objective drawer — always shows on first load, even if pre-filled
+  // Day State Machine
+  const [dayStartedLocal, setDayStartedLocal] = useState(() =>
+    localStorage.getItem(`day_started_${localDate()}`) === 'true'
+  )
+
+  type DayState = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
+  const getDayState = (rev: Review | null): DayState => {
+    if (rev?.tomorrow_reviewed) return 'COMPLETED'
+    if (dayStartedLocal) return 'IN_PROGRESS'
+    return 'NOT_STARTED'
+  }
+  const dayState: DayState | null = dataLoaded ? getDayState(review) : null
+
+  // Mandatory objective draft
   const [objectiveDraft, setObjectiveDraft] = useState('')
-  const [dayStarted, setDayStarted] = useState(false)
 
   // Pomodoro settings panel
   const [showPomSettings, setShowPomSettings] = useState(false)
@@ -222,10 +254,14 @@ export default function Today() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [habitPanelOpen, setHabitPanelOpen] = useState(false)
+  const [habitDrawerOpen, setHabitDrawerOpen] = useState(false)
   const [habitsCollapsed, setHabitsCollapsed] = useState(false)
   const [expandedHabitId, setExpandedHabitId] = useState<string | null>(null)
   const [milestonesOpen, setMilestonesOpen] = useState(false)
+
+  // QUANTIFIED habit inline editing
+  const [editingQuantifiedHabitId, setEditingQuantifiedHabitId] = useState<string | null>(null)
+  const [quantifiedInputValue, setQuantifiedInputValue] = useState('')
 
   // Quick-add overlay (⌘N — works from anywhere)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
@@ -246,23 +282,28 @@ export default function Today() {
     'cmd+.': () => setSidebarOpen(p => !p),
     'cmd+n': () => setQuickAddOpen(true),
     'cmd+e': () => setShowEndOfDay(true),
+    'cmd+h': () => setHabitDrawerOpen(v => !v),
+    'cmd+l': () => {
+      const drafts: Record<string, string> = {}
+      indicators.filter(ind => !ind.habit_id).forEach(ind => {
+        const todayLog = indicatorLogs.find(l => l.leading_indicator_id === ind.id)
+        drafts[ind.id] = todayLog ? String(todayLog.value) : ''
+      })
+      setLiDraftValues(drafts)
+      setLiPanelOpen(true)
+    },
   })
 
-  // Space → play/pause; H → habit panel; 1-9 → mark habit; Escape → close
+  // Space → play/pause; 1-9 → mark habit in drawer; Escape → close
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
       const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true'
 
       if (e.key === 'Escape') {
-        if (habitPanelOpen) { setHabitPanelOpen(false); return }
+        if (liPanelOpen) { setLiPanelOpen(false); return }
+        if (habitDrawerOpen) { setHabitDrawerOpen(false); return }
         if (showEndOfDay) { setShowEndOfDay(false); return }
-      }
-
-      if ((e.key === 'h' || e.key === 'H') && !inInput && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault()
-        setHabitPanelOpen(v => !v)
-        return
       }
 
       if ((e.key === 'm' || e.key === 'M') && !inInput && !e.metaKey && !e.ctrlKey) {
@@ -271,13 +312,13 @@ export default function Today() {
         return
       }
 
-      if (habitPanelOpen && !inInput && e.key >= '1' && e.key <= '9') {
+      if (habitDrawerOpen && !inInput && e.key >= '1' && e.key <= '9') {
         e.preventDefault()
         const idx = parseInt(e.key) - 1
-        const pending = habits.filter(h => !logs.some(l => l.habit_id === h.id && l.value === 1))
+        const pending = habits.filter(h => !isHabitDone(h))
         if (pending[idx]) {
           toggleHabit(pending[idx].id)
-          if (pending.length <= 1) setHabitPanelOpen(false)
+          if (pending.length <= 1) setHabitDrawerOpen(false)
         }
         return
       }
@@ -291,7 +332,7 @@ export default function Today() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [timerRunning, timerComplete, timerElapsed, showEndOfDay, habitPanelOpen, habits, logs])
+  }, [timerRunning, timerComplete, timerElapsed, showEndOfDay, habitDrawerOpen, liPanelOpen, habits, logs])
 
   useEffect(() => {
     const load = async () => {
@@ -303,7 +344,7 @@ export default function Today() {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
       const thirtyAgoStr = localDate(thirtyDaysAgo)
 
-      const [todosRes, yesterdayTodosRes, habitsRes, logsRes, recentLogsRes, reviewRes, goalsRes, milestonesRes] = await Promise.all([
+      const [todosRes, yesterdayTodosRes, habitsRes, logsRes, recentLogsRes, reviewRes, goalsRes, milestonesRes, tomorrowRes, indicatorsRes, indicatorLogsRes, weekLogsRes] = await Promise.all([
         supabase.from('todos').select('*').eq('user_id', user.id)
           .or(`date.is.null,date.eq.${today}`).order('sort_order', { ascending: true }),
         supabase.from('todos').select('*').eq('user_id', user.id)
@@ -316,6 +357,10 @@ export default function Today() {
         supabase.from('goals').select('id, text, alias, color, emoji').eq('user_id', user.id).eq('goal_type', 'ACTIVE'),
         supabase.from('milestones').select('*').eq('user_id', user.id)
           .or(`target_date.is.null,target_date.gte.${today}`).order('target_date', { nullsFirst: true }),
+        supabase.from('reviews').select('*').eq('user_id', user.id).eq('date', tomorrow).maybeSingle(),
+        supabase.from('leading_indicators').select('*').eq('user_id', user.id).eq('is_active', true),
+        supabase.from('indicator_daily_logs').select('*').eq('user_id', user.id).eq('log_date', today),
+        supabase.from('indicator_daily_logs').select('*').eq('user_id', user.id).gte('log_date', startOfWeek).lte('log_date', today),
       ])
       setTodos(todosRes.data ?? [])
       setYesterdayTodos(yesterdayTodosRes.data ?? [])
@@ -323,8 +368,12 @@ export default function Today() {
       setLogs(logsRes.data ?? [])
       setRecentLogs(recentLogsRes.data ?? [])
       setReview(reviewRes.data)
+      setTomorrowReview(tomorrowRes.data ?? null)
       setGoals(goalsRes.data ?? [])
       setMilestones((milestonesRes.data ?? []).slice(0, 10))
+      setIndicators(indicatorsRes.data ?? [])
+      setIndicatorLogs(indicatorLogsRes.data ?? [])
+      setWeekIndicatorLogs(weekLogsRes.data ?? [])
       setDataLoaded(true)
     }
     load()
@@ -335,7 +384,6 @@ export default function Today() {
     const val = review?.one_thing ?? ''
     setOnethingValue(val)
     if (val && !objectiveDraft) setObjectiveDraft(val) // pre-fill drawer if set from yesterday
-    if (val) setDayStarted(true) // already set today's objective — skip morning overlay
   }, [review?.one_thing])
 
   // Focus timer tick
@@ -410,8 +458,19 @@ export default function Today() {
   const doneTodos = todos.filter(t => t.completed)
   const pendingMilestones = milestones.filter(m => m.status !== 'COMPLETE')
   const doneMilestones = milestones.filter(m => m.status === 'COMPLETE')
-  const pendingHabits = habits.filter(h => !logs.some(l => l.habit_id === h.id && l.value === 1))
-  const doneHabits = habits.filter(h => logs.some(l => l.habit_id === h.id && l.value === 1))
+
+  // BINARY / QUANTIFIED habit helpers
+  const isHabitDone = (habit: Habit): boolean => {
+    const log = logs.find(l => l.habit_id === habit.id)
+    if (!log) return false
+    if (habit.habit_type === 'QUANTIFIED' && habit.daily_target) {
+      return log.value >= habit.daily_target
+    }
+    return log.value === 1
+  }
+
+  const doneHabits = habits.filter(h => isHabitDone(h))
+  const pendingHabits = habits.filter(h => !isHabitDone(h))
 
   const todosProgress = todos.length > 0 ? Math.round((doneTodos.length / todos.length) * 100) : 0
   const habitsProgress = habits.length > 0 ? Math.round((doneHabits.length / habits.length) * 100) : 0
@@ -502,6 +561,54 @@ export default function Today() {
         if (habit) setCelebrationStreak({ habit, streak })
       }
     }
+  }
+
+  const logHabitValue = async (habitId: string, value: number) => {
+    if (!userId) return
+    const habit = habits.find(h => h.id === habitId)
+    if (!habit) return
+    const existing = logs.find(l => l.habit_id === habitId && l.log_date === today)
+    if (existing) {
+      const { data, error } = await supabase.from('habit_logs')
+        .update({ value })
+        .eq('id', existing.id)
+        .eq('user_id', userId)
+        .select().single()
+      if (error || !data) return
+      setLogs(prev => prev.map(l => l.id === existing.id ? data : l))
+    } else {
+      const { data, error } = await supabase.from('habit_logs')
+        .insert({ habit_id: habitId, user_id: userId, log_date: today, value })
+        .select().single()
+      if (error || !data) return
+      setLogs(prev => [...prev, data])
+    }
+  }
+
+  const saveIndicatorLogs = async () => {
+    if (!userId) return
+    const manualIndicators = indicators.filter(ind => !ind.habit_id)
+    await Promise.all(manualIndicators.map(async ind => {
+      const val = parseFloat(liDraftValues[ind.id] ?? '')
+      if (isNaN(val)) return
+      const { data } = await supabase.from('indicator_daily_logs')
+        .upsert(
+          { user_id: userId, leading_indicator_id: ind.id, log_date: today, value: val },
+          { onConflict: 'user_id,leading_indicator_id,log_date' }
+        )
+        .select().single()
+      if (data) {
+        setIndicatorLogs(prev => {
+          const idx = prev.findIndex(l => l.leading_indicator_id === ind.id)
+          return idx >= 0 ? prev.map(l => l.leading_indicator_id === ind.id ? data : l) : [...prev, data]
+        })
+        setWeekIndicatorLogs(prev => {
+          const idx = prev.findIndex(l => l.leading_indicator_id === ind.id && l.log_date === today)
+          return idx >= 0 ? prev.map(l => l.leading_indicator_id === ind.id && l.log_date === today ? data : l) : [...prev, data]
+        })
+      }
+    }))
+    setLiPanelOpen(false)
   }
 
   // Core todo submission (used by inline input and quick-add overlay)
@@ -696,6 +803,9 @@ export default function Today() {
     inputRef.current?.focus()
   }
 
+  // Suppress Lightning unused warning
+  void Lightning
+
   return (
     <div className="h-screen bg-white text-burnham font-sans">
 
@@ -717,10 +827,11 @@ export default function Today() {
         <div className="px-10 pt-3 pb-1 flex items-center gap-5 shrink-0">
           {[
             { key: '⌘N', label: 'add task' },
-            { key: 'H', label: 'habits' },
+            { key: '⌘H', label: 'habits' },
             { key: 'M', label: 'milestones' },
             { key: '⌘B', label: 'sidebar' },
             { key: '⌘E', label: 'end day' },
+            { key: '⌘L', label: 'indicators' },
             { key: '⎵', label: 'focus' },
           ].map(s => (
             <span key={s.key} className="flex items-center gap-1 text-[9px] text-shuttle/25 font-mono">
@@ -730,144 +841,282 @@ export default function Today() {
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-10 py-6 pb-32">
-          <div className="max-w-2xl w-full">
+        {dayState === 'COMPLETED' ? (
+          /* ── Day Complete Summary View ──────────────────────────── */
+          <div className="flex-1 flex flex-col items-center justify-center py-16 px-8">
+            <div className="w-full max-w-sm">
+              <p className="text-[9px] uppercase tracking-[0.2em] text-shuttle/40 mb-2 font-mono">Day complete</p>
+              <h1 className="text-xl font-semibold text-burnham mb-1">{onethingValue}</h1>
+              <p className="text-xs text-shuttle/50 mb-8">Today's one thing</p>
+              <div className="flex items-center gap-3 mb-8 text-xs text-shuttle flex-wrap">
+                <span><strong className="text-burnham font-semibold">{todos.filter(t => t.completed).length}</strong> tasks done</span>
+                <span className="text-mercury">·</span>
+                <span><strong className="text-burnham font-semibold">{doneHabits.length}/{habits.length}</strong> habits</span>
+                {review?.energy_level && (
+                  <>
+                    <span className="text-mercury">·</span>
+                    <span>energy <strong className="text-burnham font-semibold">{review.energy_level}/10</strong></span>
+                  </>
+                )}
+              </div>
+              {(tomorrowReview?.one_thing || todos.filter(t => t.date === tomorrow).length > 0) && (
+                <div className="border-t border-mercury pt-6 mb-8">
+                  <p className="text-[9px] uppercase tracking-widest text-shuttle/40 mb-3 font-mono">Tomorrow</p>
+                  {tomorrowReview?.one_thing && (
+                    <p className="text-sm font-medium text-burnham mb-3">"{tomorrowReview.one_thing}"</p>
+                  )}
+                  <div className="space-y-1.5">
+                    {todos.filter(t => t.date === tomorrow).map(t => (
+                      <div key={t.id} className="flex items-center gap-2 text-xs text-shuttle">
+                        <span className="w-1 h-1 rounded-full bg-mercury shrink-0 mt-px" />
+                        {t.text}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <p className="text-xs text-shuttle/30 italic">See you tomorrow.</p>
+            </div>
+          </div>
+        ) : (
+          /* ── Normal Today Content ───────────────────────────────── */
+          <div className="flex-1 overflow-y-auto px-10 py-6 pb-32">
+            <div className="max-w-2xl w-full">
 
-            <p className="text-[10px] font-mono text-shuttle/40 mb-7">{monthStr}</p>
+              <p className="text-[10px] font-mono text-shuttle/40 mb-7">{monthStr}</p>
 
-            {/* ── Backlog (all past incomplete todos) ─────────────── */}
-            {yesterdayTodos.length > 0 && (
+              {/* ── Habits — horizontal chip strip ──────────────────── */}
               <section className="mb-8">
-                <h3 className="text-[9px] font-semibold text-shuttle/40 uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <span className="w-4 h-px bg-shuttle/20" />
-                  Backlog · {yesterdayTodos.length} unfinished
-                </h3>
-                <div className="space-y-0.5">
-                  {yesterdayTodos.map(todo => {
-                    const daysAgo = Math.round((new Date(today).getTime() - new Date(todo.date ?? today).getTime()) / 86400000)
-                    const ageLabel = daysAgo === 1 ? 'yesterday' : daysAgo <= 7 ? `${daysAgo}d ago` : `${todo.date}`
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest flex items-center gap-2">
+                    Habits
+                    <span className="font-mono font-normal text-shuttle/40 normal-case">{doneHabits.length}/{habits.length}</span>
+                  </h3>
+                  <span className="text-[9px] font-mono text-shuttle/25 border border-mercury/50 rounded px-1">⌘H</span>
+                </div>
+
+                {/* Chip strip — all habits always visible */}
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {habits.map(habit => {
+                    const currentLog = logs.find(l => l.habit_id === habit.id)
+                    const currentVal = currentLog?.value ?? 0
+                    const isDone = isHabitDone(habit)
+                    const pct = habit.habit_type === 'QUANTIFIED' && habit.daily_target
+                      ? Math.min(100, (currentVal / habit.daily_target) * 100)
+                      : (isDone ? 100 : 0)
+                    const streak = getStreak(habit.id)
+                    const isExpanded = expandedHabitId === habit.id
+                    const label = habit.alias ?? habit.text.split(' ').slice(0, 3).join(' ')
+
+                    // Chip color based on type and state
+                    let chipClass = ''
+                    if (habit.habit_type === 'QUANTIFIED') {
+                      if (pct >= 100) chipClass = 'bg-gossip/60 border-pastel/50 text-burnham'
+                      else if (pct >= 50) chipClass = 'bg-lime-50 border-lime-400 text-lime-800'
+                      else if (pct > 0) chipClass = 'bg-amber-50 border-amber-300 text-amber-800'
+                      else chipClass = 'bg-white border-mercury text-shuttle'
+                    } else {
+                      chipClass = isDone
+                        ? 'bg-gossip/60 border-pastel/50 text-burnham'
+                        : 'bg-white border-mercury text-shuttle hover:border-shuttle/30'
+                    }
+
                     return (
-                      <div key={todo.id} className="group flex items-center gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-amber-50/30 transition-colors">
-                        <input
-                          type="checkbox"
-                          className="custom-checkbox shrink-0 opacity-60"
-                          checked={false}
-                          onChange={async () => {
-                            await supabase.from('todos').update({ completed: true }).eq('id', todo.id)
-                            setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
-                          }}
-                        />
-                        <span className="flex-1 text-sm text-shuttle/70 min-w-0 truncate">{todo.text}</span>
-                        <span className="text-[9px] font-mono text-shuttle/25 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">{ageLabel}</span>
-                        <button
-                          onClick={async () => {
-                            await supabase.from('todos').update({ date: today }).eq('id', todo.id)
-                            setTodos(prev => [...prev, { ...todo, date: today }])
-                            setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
-                          }}
-                          className="opacity-0 group-hover:opacity-100 text-[10px] text-shuttle/50 hover:text-burnham transition-all px-2 py-0.5 rounded border border-mercury/50 hover:border-burnham/30 shrink-0"
-                        >
-                          →today
-                        </button>
-                        <button
-                          onClick={async () => {
-                            await supabase.from('todos').delete().eq('id', todo.id)
-                            setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
-                          }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
-                        >
-                          <TrashSimple size={12} />
-                        </button>
+                      <div key={habit.id} className="flex flex-col items-start">
+                        {/* The pill itself */}
+                        <div className={`flex items-center gap-1.5 rounded-full border text-xs font-medium transition-all duration-200 ${chipClass}`}>
+                          {habit.habit_type === 'QUANTIFIED' ? (
+                            /* QUANTIFIED chip */
+                            <button
+                              onClick={() => {
+                                setEditingQuantifiedHabitId(habit.id)
+                                setQuantifiedInputValue(String(currentVal))
+                              }}
+                              className="flex items-center gap-1.5 pl-3 pr-1 py-1.5 rounded-full"
+                              title={habit.text}
+                            >
+                              {habit.emoji && <span className="leading-none">{habit.emoji}</span>}
+                              {editingQuantifiedHabitId === habit.id ? (
+                                <input
+                                  autoFocus
+                                  type="number"
+                                  min={0}
+                                  className="w-14 text-center text-xs bg-transparent border-b border-current outline-none"
+                                  value={quantifiedInputValue}
+                                  onChange={e => setQuantifiedInputValue(e.target.value)}
+                                  onClick={e => e.stopPropagation()}
+                                  onKeyDown={e => {
+                                    e.stopPropagation()
+                                    if (e.key === 'Enter') {
+                                      const val = Math.max(0, parseInt(quantifiedInputValue) || 0)
+                                      logHabitValue(habit.id, val)
+                                      setEditingQuantifiedHabitId(null)
+                                    }
+                                    if (e.key === 'Escape') setEditingQuantifiedHabitId(null)
+                                  }}
+                                  onBlur={() => {
+                                    const val = Math.max(0, parseInt(quantifiedInputValue) || 0)
+                                    logHabitValue(habit.id, val)
+                                    setEditingQuantifiedHabitId(null)
+                                  }}
+                                />
+                              ) : (
+                                <span>{label}</span>
+                              )}
+                              <span className="text-[9px] font-mono opacity-60">{currentVal}/{habit.daily_target}</span>
+                              {isDone
+                                ? <Check size={10} weight="bold" className="text-pastel shrink-0" />
+                                : <span className="w-1.5 h-1.5 rounded-full bg-mercury/80 shrink-0" />
+                              }
+                              {streak > 0 && (
+                                <span className="flex items-center gap-0.5 text-[9px] opacity-60">
+                                  <Flame size={8} weight="fill" className="text-pastel" />
+                                  {streak}
+                                </span>
+                              )}
+                            </button>
+                          ) : (
+                            /* BINARY chip */
+                            <button
+                              onClick={() => toggleHabit(habit.id)}
+                              className="flex items-center gap-1.5 pl-3 pr-1 py-1.5 rounded-full"
+                              title={habit.text}
+                            >
+                              {habit.emoji && <span className="leading-none">{habit.emoji}</span>}
+                              <span>{label}</span>
+                              {isDone
+                                ? <Check size={10} weight="bold" className="text-pastel shrink-0" />
+                                : <span className="w-1.5 h-1.5 rounded-full bg-mercury/80 shrink-0" />
+                              }
+                              {streak > 0 && (
+                                <span className="flex items-center gap-0.5 text-[9px] opacity-60">
+                                  <Flame size={8} weight="fill" className="text-pastel" />
+                                  {streak}
+                                </span>
+                              )}
+                            </button>
+                          )}
+                          {/* Expand toggle — visible on hover */}
+                          <button
+                            onClick={() => setExpandedHabitId(isExpanded ? null : habit.id)}
+                            className={`pr-2 py-1.5 text-[10px] transition-colors rounded-r-full ${isExpanded ? 'text-shuttle/60' : 'text-shuttle/20 hover:text-shuttle/50'}`}
+                            title="Details"
+                          >
+                            {isExpanded ? '↑' : '↓'}
+                          </button>
+                        </div>
+
+                        {/* Expanded details — shown below the chip */}
+                        {isExpanded && (
+                          <div className="mt-1.5 ml-1 flex items-center flex-wrap gap-3 text-[10px] text-shuttle/50">
+                            {habit.default_time && <span className="font-mono">{habit.default_time}</span>}
+                            {(() => { const adh = getAdherence(habit.id); return adh < 90 ? <span>{adh}% adherence</span> : null })()}
+                            <button
+                              onClick={() => setCalendarDialogHabitId(prev => prev === habit.id ? null : habit.id)}
+                              className="flex items-center gap-1 hover:text-burnham transition-colors"
+                            >
+                              <CalendarBlank size={10} /> schedule
+                            </button>
+                            {!isDone && (
+                              <select
+                                className="bg-transparent border-0 cursor-pointer hover:text-shuttle transition-colors focus:outline-none text-[10px]"
+                                onChange={e => { if (e.target.value) logFriction(habit.id, e.target.value); e.target.value = '' }}
+                                defaultValue=""
+                              >
+                                <option value="" disabled>why not?</option>
+                                <option value="Travel">Travel</option>
+                                <option value="Forgot">Forgot</option>
+                                <option value="Too tired">Too tired</option>
+                                <option value="External blocker">External blocker</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            )}
+
+                            {calendarDialogHabitId === habit.id && (
+                              <div className="mt-1.5 w-full p-3 bg-[#F8F9F9] border border-mercury rounded-lg space-y-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle mb-2">Block time in calendar</p>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <select value={calWhen} onChange={e => setCalWhen(e.target.value)}
+                                    className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none">
+                                    <option value="today">Today</option>
+                                    <option value="tomorrow">Tomorrow</option>
+                                    <option value="next_monday">Next Monday</option>
+                                  </select>
+                                  <span className="text-xs text-shuttle">at</span>
+                                  <input type="time" value={calTime} onChange={e => setCalTime(e.target.value)}
+                                    className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none" />
+                                  <select value={calDuration} onChange={e => setCalDuration(e.target.value)}
+                                    className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none">
+                                    <option value="15">15 min</option>
+                                    <option value="30">30 min</option>
+                                    <option value="45">45 min</option>
+                                    <option value="60">1 hour</option>
+                                  </select>
+                                </div>
+                                <div className="flex items-center gap-2 pt-1">
+                                  <button
+                                    onClick={() => blockHabitTime(habit)}
+                                    disabled={calSaving}
+                                    className="text-xs bg-burnham text-white px-3 py-1.5 rounded hover:bg-burnham/90 disabled:opacity-50 transition-colors"
+                                  >
+                                    {calSaving ? 'Blocking...' : 'Block time'}
+                                  </button>
+                                  <button onClick={() => setCalendarDialogHabitId(null)} className="text-xs text-shuttle hover:text-burnham transition-colors">
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
                 </div>
-                <div className="h-px bg-mercury/30 mt-5" />
               </section>
-            )}
 
-            {/* ── To-Dos ─────────────────────────────────────────────── */}
-            <section className="mb-10">
-              {/* Hidden input — only used programmatically by ⌘N overlay */}
-              <input
-                ref={inputRef}
-                className="sr-only"
-                value={newTask}
-                onChange={e => setNewTask(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'ArrowDown' && showAtSuggestions) {
-                    e.preventDefault()
-                    setSuggestionIndex(i => Math.min(i + 1, goalSuggestions.length - 1))
-                  } else if (e.key === 'ArrowUp' && showAtSuggestions) {
-                    e.preventDefault()
-                    setSuggestionIndex(i => Math.max(i - 1, -1))
-                  } else if (e.key === 'Enter' && showAtSuggestions && suggestionIndex >= 0) {
-                    e.preventDefault()
-                    selectGoalSuggestion(goalSuggestions[suggestionIndex])
-                  } else if (e.key === 'Enter' && !showAtSuggestions) {
-                    parseAndAddTodo()
-                  } else if (e.key === 'Escape' && showAtSuggestions) {
-                    setNewTask(prev => prev.replace(/@[^\s]*$/, '').trim())
-                    setSuggestionIndex(-1)
-                  }
-                }}
-              />
-              {/* Placeholder section — not needed but keep structure */}
-              <div className="relative">
-                <div className="flex items-center gap-2 group">
-                  <span />
-                  {/* Tags appear only when typing */}
-                </div>
-              </div>
+              {/* ── Separator before todos ───────────────────────────── */}
+              <div className="h-px bg-mercury/40 mb-8" />
 
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorderTodos}>
-                <SortableContext items={pendingTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-0.5 mb-6">
-                    {pendingTodos.map(todo => (
-                      <SortableTodoRow
-                        key={todo.id}
-                        todo={todo}
-                        goal={todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null}
-                        isEditing={editingTodoId === todo.id}
-                        editingText={editingTodoText}
-                        onEditStart={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text) }}
-                        onEditChange={setEditingTodoText}
-                        onEditSave={() => saveTodoText(todo.id)}
-                        onEditCancel={() => setEditingTodoId(null)}
-                        onToggle={() => toggleTodo(todo.id)}
-                        onDelete={() => deleteTodo(todo.id)}
-                      />
-                    ))}
-                    <button
-                      className="flex items-center gap-2 py-2 px-2 -mx-2 opacity-30 hover:opacity-70 transition-opacity"
-                      onClick={() => setQuickAddOpen(true)}
-                    >
-                      <div className="w-[1.15em] h-[1.15em] border border-dashed border-shuttle/60 rounded-[0.35em]" />
-                      <span className="text-xs text-shuttle font-mono">⌘N to add a task</span>
-                    </button>
-                  </div>
-                </SortableContext>
-              </DndContext>
-              {doneTodos.length > 0 && (
-                <div className="pt-5 border-t border-dashed border-mercury">
-                  <h4 className="text-[10px] font-semibold text-shuttle/60 uppercase tracking-widest mb-3">Done</h4>
-                  <div className="space-y-1">
-                    {doneTodos.map(todo => {
-                      const goal = todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null
+              {/* ── Backlog (all past incomplete todos) ─────────────── */}
+              {yesterdayTodos.length > 0 && (
+                <section className="mb-8">
+                  <h3 className="text-[9px] font-semibold text-shuttle/40 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <span className="w-4 h-px bg-shuttle/20" />
+                    Backlog · {yesterdayTodos.length} unfinished
+                  </h3>
+                  <div className="space-y-0.5">
+                    {yesterdayTodos.map(todo => {
+                      const daysAgo = Math.round((new Date(today).getTime() - new Date(todo.date ?? today).getTime()) / 86400000)
+                      const ageLabel = daysAgo === 1 ? 'yesterday' : daysAgo <= 7 ? `${daysAgo}d ago` : `${todo.date}`
                       return (
-                        <div key={todo.id} className="group flex items-center gap-3 py-1.5 px-2 -mx-2 opacity-50 hover:opacity-70 transition-opacity">
-                          <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleTodo(todo.id)} />
-                          <span className="text-sm text-shuttle line-through decoration-pastel flex-1 truncate">{todo.text}</span>
-                          {goal && (
-                            <span
-                              className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 opacity-60"
-                              style={{ backgroundColor: goal.color ? `${goal.color}20` : '#E5F9BD', color: goal.color ?? '#003720' }}
-                            >
-                              {goal.alias ?? goal.text.slice(0, 6)}
-                            </span>
-                          )}
+                        <div key={todo.id} className="group flex items-center gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-amber-50/30 transition-colors">
+                          <input
+                            type="checkbox"
+                            className="custom-checkbox shrink-0 opacity-60"
+                            checked={false}
+                            onChange={async () => {
+                              await supabase.from('todos').update({ completed: true }).eq('id', todo.id)
+                              setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                            }}
+                          />
+                          <span className="flex-1 text-sm text-shuttle/70 min-w-0 truncate">{todo.text}</span>
+                          <span className="text-[9px] font-mono text-shuttle/25 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">{ageLabel}</span>
                           <button
-                            onClick={() => deleteTodo(todo.id)}
+                            onClick={async () => {
+                              await supabase.from('todos').update({ date: today }).eq('id', todo.id)
+                              setTodos(prev => [...prev, { ...todo, date: today }])
+                              setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                            }}
+                            className="opacity-0 group-hover:opacity-100 text-[10px] text-shuttle/50 hover:text-burnham transition-all px-2 py-0.5 rounded border border-mercury/50 hover:border-burnham/30 shrink-0"
+                          >
+                            →today
+                          </button>
+                          <button
+                            onClick={async () => {
+                              await supabase.from('todos').delete().eq('id', todo.id)
+                              setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                            }}
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
                           >
                             <TrashSimple size={12} />
@@ -876,131 +1125,107 @@ export default function Today() {
                       )
                     })}
                   </div>
-                </div>
+                  <div className="h-px bg-mercury/30 mt-5" />
+                </section>
               )}
-            </section>
 
-            {/* ── Habits — horizontal chip strip ──────────────────────── */}
-            <section className="pt-8 border-t border-mercury/60">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest flex items-center gap-2">
-                  Habits
-                  <span className="font-mono font-normal text-shuttle/40 normal-case">{doneHabits.length}/{habits.length}</span>
-                </h3>
-                <span className="text-[9px] font-mono text-shuttle/25 border border-mercury/50 rounded px-1">H</span>
-              </div>
+              {/* ── To-Dos ─────────────────────────────────────────────── */}
+              <section className="mb-10">
+                {/* Hidden input — only used programmatically by ⌘N overlay */}
+                <input
+                  ref={inputRef}
+                  className="sr-only"
+                  value={newTask}
+                  onChange={e => setNewTask(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'ArrowDown' && showAtSuggestions) {
+                      e.preventDefault()
+                      setSuggestionIndex(i => Math.min(i + 1, goalSuggestions.length - 1))
+                    } else if (e.key === 'ArrowUp' && showAtSuggestions) {
+                      e.preventDefault()
+                      setSuggestionIndex(i => Math.max(i - 1, -1))
+                    } else if (e.key === 'Enter' && showAtSuggestions && suggestionIndex >= 0) {
+                      e.preventDefault()
+                      selectGoalSuggestion(goalSuggestions[suggestionIndex])
+                    } else if (e.key === 'Enter' && !showAtSuggestions) {
+                      parseAndAddTodo()
+                    } else if (e.key === 'Escape' && showAtSuggestions) {
+                      setNewTask(prev => prev.replace(/@[^\s]*$/, '').trim())
+                      setSuggestionIndex(-1)
+                    }
+                  }}
+                />
+                {/* Placeholder section — not needed but keep structure */}
+                <div className="relative">
+                  <div className="flex items-center gap-2 group">
+                    <span />
+                    {/* Tags appear only when typing */}
+                  </div>
+                </div>
 
-              {/* Chip strip — all habits always visible */}
-              <div className="flex flex-wrap gap-2 mb-2">
-                {habits.map(habit => {
-                  const done = doneHabits.some(h => h.id === habit.id)
-                  const streak = getStreak(habit.id)
-                  const isExpanded = expandedHabitId === habit.id
-                  const label = habit.alias ?? habit.text.split(' ').slice(0, 3).join(' ')
-                  return (
-                    <div key={habit.id} className="flex flex-col items-start">
-                      {/* The pill itself */}
-                      <div className={`flex items-center gap-1.5 rounded-full border text-xs font-medium transition-all duration-200 ${done ? 'bg-gossip/60 border-pastel/50 text-burnham' : 'bg-white border-mercury text-shuttle hover:border-shuttle/30'}`}>
-                        {/* Toggle area */}
-                        <button
-                          onClick={() => toggleHabit(habit.id)}
-                          className="flex items-center gap-1.5 pl-3 pr-1 py-1.5 rounded-full"
-                          title={habit.text}
-                        >
-                          {habit.emoji && <span className="leading-none">{habit.emoji}</span>}
-                          <span>{label}</span>
-                          {done
-                            ? <Check size={10} weight="bold" className="text-pastel shrink-0" />
-                            : <span className="w-1.5 h-1.5 rounded-full bg-mercury/80 shrink-0" />
-                          }
-                          {streak > 0 && (
-                            <span className="flex items-center gap-0.5 text-[9px] opacity-60">
-                              <Flame size={8} weight="fill" className="text-pastel" />
-                              {streak}
-                            </span>
-                          )}
-                        </button>
-                        {/* Expand toggle — visible on hover */}
-                        <button
-                          onClick={() => setExpandedHabitId(isExpanded ? null : habit.id)}
-                          className={`pr-2 py-1.5 text-[10px] transition-colors rounded-r-full ${isExpanded ? 'text-shuttle/60' : 'text-shuttle/20 hover:text-shuttle/50'}`}
-                          title="Details"
-                        >
-                          {isExpanded ? '↑' : '↓'}
-                        </button>
-                      </div>
-
-                      {/* Expanded details — shown below the chip */}
-                      {isExpanded && (
-                        <div className="mt-1.5 ml-1 flex items-center flex-wrap gap-3 text-[10px] text-shuttle/50">
-                          {habit.default_time && <span className="font-mono">{habit.default_time}</span>}
-                          {(() => { const adh = getAdherence(habit.id); return adh < 90 ? <span>{adh}% adherence</span> : null })()}
-                          <button
-                            onClick={() => setCalendarDialogHabitId(prev => prev === habit.id ? null : habit.id)}
-                            className="flex items-center gap-1 hover:text-burnham transition-colors"
-                          >
-                            <CalendarBlank size={10} /> schedule
-                          </button>
-                          {!done && (
-                            <select
-                              className="bg-transparent border-0 cursor-pointer hover:text-shuttle transition-colors focus:outline-none text-[10px]"
-                              onChange={e => { if (e.target.value) logFriction(habit.id, e.target.value); e.target.value = '' }}
-                              defaultValue=""
-                            >
-                              <option value="" disabled>why not?</option>
-                              <option value="Travel">Travel</option>
-                              <option value="Forgot">Forgot</option>
-                              <option value="Too tired">Too tired</option>
-                              <option value="External blocker">External blocker</option>
-                              <option value="Other">Other</option>
-                            </select>
-                          )}
-
-                          {calendarDialogHabitId === habit.id && (
-                            <div className="mt-1.5 w-full p-3 bg-[#F8F9F9] border border-mercury rounded-lg space-y-2">
-                              <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle mb-2">Block time in calendar</p>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <select value={calWhen} onChange={e => setCalWhen(e.target.value)}
-                                  className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none">
-                                  <option value="today">Today</option>
-                                  <option value="tomorrow">Tomorrow</option>
-                                  <option value="next_monday">Next Monday</option>
-                                </select>
-                                <span className="text-xs text-shuttle">at</span>
-                                <input type="time" value={calTime} onChange={e => setCalTime(e.target.value)}
-                                  className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none" />
-                                <select value={calDuration} onChange={e => setCalDuration(e.target.value)}
-                                  className="text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none">
-                                  <option value="15">15 min</option>
-                                  <option value="30">30 min</option>
-                                  <option value="45">45 min</option>
-                                  <option value="60">1 hour</option>
-                                </select>
-                              </div>
-                              <div className="flex items-center gap-2 pt-1">
-                                <button
-                                  onClick={() => blockHabitTime(habit)}
-                                  disabled={calSaving}
-                                  className="text-xs bg-burnham text-white px-3 py-1.5 rounded hover:bg-burnham/90 disabled:opacity-50 transition-colors"
-                                >
-                                  {calSaving ? 'Blocking...' : 'Block time'}
-                                </button>
-                                <button onClick={() => setCalendarDialogHabitId(null)} className="text-xs text-shuttle hover:text-burnham transition-colors">
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorderTodos}>
+                  <SortableContext items={pendingTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-0.5 mb-6">
+                      {pendingTodos.map(todo => (
+                        <SortableTodoRow
+                          key={todo.id}
+                          todo={todo}
+                          goal={todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null}
+                          isEditing={editingTodoId === todo.id}
+                          editingText={editingTodoText}
+                          onEditStart={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text) }}
+                          onEditChange={setEditingTodoText}
+                          onEditSave={() => saveTodoText(todo.id)}
+                          onEditCancel={() => setEditingTodoId(null)}
+                          onToggle={() => toggleTodo(todo.id)}
+                          onDelete={() => deleteTodo(todo.id)}
+                        />
+                      ))}
+                      <button
+                        className="flex items-center gap-2 py-2 px-2 -mx-2 opacity-30 hover:opacity-70 transition-opacity"
+                        onClick={() => setQuickAddOpen(true)}
+                      >
+                        <div className="w-[1.15em] h-[1.15em] border border-dashed border-shuttle/60 rounded-[0.35em]" />
+                        <span className="text-xs text-shuttle font-mono">⌘N to add a task</span>
+                      </button>
                     </div>
-                  )
-                })}
-              </div>
-            </section>
+                  </SortableContext>
+                </DndContext>
+                {doneTodos.length > 0 && (
+                  <div className="pt-5 border-t border-dashed border-mercury">
+                    <h4 className="text-[10px] font-semibold text-shuttle/60 uppercase tracking-widest mb-3">Done</h4>
+                    <div className="space-y-1">
+                      {doneTodos.map(todo => {
+                        const goal = todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null
+                        return (
+                          <div key={todo.id} className="group flex items-center gap-3 py-1.5 px-2 -mx-2 opacity-50 hover:opacity-70 transition-opacity">
+                            <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleTodo(todo.id)} />
+                            <span className="text-sm text-shuttle line-through decoration-pastel flex-1 truncate">{todo.text}</span>
+                            {goal && (
+                              <span
+                                className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 opacity-60"
+                                style={{ backgroundColor: goal.color ? `${goal.color}20` : '#E5F9BD', color: goal.color ?? '#003720' }}
+                              >
+                                {goal.alias ?? goal.text.slice(0, 6)}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => deleteTodo(todo.id)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
+                            >
+                              <TrashSimple size={12} />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </section>
 
+            </div>
           </div>
-        </div>
+        )}
       </main>
 
       {/* ─── Left Sidebar — fixed so it never scrolls away ────────────── */}
@@ -1098,6 +1323,43 @@ export default function Today() {
                       >
                         <TextStrikethrough size={11} />
                       </button>
+                      <button
+                        onMouseDown={e => {
+                          e.preventDefault()
+                          const ta = journalRef.current
+                          if (!ta) return
+                          const { selectionStart, value } = ta
+                          const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1
+                          const lineContent = value.substring(lineStart, selectionStart)
+                          if (!lineContent.startsWith('- ')) {
+                            const newVal = value.substring(0, lineStart) + '- ' + lineContent + value.substring(selectionStart)
+                            handleJournalChange(newVal)
+                            setTimeout(() => { ta.selectionStart = ta.selectionEnd = selectionStart + 2 }, 0)
+                          }
+                        }}
+                        className="w-5 h-5 rounded flex items-center justify-center text-shuttle hover:text-burnham hover:bg-mercury/30 transition-colors"
+                        title="Bullet list"
+                      ><ListBullets size={11} /></button>
+                      <button
+                        onMouseDown={e => {
+                          e.preventDefault()
+                          const ta = journalRef.current
+                          if (!ta) return
+                          const { selectionStart, value } = ta
+                          const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1
+                          const lineContent = value.substring(lineStart, selectionStart)
+                          if (!lineContent.match(/^\d+\. /)) {
+                            const lines = value.substring(0, lineStart).split('\n')
+                            const prevNum = lines.reduce((n: number, l: string) => { const m = l.match(/^(\d+)\. /); return m ? parseInt(m[1]) : n }, 0)
+                            const nextNum = prevNum + 1
+                            const newVal = value.substring(0, lineStart) + `${nextNum}. ` + lineContent + value.substring(selectionStart)
+                            handleJournalChange(newVal)
+                            setTimeout(() => { ta.selectionStart = ta.selectionEnd = selectionStart + `${nextNum}. `.length }, 0)
+                          }
+                        }}
+                        className="w-5 h-5 rounded flex items-center justify-center text-shuttle hover:text-burnham hover:bg-mercury/30 transition-colors"
+                        title="Numbered list"
+                      ><ListNumbers size={11} /></button>
                     </div>
                   )}
                 </div>
@@ -1111,6 +1373,36 @@ export default function Today() {
                     value={journalValue}
                     onChange={e => handleJournalChange(e.target.value)}
                     onBlur={() => setJournalEditing(false)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const ta = e.currentTarget
+                        const { selectionStart, value } = ta
+                        const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1
+                        const currentLine = value.substring(lineStart, selectionStart)
+                        if (currentLine.startsWith('- ')) {
+                          e.preventDefault()
+                          if (currentLine.trim() === '-') {
+                            const newVal = value.substring(0, lineStart) + '\n' + value.substring(selectionStart)
+                            handleJournalChange(newVal)
+                            setTimeout(() => { ta.selectionStart = ta.selectionEnd = lineStart + 1 }, 0)
+                          } else {
+                            const newVal = value.substring(0, selectionStart) + '\n- ' + value.substring(selectionStart)
+                            handleJournalChange(newVal)
+                            setTimeout(() => { ta.selectionStart = ta.selectionEnd = selectionStart + 3 }, 0)
+                          }
+                          return
+                        }
+                        const numMatch = currentLine.match(/^(\d+)\. (.+)/)
+                        if (numMatch) {
+                          e.preventDefault()
+                          const nextNum = parseInt(numMatch[1]) + 1
+                          const insert = `\n${nextNum}. `
+                          const newVal = value.substring(0, selectionStart) + insert + value.substring(selectionStart)
+                          handleJournalChange(newVal)
+                          setTimeout(() => { ta.selectionStart = ta.selectionEnd = selectionStart + insert.length }, 0)
+                        }
+                      }
+                    }}
                   />
                 ) : (
                   <div
@@ -1297,45 +1589,113 @@ export default function Today() {
         )}
       </div>
 
-      {/* ─── Habit Quick-Mark Panel (H shortcut) ────────────────────── */}
-      {habitPanelOpen && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-white border border-mercury rounded-xl shadow-xl px-5 py-4 w-80">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">Habits · press number to mark</span>
-            <button onClick={() => setHabitPanelOpen(false)} className="text-shuttle/40 hover:text-shuttle text-xs">Esc</button>
-          </div>
-          <div className="space-y-1">
-            {habits.filter(h => !logs.some(l => l.habit_id === h.id && l.value === 1)).map((habit, idx) => (
-              <button
-                key={habit.id}
-                onClick={() => { toggleHabit(habit.id); if (pendingHabits.length <= 1) setHabitPanelOpen(false) }}
-                className="w-full flex items-center gap-3 px-2 py-1.5 rounded hover:bg-gossip/30 transition-colors text-left group"
-              >
-                <span className="text-[10px] font-mono w-4 text-shuttle/50 shrink-0 group-hover:text-burnham">{idx + 1}</span>
-                <span className="text-sm text-burnham truncate">{habit.text}</span>
-                {getStreak(habit.id) > 0 && (
-                  <span className="flex items-center gap-0.5 text-[10px] text-shuttle/50 ml-auto shrink-0">
-                    <Flame size={9} weight="fill" className="text-pastel/70" />
-                    {getStreak(habit.id)}
-                  </span>
-                )}
-              </button>
-            ))}
-            {habits.filter(h => logs.some(l => l.habit_id === h.id && l.value === 1)).length > 0 && (
-              <div className="pt-2 border-t border-mercury/60 mt-1 space-y-1">
-                {habits.filter(h => logs.some(l => l.habit_id === h.id && l.value === 1)).map(habit => (
-                  <div key={habit.id} className="flex items-center gap-3 px-2 py-1 opacity-40">
-                    <Check size={11} weight="bold" className="text-pastel shrink-0" />
-                    <span className="text-xs text-shuttle line-through">{habit.text}</span>
-                  </div>
-                ))}
+      {/* ── Habit Drawer (⌘H) ───────────────────────────────── */}
+      {habitDrawerOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-[185] bg-black/10 backdrop-blur-[1px]"
+            onClick={() => setHabitDrawerOpen(false)}
+          />
+          <div className="fixed right-0 top-0 bottom-0 z-[190] w-80 bg-white border-l border-mercury shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-mercury shrink-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-burnham">Habits</h2>
+                <span className="text-[10px] font-mono text-shuttle/40">{doneHabits.length}/{habits.length}</span>
               </div>
-            )}
-            {habits.length === 0 && (
-              <p className="text-xs text-shuttle/40 text-center py-2">No habits for today</p>
-            )}
+              <button onClick={() => setHabitDrawerOpen(false)} className="text-shuttle hover:text-burnham transition-colors p-1">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
+              {habits.filter(h => h.habit_type !== 'QUANTIFIED').length > 0 && (
+                <div>
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-shuttle/40 mb-3">Yes / No</p>
+                  <div className="space-y-1">
+                    {habits.filter(h => h.habit_type !== 'QUANTIFIED').map((habit, idx) => {
+                      const done = isHabitDone(habit)
+                      const streak = getStreak(habit.id)
+                      return (
+                        <div key={habit.id} className="flex items-center gap-3 py-2 px-2 -mx-2 rounded hover:bg-gray-50/60 transition-colors">
+                          <input
+                            type="checkbox"
+                            className="custom-checkbox shrink-0"
+                            checked={done}
+                            onChange={() => toggleHabit(habit.id)}
+                          />
+                          {habit.emoji && <span className="text-base leading-none shrink-0">{habit.emoji}</span>}
+                          <span className={`flex-1 text-sm ${done ? 'line-through text-shuttle/40' : 'font-medium text-burnham'}`}>
+                            {habit.text}
+                          </span>
+                          {streak > 0 && (
+                            <span className="flex items-center gap-0.5 text-[10px] text-shuttle/40 shrink-0">
+                              <Flame size={10} weight="fill" className="text-pastel" />
+                              {streak}
+                            </span>
+                          )}
+                          <span className="text-[9px] font-mono text-shuttle/20 border border-mercury/40 rounded px-1 shrink-0">{idx + 1}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              {habits.filter(h => h.habit_type === 'QUANTIFIED').length > 0 && (
+                <div>
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-shuttle/40 mb-3">Track Progress</p>
+                  <div className="space-y-4">
+                    {habits.filter(h => h.habit_type === 'QUANTIFIED').map(habit => {
+                      const currentLog = logs.find(l => l.habit_id === habit.id)
+                      const currentVal = currentLog?.value ?? 0
+                      const pct = habit.daily_target ? Math.min(100, (currentVal / habit.daily_target) * 100) : 0
+                      const done = isHabitDone(habit)
+                      const streak = getStreak(habit.id)
+                      return (
+                        <div key={habit.id} className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            {habit.emoji && <span className="text-base leading-none shrink-0">{habit.emoji}</span>}
+                            <span className="flex-1 text-sm font-medium text-burnham">{habit.text}</span>
+                            {streak > 0 && (
+                              <span className="flex items-center gap-0.5 text-[10px] text-shuttle/40 shrink-0">
+                                <Flame size={10} weight="fill" className="text-pastel" />
+                                {streak}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => logHabitValue(habit.id, Math.max(0, currentVal - 1))}
+                              className="w-7 h-7 rounded border border-mercury flex items-center justify-center text-shuttle hover:text-burnham hover:border-shuttle transition-colors font-medium"
+                            >−</button>
+                            <div className="flex-1 text-center">
+                              <span className="text-lg font-semibold text-burnham">{currentVal}</span>
+                              <span className="text-[10px] text-shuttle/40 ml-1">/ {habit.daily_target}{habit.unit ? ` ${habit.unit}` : ''}</span>
+                            </div>
+                            <button
+                              onClick={() => logHabitValue(habit.id, currentVal + 1)}
+                              className="w-7 h-7 rounded border border-mercury flex items-center justify-center text-shuttle hover:text-burnham hover:border-shuttle transition-colors font-medium"
+                            >+</button>
+                          </div>
+                          <div className="h-1 rounded-full bg-mercury/40 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${done ? 'bg-pastel' : pct >= 50 ? 'bg-lime-400' : 'bg-amber-400'}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              {habits.length === 0 && (
+                <p className="text-xs text-shuttle/40 italic text-center py-8">No habits configured yet.</p>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-mercury shrink-0">
+              <p className="text-[9px] font-mono text-shuttle/25 text-center">⌘H to close</p>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* ─── Milestones — bottom-right floating panel ─────────────────── */}
@@ -1439,48 +1799,112 @@ export default function Today() {
         </div>
       )}
 
-      {/* ─── Mandatory Objective Drawer ───────────────────────────────── */}
-      {dataLoaded && !dayStarted && (
+      {/* ─── Leading Indicators Panel (⌘L) ───────────────────────────── */}
+      {liPanelOpen && (
+        <div
+          className="fixed inset-0 z-[200] flex items-start justify-center pt-40 bg-black/10 backdrop-blur-[2px]"
+          onClick={e => { if (e.target === e.currentTarget) setLiPanelOpen(false) }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl border border-mercury p-6 w-full max-w-md mx-4">
+            <p className="text-[9px] uppercase tracking-[0.15em] text-shuttle/30 mb-5 font-mono">Indicators · Today · ⌘L</p>
+            {indicators.length === 0 ? (
+              <p className="text-sm text-shuttle/40 italic">No leading indicators configured yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {indicators.filter(ind => !ind.habit_id).map(ind => {
+                  const weekTotal = weekIndicatorLogs
+                    .filter(l => l.leading_indicator_id === ind.id)
+                    .reduce((sum, l) => sum + Number(l.value), 0)
+                  return (
+                    <div key={ind.id} className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-burnham truncate">{ind.name}</p>
+                        <p className="text-[10px] text-shuttle/40">
+                          {weekTotal % 1 === 0 ? weekTotal : weekTotal.toFixed(1)}{ind.unit ? ` ${ind.unit}` : ''} this week
+                          {ind.target ? ` · target ${ind.target}` : ''}
+                        </p>
+                      </div>
+                      <input
+                        type="number"
+                        min={0}
+                        value={liDraftValues[ind.id] ?? ''}
+                        onChange={e => setLiDraftValues(prev => ({ ...prev, [ind.id]: e.target.value }))}
+                        onKeyDown={e => { if (e.key === 'Enter') saveIndicatorLogs() }}
+                        placeholder="0"
+                        className="w-20 text-right text-sm text-burnham border border-mercury rounded-lg px-2 py-1.5 focus:outline-none focus:border-shuttle transition-colors"
+                      />
+                      {ind.unit && <span className="text-xs text-shuttle/40 w-8 shrink-0">{ind.unit}</span>}
+                    </div>
+                  )
+                })}
+                {indicators.filter(ind => !!ind.habit_id).map(ind => {
+                  const todayLog = indicatorLogs.find(l => l.leading_indicator_id === ind.id)
+                  const weekTotal = weekIndicatorLogs
+                    .filter(l => l.leading_indicator_id === ind.id)
+                    .reduce((sum, l) => sum + Number(l.value), 0)
+                  const sourceHabit = habits.find(h => h.id === ind.habit_id)
+                  return (
+                    <div key={ind.id} className="flex items-center gap-3 opacity-60">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-burnham truncate">{ind.name}</p>
+                        <p className="text-[10px] text-shuttle/40">
+                          via {sourceHabit?.alias ?? sourceHabit?.text ?? 'habit'} · {weekTotal}{ind.unit ? ` ${ind.unit}` : ''} this week
+                        </p>
+                      </div>
+                      <span className="text-sm text-shuttle font-mono">{todayLog?.value ?? 0}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-mercury">
+              <span className="text-[9px] text-shuttle/25 font-mono">↵ save · Esc close</span>
+              <button onClick={saveIndicatorLogs} className="text-xs font-semibold text-burnham hover:text-burnham/70 transition-colors">
+                Save →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Day NOT_STARTED overlay ───────────────────────────────── */}
+      {dayState === 'NOT_STARTED' && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-burnham">
           <div className="w-full max-w-md px-8">
             <p className="text-[9px] uppercase tracking-[0.2em] text-white/25 mb-10 font-mono">{monthStr}</p>
             {onethingValue ? (
-              <>
-                <h1 className="text-2xl font-semibold text-white mb-3 leading-tight">
-                  Good morning. Ready to focus?
-                </h1>
-                <p className="text-[10px] uppercase tracking-widest text-white/30 mb-3 font-mono">Today's one thing</p>
-              </>
+              <h1 className="text-2xl font-semibold text-white mb-8 leading-tight">Good morning. Ready to focus?</h1>
             ) : (
               <>
-                <h1 className="text-2xl font-semibold text-white mb-3 leading-tight">
-                  What's your one thing today?
-                </h1>
-                <p className="text-sm text-white/35 mb-8 leading-relaxed">
-                  The single outcome that makes today a win.
-                </p>
+                <h1 className="text-2xl font-semibold text-white mb-3 leading-tight">What's your one thing today?</h1>
+                <p className="text-sm text-white/35 mb-8 leading-relaxed">The single outcome that makes today a win.</p>
               </>
             )}
-            <input
-              autoFocus
-              value={objectiveDraft}
-              onChange={e => setObjectiveDraft(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && objectiveDraft.trim()) {
-                  handleOnethingChange(objectiveDraft)
-                  setDayStarted(true)
-                }
-              }}
-              placeholder="e.g. Ship the auth integration"
-              className="w-full bg-transparent border-b border-white/20 focus:border-white/50 outline-none text-xl text-white placeholder-white/15 pb-3 transition-colors"
-            />
+            {!onethingValue && (
+              <input
+                autoFocus
+                value={objectiveDraft}
+                onChange={e => setObjectiveDraft(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && objectiveDraft.trim()) {
+                    handleOnethingChange(objectiveDraft)
+                    localStorage.setItem(`day_started_${today}`, 'true')
+                    setDayStartedLocal(true)
+                  }
+                }}
+                placeholder="e.g. Ship the auth integration"
+                className="w-full bg-transparent border-b border-white/20 focus:border-white/50 outline-none text-xl text-white placeholder-white/15 pb-3 transition-colors mb-10"
+              />
+            )}
             <button
+              autoFocus={!!onethingValue}
               onClick={() => {
                 if (objectiveDraft.trim()) handleOnethingChange(objectiveDraft)
-                setDayStarted(true)
+                localStorage.setItem(`day_started_${today}`, 'true')
+                setDayStartedLocal(true)
               }}
-              disabled={!objectiveDraft.trim()}
-              className="mt-10 px-8 py-3 bg-white text-burnham font-semibold rounded-xl text-sm disabled:opacity-20 transition-opacity hover:bg-gossip"
+              disabled={!onethingValue && !objectiveDraft.trim()}
+              className="mt-2 px-8 py-3 bg-white text-burnham font-semibold rounded-xl text-sm disabled:opacity-20 transition-opacity hover:bg-gossip"
             >
               {onethingValue ? 'Begin the day →' : 'Set & Begin →'}
             </button>
@@ -1495,7 +1919,13 @@ export default function Today() {
           today={today}
           userId={userId}
           onClose={() => setShowEndOfDay(false)}
-          onComplete={() => setShowEndOfDay(false)}
+          onComplete={async () => {
+            setShowEndOfDay(false)
+            if (!userId) return
+            const { data } = await supabase.from('reviews').select('*')
+              .eq('user_id', userId).eq('date', today).maybeSingle()
+            if (data) setReview(data)
+          }}
         />
       )}
 
