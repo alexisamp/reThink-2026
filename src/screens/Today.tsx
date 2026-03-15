@@ -28,6 +28,20 @@ const FOCUS_DURATIONS = [
   { label: '90', minutes: 90, desc: 'Deep Work' },
 ]
 
+function formatMilestoneDate(date: string): string {
+  const parts = date.split('-')
+  const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+  if (parts.length >= 3) {
+    const d = new Date(date + 'T12:00:00')
+    if (!isNaN(d.getTime())) return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`
+  }
+  if (parts.length >= 2) {
+    const mIdx = parseInt(parts[1]) - 1
+    return `${months[mIdx] ?? '?'} ${parts[0]}`
+  }
+  return date
+}
+
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0')
   const s = (seconds % 60).toString().padStart(2, '0')
@@ -289,6 +303,11 @@ export default function Today() {
   const [habitsCollapsed, setHabitsCollapsed] = useState(false)
   const [expandedHabitId, setExpandedHabitId] = useState<string | null>(null)
   const [milestonesOpen, setMilestonesOpen] = useState(false)
+
+  // Milestone inline editing
+  const [editingMilestoneDateId, setEditingMilestoneDateId] = useState<string | null>(null)
+  const [addingMilestoneForGoalId, setAddingMilestoneForGoalId] = useState<string | null>(null)
+  const [newMilestoneDraft, setNewMilestoneDraft] = useState({ text: '', date: '' })
 
   // QUANTIFIED habit inline editing
   const [editingQuantifiedHabitId, setEditingQuantifiedHabitId] = useState<string | null>(null)
@@ -556,8 +575,11 @@ export default function Today() {
   const urgentMilestone = pendingMilestones
     .filter(m => m.target_date)
     .map(m => {
+      const raw = m.target_date!
+      // Normalize YYYY-MM to YYYY-MM-01 so Date parsing is unambiguous
+      const normalized = raw.length === 7 ? raw + '-01' : raw
       const daysLeft = Math.ceil(
-        (new Date(m.target_date! + 'T12:00:00').getTime() - Date.now()) / 86400000
+        (new Date(normalized + 'T12:00:00').getTime() - Date.now()) / 86400000
       )
       return { ...m, daysLeft }
     })
@@ -638,6 +660,27 @@ export default function Today() {
     const newStatus = m.status === 'COMPLETE' ? 'PENDING' : 'COMPLETE'
     await supabase.from('milestones').update({ status: newStatus }).eq('id', id).eq('user_id', userId)
     setMilestones(prev => prev.map(m => m.id === id ? { ...m, status: newStatus } : m))
+  }
+
+  const updateMilestoneDate = async (id: string, date: string) => {
+    const value = date || null
+    await supabase.from('milestones').update({ target_date: value }).eq('id', id).eq('user_id', userId)
+    setMilestones(prev => prev.map(m => m.id === id ? { ...m, target_date: value } : m))
+    setEditingMilestoneDateId(null)
+  }
+
+  const createMilestoneFromPanel = async (goalId: string) => {
+    if (!newMilestoneDraft.text.trim() || !userId) return
+    const { data } = await supabase.from('milestones').insert({
+      text: newMilestoneDraft.text.trim(),
+      goal_id: goalId === '__none__' ? null : goalId,
+      user_id: userId,
+      status: 'PENDING',
+      target_date: newMilestoneDraft.date || null,
+    }).select().single()
+    if (data) setMilestones(prev => [...prev, data])
+    setAddingMilestoneForGoalId(null)
+    setNewMilestoneDraft({ text: '', date: '' })
   }
 
   const toggleHabit = async (habitId: string) => {
@@ -1908,16 +1951,65 @@ export default function Today() {
                       <p className="text-[9px] font-semibold uppercase tracking-widest text-shuttle/40 mb-1.5">{label}</p>
                     )}
                     {grouped[key].map(m => (
-                      <div key={m.id} className="flex items-start gap-3 py-1.5 hover:bg-gray-50/60 px-1 -mx-1 rounded transition-colors">
+                      <div key={m.id} className="flex items-start gap-2 py-1.5 hover:bg-gray-50/60 px-1 -mx-1 rounded group/row transition-colors">
                         <input type="checkbox" className="custom-checkbox mt-0.5 shrink-0" checked={false} onChange={() => toggleMilestone(m.id)} />
                         <div className="flex-1 min-w-0">
-                          <span className="text-sm text-burnham">{m.text}</span>
-                          {m.target_date && (
-                            <span className="text-[10px] text-shuttle/40 font-mono ml-2">{m.target_date}</span>
-                          )}
+                          <span className="text-[13px] text-burnham leading-snug">{m.text}</span>
+                          <div className="mt-0.5">
+                            {editingMilestoneDateId === m.id ? (
+                              <input
+                                type="date"
+                                defaultValue={m.target_date && m.target_date.length >= 10 ? m.target_date : m.target_date ? m.target_date + '-01' : ''}
+                                autoFocus
+                                className="text-[10px] text-shuttle/60 font-mono border-b border-shuttle/30 bg-transparent outline-none"
+                                onBlur={e => updateMilestoneDate(m.id, e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') e.currentTarget.blur()
+                                  if (e.key === 'Escape') setEditingMilestoneDateId(null)
+                                }}
+                              />
+                            ) : (
+                              <button
+                                onClick={() => setEditingMilestoneDateId(m.id)}
+                                className="text-[10px] text-shuttle/30 font-mono hover:text-shuttle/60 transition-colors"
+                              >
+                                {m.target_date ? formatMilestoneDate(m.target_date) : '+ fecha'}
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
+                    {addingMilestoneForGoalId === key ? (
+                      <div className="flex items-center gap-2 mt-1.5 pl-6">
+                        <input
+                          autoFocus
+                          placeholder="Nombre del milestone…"
+                          className="flex-1 text-[13px] text-burnham outline-none border-b border-mercury/80 bg-transparent pb-0.5 placeholder-shuttle/20"
+                          value={newMilestoneDraft.text}
+                          onChange={e => setNewMilestoneDraft(d => ({ ...d, text: e.target.value }))}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') createMilestoneFromPanel(key)
+                            if (e.key === 'Escape') setAddingMilestoneForGoalId(null)
+                          }}
+                        />
+                        <input
+                          type="date"
+                          className="text-[10px] text-shuttle/50 font-mono border-b border-mercury/60 bg-transparent outline-none"
+                          value={newMilestoneDraft.date}
+                          onChange={e => setNewMilestoneDraft(d => ({ ...d, date: e.target.value }))}
+                        />
+                        <button onClick={() => createMilestoneFromPanel(key)} className="text-[10px] text-pastel font-mono hover:text-pastel/80">ok</button>
+                        <button onClick={() => setAddingMilestoneForGoalId(null)} className="text-[10px] text-shuttle/30 font-mono">esc</button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setAddingMilestoneForGoalId(key); setNewMilestoneDraft({ text: '', date: '' }) }}
+                        className="mt-1 ml-6 text-[9px] text-shuttle/25 hover:text-shuttle/50 font-mono transition-colors"
+                      >
+                        + milestone
+                      </button>
+                    )}
                   </div>
                 )
               })
@@ -1936,13 +2028,13 @@ export default function Today() {
             )}
           </div>
         )}
-        {urgentMilestone && (
-          <button
-            onClick={() => setMilestonesOpen(v => !v)}
-            className="flex items-center gap-2 bg-white border border-mercury rounded-full px-3 py-1.5 shadow-md text-[11px] text-shuttle hover:border-shuttle/40 transition-colors"
-          >
-            <Flag size={12} className="text-shuttle/60" />
-            <span>Milestones</span>
+        <button
+          onClick={() => setMilestonesOpen(v => !v)}
+          className="flex items-center gap-2 bg-white border border-mercury rounded-full px-3 py-1.5 shadow-md text-[11px] text-shuttle hover:border-shuttle/40 transition-colors"
+        >
+          <Flag size={12} className="text-shuttle/60" />
+          <span>Milestones</span>
+          {urgentMilestone && (
             <span className={`text-[9px] font-bold rounded-full px-1.5 py-0.5 leading-none ${
               urgentMilestone.daysLeft < 0
                 ? 'bg-burnham/10 text-burnham'
@@ -1952,8 +2044,8 @@ export default function Today() {
             }`}>
               {urgentMilestone.daysLeft < 0 ? 'vencido' : `${urgentMilestone.daysLeft}d`}
             </span>
-          </button>
-        )}
+          )}
+        </button>
         {unloggedIndicatorsCount > 0 && (
           <button
             onClick={() => setLiPanelOpen(true)}
@@ -2033,22 +2125,24 @@ export default function Today() {
 
             {/* Autocomplete dropdown */}
             {qaDropdown && qaDropdown.items.length > 0 && (
-              <div className="absolute left-6 right-6 bottom-full mb-2 bg-white border border-mercury rounded-xl shadow-lg overflow-hidden z-10">
+              <div className="absolute left-6 right-6 top-full mt-2 bg-white border border-mercury rounded-xl shadow-lg z-10">
                 <div className="px-3 py-1.5 border-b border-mercury/40">
                   <span className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono">
                     {qaDropdown.type === 'command' ? 'Comandos' : qaDropdown.type === 'milestone' ? 'Milestones' : 'Objetivos'}
                   </span>
                 </div>
-                {qaDropdown.items.map((item, i) => (
-                  <button
-                    key={i}
-                    onMouseDown={e => { e.preventDefault(); applyQaDropdownItem(item) }}
-                    className={`w-full flex items-center justify-between px-4 py-2 text-left transition-colors ${i === qaDropdown.selectedIdx ? 'bg-gossip/30 text-burnham' : 'text-burnham hover:bg-mercury/20'}`}
-                  >
-                    <span className="text-[13px] font-medium">{item.label}</span>
-                    {item.sub && <span className="text-[10px] text-shuttle/40 ml-3 truncate max-w-[160px]">{item.sub}</span>}
-                  </button>
-                ))}
+                <div className="max-h-44 overflow-y-auto">
+                  {qaDropdown.items.map((item, i) => (
+                    <button
+                      key={i}
+                      onMouseDown={e => { e.preventDefault(); applyQaDropdownItem(item) }}
+                      className={`w-full flex items-center justify-between px-4 py-2 text-left transition-colors ${i === qaDropdown.selectedIdx ? 'bg-gossip/30 text-burnham' : 'text-burnham hover:bg-mercury/20'}`}
+                    >
+                      <span className="text-[13px] font-medium">{item.label}</span>
+                      {item.sub && <span className="text-[10px] text-shuttle/40 ml-3 truncate max-w-[160px]">{item.sub}</span>}
+                    </button>
+                  ))}
+                </div>
                 <div className="px-3 py-1 border-t border-mercury/40">
                   <span className="text-[9px] text-shuttle/25 font-mono">↑↓ navegar · Tab seleccionar · Esc cerrar</span>
                 </div>
