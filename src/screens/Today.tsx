@@ -297,6 +297,64 @@ export default function Today() {
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [quickAddText, setQuickAddText] = useState('')
   const quickAddRef = useRef<HTMLInputElement>(null)
+  // Autocomplete state for @ and / triggers
+  const [qaDropdown, setQaDropdown] = useState<{
+    type: 'goal' | 'milestone' | 'command'
+    query: string
+    items: Array<{ label: string; insert: string; sub?: string }>
+    selectedIdx: number
+  } | null>(null)
+
+  const QA_COMMANDS = [
+    { label: '/am', insert: '/am ', sub: 'bloque mañana' },
+    { label: '/pm', insert: '/pm ', sub: 'bloque tarde' },
+    { label: '/deep', insert: '/deep ', sub: 'trabajo profundo' },
+    { label: '/url', insert: '/url ', sub: 'agregar link' },
+  ]
+
+  const computeQaDropdown = (text: string) => {
+    // Check for / command trigger
+    const slashMatch = text.match(/(^|\s)(\/\S*)$/)
+    if (slashMatch) {
+      const q = slashMatch[2].toLowerCase()
+      const items = QA_COMMANDS.filter(c => c.label.startsWith(q))
+      if (items.length > 0) {
+        setQaDropdown({ type: 'command', query: q, items, selectedIdx: 0 })
+        return
+      }
+    }
+    // Check for @m milestone trigger
+    const milestoneMatch = text.match(/@m(\S*)$/)
+    if (milestoneMatch) {
+      const q = milestoneMatch[1].toLowerCase()
+      const items = milestones
+        .filter(m => m.status !== 'COMPLETE' && m.text.toLowerCase().includes(q))
+        .slice(0, 6)
+        .map(m => ({ label: m.text, insert: `@m${m.text.split(' ')[0]} `, sub: goals.find(g => g.id === m.goal_id)?.alias ?? '' }))
+      setQaDropdown({ type: 'milestone', query: q, items, selectedIdx: 0 })
+      return
+    }
+    // Check for @goal trigger (not followed by m)
+    const goalMatch = text.match(/@(?!m)(\S*)$/)
+    if (goalMatch) {
+      const q = goalMatch[1].toLowerCase()
+      const items = goals
+        .filter(g => g.text.toLowerCase().includes(q) || (g.alias ?? '').toLowerCase().includes(q))
+        .slice(0, 6)
+        .map(g => ({ label: g.alias ?? g.text.slice(0, 20), insert: `@${g.alias ?? g.text.split(' ')[0]} `, sub: g.text.slice(0, 30) }))
+      setQaDropdown({ type: 'goal', query: q, items, selectedIdx: 0 })
+      return
+    }
+    setQaDropdown(null)
+  }
+
+  const applyQaDropdownItem = (item: { label: string; insert: string }) => {
+    // Replace the trigger in quickAddText with the selected insert
+    const newText = quickAddText.replace(/(@m?\S*|\/\S*)$/, item.insert)
+    setQuickAddText(newText)
+    setQaDropdown(null)
+    quickAddRef.current?.focus()
+  }
 
   // Friction modal for >5 todos
   const [frictionPendingTodo, setFrictionPendingTodo] = useState<{ text: string; block: 'AM' | 'PM' | null; goalId: string | null; milestoneId: string | null } | null>(null)
@@ -652,13 +710,21 @@ export default function Today() {
     let goalId = selectedGoalId
     let block: 'AM' | 'PM' | null = blockOverride !== undefined ? blockOverride : todoBlock
 
-    // Extract URL
+    // Extract URL — supports /url https://... or bare paste
     let extractedUrl: string | null = null
-    const urlMatch = text.match(/(https?:\/\/[^\s]+)/i)
-    if (urlMatch) {
-      extractedUrl = urlMatch[0]
-      text = text.replace(urlMatch[0], '').replace(/\s+/g, ' ').trim()
+    const urlCmdMatch = text.match(/\/url\s+(https?:\/\/[^\s]+)/i)
+    if (urlCmdMatch) {
+      extractedUrl = urlCmdMatch[1]
+      text = text.replace(urlCmdMatch[0], '').replace(/\s+/g, ' ').trim()
+    } else {
+      const urlMatch = text.match(/(https?:\/\/[^\s]+)/i)
+      if (urlMatch) {
+        extractedUrl = urlMatch[0]
+        text = text.replace(urlMatch[0], '').replace(/\s+/g, ' ').trim()
+      }
     }
+    // Remove bare /url command if URL was already extracted above or no URL provided
+    text = text.replace(/\/url\b/i, '').replace(/\s+/g, ' ').trim()
 
     const blockMatch = text.match(/\/\s*(am|pm)\b/i)
     if (blockMatch) {
@@ -973,7 +1039,7 @@ export default function Today() {
                       : (isDone ? 100 : 0)
                     const streak = getStreak(habit.id)
                     const isExpanded = expandedHabitId === habit.id
-                    const label = habit.alias ?? habit.text.split(' ').slice(0, 3).join(' ')
+                    const label = habit.alias ?? habit.text.split(' ')[0].slice(0, 10)
 
                     // Chip color based on type and state
                     let chipClass = ''
@@ -1063,13 +1129,13 @@ export default function Today() {
                               )}
                             </button>
                           )}
-                          {/* Expand toggle — visible on hover */}
+                          {/* Expand toggle — tiny dot, visible on hover */}
                           <button
                             onClick={() => setExpandedHabitId(isExpanded ? null : habit.id)}
-                            className={`pr-2 py-1.5 text-[10px] transition-colors rounded-r-full ${isExpanded ? 'text-shuttle/60' : 'text-shuttle/20 hover:text-shuttle/50'}`}
+                            className={`pr-1.5 py-1 transition-colors rounded-r-full ${isExpanded ? 'text-shuttle/50' : 'text-shuttle/15 hover:text-shuttle/40'}`}
                             title="Details"
                           >
-                            {isExpanded ? '↑' : '↓'}
+                            <span className="text-[8px]">{isExpanded ? '▲' : '▾'}</span>
                           </button>
                         </div>
 
@@ -1903,28 +1969,66 @@ export default function Today() {
       {quickAddOpen && (
         <div
           className="fixed inset-0 z-[200] flex items-start justify-center pt-40 bg-black/10 backdrop-blur-[2px]"
-          onClick={e => { if (e.target === e.currentTarget) setQuickAddOpen(false) }}
+          onClick={e => { if (e.target === e.currentTarget) { setQuickAddOpen(false); setQaDropdown(null) } }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl border border-mercury p-6 w-full max-w-lg mx-4">
-            <p className="text-[9px] uppercase tracking-[0.15em] text-shuttle/30 mb-4 font-mono">Quick Add Task · ⌘N</p>
+          <div className="bg-white rounded-2xl shadow-2xl border border-mercury p-6 w-full max-w-lg mx-4 relative">
+            <p className="text-[9px] uppercase tracking-[0.15em] text-shuttle/30 mb-4 font-mono">Quick Add · ⌘N</p>
             <input
               ref={quickAddRef}
               autoFocus
               value={quickAddText}
-              onChange={e => setQuickAddText(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') { submitQuickAdd() }
-                if (e.key === 'Escape') { setQuickAddOpen(false); setQuickAddText('') }
+              onChange={e => {
+                setQuickAddText(e.target.value)
+                computeQaDropdown(e.target.value)
               }}
-              placeholder="What needs to get done?"
-              className="w-full text-lg text-burnham placeholder-shuttle/20 border-none outline-none bg-transparent"
+              onKeyDown={e => {
+                if (qaDropdown && qaDropdown.items.length > 0) {
+                  if (e.key === 'ArrowDown') { e.preventDefault(); setQaDropdown(d => d ? { ...d, selectedIdx: Math.min(d.selectedIdx + 1, d.items.length - 1) } : d) }
+                  if (e.key === 'ArrowUp') { e.preventDefault(); setQaDropdown(d => d ? { ...d, selectedIdx: Math.max(d.selectedIdx - 1, 0) } : d) }
+                  if (e.key === 'Tab' || (e.key === 'Enter' && qaDropdown)) {
+                    e.preventDefault()
+                    applyQaDropdownItem(qaDropdown.items[qaDropdown.selectedIdx])
+                    return
+                  }
+                  if (e.key === 'Escape') { setQaDropdown(null); return }
+                }
+                if (e.key === 'Enter') { submitQuickAdd() }
+                if (e.key === 'Escape') { setQuickAddOpen(false); setQuickAddText(''); setQaDropdown(null) }
+              }}
+              placeholder="What needs to get done? Use @ for goals, /am /pm /url..."
+              className="w-full text-base text-burnham placeholder-shuttle/20 border-none outline-none bg-transparent"
             />
+
+            {/* Autocomplete dropdown */}
+            {qaDropdown && qaDropdown.items.length > 0 && (
+              <div className="absolute left-6 right-6 bottom-full mb-2 bg-white border border-mercury rounded-xl shadow-lg overflow-hidden z-10">
+                <div className="px-3 py-1.5 border-b border-mercury/40">
+                  <span className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono">
+                    {qaDropdown.type === 'command' ? 'Comandos' : qaDropdown.type === 'milestone' ? 'Milestones' : 'Objetivos'}
+                  </span>
+                </div>
+                {qaDropdown.items.map((item, i) => (
+                  <button
+                    key={i}
+                    onMouseDown={e => { e.preventDefault(); applyQaDropdownItem(item) }}
+                    className={`w-full flex items-center justify-between px-4 py-2 text-left transition-colors ${i === qaDropdown.selectedIdx ? 'bg-gossip/30 text-burnham' : 'text-burnham hover:bg-mercury/20'}`}
+                  >
+                    <span className="text-[13px] font-medium">{item.label}</span>
+                    {item.sub && <span className="text-[10px] text-shuttle/40 ml-3 truncate max-w-[160px]">{item.sub}</span>}
+                  </button>
+                ))}
+                <div className="px-3 py-1 border-t border-mercury/40">
+                  <span className="text-[9px] text-shuttle/25 font-mono">↑↓ navegar · Tab seleccionar · Esc cerrar</span>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between mt-5 pt-4 border-t border-mercury">
               <span className="text-[9px] text-shuttle/25 font-mono flex items-center gap-3">
-                <span>↵ add</span>
-                <span>Esc close</span>
+                <span>↵ agregar</span>
+                <span>Esc cerrar</span>
               </span>
-              <span className="text-[9px] text-shuttle/20 font-mono">supports @goal @mMilestone /am /pm</span>
+              <span className="text-[9px] text-shuttle/20 font-mono">@ objetivos · @m milestones · / comandos</span>
             </div>
           </div>
         </div>
