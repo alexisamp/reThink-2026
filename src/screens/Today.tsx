@@ -20,6 +20,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useHabitNotifications } from '@/hooks/useHabitNotifications'
 import StreakCelebration from '@/components/StreakCelebration'
 import EndOfDayDrawer from '@/components/EndOfDayDrawer'
+import NewsletterPill from '@/components/NewsletterPill'
 
 const FOCUS_DURATIONS = [
   { label: '25', minutes: 25, desc: 'Pomodoro' },
@@ -1935,6 +1936,7 @@ export default function Today() {
           <span className="text-[9px] font-mono border border-mercury/50 rounded px-1">⌘L</span>
           <span>Indicators</span>
         </button>
+        <NewsletterPill />
       </div>
 
       {/* ─── Friction modal (>5 todos) ───────────────────────────────── */}
