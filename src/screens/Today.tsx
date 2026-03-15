@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Lightning, Check, Play, Pause, Stop,
   Timer, CalendarBlank, SidebarSimple,
@@ -15,7 +15,9 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
-import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog } from '@/types'
+import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog, Capture } from '@/types'
+import { parseJournalCaptures, splitJournalIntoSegments } from '@/lib/captureParser'
+import CaptureModal, { CaptureChip } from '@/components/CaptureModal'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useHabitNotifications } from '@/hooks/useHabitNotifications'
 import StreakCelebration from '@/components/StreakCelebration'
@@ -255,6 +257,8 @@ export default function Today() {
   const [onethingValue, setOnethingValue] = useState('')
   const [journalEditing, setJournalEditing] = useState(false)
   const journalRef = useRef<HTMLTextAreaElement>(null)
+  const [captures, setCaptures] = useState<Capture[]>([])
+  const [activeCapture, setActiveCapture] = useState<Capture | null>(null)
 
   // Day State Machine
   const [dayStartedLocal, setDayStartedLocal] = useState(() =>
@@ -558,6 +562,29 @@ export default function Today() {
     if (journalTimerRef.current) clearTimeout(journalTimerRef.current)
     journalTimerRef.current = setTimeout(() => upsertReview({ notes: value }), 800)
   }
+
+  const saveCaptures = useCallback(async () => {
+    if (!userId) return
+    const found = parseJournalCaptures(journalValue)
+    if (found.length === 0) return
+    const today2 = new Date().toISOString().slice(0, 10)
+    const rows = found.map(f => ({
+      user_id: userId,
+      type: f.type,
+      title: f.title,
+      captured_date: today2,
+    }))
+    const { data } = await supabase
+      .from('captures')
+      .upsert(rows, { onConflict: 'user_id,captured_date,type,title', ignoreDuplicates: true })
+      .select()
+    if (data && data.length > 0) {
+      setCaptures(prev => {
+        const ids = new Set(prev.map(c => c.id))
+        return [...prev, ...data.filter((c: Capture) => !ids.has(c.id))]
+      })
+    }
+  }, [userId, journalValue])
 
   const handleOnethingChange = (value: string) => {
     setOnethingValue(value)
@@ -1055,7 +1082,7 @@ export default function Today() {
           </div>
         ) : (
           /* ── Normal Today Content ───────────────────────────────── */
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <div className={`w-full ${!sidebarOpen ? 'max-w-2xl mx-auto' : ''} px-8 py-8 pt-10`}>
 
               <p className="text-[10px] font-mono text-shuttle/40 mb-4">{monthStr}</p>
@@ -1594,7 +1621,7 @@ export default function Today() {
                     placeholder="What's on your mind…"
                     value={journalValue}
                     onChange={e => handleJournalChange(e.target.value)}
-                    onBlur={() => setJournalEditing(false)}
+                    onBlur={() => { setJournalEditing(false); saveCaptures() }}
                     onKeyDown={e => {
                       if (e.key === 'Enter') {
                         const ta = e.currentTarget
@@ -1628,17 +1655,23 @@ export default function Today() {
                   />
                 ) : (
                   <div
-                    className="flex-1 min-h-[160px] cursor-text"
-                    onClick={() => setJournalEditing(true)}
+                    onClick={() => { setJournalEditing(true); setTimeout(() => journalRef.current?.focus(), 0) }}
+                    className="min-h-[160px] cursor-text text-xs text-burnham leading-relaxed"
                   >
-                    {journalValue ? (
-                      <div
-                        className="text-xs text-burnham leading-relaxed"
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(journalValue) }}
-                      />
-                    ) : (
-                      <p className="text-xs text-shuttle/30 italic">What's on your mind…</p>
-                    )}
+                    {journalValue ? splitJournalIntoSegments(journalValue).map((seg, i) =>
+                      seg.kind === 'capture'
+                        ? <CaptureChip
+                            key={i}
+                            type={seg.captureType}
+                            title={seg.title}
+                            onClick={e => {
+                              e.stopPropagation()
+                              const found = captures.find(c => c.type === seg.captureType && c.title === seg.title)
+                              if (found) setActiveCapture(found)
+                            }}
+                          />
+                        : <span key={i} dangerouslySetInnerHTML={{ __html: renderMarkdown(seg.content) }} className="block" />
+                    ) : <span className="text-shuttle/25 italic">What's on your mind…</span>}
                   </div>
                 )}
               </div>
@@ -2305,6 +2338,15 @@ export default function Today() {
           onDismiss={() => setCelebrationStreak(null)}
         />
       )}
+
+      {/* ── Capture Modal ──────────────────────────────────────────────── */}
+      <CaptureModal
+        capture={activeCapture}
+        onClose={() => setActiveCapture(null)}
+        goals={goals}
+        milestones={milestones}
+        onUpdate={updated => setCaptures(prev => prev.map(c => c.id === updated.id ? updated : c))}
+      />
     </div>
   )
 }
