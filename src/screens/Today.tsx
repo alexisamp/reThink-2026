@@ -4,7 +4,7 @@ import {
   Timer, CalendarBlank, SidebarSimple,
   Flame, TrashSimple, NotePencil, GearSix,
   TextB, TextItalic, TextStrikethrough, DotsSixVertical,
-  X, ListBullets, ListNumbers,
+  X, ListBullets, ListNumbers, Flag, ChartLine,
 } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -551,6 +551,22 @@ export default function Today() {
   const doneTodos = todos.filter(t => t.completed)
   const pendingMilestones = milestones.filter(m => m.status !== 'COMPLETE')
   const doneMilestones = milestones.filter(m => m.status === 'COMPLETE')
+
+  // Pill visibility logic — only show when actionable
+  const urgentMilestone = pendingMilestones
+    .filter(m => m.target_date)
+    .map(m => {
+      const daysLeft = Math.ceil(
+        (new Date(m.target_date! + 'T12:00:00').getTime() - Date.now()) / 86400000
+      )
+      return { ...m, daysLeft }
+    })
+    .filter(m => m.daysLeft <= 14)
+    .sort((a, b) => a.daysLeft - b.daysLeft)[0] ?? null
+
+  const unloggedIndicatorsCount = indicators.filter(ind =>
+    !indicatorLogs.some(l => l.indicator_id === ind.id && l.log_date === today)
+  ).length
 
   // BINARY / QUANTIFIED habit helpers
   const isHabitDone = (habit: Habit): boolean => {
@@ -1920,22 +1936,36 @@ export default function Today() {
             )}
           </div>
         )}
-        <button
-          onClick={() => setMilestonesOpen(v => !v)}
-          className="flex items-center gap-3 bg-white border border-mercury rounded-full px-4 py-2 shadow-md hover:shadow-lg transition-all text-[11px] group"
-        >
-          <span className="font-mono text-shuttle/30 border border-mercury/50 rounded px-1 py-0.5 text-[9px] group-hover:text-shuttle/60 transition-colors">M</span>
-          <span className="text-burnham font-medium">Milestones</span>
-          <span className="text-shuttle/40">{pendingMilestones.length} pending</span>
-          <span className="text-shuttle/25 text-[10px]">{milestonesOpen ? '↓' : '↑'}</span>
-        </button>
-        <button
-          onClick={() => setLiPanelOpen(true)}
-          className="flex items-center gap-2 bg-white border border-mercury rounded-full px-3 py-1.5 shadow-md text-[11px] text-shuttle hover:border-shuttle/40 transition-colors"
-        >
-          <span className="text-[9px] font-mono border border-mercury/50 rounded px-1">⌘L</span>
-          <span>Indicators</span>
-        </button>
+        {urgentMilestone && (
+          <button
+            onClick={() => setMilestonesOpen(v => !v)}
+            className="flex items-center gap-2 bg-white border border-mercury rounded-full px-3 py-1.5 shadow-md text-[11px] text-shuttle hover:border-shuttle/40 transition-colors"
+          >
+            <Flag size={12} className="text-shuttle/60" />
+            <span>Milestones</span>
+            <span className={`text-[9px] font-bold rounded-full px-1.5 py-0.5 leading-none ${
+              urgentMilestone.daysLeft < 0
+                ? 'bg-burnham/10 text-burnham'
+                : urgentMilestone.daysLeft <= 3
+                ? 'bg-burnham text-white'
+                : 'bg-mercury text-shuttle'
+            }`}>
+              {urgentMilestone.daysLeft < 0 ? 'vencido' : `${urgentMilestone.daysLeft}d`}
+            </span>
+          </button>
+        )}
+        {unloggedIndicatorsCount > 0 && (
+          <button
+            onClick={() => setLiPanelOpen(true)}
+            className="flex items-center gap-2 bg-white border border-mercury rounded-full px-3 py-1.5 shadow-md text-[11px] text-shuttle hover:border-shuttle/40 transition-colors"
+          >
+            <ChartLine size={12} className="text-shuttle/60" />
+            <span>Indicators</span>
+            <span className="bg-burnham text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+              {unloggedIndicatorsCount}
+            </span>
+          </button>
+        )}
         <NewsletterPill />
       </div>
 
