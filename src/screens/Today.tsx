@@ -1155,7 +1155,7 @@ export default function Today() {
                               className="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full"
                               title={habit.text}
                             >
-                              {habit.emoji && <span className="leading-none text-[13px]">{habit.emoji}</span>}
+                              {habit.emoji && <span className="leading-none text-[13px]" style={{ filter: 'grayscale(1)' }}>{habit.emoji}</span>}
                               {editingQuantifiedHabitId === habit.id ? (
                                 <input
                                   autoFocus
@@ -1202,7 +1202,7 @@ export default function Today() {
                               className="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full"
                               title={habit.text}
                             >
-                              {habit.emoji && <span className="leading-none text-[13px]">{habit.emoji}</span>}
+                              {habit.emoji && <span className="leading-none text-[13px]" style={{ filter: 'grayscale(1)' }}>{habit.emoji}</span>}
                               <span className="whitespace-nowrap">{label}</span>
                               {isDone
                                 ? <Check size={10} weight="bold" className="text-pastel shrink-0" />
