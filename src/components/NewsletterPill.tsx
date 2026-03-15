@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Tray } from '@phosphor-icons/react'
+import { Tray, ArrowSquareOut } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
+
+async function openLink(url: string) {
+  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+    const { openUrl } = await import('@tauri-apps/plugin-opener')
+    await openUrl(url)
+  } else {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+}
 
 interface NewsletterItem {
   id: string
@@ -222,9 +231,10 @@ function FeedRow({
 
   return (
     <div
-      className={`flex items-start gap-3 px-5 py-3 hover:bg-mercury/10 transition-all duration-500 ${
+      className={`group flex items-start gap-3 px-5 py-3 hover:bg-mercury/10 transition-all duration-500 cursor-pointer ${
         dismissing ? 'opacity-0 scale-95 -translate-x-2' : 'opacity-100'
       } ${isRead ? 'opacity-40' : ''}`}
+      onClick={() => { openLink(item.gmail_link); onMark() }}
     >
       {/* Sender avatar */}
       <div className={`shrink-0 w-6 h-6 rounded-full ${style.bgClass} ${style.textClass} flex items-center justify-center text-[8px] font-bold mt-0.5`}>
@@ -237,33 +247,35 @@ function FeedRow({
           <span className="text-[10px] text-shuttle/50 font-medium truncate">{item.newsletter}</span>
           <span className="text-[9px] text-shuttle/30 ml-auto shrink-0">{formatRelative(item.received_at)}</span>
         </div>
-        <a
-          href={item.gmail_link}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={onMark}
-          className={`text-[12px] leading-snug block hover:text-burnham transition-colors ${
+        <div className="flex items-start gap-1">
+          <span className={`text-[12px] leading-snug flex-1 min-w-0 ${
             isRead ? 'line-through text-shuttle/40' : 'text-burnham'
-          }`}
-        >
-          {item.subject}
-        </a>
+          }`}>
+            {item.subject}
+          </span>
+          <ArrowSquareOut
+            size={11}
+            className="shrink-0 mt-0.5 text-shuttle/20 group-hover:text-shuttle/50 transition-colors"
+          />
+        </div>
       </div>
 
       {/* Checkbox */}
-      {!isRead && (
-        <button
-          onClick={onMark}
-          className="shrink-0 mt-0.5 w-4 h-4 rounded border border-mercury hover:border-pastel transition-colors flex items-center justify-center group"
-        >
-          <span className="text-[8px] text-pastel opacity-0 group-hover:opacity-100 transition-opacity">✓</span>
-        </button>
-      )}
-      {isRead && (
-        <span className="shrink-0 mt-0.5 w-4 h-4 rounded bg-gossip/40 border border-pastel/40 flex items-center justify-center">
-          <span className="text-[8px] text-pastel">✓</span>
-        </span>
-      )}
+      <div onClick={e => e.stopPropagation()}>
+        {!isRead && (
+          <button
+            onClick={onMark}
+            className="shrink-0 mt-0.5 w-4 h-4 rounded border border-mercury hover:border-pastel transition-colors flex items-center justify-center group/check"
+          >
+            <span className="text-[8px] text-pastel opacity-0 group-hover/check:opacity-100 transition-opacity">✓</span>
+          </button>
+        )}
+        {isRead && (
+          <span className="shrink-0 mt-0.5 w-4 h-4 rounded bg-gossip/40 border border-pastel/40 flex items-center justify-center">
+            <span className="text-[8px] text-pastel">✓</span>
+          </span>
+        )}
+      </div>
     </div>
   )
 }
