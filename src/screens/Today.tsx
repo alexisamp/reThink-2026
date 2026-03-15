@@ -17,6 +17,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
 import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog } from '@/types'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { useHabitNotifications } from '@/hooks/useHabitNotifications'
 import StreakCelebration from '@/components/StreakCelebration'
 import EndOfDayDrawer from '@/components/EndOfDayDrawer'
 
@@ -120,7 +121,7 @@ function SortableTodoRow({ todo, goal, isEditing, editingText, onEditStart, onEd
           />
         ) : (
           <span
-            className="text-sm font-medium text-burnham truncate cursor-text flex-1"
+            className="text-[13px] font-medium text-burnham truncate cursor-text flex-1"
             onClick={onEditStart}
           >
             {todo.text}
@@ -276,6 +277,7 @@ export default function Today() {
   const [timerStartedAt, setTimerStartedAt] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  useHabitNotifications(habits, logs, today)
 
   useKeyboardShortcuts({
     'cmd+b': () => setSidebarOpen(p => !p),
@@ -823,23 +825,6 @@ export default function Today() {
           </div>
         )}
 
-        {/* ── Shortcut hints ────────────────────────────────────────── */}
-        <div className="px-10 pt-3 pb-1 flex items-center gap-5 shrink-0">
-          {[
-            { key: '⌘N', label: 'add task' },
-            { key: '⌘H', label: 'habits' },
-            { key: 'M', label: 'milestones' },
-            { key: '⌘B', label: 'sidebar' },
-            { key: '⌘E', label: 'end day' },
-            { key: '⌘L', label: 'indicators' },
-            { key: '⎵', label: 'focus' },
-          ].map(s => (
-            <span key={s.key} className="flex items-center gap-1 text-[9px] text-shuttle/25 font-mono">
-              <kbd className="px-1 py-0.5 bg-mercury/20 rounded text-[8px] border border-mercury/40">{s.key}</kbd>
-              <span>{s.label}</span>
-            </span>
-          ))}
-        </div>
 
         {dayState === 'COMPLETED' ? (
           /* ── Day Complete Summary View ──────────────────────────── */
@@ -880,8 +865,8 @@ export default function Today() {
           </div>
         ) : (
           /* ── Normal Today Content ───────────────────────────────── */
-          <div className="flex-1 overflow-y-auto px-10 py-6 pb-32">
-            <div className="max-w-2xl w-full">
+          <div className="flex-1 overflow-y-auto">
+            <div className={`w-full ${!sidebarOpen ? 'max-w-2xl mx-auto' : ''} px-8 py-8 pt-10`}>
 
               <p className="text-[10px] font-mono text-shuttle/40 mb-7">{monthStr}</p>
 
@@ -896,7 +881,7 @@ export default function Today() {
                 </div>
 
                 {/* Chip strip — all habits always visible */}
-                <div className="flex flex-wrap gap-2 mb-2">
+                <div className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1 mb-2" style={{ scrollbarWidth: 'none' }}>
                   {habits.map(habit => {
                     const currentLog = logs.find(l => l.habit_id === habit.id)
                     const currentVal = currentLog?.value ?? 0
@@ -924,7 +909,7 @@ export default function Today() {
                     return (
                       <div key={habit.id} className="flex flex-col items-start">
                         {/* The pill itself */}
-                        <div className={`flex items-center gap-1.5 rounded-full border text-xs font-medium transition-all duration-200 ${chipClass}`}>
+                        <div className={`flex items-center gap-1.5 rounded-full border text-[11px] font-medium transition-all duration-200 ${chipClass}`}>
                           {habit.habit_type === 'QUANTIFIED' ? (
                             /* QUANTIFIED chip */
                             <button
@@ -932,7 +917,7 @@ export default function Today() {
                                 setEditingQuantifiedHabitId(habit.id)
                                 setQuantifiedInputValue(String(currentVal))
                               }}
-                              className="flex items-center gap-1.5 pl-3 pr-1 py-1.5 rounded-full"
+                              className="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full"
                               title={habit.text}
                             >
                               {habit.emoji && <span className="leading-none">{habit.emoji}</span>}
@@ -979,7 +964,7 @@ export default function Today() {
                             /* BINARY chip */
                             <button
                               onClick={() => toggleHabit(habit.id)}
-                              className="flex items-center gap-1.5 pl-3 pr-1 py-1.5 rounded-full"
+                              className="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full"
                               title={habit.text}
                             >
                               {habit.emoji && <span className="leading-none">{habit.emoji}</span>}
@@ -1200,7 +1185,7 @@ export default function Today() {
                         return (
                           <div key={todo.id} className="group flex items-center gap-3 py-1.5 px-2 -mx-2 opacity-50 hover:opacity-70 transition-opacity">
                             <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleTodo(todo.id)} />
-                            <span className="text-sm text-shuttle line-through decoration-pastel flex-1 truncate">{todo.text}</span>
+                            <span className="text-[13px] text-shuttle line-through decoration-pastel flex-1 truncate">{todo.text}</span>
                             {goal && (
                               <span
                                 className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 opacity-60"
@@ -1699,7 +1684,7 @@ export default function Today() {
       )}
 
       {/* ─── Milestones — bottom-right floating panel ─────────────────── */}
-      <div className="fixed bottom-6 right-6 z-30 flex flex-col items-end gap-2" style={{ maxWidth: 'min(400px, calc(100vw - 6rem))' }}>
+      <div className="fixed bottom-6 right-6 z-30 flex flex-col gap-2 items-end" style={{ maxWidth: 'min(400px, calc(100vw - 6rem))' }}>
         {milestonesOpen && (
           <div className="w-full bg-white border border-mercury rounded-2xl shadow-xl p-4 max-h-72 overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
@@ -1765,6 +1750,13 @@ export default function Today() {
           <span className="text-burnham font-medium">Milestones</span>
           <span className="text-shuttle/40">{pendingMilestones.length} pending</span>
           <span className="text-shuttle/25 text-[10px]">{milestonesOpen ? '↓' : '↑'}</span>
+        </button>
+        <button
+          onClick={() => setLiPanelOpen(true)}
+          className="flex items-center gap-2 bg-white border border-mercury rounded-full px-3 py-1.5 shadow-md text-[11px] text-shuttle hover:border-shuttle/40 transition-colors"
+        >
+          <span className="text-[9px] font-mono border border-mercury/50 rounded px-1">⌘L</span>
+          <span>Indicators</span>
         </button>
       </div>
 
