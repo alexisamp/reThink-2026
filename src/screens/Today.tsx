@@ -30,6 +30,15 @@ const FOCUS_DURATIONS = [
   { label: '90', minutes: 90, desc: 'Deep Work' },
 ]
 
+const JOURNAL_CAPTURE_TYPES = [
+  { type: 'idea',       label: '/idea',       desc: 'idea o concepto' },
+  { type: 'learning',   label: '/learning',   desc: 'algo aprendido' },
+  { type: 'reflection', label: '/reflection', desc: 'reflexión personal' },
+  { type: 'decision',   label: '/decision',   desc: 'decisión tomada' },
+  { type: 'win',        label: '/win',        desc: 'logro o victoria' },
+  { type: 'question',   label: '/question',   desc: 'pregunta abierta' },
+]
+
 function formatMilestoneDate(date: string): string {
   const parts = date.split('-')
   const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -259,6 +268,10 @@ export default function Today() {
   const journalRef = useRef<HTMLTextAreaElement>(null)
   const [captures, setCaptures] = useState<Capture[]>([])
   const [activeCapture, setActiveCapture] = useState<Capture | null>(null)
+  const [journalDropdown, setJournalDropdown] = useState<{
+    items: Array<{ type: string; label: string; desc: string }>
+    selectedIdx: number
+  } | null>(null)
 
   // Day State Machine
   const [dayStartedLocal, setDayStartedLocal] = useState(() =>
@@ -460,7 +473,7 @@ export default function Today() {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
       const thirtyAgoStr = localDate(thirtyDaysAgo)
 
-      const [todosRes, yesterdayTodosRes, habitsRes, logsRes, recentLogsRes, reviewRes, goalsRes, milestonesRes, tomorrowRes, indicatorsRes, indicatorLogsRes, weekLogsRes] = await Promise.all([
+      const [todosRes, yesterdayTodosRes, habitsRes, logsRes, recentLogsRes, reviewRes, goalsRes, milestonesRes, tomorrowRes, indicatorsRes, indicatorLogsRes, weekLogsRes, capturesRes] = await Promise.all([
         supabase.from('todos').select('*').eq('user_id', user.id)
           .or(`date.is.null,date.eq.${today}`).order('sort_order', { ascending: true }),
         supabase.from('todos').select('*').eq('user_id', user.id)
@@ -477,6 +490,7 @@ export default function Today() {
         supabase.from('leading_indicators').select('*').eq('user_id', user.id).eq('is_active', true),
         supabase.from('indicator_daily_logs').select('*').eq('user_id', user.id).eq('log_date', today),
         supabase.from('indicator_daily_logs').select('*').eq('user_id', user.id).gte('log_date', startOfWeek).lte('log_date', today),
+        supabase.from('captures').select('*').eq('user_id', user.id).gte('captured_date', today),
       ])
       setTodos(todosRes.data ?? [])
       setYesterdayTodos(yesterdayTodosRes.data ?? [])
@@ -490,6 +504,7 @@ export default function Today() {
       setIndicators(indicatorsRes.data ?? [])
       setIndicatorLogs(indicatorLogsRes.data ?? [])
       setWeekIndicatorLogs(weekLogsRes.data ?? [])
+      if (capturesRes.data) setCaptures(capturesRes.data)
       setDataLoaded(true)
     }
     load()
@@ -574,16 +589,16 @@ export default function Today() {
       title: f.title,
       captured_date: today2,
     }))
-    const { data } = await supabase
+    await supabase
       .from('captures')
       .upsert(rows, { onConflict: 'user_id,captured_date,type,title', ignoreDuplicates: true })
-      .select()
-    if (data && data.length > 0) {
-      setCaptures(prev => {
-        const ids = new Set(prev.map(c => c.id))
-        return [...prev, ...data.filter((c: Capture) => !ids.has(c.id))]
-      })
-    }
+    // Fetch fresh to ensure state has all captures (including pre-existing ones)
+    const { data: fresh } = await supabase
+      .from('captures')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('captured_date', today2)
+    if (fresh) setCaptures(fresh)
   }, [userId, journalValue])
 
   const handleOnethingChange = (value: string) => {
@@ -1613,6 +1628,44 @@ export default function Today() {
                   )}
                 </div>
 
+                <div className="relative flex-1 flex flex-col min-h-0">
+                {/* Journal capture autocomplete */}
+                {journalEditing && journalDropdown && journalDropdown.items.length > 0 && (
+                  <div className="absolute left-0 right-0 bottom-full mb-1 bg-white border border-mercury rounded-xl shadow-lg z-20 overflow-hidden">
+                    <div className="px-3 py-1.5 border-b border-mercury/40">
+                      <span className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono">Tipo de captura</span>
+                    </div>
+                    {journalDropdown.items.map((item, i) => (
+                      <button
+                        key={item.type}
+                        onMouseDown={e => {
+                          e.preventDefault()
+                          // Insert the selected type into the journal
+                          if (journalRef.current) {
+                            const ta = journalRef.current
+                            const pos = ta.selectionStart ?? ta.value.length
+                            const lineStart = ta.value.lastIndexOf('\n', pos - 1) + 1
+                            const before = ta.value.slice(0, lineStart)
+                            const after = ta.value.slice(pos)
+                            const newVal = before + '/' + item.type + ' ' + after
+                            handleJournalChange(newVal)
+                            setJournalDropdown(null)
+                            setTimeout(() => {
+                              ta.selectionStart = ta.selectionEnd = lineStart + item.type.length + 2
+                              ta.focus()
+                            }, 0)
+                          }
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${
+                          i === journalDropdown.selectedIdx ? 'bg-gossip/30 text-burnham' : 'text-burnham hover:bg-mercury/20'
+                        }`}
+                      >
+                        <span className="text-[12px] font-medium font-mono">{item.label}</span>
+                        <span className="text-[10px] text-shuttle/40">{item.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {journalEditing ? (
                   <textarea
                     ref={journalRef}
@@ -1620,9 +1673,65 @@ export default function Today() {
                     className="flex-1 w-full bg-transparent border-none p-0 text-xs text-burnham resize-none placeholder-shuttle/30 focus:ring-0 outline-none leading-relaxed min-h-[160px]"
                     placeholder="What's on your mind…"
                     value={journalValue}
-                    onChange={e => handleJournalChange(e.target.value)}
-                    onBlur={() => { setJournalEditing(false); saveCaptures() }}
+                    onChange={e => {
+                      handleJournalChange(e.target.value)
+                      // Detect /type trigger on current line
+                      const val = e.target.value
+                      const pos = e.target.selectionStart ?? val.length
+                      const lineStart = val.lastIndexOf('\n', pos - 1) + 1
+                      const currentWord = val.slice(lineStart, pos)
+                      const slashMatch = currentWord.match(/^\/(\w*)$/)
+                      if (slashMatch) {
+                        const q = slashMatch[1].toLowerCase()
+                        const filtered = JOURNAL_CAPTURE_TYPES.filter(t =>
+                          q === '' || t.type.startsWith(q) || t.label.startsWith('/' + q)
+                        )
+                        if (filtered.length > 0) {
+                          setJournalDropdown({ items: filtered, selectedIdx: 0 })
+                        } else {
+                          setJournalDropdown(null)
+                        }
+                      } else {
+                        setJournalDropdown(null)
+                      }
+                    }}
+                    onBlur={() => { setJournalEditing(false); setJournalDropdown(null); saveCaptures() }}
                     onKeyDown={e => {
+                      // Handle journal capture dropdown
+                      if (journalDropdown && journalDropdown.items.length > 0) {
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault()
+                          setJournalDropdown(d => d ? { ...d, selectedIdx: Math.min(d.selectedIdx + 1, d.items.length - 1) } : d)
+                          return
+                        }
+                        if (e.key === 'ArrowUp') {
+                          e.preventDefault()
+                          setJournalDropdown(d => d ? { ...d, selectedIdx: Math.max(d.selectedIdx - 1, 0) } : d)
+                          return
+                        }
+                        if (e.key === 'Tab' || e.key === 'Enter') {
+                          e.preventDefault()
+                          const selected = journalDropdown.items[journalDropdown.selectedIdx]
+                          // Replace the current /xxx with /type (a space after)
+                          const ta = e.currentTarget
+                          const pos = ta.selectionStart ?? ta.value.length
+                          const lineStart = ta.value.lastIndexOf('\n', pos - 1) + 1
+                          const before = ta.value.slice(0, lineStart)
+                          const after = ta.value.slice(pos)
+                          const newVal = before + '/' + selected.type + ' ' + after
+                          handleJournalChange(newVal)
+                          setJournalDropdown(null)
+                          // Move cursor after the inserted text
+                          setTimeout(() => {
+                            ta.selectionStart = ta.selectionEnd = lineStart + selected.type.length + 2
+                          }, 0)
+                          return
+                        }
+                        if (e.key === 'Escape') {
+                          setJournalDropdown(null)
+                          return
+                        }
+                      }
                       if (e.key === 'Enter') {
                         const ta = e.currentTarget
                         const { selectionStart, value } = ta
@@ -1674,6 +1783,7 @@ export default function Today() {
                     ) : <span className="text-shuttle/25 italic">What's on your mind…</span>}
                   </div>
                 )}
+                </div>
               </div>
 
             </div>
