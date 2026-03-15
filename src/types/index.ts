@@ -129,6 +129,7 @@ export interface Todo {
   completed_at: string | null
   date: string | null
   sort_order: number
+  url: string | null
   created_at: string
 }
 

@@ -72,6 +72,19 @@ function localDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+function getUrlChip(url: string): { icon: string; label: string; color: string } {
+  if (url.includes('docs.google.com/document')) return { icon: '📄', label: 'Doc', color: '#4285F4' }
+  if (url.includes('docs.google.com/spreadsheets')) return { icon: '📊', label: 'Sheet', color: '#0F9D58' }
+  if (url.includes('docs.google.com/presentation')) return { icon: '📽', label: 'Slides', color: '#F4B400' }
+  if (url.includes('drive.google.com')) return { icon: '📁', label: 'Drive', color: '#4285F4' }
+  if (url.includes('notion.so')) return { icon: '◼', label: 'Notion', color: '#000000' }
+  if (url.includes('linear.app')) return { icon: '◈', label: 'Linear', color: '#5E6AD2' }
+  if (url.includes('github.com')) return { icon: '◉', label: 'GitHub', color: '#24292e' }
+  if (url.includes('figma.com')) return { icon: '◐', label: 'Figma', color: '#F24E1E' }
+  try { return { icon: '🔗', label: new URL(url).hostname.replace('www.', '').split('.')[0], color: '#536471' } }
+  catch { return { icon: '🔗', label: 'Link', color: '#536471' } }
+}
+
 interface SortableTodoRowProps {
   todo: Todo
   goal: Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'> | null | undefined
@@ -139,6 +152,22 @@ function SortableTodoRow({ todo, goal, isEditing, editingText, onEditStart, onEd
             {goal.emoji ? `${goal.emoji} ` : ''}{goal.alias ?? goal.text.slice(0, 6)}
           </span>
         )}
+        {todo.url && (() => {
+          const chip = getUrlChip(todo.url)
+          return (
+            <a
+              href={todo.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full border shrink-0 hover:opacity-80 transition-opacity leading-none"
+              style={{ color: chip.color, borderColor: `${chip.color}40`, backgroundColor: `${chip.color}10` }}
+            >
+              <span>{chip.icon}</span>
+              <span className="font-medium ml-0.5">{chip.label}</span>
+            </a>
+          )
+        })()}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {todo.block && (
@@ -268,6 +297,9 @@ export default function Today() {
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [quickAddText, setQuickAddText] = useState('')
   const quickAddRef = useRef<HTMLInputElement>(null)
+
+  // Friction modal for >5 todos
+  const [frictionPendingTodo, setFrictionPendingTodo] = useState<{ text: string; block: 'AM' | 'PM' | null; goalId: string | null; milestoneId: string | null } | null>(null)
 
   // Pomodoro Enhanced (Sprint 16)
   const [timerIntention, setTimerIntention] = useState('')
@@ -614,11 +646,19 @@ export default function Today() {
   }
 
   // Core todo submission (used by inline input and quick-add overlay)
-  const submitTodo = async (rawText: string, blockOverride?: 'AM' | 'PM' | null) => {
+  const submitTodo = async (rawText: string, blockOverride?: 'AM' | 'PM' | null, frictionBypass = false) => {
     if (!rawText.trim() || !userId) return
     let text = rawText.trim()
     let goalId = selectedGoalId
     let block: 'AM' | 'PM' | null = blockOverride !== undefined ? blockOverride : todoBlock
+
+    // Extract URL
+    let extractedUrl: string | null = null
+    const urlMatch = text.match(/(https?:\/\/[^\s]+)/i)
+    if (urlMatch) {
+      extractedUrl = urlMatch[0]
+      text = text.replace(urlMatch[0], '').replace(/\s+/g, ' ').trim()
+    }
 
     const blockMatch = text.match(/\/\s*(am|pm)\b/i)
     if (blockMatch) {
@@ -634,11 +674,35 @@ export default function Today() {
       }
     }
 
+    // Parse @m<milestone> mention
+    let milestoneId: string | null = null
+    const milestoneMatch = text.match(/@m([^\s@/]+)/i)
+    if (milestoneMatch) {
+      const mMatch = milestones.find(m => m.text.toLowerCase().includes(milestoneMatch[1].toLowerCase()))
+      if (mMatch) {
+        milestoneId = mMatch.id
+        if (!goalId && mMatch.goal_id) goalId = mMatch.goal_id
+      }
+      text = text.replace(milestoneMatch[0], '').replace(/\s+/g, ' ').trim()
+    }
+
     text = text.replace(/@\S+/g, '').replace(/\s+/g, ' ').trim()
     if (!text) return
 
+    // Friction check: >5 pending todos for today
+    const todayPendingCount = pendingTodos.filter(t => t.date === today || t.date === null).length
+    if (todayPendingCount >= 5 && !frictionBypass) {
+      setFrictionPendingTodo({ text, block, goalId, milestoneId })
+      return
+    }
+
+    const finalText = text
+    const finalBlock = block
+    const finalGoalId = goalId
+    const finalMilestoneId = milestoneId
+
     const { data } = await supabase.from('todos')
-      .insert({ text, user_id: userId, effort: 'NORMAL', date: today, block, goal_id: goalId })
+      .insert({ text: finalText, user_id: userId, effort: 'NORMAL', date: today, block: finalBlock, goal_id: finalGoalId, milestone_id: finalMilestoneId, sort_order: pendingTodos.length, url: extractedUrl ?? null })
       .select().single()
     if (data) setTodos(prev => [...prev, data])
   }
@@ -868,7 +932,25 @@ export default function Today() {
           <div className="flex-1 overflow-y-auto">
             <div className={`w-full ${!sidebarOpen ? 'max-w-2xl mx-auto' : ''} px-8 py-8 pt-10`}>
 
-              <p className="text-[10px] font-mono text-shuttle/40 mb-7">{monthStr}</p>
+              <p className="text-[10px] font-mono text-shuttle/40 mb-4">{monthStr}</p>
+
+              {/* Weekly context */}
+              {habits.length > 0 && (
+                <div className="flex items-center gap-3 text-[10px] text-shuttle/35 mb-4 font-mono">
+                  <span>W{(() => {
+                    const d = new Date()
+                    const startOfYear = new Date(d.getFullYear(), 0, 1)
+                    return Math.ceil(((d.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7)
+                  })()}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-16 h-0.5 rounded-full bg-mercury overflow-hidden align-middle">
+                      <span className="h-full bg-pastel/60 block" style={{ width: `${habitsProgress}%` }} />
+                    </span>
+                    {habitsProgress}% habits
+                  </span>
+                  {doneTodos.length > 0 && <span>{doneTodos.length} done today</span>}
+                </div>
+              )}
 
               {/* ── Habits — horizontal chip strip ──────────────────── */}
               <section className="mb-8">
@@ -1194,6 +1276,22 @@ export default function Today() {
                                 {goal.alias ?? goal.text.slice(0, 6)}
                               </span>
                             )}
+                            {todo.url && (() => {
+                              const chip = getUrlChip(todo.url)
+                              return (
+                                <a
+                                  href={todo.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={e => e.stopPropagation()}
+                                  className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full border shrink-0 hover:opacity-80 transition-opacity leading-none"
+                                  style={{ color: chip.color, borderColor: `${chip.color}40`, backgroundColor: `${chip.color}10` }}
+                                >
+                                  <span>{chip.icon}</span>
+                                  <span className="font-medium ml-0.5">{chip.label}</span>
+                                </a>
+                              )
+                            })()}
                             <button
                               onClick={() => deleteTodo(todo.id)}
                               className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
@@ -1207,6 +1305,14 @@ export default function Today() {
                   </div>
                 )}
               </section>
+
+              {pendingTodos.length === 0 && doneHabits.length > 0 && doneHabits.length === habits.length && habits.length > 0 && (
+                <div className="mt-10 text-center">
+                  <p className="text-[11px] text-shuttle/30">Día sólido —{' '}
+                    <button onClick={() => setShowEndOfDay(true)} className="underline hover:text-shuttle/60 transition-colors">¿cerramos?</button>
+                  </p>
+                </div>
+              )}
 
             </div>
           </div>
@@ -1245,16 +1351,6 @@ export default function Today() {
 
         {sidebarOpen && (
           <>
-            <div className="px-6 pt-5 pb-4 border-b border-mercury">
-              <p className="text-[10px] uppercase tracking-widest text-shuttle/60 mb-3">Today's objective</p>
-              <input
-                className="w-full text-base font-semibold text-burnham border-b border-mercury focus:border-burnham outline-none bg-transparent pb-1 placeholder-mercury/80 transition-colors"
-                placeholder="What would make today a win?"
-                value={onethingValue}
-                onChange={e => handleOnethingChange(e.target.value)}
-              />
-            </div>
-
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
 
               {/* PULSE */}
@@ -1262,9 +1358,8 @@ export default function Today() {
                 <h3 className="text-[10px] font-semibold text-shuttle/70 uppercase tracking-widest mb-3">Pulse</h3>
                 <div className="space-y-3 mb-4">
                   {[
-                    { label: 'To-Dos',      val: `${doneTodos.length}/${todos.length}`,           pct: todosProgress },
-                    { label: 'Habits',      val: `${doneHabits.length}/${habits.length}`,         pct: habitsProgress },
-                    { label: 'Milestones',  val: `${doneMilestones.length}/${milestones.length}`, pct: milestonesProgress },
+                    { label: 'To-Dos',  val: `${doneTodos.length}/${todos.length}`,       pct: todosProgress },
+                    { label: 'Habits',  val: `${doneHabits.length}/${habits.length}`,     pct: habitsProgress },
                   ].map(item => (
                     <div key={item.label}>
                       <div className="flex justify-between text-[10px] mb-1">
@@ -1276,6 +1371,22 @@ export default function Today() {
                       </div>
                     </div>
                   ))}
+                  {/* Next milestone — motivating, not anxious */}
+                  {(() => {
+                    const upcoming = milestones
+                      .filter(m => m.status !== 'COMPLETE' && m.target_date)
+                      .sort((a, b) => new Date(a.target_date! + 'T12:00:00').getTime() - new Date(b.target_date! + 'T12:00:00').getTime())[0]
+                    if (!upcoming) return null
+                    const daysLeft = Math.ceil((new Date(upcoming.target_date! + 'T12:00:00').getTime() - Date.now()) / 86400000)
+                    return (
+                      <div className="flex items-center justify-between text-[10px] text-shuttle/60 py-0.5">
+                        <span className="truncate flex-1 text-shuttle/70">{upcoming.text.length > 28 ? upcoming.text.slice(0, 28) + '…' : upcoming.text}</span>
+                        <span className="shrink-0 ml-2 font-mono text-[9px] text-shuttle/40">
+                          {daysLeft > 0 ? `${daysLeft}d` : daysLeft === 0 ? 'hoy' : 'pasado'}
+                        </span>
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
 
@@ -1760,6 +1871,34 @@ export default function Today() {
         </button>
       </div>
 
+      {/* ─── Friction modal (>5 todos) ───────────────────────────────── */}
+      {frictionPendingTodo && (
+        <div className="fixed inset-0 z-[205] flex items-start justify-center pt-40 bg-black/10 backdrop-blur-[2px]" onClick={() => setFrictionPendingTodo(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-mercury p-5 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-burnham mb-1">Ya tienes 5 tareas hoy</p>
+            <p className="text-xs text-shuttle/60 mb-4">"{frictionPendingTodo.text}" — ¿es para hoy o para después?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { submitTodo(frictionPendingTodo.text, frictionPendingTodo.block ?? undefined, true); setFrictionPendingTodo(null) }}
+                className="flex-1 text-xs bg-burnham text-white py-2 rounded-lg hover:bg-burnham/90 transition-colors"
+              >
+                Agregar hoy
+              </button>
+              <button
+                onClick={async () => {
+                  if (!userId) return
+                  await supabase.from('todos').insert({ text: frictionPendingTodo.text, user_id: userId, effort: 'NORMAL', date: null, block: frictionPendingTodo.block, goal_id: frictionPendingTodo.goalId, milestone_id: frictionPendingTodo.milestoneId, url: null })
+                  setFrictionPendingTodo(null)
+                }}
+                className="flex-1 text-xs bg-mercury/30 text-shuttle py-2 rounded-lg hover:bg-mercury/50 transition-colors"
+              >
+                Al backlog
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── Quick-Add Overlay (⌘N — from anywhere) ──────────────────── */}
       {quickAddOpen && (
         <div
@@ -1785,7 +1924,7 @@ export default function Today() {
                 <span>↵ add</span>
                 <span>Esc close</span>
               </span>
-              <span className="text-[9px] text-shuttle/20 font-mono">supports @goal /am /pm</span>
+              <span className="text-[9px] text-shuttle/20 font-mono">supports @goal @mMilestone /am /pm</span>
             </div>
           </div>
         </div>
