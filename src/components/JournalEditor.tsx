@@ -51,31 +51,43 @@ export function deserializeToHTML(text: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-  // Replace inline markers with pill spans
-  const withPills = escaped.replace(/\[~(\w+):([^\]~]+)~\]/g, (_, type, title) => {
-    if (!CAPTURE_TYPES.includes(type as CaptureType)) return `[~${type}:${title}~]`
-    const s = PILL_STYLE[type as CaptureType]
-    return (
-      `<span ` +
-      `data-capture-pill="" ` +
-      `data-type="${type}" ` +
-      `data-title="${title}" ` +
-      `contenteditable="false" ` +
-      `style="${s};${PILL_BASE}"` +
-      `>${type} · ${title}</span>`
-    )
-  })
+  // Replace inline markers with pill spans.
+  // Handles both 2-part [~type:title~] and 5-part [~type:title:gid:mid:tid~] formats.
+  const withPills = escaped.replace(
+    /\[~(\w+):([^\]~:]+)(?::([^~\]]*):([^~\]]*):([^~\]]*))?~\]/g,
+    (_, type, title, gid, mid, tid) => {
+      if (!CAPTURE_TYPES.includes(type as CaptureType)) return `[~${type}:${title}~]`
+      const s = PILL_STYLE[type as CaptureType]
+      return (
+        `<span ` +
+        `data-capture-pill="" ` +
+        `data-type="${type}" ` +
+        `data-title="${title}" ` +
+        `data-goal-id="${gid ?? ''}" ` +
+        `data-milestone-id="${mid ?? ''}" ` +
+        `data-todo-id="${tid ?? ''}" ` +
+        `contenteditable="false" ` +
+        `style="${s};${PILL_BASE}"` +
+        `>${type} · ${title}</span>`
+      )
+    }
+  )
   // Newlines → <br>
   return withPills.replace(/\n/g, '<br>')
 }
 
-/** contentEditable DOM → stored text with [~type:title~] markers */
+/** contentEditable DOM → stored text with [~type:title:gid:mid:tid~] markers (new 5-part format) */
 export function serializeFromDOM(div: HTMLDivElement): string {
   function walk(node: Node): string {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent || ''
     const el = node as HTMLElement
     if (el.hasAttribute('data-capture-pill')) {
-      return `[~${el.getAttribute('data-type')}:${el.getAttribute('data-title')}~]`
+      const type = el.getAttribute('data-type') ?? ''
+      const title = el.getAttribute('data-title') ?? ''
+      const gid = el.getAttribute('data-goal-id') ?? ''
+      const mid = el.getAttribute('data-milestone-id') ?? ''
+      const tid = el.getAttribute('data-todo-id') ?? ''
+      return `[~${type}:${title}:${gid}:${mid}:${tid}~]`
     }
     if (el.tagName === 'BR') return '\n'
     // Chrome wraps new paragraphs in <div> when pressing Enter
@@ -151,7 +163,7 @@ export function JournalEditor({
 
   // ── Insert a pill at cursor ────────────────────────────────────────────────
   const insertPill = useCallback(
-    (type: CaptureType, title: string) => {
+    (type: CaptureType, title: string, goalId?: string | null, milestoneId?: string | null, todoId?: string | null) => {
       const el = editorRef.current
       if (!el) return
       const sel = window.getSelection()
@@ -173,11 +185,14 @@ export function JournalEditor({
         }
       }
 
-      // Build pill element
+      // Build pill element with new 5-part data attributes
       const pill = document.createElement('span')
       pill.setAttribute('data-capture-pill', '')
       pill.setAttribute('data-type', type)
       pill.setAttribute('data-title', title)
+      pill.setAttribute('data-goal-id', goalId ?? '')
+      pill.setAttribute('data-milestone-id', milestoneId ?? '')
+      pill.setAttribute('data-todo-id', todoId ?? '')
       pill.setAttribute('contenteditable', 'false')
       pill.style.cssText = `${PILL_STYLE[type]};${PILL_BASE}`
       pill.textContent = `${type} · ${title}`
