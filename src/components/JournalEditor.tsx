@@ -376,7 +376,7 @@ export function JournalEditor({
     <div className="relative">
       {/* ── Dropdown ── */}
       {dropdown && dropdown.items.length > 0 && (
-        <div className="absolute bottom-full left-0 mb-1 bg-white border border-mercury rounded-xl shadow-lg z-50 overflow-hidden min-w-[180px]">
+        <div className="mb-1 bg-white border border-mercury rounded-xl shadow-sm overflow-hidden min-w-[180px]">
           {dropdown.items.map((item, idx) => (
             <button
               key={item.type}

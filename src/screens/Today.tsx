@@ -238,6 +238,8 @@ export default function Today() {
   // Autosave refs
   const journalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onethingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Guard: only initialize journalValue from DB once (prevents stale save responses clobbering local state)
+  const journalInitialized = useRef(false)
 
   // Local autosave values
   const [journalValue, setJournalValue] = useState('')
@@ -480,10 +482,18 @@ export default function Today() {
       if (capturesRes.data) setCaptures(capturesRes.data)
       setDataLoaded(true)
     }
+    journalInitialized.current = false // reset so today's notes load fresh on day change
     load()
   }, [today])
 
-  useEffect(() => { setJournalValue(review?.notes ?? '') }, [review?.notes])
+  // Only initialize from DB once — prevents stale upsertReview responses from clobbering local pill markers
+  useEffect(() => {
+    if (journalInitialized.current) return
+    if (review?.notes !== undefined) {
+      setJournalValue(review.notes ?? '')
+      journalInitialized.current = true
+    }
+  }, [review?.notes])
   useEffect(() => {
     const val = review?.one_thing ?? ''
     setOnethingValue(val)
