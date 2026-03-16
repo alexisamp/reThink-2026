@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
+import { MagicWand } from '@phosphor-icons/react'
 import type { CaptureType } from '@/types'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -99,6 +100,8 @@ interface JournalEditorProps {
   onBlur?: () => void
   placeholder?: string
   className?: string
+  onScoreText?: (text: string) => void
+  hasAiScorer?: boolean
 }
 
 export function JournalEditor({
@@ -109,6 +112,8 @@ export function JournalEditor({
   onBlur,
   placeholder = "What's on your mind…",
   className = '',
+  onScoreText,
+  hasAiScorer = false,
 }: JournalEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   // Track the last value we set externally so we don't re-render on our own changes
@@ -398,19 +403,38 @@ export function JournalEditor({
       )}
 
       {/* ── Editor ── */}
-      <div
-        ref={editorRef}
-        contentEditable
-        suppressContentEditableWarning
-        onInput={handleInput}
-        onKeyDown={handleKeyDown}
-        onPaste={handlePaste}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        data-placeholder={placeholder}
-        className={`min-h-[160px] w-full text-xs text-burnham leading-relaxed outline-none journal-editor ${className}`}
-        style={{ wordBreak: 'break-word' }}
-      />
+      <div className="relative">
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          data-placeholder={placeholder}
+          className={`min-h-[160px] w-full text-xs text-burnham leading-relaxed outline-none journal-editor ${className}`}
+          style={{ wordBreak: 'break-word' }}
+        />
+        {hasAiScorer && onScoreText && (
+          <button
+            type="button"
+            onMouseDown={e => {
+              e.preventDefault()
+              const editorEl = editorRef.current
+              if (editorEl) {
+                const text = editorEl.innerText.trim()
+                if (text) onScoreText(text)
+              }
+            }}
+            className="absolute bottom-1 right-1 text-shuttle/20 hover:text-shuttle/50 transition-colors"
+            title="Evaluar escritura con AI"
+          >
+            <MagicWand size={13} />
+          </button>
+        )}
+      </div>
     </div>
   )
 }

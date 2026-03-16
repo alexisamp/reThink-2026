@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   Lightbulb, BookOpen, Eye, Scales, Trophy, Question,
-  ArrowSquareOut, X, Link, Target, Trash
+  ArrowSquareOut, X, Link, Target, Trash, MagicWand, Flag
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Capture, CaptureType } from '@/types'
+import { useGeminiScorer, hasGeminiKey } from '@/hooks/useGeminiScorer'
 
 type GoalOption = { id: string; text: string; alias?: string | null }
 type MilestoneOption = { id: string; text: string }
@@ -82,15 +83,19 @@ interface CaptureModalProps {
   onDelete?: (capture: Capture) => void
 }
 
-export default function CaptureModal({ capture, onClose, goals, onUpdate, onDelete }: CaptureModalProps) {
+export default function CaptureModal({ capture, onClose, goals, milestones, onUpdate, onDelete }: CaptureModalProps) {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [url, setUrl] = useState('')
   const [linkedGoalId, setLinkedGoalId] = useState<string>('')
+  const [linkedMilestoneId, setLinkedMilestoneId] = useState('')
   const [bodyEditing, setBodyEditing] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('idle')
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // AI scorer for title
+  const { result: aiResult, loading: aiLoading, scoreText: runScore, clear: clearAi } = useGeminiScorer()
 
   // Sync state when capture changes
   useEffect(() => {
@@ -99,9 +104,11 @@ export default function CaptureModal({ capture, onClose, goals, onUpdate, onDele
     setBody(capture.body ?? '')
     setUrl(capture.url ?? '')
     setLinkedGoalId(capture.linked_goal_id ?? '')
+    setLinkedMilestoneId(capture.linked_milestone_id ?? '')
     setBodyEditing(false)
     setSaveStatus('idle')
-  }, [capture?.id])
+    clearAi()
+  }, [capture?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keyboard: Esc to close
   useEffect(() => {
@@ -183,16 +190,49 @@ export default function CaptureModal({ capture, onClose, goals, onUpdate, onDele
 
           {/* ── Title ── */}
           <div className="px-6 pt-4 pb-2 shrink-0">
-            <input
-              type="text"
-              value={title}
-              onChange={e => {
-                setTitle(e.target.value)
-                scheduleSave({ title: e.target.value })
-              }}
-              className="w-full text-xl font-semibold text-burnham bg-transparent border-none outline-none placeholder-shuttle/20"
-              placeholder="Título…"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={title}
+                onChange={e => {
+                  setTitle(e.target.value)
+                  scheduleSave({ title: e.target.value })
+                }}
+                className="w-full text-xl font-semibold text-burnham bg-transparent border-none outline-none placeholder-shuttle/20 pr-8"
+                placeholder="Título…"
+              />
+              {title.trim() && hasGeminiKey && (
+                <button
+                  type="button"
+                  onClick={() => runScore(title)}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 text-shuttle/30 hover:text-shuttle transition-colors"
+                  title="Evaluar escritura con AI"
+                >
+                  <MagicWand size={14} />
+                </button>
+              )}
+              {aiLoading && <p className="text-[10px] text-shuttle/50 mt-1 animate-pulse">Evaluando…</p>}
+              {aiResult && (
+                <div className="mt-2 p-2 bg-gossip/20 rounded-lg border border-gossip/40 text-[11px]">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold text-burnham">Nota: {aiResult.score}/10</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => { setTitle(aiResult.corrected); scheduleSave({ title: aiResult.corrected }); clearAi() }}
+                        className="text-[10px] text-burnham underline"
+                      >
+                        Aplicar
+                      </button>
+                      <button onClick={clearAi} className="text-shuttle/40 hover:text-shuttle transition-colors">
+                        <X size={10} />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-shuttle/60">{aiResult.corrected}</p>
+                  <p className="text-shuttle/40 mt-0.5">{aiResult.explanation}</p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ── Body (rich text) ── */}
@@ -265,11 +305,28 @@ export default function CaptureModal({ capture, onClose, goals, onUpdate, onDele
                 ))}
               </select>
             </div>
+
+            {/* Milestone link */}
+            <div className="flex items-center gap-2">
+              <Flag size={12} className="text-shuttle/30 shrink-0" />
+              <select
+                value={linkedMilestoneId}
+                onChange={e => { setLinkedMilestoneId(e.target.value); scheduleSave({ linked_milestone_id: e.target.value || null }) }}
+                className="flex-1 text-[12px] text-burnham bg-transparent border-none outline-none cursor-pointer"
+              >
+                <option value="">Sin milestone vinculado</option>
+                {milestones.map(m => (
+                  <option key={m.id} value={m.id}>{m.text}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* ── Footer ── */}
           <div className="px-6 py-3 border-t border-mercury/50 flex items-center justify-between shrink-0">
-            <span className="text-[9px] font-mono text-shuttle/25">{formattedDate} · {cfg.label.toLowerCase()}</span>
+            <span className="text-[9px] font-mono text-shuttle/25">
+              {formattedDate} · {cfg.label.toLowerCase()} · editado {new Date(capture.updated_at).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+            </span>
             <div className="flex items-center gap-3">
               {onDelete && (
                 <button

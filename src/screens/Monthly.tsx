@@ -570,8 +570,20 @@ export default function Monthly() {
                               {(() => {
                                 const currentMonthStr = `${currentYear}-${String(viewMonth).padStart(2, '0')}`
                                 const completedDays = habitLogs.filter(l => l.habit_id === habit.id && l.value === 1 && l.log_date.startsWith(currentMonthStr)).length
-                                const daysElapsed = viewMonth === todayMonth ? new Date().getDate() : getDaysInMonth(viewMonth, currentYear)
-                                const { grade, color } = getHabitGrade(completedDays, daysElapsed)
+                                // Count only days elapsed that fall on the habit's scheduled_days (if set)
+                                const totalDays = viewMonth === todayMonth ? new Date().getDate() : getDaysInMonth(viewMonth, currentYear)
+                                let scheduledDaysElapsed = 0
+                                if (habit.scheduled_days === null || habit.scheduled_days.length === 0) {
+                                  scheduledDaysElapsed = totalDays
+                                } else {
+                                  for (let d = 1; d <= totalDays; d++) {
+                                    const dayOfWeek = new Date(currentYear, viewMonth - 1, d).getDay()
+                                    if (habit.scheduled_days.includes(dayOfWeek)) {
+                                      scheduledDaysElapsed++
+                                    }
+                                  }
+                                }
+                                const { grade, color } = getHabitGrade(completedDays, scheduledDaysElapsed)
                                 return (
                                   <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${color}`}>
                                     {grade}
