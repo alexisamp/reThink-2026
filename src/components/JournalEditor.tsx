@@ -18,7 +18,7 @@ const CAPTURE_MENU = [
 const PILL_STYLE: Record<CaptureType, string> = {
   idea:       'background:#E5F9BD;color:#003720',
   learning:   'background:rgba(121,214,94,0.3);color:#003720',
-  reflection: 'background:rgba(83,100,113,0.1);color:#536471',
+  reflection: 'background:rgba(83,100,113,0.12);color:#536471',
   decision:   'background:rgba(0,55,32,0.15);color:#003720',
   win:        'background:#79D65E;color:#003720',
   question:   'background:#E3E3E3;color:#536471',

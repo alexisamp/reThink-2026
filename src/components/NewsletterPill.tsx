@@ -2,12 +2,18 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Tray, ArrowSquareOut, ArrowCounterClockwise, ArrowClockwise } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 
-async function openLink(url: string) {
+function openLink(url: string): void {
   if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-    const { openUrl } = await import('@tauri-apps/plugin-opener')
-    await openUrl(url)
+    import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(url))
   } else {
-    window.open(url, '_blank', 'noopener,noreferrer')
+    const a = Object.assign(document.createElement('a'), {
+      href: url,
+      target: '_blank',
+      rel: 'noopener noreferrer'
+    })
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
   }
 }
 
@@ -90,7 +96,11 @@ export default function NewsletterPill() {
       .order('received_at', { ascending: false })
     const result = data ?? []
     setItems(result)
-    if (result.length > 0) setLastSync(result[0].received_at)
+    if (isRefresh) {
+      setLastSync(new Date().toISOString())
+    } else if (result.length > 0) {
+      setLastSync(result[0].received_at)
+    }
     if (isRefresh) setRefreshing(false)
     else setLoading(false)
     fetchCount()

@@ -10,8 +10,8 @@ interface HabitEditModalProps {
   onUpdate: (updated: Habit) => void
 }
 
-const DAY_LABELS = ['D', 'L', 'M', 'X', 'J', 'V', 'S']
-const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export default function HabitEditModal({ habit, goals, onClose, onUpdate }: HabitEditModalProps) {
   const [text, setText] = useState('')
@@ -74,7 +74,7 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
         <div className="pointer-events-auto w-[440px] max-h-[85vh] bg-white rounded-2xl border border-mercury shadow-2xl flex flex-col overflow-hidden">
 
           <div className="flex items-center justify-between px-6 py-4 border-b border-mercury/50 shrink-0">
-            <p className="text-sm font-semibold text-burnham">Editar hábito</p>
+            <p className="text-xs font-semibold text-burnham uppercase tracking-wide">Edit habit</p>
             <button onClick={onClose} className="text-shuttle/30 hover:text-shuttle transition-colors">
               <X size={16} />
             </button>
@@ -83,35 +83,35 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
           <div className="p-6 space-y-4 overflow-y-auto">
 
             <div>
-              <label className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">Nombre</label>
+              <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">Habit name</label>
               <input value={text} onChange={e => setText(e.target.value)}
-                className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors" />
+                className="w-full text-xs text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors" />
             </div>
 
             <div className="flex gap-3">
               <div className="flex-1">
-                <label className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">Alias <span className="normal-case text-shuttle/30">≤20 chars</span></label>
+                <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">Alias (≤20 chars)</label>
                 <input value={alias} onChange={e => setAlias(e.target.value.slice(0, 20))} maxLength={20}
-                  className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors"
-                  placeholder="gym, leer…" />
+                  className="w-full text-xs text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors"
+                  placeholder="gym, read…" />
               </div>
               <div className="w-24">
-                <label className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">Emoji</label>
+                <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">Emoji</label>
                 <input value={emoji} onChange={e => setEmoji(e.target.value)}
-                  className="w-full text-sm text-center border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors"
+                  className={`w-full text-xs text-center border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors ${!emoji ? 'opacity-60' : ''}`}
                   placeholder="🏋️" />
               </div>
             </div>
 
             <div>
-              <label className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono block mb-2">Tipo</label>
+              <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-2">Type</label>
               <div className="flex gap-2">
                 {(['BINARY', 'QUANTIFIED'] as const).map(t => (
                   <button key={t} onClick={() => setHabitType(t)}
-                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors border ${
-                      habitType === t ? 'bg-burnham text-white border-burnham' : 'text-shuttle border-mercury hover:border-shuttle bg-white'
+                    className={`flex-1 px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-colors border ${
+                      habitType === t ? 'bg-burnham text-gossip border-burnham' : 'bg-white border border-mercury text-shuttle'
                     }`}>
-                    {t === 'BINARY' ? 'Binario (sí/no)' : 'Con unidades'}
+                    {t === 'BINARY' ? 'Yes / No' : 'Quantified'}
                   </button>
                 ))}
               </div>
@@ -120,58 +120,58 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
             {habitType === 'QUANTIFIED' && (
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">Meta diaria</label>
+                  <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">Daily target</label>
                   <input type="number" min={0} value={dailyTarget} onChange={e => setDailyTarget(e.target.value)}
-                    className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors"
+                    className="w-full text-xs text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors"
                     placeholder="8" />
                 </div>
                 <div className="flex-1">
-                  <label className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">Unidad</label>
+                  <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">Unit</label>
                   <input value={unit} onChange={e => setUnit(e.target.value)}
-                    className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors"
-                    placeholder="vasos, km, págs…" />
+                    className="w-full text-xs text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors"
+                    placeholder="glasses, km, pages…" />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">Objetivo</label>
+              <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">Goal</label>
               <select value={goalId} onChange={e => setGoalId(e.target.value)}
-                className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors bg-white">
-                <option value="">Sin objetivo</option>
+                className="w-full text-xs text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors bg-white">
+                <option value="">No goal</option>
                 {goals.map(g => <option key={g.id} value={g.id}>{g.alias ?? g.text}</option>)}
               </select>
             </div>
 
             <div>
-              <label className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono block mb-2">
-                Días de la semana
-                <span className="normal-case text-shuttle/30 ml-2">vacío = todos los días</span>
+              <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-2">
+                Schedule
+                <span className="normal-case text-shuttle/30 ml-2">empty = every day</span>
               </label>
               <div className="flex gap-1.5">
                 {DAY_LABELS.map((label, day) => (
                   <button key={day} onClick={() => toggleDay(day)}
                     title={DAY_NAMES[day]}
-                    className={`w-8 h-8 rounded-full text-[11px] font-semibold transition-colors border ${
+                    className={`w-7 h-7 rounded text-[10px] font-mono font-semibold transition-colors ${
                       !scheduledDays || scheduledDays.includes(day)
-                        ? 'bg-burnham text-white border-burnham'
-                        : 'text-shuttle/50 border-mercury hover:border-shuttle/40 bg-white'
+                        ? 'bg-burnham text-gossip'
+                        : 'bg-mercury/40 text-shuttle/50'
                     }`}>
                     {label}
                   </button>
                 ))}
               </div>
               <p className="text-[9px] text-shuttle/30 mt-1 font-mono">
-                {scheduledDays ? `${scheduledDays.length} día${scheduledDays.length !== 1 ? 's' : ''} / semana` : 'Todos los días'}
+                {scheduledDays ? `${scheduledDays.length} day${scheduledDays.length !== 1 ? 's' : ''} / week` : 'Every day'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center justify-between px-6 py-4 border-t border-mercury/50 shrink-0">
-            <button onClick={onClose} className="text-sm text-shuttle/60 hover:text-shuttle transition-colors">Cancelar</button>
+            <button onClick={onClose} className="text-xs font-semibold text-shuttle/60 hover:text-shuttle transition-colors">Cancel</button>
             <button onClick={handleSave} disabled={saving}
-              className="px-4 py-2 bg-burnham text-white text-sm font-semibold rounded-lg hover:bg-burnham/80 transition-colors disabled:opacity-50">
-              {saving ? 'Guardando…' : 'Guardar'}
+              className="px-4 py-2 bg-burnham text-white text-xs font-semibold rounded-lg hover:bg-burnham/80 transition-colors disabled:opacity-50">
+              {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
         </div>

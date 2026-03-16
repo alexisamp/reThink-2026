@@ -70,7 +70,7 @@ function TimelineTodoRow({
              <Circle size={14} className="text-mercury" />}
           </button>
 
-          <span className={`flex-1 text-sm leading-snug min-w-0 truncate ${
+          <span className={`flex-1 text-xs leading-snug min-w-0 truncate ${
             isDone ? 'line-through text-shuttle/40' : 'text-burnham'
           }`}>
             {todo.text}
@@ -197,14 +197,14 @@ export default function MilestoneDetailModal({
       <div className="fixed inset-0 z-[215] flex items-center justify-center pointer-events-none">
         <div className="pointer-events-auto w-[560px] max-h-[82vh] bg-white rounded-2xl border border-mercury shadow-2xl flex flex-col overflow-hidden">
 
-          <div className="flex items-start justify-between px-6 py-5 border-b border-mercury/50 shrink-0">
+          <div className="flex items-start justify-between px-4 py-3 border-b border-mercury/50 shrink-0">
             <div className="flex-1 min-w-0 pr-4">
               {goal && (
                 <span className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">
                   {goal.emoji ? `${goal.emoji} ` : ''}{goal.alias ?? goal.text.slice(0, 20)}
                 </span>
               )}
-              <h2 className="text-base font-semibold text-burnham leading-snug">{milestone.text}</h2>
+              <h2 className="text-sm font-semibold text-burnham leading-snug">{milestone.text}</h2>
               {milestone.target_date && (
                 <p className="text-[10px] text-shuttle/40 font-mono mt-0.5">{milestone.target_date}</p>
               )}
@@ -214,18 +214,18 @@ export default function MilestoneDetailModal({
             </button>
           </div>
 
-          <div className="px-6 py-3 border-b border-mercury/30 shrink-0">
+          <div className="px-4 py-2 border-b border-mercury/30 shrink-0">
             <input value={description} onChange={e => handleDescChange(e.target.value)}
-              placeholder="Descripción opcional…"
-              className="w-full text-[12px] text-shuttle bg-transparent border-none outline-none placeholder-shuttle/25" />
+              placeholder="Optional description…"
+              className="w-full text-[11px] text-shuttle bg-transparent border-none outline-none placeholder-shuttle/25" />
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 pt-5 pb-2 min-h-0">
+          <div className="flex-1 overflow-y-auto px-4 pt-4 pb-2 min-h-0">
             {loading ? (
-              <p className="text-[11px] text-shuttle/30 text-center py-10 animate-pulse">Cargando…</p>
+              <p className="text-[11px] text-shuttle/30 text-center py-10 animate-pulse">Loading…</p>
             ) : todos.length === 0 ? (
               <div className="text-center py-10">
-                <p className="text-[12px] text-shuttle/40">Añadí el primer paso hacia este hito</p>
+                <p className="text-xs text-shuttle/40">Add the first step toward this milestone</p>
               </div>
             ) : (
               <div className="relative">
@@ -247,23 +247,23 @@ export default function MilestoneDetailModal({
             )}
           </div>
 
-          <div className="px-6 py-4 border-t border-mercury/50 shrink-0">
+          <div className="px-4 py-3 border-t border-mercury/50 shrink-0">
             {addingTodo ? (
               <div className="flex items-center gap-2">
                 <input autoFocus value={newTodoText} onChange={e => setNewTodoText(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleAddTodo(); if (e.key === 'Escape') { setAddingTodo(false); setNewTodoText('') } }}
-                  placeholder="Descripción del paso…"
-                  className="flex-1 text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors" />
+                  placeholder="Step description…"
+                  className="flex-1 text-xs text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors" />
                 <input type="date" value={newTodoDate} onChange={e => setNewTodoDate(e.target.value)}
-                  className="text-[11px] text-shuttle border border-mercury rounded-lg px-2 py-2 focus:outline-none focus:border-shuttle font-mono" />
-                <button onClick={handleAddTodo} className="px-3 py-2 bg-burnham text-white text-xs font-semibold rounded-lg hover:bg-burnham/80 transition-colors">ok</button>
+                  className="text-[10px] text-shuttle border border-mercury rounded-lg px-2 py-2 focus:outline-none focus:border-shuttle font-mono" />
+                <button onClick={handleAddTodo} className="px-3 py-2 bg-burnham text-white text-[10px] font-semibold rounded-lg hover:bg-burnham/80 transition-colors">ok</button>
                 <button onClick={() => { setAddingTodo(false); setNewTodoText('') }} className="text-shuttle/40 hover:text-shuttle"><X size={14} /></button>
               </div>
             ) : (
               <button onClick={() => setAddingTodo(true)}
-                className="flex items-center gap-2 text-[11px] text-shuttle/40 hover:text-shuttle transition-colors font-mono">
+                className="flex items-center gap-2 text-[10px] text-shuttle/40 hover:text-shuttle transition-colors font-mono">
                 <Plus size={12} />
-                <span>Añadir paso</span>
+                <span>Add step</span>
               </button>
             )}
           </div>

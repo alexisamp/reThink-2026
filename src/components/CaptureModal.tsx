@@ -8,7 +8,7 @@ import type { Capture, CaptureType } from '@/types'
 import { useGeminiScorer, hasGeminiKey } from '@/hooks/useGeminiScorer'
 
 type GoalOption = { id: string; text: string; alias?: string | null }
-type MilestoneOption = { id: string; text: string }
+type MilestoneOption = { id: string; text: string; goal_id?: string | null }
 
 // ── Capture type config ──────────────────────────────────────────────
 const CAPTURE_CONFIG: Record<CaptureType, {
@@ -254,7 +254,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                 autoFocus
                 value={body}
                 onChange={e => { setBody(e.target.value); scheduleSave({ body: e.target.value }) }}
-                onBlur={() => { setBodyEditing(false); persist({ title, body, url: url || null, linked_goal_id: linkedGoalId || null }) }}
+                onBlur={() => { setBodyEditing(false); persist({ title, body, url: url || null, linked_goal_id: linkedGoalId || null, linked_milestone_id: linkedMilestoneId || null }) }}
                 className="w-full min-h-[140px] bg-transparent border-none outline-none text-sm text-burnham resize-none leading-relaxed placeholder-shuttle/20 focus:ring-0"
                 placeholder="Agrega contexto, notas, reflexiones…"
               />
@@ -291,7 +291,30 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
               )}
             </div>
 
-            {/* Goal link */}
+            {/* Milestone link — first */}
+            <div className="flex items-center gap-2">
+              <Flag size={12} className="text-shuttle/30 shrink-0" />
+              <select
+                value={linkedMilestoneId}
+                onChange={e => {
+                  const mid = e.target.value || null
+                  setLinkedMilestoneId(mid ?? '')
+                  if (mid) {
+                    const ms = milestones.find(m => m.id === mid)
+                    if (ms?.goal_id) setLinkedGoalId(ms.goal_id)
+                  }
+                  scheduleSave({ linked_milestone_id: mid })
+                }}
+                className="flex-1 text-[12px] text-burnham bg-transparent border-none outline-none cursor-pointer"
+              >
+                <option value="">Sin milestone vinculado</option>
+                {milestones.map(m => (
+                  <option key={m.id} value={m.id}>{m.text}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Goal link — second */}
             <div className="flex items-center gap-2">
               <Target size={12} className="text-shuttle/30 shrink-0" />
               <select
@@ -302,21 +325,6 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                 <option value="">Sin objetivo vinculado</option>
                 {goals.map(g => (
                   <option key={g.id} value={g.id}>{g.alias ?? g.text}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Milestone link */}
-            <div className="flex items-center gap-2">
-              <Flag size={12} className="text-shuttle/30 shrink-0" />
-              <select
-                value={linkedMilestoneId}
-                onChange={e => { setLinkedMilestoneId(e.target.value); scheduleSave({ linked_milestone_id: e.target.value || null }) }}
-                className="flex-1 text-[12px] text-burnham bg-transparent border-none outline-none cursor-pointer"
-              >
-                <option value="">Sin milestone vinculado</option>
-                {milestones.map(m => (
-                  <option key={m.id} value={m.id}>{m.text}</option>
                 ))}
               </select>
             </div>
