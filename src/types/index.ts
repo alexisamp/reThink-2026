@@ -103,6 +103,7 @@ export interface Habit {
   daily_target: number | null     // target value per day (QUANTIFIED only)
   scheduled_days: number[] | null
   linked_indicator_id: string | null   // optional link to leading indicator
+  tracks_outreach: 'networking' | 'prospecting' | null
   created_at: string
   updated_at: string
 }
@@ -228,6 +229,28 @@ export interface Capture {
   linked_milestone_id: string | null
   linked_todo_id: string | null
   captured_date: string
+  created_at: string
+  updated_at: string
+}
+
+export type OutreachStatus =
+  | 'CONTACTED' | 'RESPONDED' | 'MEETING_SCHEDULED'
+  | 'MET' | 'FOLLOWING_UP' | 'CLOSED_WON' | 'CLOSED_LOST' | 'NURTURING'
+
+export type OutreachType = 'networking' | 'prospecting'
+
+export interface OutreachLog {
+  id: string
+  user_id: string
+  goal_id: string | null
+  name: string
+  linkedin_url: string | null
+  contact_type: OutreachType
+  status: OutreachStatus
+  notes: string | null
+  log_date: string
+  attio_record_id: string | null
+  attio_synced_at: string | null
   created_at: string
   updated_at: string
 }

@@ -22,6 +22,7 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
   const [unit, setUnit] = useState('')
   const [goalId, setGoalId] = useState('')
   const [scheduledDays, setScheduledDays] = useState<number[] | null>(null)
+  const [tracksOutreach, setTracksOutreach] = useState<'networking' | 'prospecting' | ''>('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
     setUnit(habit.unit ?? '')
     setGoalId(habit.goal_id ?? '')
     setScheduledDays(habit.scheduled_days ?? null)
+    setTracksOutreach(habit.tracks_outreach ?? '')
   }, [habit?.id])
 
   if (!habit) return null
@@ -60,6 +62,7 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
       unit: habitType === 'QUANTIFIED' ? (unit.trim() || null) : null,
       goal_id: goalId || null,
       scheduled_days: scheduledDays,
+      tracks_outreach: tracksOutreach || null,
     }
     const { data } = await supabase.from('habits').update(patch).eq('id', habit.id).select().single()
     if (data) onUpdate(data as Habit)
@@ -141,6 +144,17 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
                 <option value="">No goal</option>
                 {goals.map(g => <option key={g.id} value={g.id}>{g.alias ?? g.text}</option>)}
               </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">Tracks outreach</label>
+              <select value={tracksOutreach} onChange={e => setTracksOutreach(e.target.value as 'networking' | 'prospecting' | '')}
+                className="w-full text-xs text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors bg-white">
+                <option value="">None</option>
+                <option value="networking">Networking contacts</option>
+                <option value="prospecting">Prospecting contacts</option>
+              </select>
+              <p className="text-[9px] text-shuttle/30 mt-1">Auto-increments this habit when a contact is logged in Outreach</p>
             </div>
 
             <div>

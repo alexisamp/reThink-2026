@@ -4,7 +4,7 @@
     {
       "name": "dev",
       "runtimeExecutable": "node_modules/.bin/vite",
-      "runtimeArgs": ["preview", "--port", "5173", "--host", "localhost"],
+      "runtimeArgs": ["--port", "5173", "--host", "localhost"],
       "port": 5173
     }
   ]

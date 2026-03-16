@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { House, ArrowRight, Lightning, TrendUp, TrendDown, Minus } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import type { Goal, Milestone, LeadingIndicator, Habit, HabitLog, Review, MonthlyKpiEntry, Todo } from '@/types'
+import type { Goal, Milestone, LeadingIndicator, Habit, HabitLog, Review, MonthlyKpiEntry, Todo, OutreachLog } from '@/types'
 import { getMomentumScore, getMomentumBadge } from '@/lib/momentum'
 import AICoach from '@/components/AICoach'
 
@@ -259,6 +259,7 @@ export default function Dashboard() {
   const [reviews, setReviews] = useState<Review[]>([])
   const [monthlyKpiEntries, setMonthlyKpiEntries] = useState<MonthlyKpiEntry[]>([])
   const [completedTodos, setCompletedTodos] = useState<Todo[]>([])
+  const [outreach30, setOutreach30] = useState<OutreachLog[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -268,6 +269,15 @@ export default function Dashboard() {
         .from('workbooks').select('id')
         .eq('user_id', user.id).eq('year', currentYear).maybeSingle()
       if (!wb) { setLoading(false); return }
+
+      // Fetch outreach logs (last 30 days) — independent of goals
+      const thirtyDaysAgo30 = new Date()
+      thirtyDaysAgo30.setDate(thirtyDaysAgo30.getDate() - 30)
+      const cutoff30 = thirtyDaysAgo30.toISOString().split('T')[0]
+      const { data: outreachData } = await supabase
+        .from('outreach_logs').select('*')
+        .eq('user_id', user.id).gte('log_date', cutoff30)
+      setOutreach30(outreachData || [])
 
       const { data: goalsData } = await supabase
         .from('goals').select('*')
@@ -514,6 +524,56 @@ export default function Dashboard() {
             </p>
           </div>
         )}
+
+        {/* Outreach Funnel · 30 days */}
+        {outreach30.length > 0 && (() => {
+          const contacted = outreach30.length
+          const responded = outreach30.filter(l =>
+            ['RESPONDED', 'MEETING_SCHEDULED', 'MET', 'FOLLOWING_UP', 'CLOSED_WON'].includes(l.status)
+          ).length
+          const meetings = outreach30.filter(l =>
+            ['MEETING_SCHEDULED', 'MET'].includes(l.status)
+          ).length
+          const won = outreach30.filter(l => l.status === 'CLOSED_WON').length
+
+          const steps = [
+            { label: 'Contacted', value: contacted },
+            { label: 'Responded', value: responded },
+            { label: 'Meetings', value: meetings },
+            { label: 'Won', value: won },
+          ]
+
+          return (
+            <section className="py-8 border-b border-mercury">
+              <p className="text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-4">
+                Outreach · 30 days
+              </p>
+              <div className="flex gap-4">
+                {steps.map((s, i) => {
+                  const prev = i === 0 ? contacted : steps[i - 1].value
+                  const pct = prev > 0 ? Math.round((s.value / contacted) * 100) : 0
+                  const convPct = prev > 0 && i > 0 ? Math.round((s.value / prev) * 100) : null
+                  const barHeight = Math.max(4, Math.round((s.value / Math.max(contacted, 1)) * 60))
+                  return (
+                    <div key={s.label} className="flex-1 flex flex-col items-center gap-1.5">
+                      <div className="relative w-full bg-mercury/20 rounded-lg" style={{ height: 60 }}>
+                        <div
+                          className="absolute bottom-0 w-full bg-pastel/60 rounded-lg"
+                          style={{ height: barHeight }}
+                        />
+                      </div>
+                      <p className="text-lg font-bold text-burnham font-mono">{s.value}</p>
+                      <p className="text-[9px] text-shuttle/50 uppercase tracking-widest">{s.label}</p>
+                      <p className="text-[9px] text-shuttle/40 font-mono">
+                        {i === 0 ? `${pct}%` : convPct !== null ? `${convPct}% from prev` : '—'}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )
+        })()}
 
         {/* Goals Heatmaps */}
         <section className="flex flex-col gap-12 pt-12">

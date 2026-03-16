@@ -5,6 +5,7 @@ import {
   Flame, TrashSimple, NotePencil, GearSix,
   DotsSixVertical,
   X, Flag, ChartLine, HourglassMedium, MagicWand, Pencil, ArrowsOut, ArrowsIn, Circle,
+  ArrowSquareOut,
 } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -15,7 +16,8 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
-import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog, Capture } from '@/types'
+import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog, Capture, OutreachLog, OutreachStatus } from '@/types'
+import { useOutreach, type OutreachLogInput } from '@/hooks/useOutreach'
 import { parseJournalCaptures } from '@/lib/captureParser'
 import CaptureModal from '@/components/CaptureModal'
 import { JournalEditor } from '@/components/JournalEditor'
@@ -26,6 +28,7 @@ import EndOfDayDrawer from '@/components/EndOfDayDrawer'
 import NewsletterPill from '@/components/NewsletterPill'
 import MilestoneDetailModal from '@/components/MilestoneDetailModal'
 import HabitEditModal from '@/components/HabitEditModal'
+import OutreachPanel from '@/components/OutreachPanel'
 import { useGeminiScorer, hasGeminiKey } from '@/hooks/useGeminiScorer'
 
 const FOCUS_DURATIONS = [
@@ -192,6 +195,74 @@ function SortableTodoRow({ todo, goal, milestone, isEditing, editingText, onEdit
           <TrashSimple size={12} />
         </button>
       </div>
+    </div>
+  )
+}
+
+// ── Outreach status config ───────────────────────────────────────────────────
+const STATUS_CONFIG: Record<OutreachStatus, { label: string; classes: string }> = {
+  CONTACTED:         { label: 'contacted',  classes: 'bg-mercury/50 text-shuttle/60' },
+  RESPONDED:         { label: 'responded',  classes: 'bg-gossip text-burnham' },
+  MEETING_SCHEDULED: { label: 'meeting',    classes: 'bg-pastel/30 text-burnham' },
+  MET:               { label: 'met',        classes: 'bg-pastel/60 text-burnham' },
+  FOLLOWING_UP:      { label: 'follow up',  classes: 'bg-gossip text-shuttle' },
+  CLOSED_WON:        { label: 'won',        classes: 'bg-pastel text-burnham font-semibold' },
+  CLOSED_LOST:       { label: 'lost',       classes: 'bg-mercury text-shuttle/50' },
+  NURTURING:         { label: 'nurturing',  classes: 'bg-mercury/30 text-shuttle/50' },
+}
+
+function StatusBadge({ status }: { status: OutreachStatus }) {
+  const cfg = STATUS_CONFIG[status]
+  return (
+    <span className={`text-[8px] px-1.5 py-0.5 rounded font-mono shrink-0 ${cfg.classes}`}>
+      {cfg.label}
+    </span>
+  )
+}
+
+interface OutreachRowProps {
+  log: OutreachLog
+  onEdit: () => void
+  onDelete: () => void
+}
+
+function OutreachRow({ log, onEdit, onDelete }: OutreachRowProps) {
+  return (
+    <div className="group flex items-center gap-2 py-1.5 px-2 -mx-2 rounded hover:bg-gossip/20 transition-colors">
+      <span className={`text-[8px] font-mono uppercase px-1.5 py-0.5 rounded shrink-0 ${
+        log.contact_type === 'networking' ? 'bg-burnham/10 text-burnham' : 'bg-shuttle/10 text-shuttle'
+      }`}>
+        {log.contact_type === 'networking' ? 'NET' : 'PRO'}
+      </span>
+      <span className="text-[13px] font-medium text-burnham flex-1 truncate">{log.name}</span>
+      <StatusBadge status={log.status} />
+      {log.linkedin_url && (
+        <a
+          href={log.linkedin_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity text-shuttle"
+          title="Open LinkedIn profile"
+        >
+          <ArrowSquareOut size={12} />
+        </a>
+      )}
+      {log.attio_record_id && (
+        <span className="opacity-0 group-hover:opacity-40 text-[8px] font-mono text-pastel shrink-0">attio</span>
+      )}
+      <button
+        onClick={onEdit}
+        className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-burnham p-0.5"
+      >
+        <Pencil size={11} />
+      </button>
+      <button
+        onClick={onDelete}
+        className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5"
+      >
+        <TrashSimple size={11} />
+      </button>
     </div>
   )
 }
@@ -449,10 +520,38 @@ export default function Today() {
   // Habit edit modal (Phase 6)
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null)
 
+  // Outreach panel
+  const [outreachPanelOpen, setOutreachPanelOpen] = useState(false)
+  const [editingOutreachLog, setEditingOutreachLog] = useState<OutreachLog | null>(null)
+
   // AI scorer (Phase 8)
   const gemini = useGeminiScorer()
 
   useHabitNotifications(habits, logs, today)
+
+  // Outreach habit count helper (uses local logs state from Today's data fetch)
+  const upsertHabitCountLocal = useCallback(async (habitId: string, count: number) => {
+    const existing = logs.find((l: HabitLog) => l.habit_id === habitId)
+    if (existing) {
+      await supabase.from('habit_logs').update({ value: count }).eq('id', existing.id)
+      setLogs((prev: HabitLog[]) => prev.map(l => l.id === existing.id ? { ...l, value: count } : l))
+    } else {
+      const { data } = await supabase
+        .from('habit_logs')
+        .insert({ habit_id: habitId, user_id: userId, log_date: today, value: count })
+        .select().single()
+      if (data) setLogs((prev: HabitLog[]) => [...prev, data])
+    }
+  }, [logs, userId, today])
+
+  const {
+    todayLogs: todayOutreach,
+    syncing: outreachSyncing,
+    syncError: outreachSyncError,
+    addContact,
+    updateContact,
+    deleteContact,
+  } = useOutreach(userId ?? undefined, habits, upsertHabitCountLocal)
 
   useKeyboardShortcuts({
     'cmd+b': () => setSidebarOpen(p => !p),
@@ -460,6 +559,7 @@ export default function Today() {
     'cmd+n': () => setQuickAddOpen(true),
     'cmd+e': () => setShowEndOfDay(true),
     'cmd+h': () => setHabitDrawerOpen(v => !v),
+    'cmd+o': () => { setEditingOutreachLog(null); setOutreachPanelOpen(p => !p) },
     'cmd+l': () => {
       const drafts: Record<string, string> = {}
       indicators.filter(ind => !ind.habit_id).forEach(ind => {
@@ -481,6 +581,7 @@ export default function Today() {
       if (e.key === 'j' && e.metaKey && e.shiftKey) { e.preventDefault(); setJournalExpanded(v => !v); return }
 
       if (e.key === 'Escape') {
+        if (outreachPanelOpen) { setOutreachPanelOpen(false); return }
         if (liPanelOpen) { setLiPanelOpen(false); return }
         if (milestonesOpen) { setMilestonesOpen(false); return }
         if (habitDrawerOpen) { setHabitDrawerOpen(false); return }
@@ -1641,6 +1742,37 @@ export default function Today() {
                 )}
               </section>
 
+              {/* ── Outreach ─────────────────────────────────────────────── */}
+              <section className="mb-8">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest flex items-center gap-2">
+                    Outreach
+                    <span className="font-mono font-normal text-shuttle/40 normal-case">{todayOutreach.length}</span>
+                  </h3>
+                  <span className="text-[9px] font-mono text-shuttle/25 border border-mercury/50 rounded px-1">⌘O</span>
+                </div>
+                <div className="space-y-1">
+                  {todayOutreach.map(log => (
+                    <OutreachRow
+                      key={log.id}
+                      log={log}
+                      onEdit={() => { setEditingOutreachLog(log); setOutreachPanelOpen(true) }}
+                      onDelete={() => deleteContact(log.id)}
+                    />
+                  ))}
+                </div>
+                <button
+                  onClick={() => { setEditingOutreachLog(null); setOutreachPanelOpen(true) }}
+                  className="mt-2 flex items-center gap-2 text-[11px] text-shuttle/40 hover:text-shuttle transition-colors w-full text-left py-1"
+                >
+                  <span className="text-base leading-none">+</span>
+                  <span>Log a contact</span>
+                </button>
+                {outreachSyncError && (
+                  <p className="mt-1 text-[10px] text-red-400">{outreachSyncError}</p>
+                )}
+              </section>
+
               {pendingTodos.length === 0 && doneHabits.length > 0 && doneHabits.length === habits.length && habits.length > 0 && (
                 <div className="mt-10 text-center">
                   <p className="text-[11px] text-shuttle/30">Día sólido —{' '}
@@ -2441,6 +2573,26 @@ export default function Today() {
           </div>
         </div>
       )}
+
+      {/* ── Outreach Panel ───────────────────────────────────────────── */}
+      <OutreachPanel
+        open={outreachPanelOpen}
+        onClose={() => setOutreachPanelOpen(false)}
+        editingLog={editingOutreachLog}
+        goals={goals}
+        onSave={async (input: OutreachLogInput) => {
+          if (editingOutreachLog) {
+            await updateContact(editingOutreachLog.id, input)
+          } else {
+            await addContact(input)
+          }
+        }}
+        syncing={outreachSyncing}
+        onSpawnTodo={(text, linkedinUrl, goalId) => {
+          submitTodo(text + (linkedinUrl ? ` /url ${linkedinUrl}` : ''), null)
+          void goalId
+        }}
+      />
 
       {/* ─── End of Day Drawer ───────────────────────────────────────── */}
       {showEndOfDay && userId && (

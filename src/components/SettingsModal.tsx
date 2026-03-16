@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, ArrowClockwise, CheckCircle, WarningCircle, DownloadSimple, RocketLaunch } from '@phosphor-icons/react'
+import { X, ArrowClockwise, CheckCircle, WarningCircle, DownloadSimple, RocketLaunch, Eye, EyeSlash } from '@phosphor-icons/react'
 import type { UpdaterState } from '@/hooks/useUpdater'
 
 interface SettingsModalProps {
@@ -15,6 +15,24 @@ interface SettingsModalProps {
 
 export default function SettingsModal({ open, onClose, updater }: SettingsModalProps) {
   const [appVersion, setAppVersion] = useState<string>('')
+  const [attioKey, setAttioKey] = useState('')
+  const [attioKeyVisible, setAttioKeyVisible] = useState(false)
+  const [attioSaved, setAttioSaved] = useState(false)
+
+  useEffect(() => {
+    if (open) setAttioKey(localStorage.getItem('attio_api_key') ?? '')
+  }, [open])
+
+  const saveAttioKey = () => {
+    const trimmed = attioKey.trim()
+    if (trimmed) {
+      localStorage.setItem('attio_api_key', trimmed)
+    } else {
+      localStorage.removeItem('attio_api_key')
+    }
+    setAttioSaved(true)
+    setTimeout(() => setAttioSaved(false), 2000)
+  }
 
   // Get current version from Tauri
   useEffect(() => {
@@ -70,6 +88,48 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                 Última búsqueda: {updater.lastChecked.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
               </p>
             )}
+          </div>
+
+          {/* Integrations */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/50">Integrations</p>
+            <div>
+              <p className="text-xs font-medium text-burnham mb-1.5">Attio API key</p>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={attioKeyVisible ? 'text' : 'password'}
+                    value={attioKey}
+                    onChange={e => setAttioKey(e.target.value)}
+                    onBlur={saveAttioKey}
+                    onKeyDown={e => { if (e.key === 'Enter') saveAttioKey() }}
+                    placeholder="Bearer token…"
+                    className="w-full text-xs text-burnham border border-mercury rounded-lg px-3 py-2 pr-8 focus:outline-none focus:border-shuttle transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAttioKeyVisible(v => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-shuttle/40 hover:text-shuttle transition-colors"
+                  >
+                    {attioKeyVisible ? <EyeSlash size={13} /> : <Eye size={13} />}
+                  </button>
+                </div>
+                <button
+                  onClick={saveAttioKey}
+                  className="px-3 py-2 text-xs font-medium bg-burnham text-white rounded-lg hover:bg-burnham/90 transition-colors shrink-0"
+                >
+                  Save
+                </button>
+              </div>
+              <p className="text-[10px] mt-1 font-mono">
+                {attioSaved
+                  ? <span className="text-pastel">Saved ✓</span>
+                  : attioKey.trim()
+                    ? <span className="text-shuttle/40">Configured</span>
+                    : <span className="text-shuttle/30">Not configured</span>
+                }
+              </p>
+            </div>
           </div>
 
           {/* Update section */}

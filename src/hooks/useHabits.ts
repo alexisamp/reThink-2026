@@ -79,5 +79,22 @@ export function useHabits(userId: string | undefined) {
     return data ?? []
   }
 
-  return { habits, logs, loading, isCompleted, toggleHabit, upsertHabit, fetchHabits, getLogsForDateRange }
+  /** For QUANTIFIED habits: sets today's log value to `count`. Idempotent. */
+  const upsertHabitCount = async (habitId: string, count: number) => {
+    if (!userId) return
+    const existing = logs.find(l => l.habit_id === habitId)
+    if (existing) {
+      await supabase.from('habit_logs').update({ value: count }).eq('id', existing.id)
+      setLogs(prev => prev.map(l => l.id === existing.id ? { ...l, value: count } : l))
+    } else {
+      const { data } = await supabase
+        .from('habit_logs')
+        .insert({ habit_id: habitId, user_id: userId, log_date: today, value: count })
+        .select()
+        .single()
+      if (data) setLogs(prev => [...prev, data])
+    }
+  }
+
+  return { habits, logs, loading, isCompleted, toggleHabit, upsertHabit, fetchHabits, getLogsForDateRange, upsertHabitCount }
 }
