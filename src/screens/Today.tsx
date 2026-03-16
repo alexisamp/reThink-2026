@@ -1756,6 +1756,14 @@ export default function Today() {
                         const { selectionStart, value } = ta
                         const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1
                         const currentLine = value.substring(lineStart, selectionStart)
+                        // If current line is a capture (/type title), create & open modal immediately
+                        const captureMatch = currentLine.trim().match(/^\/(\w+)\s+(.+)$/)
+                        const CAPTURE_TYPES_LIST = ['idea', 'learning', 'reflection', 'decision', 'win', 'question']
+                        if (captureMatch && CAPTURE_TYPES_LIST.includes(captureMatch[1])) {
+                          e.preventDefault()
+                          openOrCreateCapture(captureMatch[1] as import('@/types').CaptureType, captureMatch[2].trim())
+                          return
+                        }
                         if (currentLine.startsWith('- ')) {
                           e.preventDefault()
                           if (currentLine.trim() === '-') {
