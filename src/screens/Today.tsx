@@ -4,7 +4,7 @@ import {
   Timer, CalendarBlank, SidebarSimple,
   Flame, TrashSimple, NotePencil, GearSix,
   DotsSixVertical,
-  X, Flag, ChartLine, HourglassMedium, MagicWand, Pencil, ArrowsOut, ArrowsIn,
+  X, Flag, ChartLine, HourglassMedium, MagicWand, Pencil, ArrowsOut, ArrowsIn, Circle,
 } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -424,6 +424,7 @@ export default function Today() {
 
       if (e.key === 'Escape') {
         if (liPanelOpen) { setLiPanelOpen(false); return }
+        if (milestonesOpen) { setMilestonesOpen(false); return }
         if (habitDrawerOpen) { setHabitDrawerOpen(false); return }
         if (showEndOfDay) { setShowEndOfDay(false); return }
         if (showPomSettings) { setShowPomSettings(false); return }
@@ -460,7 +461,7 @@ export default function Today() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [timerRunning, timerComplete, timerElapsed, showEndOfDay, habitDrawerOpen, liPanelOpen, habits, logs, journalExpanded])
+  }, [timerRunning, timerComplete, timerElapsed, showEndOfDay, habitDrawerOpen, liPanelOpen, habits, logs, journalExpanded, showPomSettings, milestonesOpen])
 
   useEffect(() => {
     const load = async () => {
@@ -474,7 +475,7 @@ export default function Today() {
 
       const [todosRes, yesterdayTodosRes, habitsRes, logsRes, recentLogsRes, reviewRes, goalsRes, milestonesRes, tomorrowRes, indicatorsRes, indicatorLogsRes, weekLogsRes, capturesRes] = await Promise.all([
         supabase.from('todos').select('*').eq('user_id', user.id)
-          .or(`date.is.null,date.eq.${today}`).order('sort_order', { ascending: true }),
+          .or(`date.eq.${today},and(date.is.null,milestone_id.is.null)`).order('sort_order', { ascending: true }),
         supabase.from('todos').select('*').eq('user_id', user.id)
           .lt('date', today).eq('completed', false).order('date', { ascending: false }),
         supabase.from('habits').select('*').eq('user_id', user.id).eq('is_active', true),
@@ -1221,19 +1222,21 @@ export default function Today() {
                         {/* The pill itself */}
                         <div className={`flex items-center gap-1.5 rounded-full border text-[11px] font-medium transition-all duration-200 ${chipClass}`}>
                           {habit.habit_type === 'QUANTIFIED' ? (
-                            /* QUANTIFIED chip — always-visible +/- */
+                            /* QUANTIFIED chip — vertical +/- to save horizontal space */
                             <div className="flex items-center gap-1 pl-2 pr-1 py-1">
                               {habit.emoji && <span className="leading-none text-[13px]" style={{ filter: 'grayscale(1)' }}>{habit.emoji}</span>}
                               <span className="whitespace-nowrap text-[11px]">{label}</span>
-                              <button
-                                onClick={e => { e.stopPropagation(); logHabitValue(habit.id, Math.max(0, currentVal - 1)) }}
-                                className="w-4 h-4 flex items-center justify-center text-shuttle/50 hover:text-burnham transition-colors font-bold text-[13px] leading-none"
-                              >−</button>
-                              <span className="text-[10px] font-mono font-semibold w-6 text-center">{currentVal}</span>
-                              <button
-                                onClick={e => { e.stopPropagation(); logHabitValue(habit.id, currentVal + 1) }}
-                                className="w-4 h-4 flex items-center justify-center text-shuttle/50 hover:text-burnham transition-colors font-bold text-[13px] leading-none"
-                              >+</button>
+                              <div className="flex flex-col items-center ml-1" style={{ gap: 0 }}>
+                                <button
+                                  onClick={e => { e.stopPropagation(); logHabitValue(habit.id, currentVal + 1) }}
+                                  className="w-3.5 h-3.5 flex items-center justify-center text-[9px] text-shuttle/50 hover:text-burnham leading-none"
+                                >+</button>
+                                <span className="text-[10px] font-mono font-semibold w-5 text-center text-burnham">{currentVal}</span>
+                                <button
+                                  onClick={e => { e.stopPropagation(); logHabitValue(habit.id, Math.max(0, currentVal - 1)) }}
+                                  className="w-3.5 h-3.5 flex items-center justify-center text-[9px] text-shuttle/50 hover:text-burnham leading-none"
+                                >−</button>
+                              </div>
                               {habit.daily_target && <span className="text-[9px] font-mono opacity-40">/{habit.daily_target}</span>}
                               {isDone && <Check size={10} weight="bold" className="text-pastel shrink-0" />}
                               {streak > 0 && <span className="flex items-center gap-0.5 text-[9px] opacity-60"><Flame size={8} weight="fill" className="text-pastel" />{streak}</span>}
@@ -1274,6 +1277,25 @@ export default function Today() {
                           <div className="mt-1.5 ml-1 flex items-center flex-wrap gap-3 text-[10px] text-shuttle/50">
                             {habit.default_time && <span className="font-mono">{habit.default_time}</span>}
                             {(() => { const adh = getAdherence(habit.id); return adh < 90 ? <span>{adh}% adherence</span> : null })()}
+                            {(() => {
+                              const days = ['S','M','T','W','T','F','S']
+                              const scheduled = habit.scheduled_days
+                              return (
+                                <div className="flex items-center gap-0.5">
+                                  {days.map((d, i) => {
+                                    const active = !scheduled || scheduled.includes(i)
+                                    return (
+                                      <span
+                                        key={i}
+                                        className={`w-5 h-5 rounded flex items-center justify-center text-[9px] font-mono font-semibold ${
+                                          active ? 'bg-burnham text-gossip' : 'bg-mercury/40 text-shuttle/30'
+                                        }`}
+                                      >{d}</span>
+                                    )
+                                  })}
+                                </div>
+                              )
+                            })()}
                             <button
                               onClick={() => setEditingHabit(habit)}
                               className="flex items-center gap-1 hover:text-burnham transition-colors"
@@ -1645,6 +1667,7 @@ export default function Today() {
                     {journalEditing && (
                       <span className="text-[9px] font-mono text-shuttle/25">/ para capturar</span>
                     )}
+                    <span className="text-[9px] font-mono text-shuttle/30">⌘⇧J</span>
                     <button onClick={() => setJournalExpanded(v => !v)} className="text-shuttle/30 hover:text-shuttle transition-colors" title="Expandir ⌘⇧J">
                       <ArrowsOut size={11} />
                     </button>
@@ -1819,15 +1842,18 @@ export default function Today() {
                 </button>
               ))}
             </div>
-            <select
-              value={timerTodoId ?? ''}
-              onChange={e => setTimerTodoId(e.target.value || null)}
-              disabled={timerRunning}
-              className="w-full text-[10px] border border-mercury rounded px-1 py-0.5 bg-white text-burnham outline-none disabled:opacity-50"
-            >
-              <option value="">No todo linked</option>
-              {pendingTodos.map(t => <option key={t.id} value={t.id}>{t.text.slice(0, 40)}</option>)}
-            </select>
+            <div className="space-y-1">
+              <span className="text-[9px] uppercase tracking-wide text-shuttle/40">Link to todo</span>
+              <select
+                value={timerTodoId ?? ''}
+                onChange={e => setTimerTodoId(e.target.value || null)}
+                disabled={timerRunning}
+                className="text-xs text-shuttle border border-mercury rounded-lg px-2 py-1 bg-white w-full focus:outline-none focus:border-burnham/30 cursor-pointer disabled:opacity-50"
+              >
+                <option value="">No todo linked</option>
+                {pendingTodos.map(t => <option key={t.id} value={t.id}>{t.text.slice(0, 40)}</option>)}
+              </select>
+            </div>
           </div>
         )}
 
@@ -1991,120 +2017,69 @@ export default function Today() {
         </>
       )}
 
-      {/* ─── Milestones — bottom-right floating panel ─────────────────── */}
-      <div className="fixed bottom-6 right-6 z-30 flex flex-col gap-2 items-end" style={{ maxWidth: 'min(400px, calc(100vw - 6rem))' }}>
-        {milestonesOpen && (
-          <div className="w-full bg-white border border-mercury rounded-2xl shadow-xl p-4 max-h-72 overflow-y-auto">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">Milestones</span>
-              <button onClick={() => setMilestonesOpen(false)} className="text-shuttle/40 hover:text-shuttle text-xs">Esc</button>
+      {/* ─── Milestones — right sidebar ────────────────────────────────── */}
+      {milestonesOpen && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 z-[189]" onClick={() => setMilestonesOpen(false)} />
+          {/* Sidebar */}
+          <div className="fixed right-0 top-0 bottom-0 z-[190] w-80 bg-white border-l border-mercury shadow-2xl flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-mercury">
+              <span className="text-xs font-semibold text-burnham uppercase tracking-wide">Milestones</span>
+              <button onClick={() => setMilestonesOpen(false)} className="text-shuttle hover:text-burnham p-1">
+                <X size={14} />
+              </button>
             </div>
-
-            {/* Pending — grouped by goal */}
-            {(() => {
-              const goalOrder = goals.map(g => g.id)
-              const grouped = pendingMilestones.reduce<Record<string, typeof pendingMilestones>>((acc, m) => {
-                const key = m.goal_id ?? '__none__'
-                ;(acc[key] ??= []).push(m)
-                return acc
-              }, {})
-              const sortedKeys = Object.keys(grouped).sort((a, b) => {
-                const ai = goalOrder.indexOf(a), bi = goalOrder.indexOf(b)
-                return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
-              })
-              if (sortedKeys.length === 0) return <p className="text-xs text-shuttle/40 text-center py-3">No pending milestones</p>
-              return sortedKeys.map(key => {
-                const goal = goals.find(g => g.id === key)
-                const label = goal ? (goal.emoji ? `${goal.emoji} ` : '') + (goal.alias ?? goal.text.slice(0, 20)) : null
+            {/* Body — scrollable */}
+            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+              {/* Group by goal */}
+              {goals.map(goal => {
+                const goalMilestones = milestones.filter(m => m.goal_id === goal.id && m.status !== 'COMPLETE')
+                if (!goalMilestones.length) return null
                 return (
-                  <div key={key} className="mb-3 last:mb-0">
-                    {label && (
-                      <p className="text-[9px] font-semibold uppercase tracking-widest text-shuttle/40 mb-1.5">{label}</p>
-                    )}
-                    {grouped[key].map(m => (
-                      <div key={m.id} className="flex items-start gap-2 py-1.5 hover:bg-gray-50/60 px-1 -mx-1 rounded group/row transition-colors">
-                        <input type="checkbox" className="custom-checkbox mt-0.5 shrink-0" checked={false} onChange={() => toggleMilestone(m.id)} />
-                        <div className="flex-1 min-w-0">
-                          <button
-                            onClick={() => setSelectedMilestoneDetail(m)}
-                            className="text-[13px] text-burnham leading-snug text-left hover:text-burnham/70 transition-colors w-full"
-                          >{m.text}</button>
-                          <div className="mt-0.5">
-                            {editingMilestoneDateId === m.id ? (
-                              <input
-                                type="date"
-                                defaultValue={m.target_date && m.target_date.length >= 10 ? m.target_date : m.target_date ? m.target_date + '-01' : ''}
-                                autoFocus
-                                className="text-[10px] text-shuttle/60 font-mono border-b border-shuttle/30 bg-transparent outline-none"
-                                onBlur={e => updateMilestoneDate(m.id, e.target.value)}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') e.currentTarget.blur()
-                                  if (e.key === 'Escape') setEditingMilestoneDateId(null)
-                                }}
-                              />
-                            ) : (
-                              <button
-                                onClick={() => setEditingMilestoneDateId(m.id)}
-                                className="text-[10px] text-shuttle/30 font-mono hover:text-shuttle/60 transition-colors"
-                              >
-                                {m.target_date ? formatMilestoneDate(m.target_date) : '+ fecha'}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {addingMilestoneForGoalId === key ? (
-                      <div className="flex items-center gap-2 mt-1.5 pl-6">
-                        <input
-                          autoFocus
-                          placeholder="Nombre del milestone…"
-                          className="flex-1 text-[13px] text-burnham outline-none border-b border-mercury/80 bg-transparent pb-0.5 placeholder-shuttle/20"
-                          value={newMilestoneDraft.text}
-                          onChange={e => setNewMilestoneDraft(d => ({ ...d, text: e.target.value }))}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') createMilestoneFromPanel(key)
-                            if (e.key === 'Escape') setAddingMilestoneForGoalId(null)
-                          }}
-                        />
-                        <input
-                          type="date"
-                          className="text-[10px] text-shuttle/50 font-mono border-b border-mercury/60 bg-transparent outline-none"
-                          value={newMilestoneDraft.date}
-                          onChange={e => setNewMilestoneDraft(d => ({ ...d, date: e.target.value }))}
-                        />
-                        <button onClick={() => createMilestoneFromPanel(key)} className="text-[10px] text-pastel font-mono hover:text-pastel/80">ok</button>
-                        <button onClick={() => setAddingMilestoneForGoalId(null)} className="text-[10px] text-shuttle/30 font-mono">esc</button>
-                      </div>
-                    ) : (
+                  <div key={goal.id}>
+                    <div className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono px-1 mb-1">
+                      {goal.emoji} {goal.alias || goal.text}
+                    </div>
+                    {goalMilestones.map(ms => (
                       <button
-                        onClick={() => { setAddingMilestoneForGoalId(key); setNewMilestoneDraft({ text: '', date: '' }) }}
-                        className="mt-1 ml-6 text-[9px] text-shuttle/25 hover:text-shuttle/50 font-mono transition-colors"
+                        key={ms.id}
+                        onClick={() => { setSelectedMilestoneDetail(ms); setMilestonesOpen(false) }}
+                        className="w-full text-left px-2 py-2 rounded-lg hover:bg-mercury/30 transition-colors group"
                       >
-                        + milestone
+                        <div className="flex items-start gap-2">
+                          <Circle size={8} weight="fill" className="mt-1 text-mercury flex-shrink-0" />
+                          <span className="text-xs text-burnham leading-snug">{ms.text}</span>
+                        </div>
+                        {ms.target_date && (
+                          <span className="text-[10px] font-mono text-shuttle/40 ml-4">
+                            {formatMilestoneDate(ms.target_date)}
+                          </span>
+                        )}
                       </button>
-                    )}
+                    ))}
                   </div>
                 )
-              })
-            })()}
-
-            {/* Done milestones */}
-            {doneMilestones.length > 0 && (
-              <div className="pt-2 mt-2 border-t border-dashed border-mercury">
-                {doneMilestones.map(m => (
-                  <div key={m.id} className="flex items-center gap-3 py-1.5 px-1 -mx-1 opacity-50">
-                    <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleMilestone(m.id)} />
-                    <span className="text-sm text-shuttle line-through decoration-pastel">{m.text}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+              })}
+              {pendingMilestones.length === 0 && (
+                <p className="text-xs text-shuttle/40 text-center py-6">No pending milestones</p>
+              )}
+            </div>
+            {/* Shortcut hint */}
+            <div className="px-4 py-2 border-t border-mercury">
+              <span className="text-[9px] font-mono text-shuttle/30">⌘⇧M to toggle · Esc to close</span>
+            </div>
           </div>
-        )}
+        </>
+      )}
+
+      {/* ─── Bottom-right floating pills ───────────────────────────────── */}
+      <div className="fixed bottom-6 right-6 z-30 flex flex-col gap-2 items-end">
         <button
           onClick={() => setMilestonesOpen(v => !v)}
           className="flex items-center gap-2 bg-white border border-mercury rounded-full px-3 py-1.5 shadow-md text-[11px] text-shuttle hover:border-shuttle/40 transition-colors"
+          title="⌘⇧M"
         >
           <Flag size={12} className="text-shuttle/60" />
           <span>Milestones</span>
@@ -2116,7 +2091,7 @@ export default function Today() {
                 ? 'bg-burnham text-[#72eb7e]'
                 : 'bg-mercury text-shuttle'
             }`}>
-              {urgentMilestone.daysLeft < 0 ? 'vencido' : `${urgentMilestone.daysLeft}d`}
+              {urgentMilestone.daysLeft < 0 ? 'overdue' : `${urgentMilestone.daysLeft}d`}
             </span>
           )}
         </button>
@@ -2257,101 +2232,89 @@ export default function Today() {
         </div>
       )}
 
-      {/* ─── Leading Indicators Panel (⌘L) ───────────────────────────── */}
+      {/* ─── Leading Indicators Panel (⌘L) — right sidebar ───────────── */}
       {liPanelOpen && (
-        <div
-          className="fixed inset-0 z-[200] flex items-start justify-center pt-40 bg-black/10 backdrop-blur-[2px]"
-          onClick={e => { if (e.target === e.currentTarget) setLiPanelOpen(false) }}
-        >
-          <div className="bg-white rounded-2xl shadow-2xl border border-mercury p-6 w-full max-w-md mx-4">
-            <p className="text-[9px] uppercase tracking-[0.15em] text-shuttle/30 mb-5 font-mono">Indicators · Today · ⌘L</p>
-            {indicators.length === 0 ? (
-              <p className="text-sm text-shuttle/40 italic">No leading indicators configured yet.</p>
-            ) : (
-              <div className="space-y-5">
-                {/* Manual indicators grouped by goal */}
-                {(() => {
-                  const manual = indicators.filter(ind => !ind.habit_id)
-                  const grouped = manual.reduce<Record<string, typeof manual>>((acc, ind) => {
-                    const key = ind.goal_id ?? '__none__'
-                    ;(acc[key] ??= []).push(ind)
-                    return acc
-                  }, {})
-                  const goalOrder = goals.map(g => g.id)
-                  const sortedKeys = Object.keys(grouped).sort((a, b) => {
-                    const ai = goalOrder.indexOf(a), bi = goalOrder.indexOf(b)
-                    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
-                  })
-                  return sortedKeys.map(key => {
-                    const goal = goals.find(g => g.id === key)
-                    return (
-                      <div key={key}>
-                        {goal && (
-                          <p className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono mb-2">
-                            {goal.emoji ? `${goal.emoji} ` : ''}{goal.alias ?? goal.text.slice(0, 24)}
-                          </p>
-                        )}
-                        <div className="space-y-3">
-                          {grouped[key].map(ind => {
-                            const weekTotal = weekIndicatorLogs
-                              .filter(l => l.leading_indicator_id === ind.id)
-                              .reduce((sum, l) => sum + Number(l.value), 0)
-                            return (
-                              <div key={ind.id} className="flex items-center gap-3">
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-burnham truncate">{ind.name}</p>
-                                  <p className="text-[10px] text-shuttle/40">
-                                    {weekTotal % 1 === 0 ? weekTotal : weekTotal.toFixed(1)}{ind.unit ? ` ${ind.unit}` : ''} this week
-                                    {ind.target ? ` · target ${ind.target}` : ''}
-                                  </p>
-                                </div>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={liDraftValues[ind.id] ?? ''}
-                                  onChange={e => setLiDraftValues(prev => ({ ...prev, [ind.id]: e.target.value }))}
-                                  onKeyDown={e => { if (e.key === 'Enter') saveIndicatorLogs() }}
-                                  placeholder="0"
-                                  className="w-20 text-right text-sm text-burnham border border-mercury rounded-lg px-2 py-1.5 focus:outline-none focus:border-shuttle transition-colors"
-                                />
-                                {ind.unit && <span className="text-xs text-shuttle/40 w-8 shrink-0">{ind.unit}</span>}
-                              </div>
-                            )
-                          })}
+        <>
+          <div className="fixed inset-0 z-[199]" onClick={() => setLiPanelOpen(false)} />
+          <div className="fixed right-0 top-0 bottom-0 z-[200] w-80 bg-white border-l border-mercury shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-mercury">
+              <span className="text-xs font-semibold text-burnham uppercase tracking-wide">Indicators</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-mono text-shuttle/30">⌘L</span>
+                <button onClick={() => setLiPanelOpen(false)} className="text-shuttle hover:text-burnham p-1">
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 py-2">
+              {indicators.length === 0 ? (
+                <p className="text-xs text-shuttle/40 italic text-center py-8">No leading indicators configured yet.</p>
+              ) : (
+                <div>
+                  {/* Manual indicators grouped by goal */}
+                  {(() => {
+                    const manual = indicators.filter(ind => !ind.habit_id)
+                    const grouped = manual.reduce<Record<string, typeof manual>>((acc, ind) => {
+                      const key = ind.goal_id ?? '__none__'
+                      ;(acc[key] ??= []).push(ind)
+                      return acc
+                    }, {})
+                    const goalOrder = goals.map(g => g.id)
+                    const sortedKeys = Object.keys(grouped).sort((a, b) => {
+                      const ai = goalOrder.indexOf(a), bi = goalOrder.indexOf(b)
+                      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+                    })
+                    return sortedKeys.map(key => {
+                      const goal = goals.find(g => g.id === key)
+                      return (
+                        <div key={key}>
+                          {goal && (
+                            <div className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono px-1 mt-3 mb-1">
+                              {goal.emoji} {goal.alias ?? goal.text.slice(0, 24)}
+                            </div>
+                          )}
+                          {grouped[key].map(ind => (
+                            <div key={ind.id} className="flex items-center gap-2 py-1.5">
+                              <span className="text-xs text-burnham flex-1 truncate">{ind.name}</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={liDraftValues[ind.id] ?? ''}
+                                onChange={e => setLiDraftValues(prev => ({ ...prev, [ind.id]: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') saveIndicatorLogs() }}
+                                className="w-14 text-xs text-right border border-mercury rounded px-1.5 py-0.5 focus:outline-none focus:border-burnham/30"
+                              />
+                              {ind.unit && <span className="text-[10px] text-shuttle/50 w-8 truncate">{ind.unit}</span>}
+                            </div>
+                          ))}
                         </div>
+                      )
+                    })
+                  })()}
+                  {/* Habit-driven indicators */}
+                  {indicators.filter(ind => !!ind.habit_id).map(ind => {
+                    const todayLog = indicatorLogs.find(l => l.leading_indicator_id === ind.id)
+                    const sourceHabit = habits.find(h => h.id === ind.habit_id)
+                    return (
+                      <div key={ind.id} className="flex items-center gap-2 py-1.5 opacity-60">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs text-burnham truncate block">{ind.name}</span>
+                          <span className="text-[10px] text-shuttle/40">via {sourceHabit?.alias ?? sourceHabit?.text ?? 'habit'}</span>
+                        </div>
+                        <span className="text-xs text-shuttle font-mono">{todayLog?.value ?? 0}</span>
+                        {ind.unit && <span className="text-[10px] text-shuttle/50 w-8 truncate">{ind.unit}</span>}
                       </div>
                     )
-                  })
-                })()}
-                {/* Habit-driven indicators */}
-                {indicators.filter(ind => !!ind.habit_id).map(ind => {
-                  const todayLog = indicatorLogs.find(l => l.leading_indicator_id === ind.id)
-                  const weekTotal = weekIndicatorLogs
-                    .filter(l => l.leading_indicator_id === ind.id)
-                    .reduce((sum, l) => sum + Number(l.value), 0)
-                  const sourceHabit = habits.find(h => h.id === ind.habit_id)
-                  return (
-                    <div key={ind.id} className="flex items-center gap-3 opacity-60">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-burnham truncate">{ind.name}</p>
-                        <p className="text-[10px] text-shuttle/40">
-                          via {sourceHabit?.alias ?? sourceHabit?.text ?? 'habit'} · {weekTotal}{ind.unit ? ` ${ind.unit}` : ''} this week
-                        </p>
-                      </div>
-                      <span className="text-sm text-shuttle font-mono">{todayLog?.value ?? 0}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-            <div className="flex items-center justify-between mt-6 pt-4 border-t border-mercury">
-              <span className="text-[9px] text-shuttle/25 font-mono">↵ save · Esc close</span>
-              <button onClick={saveIndicatorLogs} className="text-xs font-semibold text-burnham hover:text-burnham/70 transition-colors">
-                Save →
-              </button>
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="px-4 py-3 border-t border-mercury flex items-center justify-between">
+              <span className="text-[9px] font-mono text-shuttle/30">↵ save · Esc close</span>
+              <button onClick={saveIndicatorLogs} className="text-xs font-semibold text-burnham hover:text-burnham/70">Save →</button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* ─── Day NOT_STARTED overlay ───────────────────────────────── */}
