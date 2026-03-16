@@ -572,15 +572,9 @@ export default function Today() {
     }
   }, [])
 
-  const handleJournalChange = (value: string) => {
-    setJournalValue(value)
-    if (journalTimerRef.current) clearTimeout(journalTimerRef.current)
-    journalTimerRef.current = setTimeout(() => upsertReview({ notes: value }), 800)
-  }
-
-  const saveCaptures = useCallback(async () => {
+  const saveCaptures = useCallback(async (value: string) => {
     if (!userId) return
-    const found = parseJournalCaptures(journalValue)
+    const found = parseJournalCaptures(value)
     if (found.length === 0) return
     const today2 = new Date().toISOString().slice(0, 10)
     const rows = found.map(f => ({
@@ -592,14 +586,39 @@ export default function Today() {
     await supabase
       .from('captures')
       .upsert(rows, { onConflict: 'user_id,captured_date,type,title', ignoreDuplicates: true })
-    // Fetch fresh to ensure state has all captures (including pre-existing ones)
     const { data: fresh } = await supabase
       .from('captures')
       .select('*')
       .eq('user_id', userId)
       .eq('captured_date', today2)
     if (fresh) setCaptures(fresh)
-  }, [userId, journalValue])
+  }, [userId])
+
+  const handleJournalChange = (value: string) => {
+    setJournalValue(value)
+    if (journalTimerRef.current) clearTimeout(journalTimerRef.current)
+    journalTimerRef.current = setTimeout(async () => {
+      await upsertReview({ notes: value })
+      await saveCaptures(value)
+    }, 800)
+  }
+
+  const openOrCreateCapture = useCallback(async (type: import('@/types').CaptureType, title: string) => {
+    let record = captures.find(c => c.type === type && c.title === title)
+    if (!record && userId) {
+      const today2 = new Date().toISOString().slice(0, 10)
+      const { data } = await supabase
+        .from('captures')
+        .upsert({ user_id: userId, type, title, captured_date: today2 }, { onConflict: 'user_id,captured_date,type,title' })
+        .select()
+        .single()
+      if (data) {
+        setCaptures(prev => prev.find(c => c.id === data.id) ? prev.map(c => c.id === data.id ? data : c) : [...prev, data])
+        record = data
+      }
+    }
+    if (record) setActiveCapture(record)
+  }, [captures, userId])
 
   const handleOnethingChange = (value: string) => {
     setOnethingValue(value)
@@ -1775,8 +1794,7 @@ export default function Today() {
                             title={seg.title}
                             onClick={e => {
                               e.stopPropagation()
-                              const found = captures.find(c => c.type === seg.captureType && c.title === seg.title)
-                              if (found) setActiveCapture(found)
+                              openOrCreateCapture(seg.captureType, seg.title)
                             }}
                           />
                         : <span key={i} dangerouslySetInnerHTML={{ __html: renderMarkdown(seg.content) }} className="block" />
