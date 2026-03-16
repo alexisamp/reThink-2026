@@ -265,7 +265,8 @@ export default function Today() {
   const [journalValue, setJournalValue] = useState('')
   const [onethingValue, setOnethingValue] = useState('')
   const [journalEditing, setJournalEditing] = useState(false)
-  const journalRef = useRef<HTMLTextAreaElement>(null)
+  const journalRef = useRef<HTMLTextAreaElement | null>(null)
+  const segmentRefs = useRef<(HTMLTextAreaElement | null)[]>([])
   const [captures, setCaptures] = useState<Capture[]>([])
   const [activeCapture, setActiveCapture] = useState<Capture | null>(null)
   const [journalDropdown, setJournalDropdown] = useState<{
@@ -601,6 +602,35 @@ export default function Today() {
       await upsertReview({ notes: value })
       await saveCaptures(value)
     }, 800)
+  }
+
+  const updateJournalLine = (lineIdx: number, newContent: string) => {
+    const lines = journalValue.split('\n')
+    lines[lineIdx] = newContent
+    handleJournalChange(lines.join('\n'))
+  }
+
+  const insertJournalLineAfter = (lineIdx: number, content = '') => {
+    const lines = journalValue.split('\n')
+    lines.splice(lineIdx + 1, 0, content)
+    handleJournalChange(lines.join('\n'))
+    setTimeout(() => {
+      const next = segmentRefs.current[lineIdx + 1]
+      next?.focus()
+      next?.setSelectionRange(0, 0)
+    }, 20)
+  }
+
+  const removeJournalLine = (lineIdx: number) => {
+    const lines = journalValue.split('\n')
+    if (lines.length <= 1) return
+    lines.splice(lineIdx, 1)
+    handleJournalChange(lines.join('\n'))
+    setTimeout(() => {
+      const prev = segmentRefs.current[Math.max(0, lineIdx - 1)]
+      prev?.focus()
+      if (prev) prev.setSelectionRange(prev.value.length, prev.value.length)
+    }, 20)
   }
 
   const openOrCreateCapture = useCallback(async (type: import('@/types').CaptureType, title: string) => {
@@ -1064,13 +1094,13 @@ export default function Today() {
 
       {/* ─── Main content ──────────────────────────────────────────────── */}
       <main
-        className="h-screen flex flex-col relative overflow-hidden transition-all duration-300"
-        style={{ marginLeft: sidebarOpen ? 'clamp(280px, 30%, 360px)' : '2.5rem' }}
+        className="fixed top-0 bottom-0 right-0 flex flex-col overflow-hidden transition-all duration-300"
+        style={{ left: sidebarOpen ? 'clamp(280px, 30%, 360px)' : '2.5rem' }}
       >
 
         {/* ── One Thing header ──────────────────────────────────────── */}
         {onethingValue && (
-          <div className="px-10 pt-7 pb-4 flex items-baseline gap-4 border-b border-mercury/30 shrink-0 sticky top-0 z-10 bg-white">
+          <div className="px-10 pt-7 pb-4 flex items-baseline gap-4 border-b border-mercury/30 shrink-0 bg-white">
             <span className="text-[9px] font-mono text-shuttle/30 uppercase tracking-[0.15em] whitespace-nowrap">one thing</span>
             <span className="text-sm font-semibold text-burnham leading-snug">{onethingValue}</span>
           </div>
@@ -1648,7 +1678,7 @@ export default function Today() {
                 </div>
 
                 <div className="relative flex-1 flex flex-col min-h-0">
-                {/* Journal capture autocomplete — inline (no absolute, avoids overflow-y-auto clipping) */}
+                {/* Journal capture autocomplete — inline, appears above active line */}
                 {journalEditing && journalDropdown && journalDropdown.items.length > 0 && (
                   <div className="mb-1 bg-white border border-mercury rounded-xl shadow-sm overflow-hidden">
                     <div className="px-3 py-1.5 border-b border-mercury/40">
@@ -1659,21 +1689,19 @@ export default function Today() {
                         key={item.type}
                         onMouseDown={e => {
                           e.preventDefault()
-                          // Insert the selected type into the journal
-                          if (journalRef.current) {
-                            const ta = journalRef.current
+                          // Find the active textarea and insert the type
+                          const ta = journalRef.current
+                          if (ta) {
                             const pos = ta.selectionStart ?? ta.value.length
-                            const lineStart = ta.value.lastIndexOf('\n', pos - 1) + 1
-                            const before = ta.value.slice(0, lineStart)
+                            const before = ta.value.slice(0, ta.value.lastIndexOf('/', pos))
                             const after = ta.value.slice(pos)
                             const newVal = before + '/' + item.type + ' ' + after
-                            handleJournalChange(newVal)
-                            setJournalDropdown(null)
-                            setTimeout(() => {
-                              ta.selectionStart = ta.selectionEnd = lineStart + item.type.length + 2
-                              ta.focus()
-                            }, 0)
+                            // Update via updateJournalLine — find which line index this is
+                            const lineIdx = segmentRefs.current.indexOf(ta)
+                            if (lineIdx >= 0) updateJournalLine(lineIdx, newVal)
                           }
+                          setJournalDropdown(null)
+                          setTimeout(() => journalRef.current?.focus(), 0)
                         }}
                         className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${
                           i === journalDropdown.selectedIdx ? 'bg-gossip/30 text-burnham' : 'text-burnham hover:bg-mercury/20'
@@ -1685,132 +1713,138 @@ export default function Today() {
                     ))}
                   </div>
                 )}
-                {journalEditing ? (
-                  <textarea
-                    ref={journalRef}
-                    autoFocus
-                    className="flex-1 w-full bg-transparent border-none p-0 text-xs text-burnham resize-none placeholder-shuttle/30 focus:ring-0 outline-none leading-relaxed min-h-[160px]"
-                    placeholder="What's on your mind…"
-                    value={journalValue}
-                    onChange={e => {
-                      handleJournalChange(e.target.value)
-                      // Detect /type trigger on current line
-                      const val = e.target.value
-                      const pos = e.target.selectionStart ?? val.length
-                      const lineStart = val.lastIndexOf('\n', pos - 1) + 1
-                      const currentWord = val.slice(lineStart, pos)
-                      const slashMatch = currentWord.match(/^\/(\w*)$/)
-                      if (slashMatch) {
-                        const q = slashMatch[1].toLowerCase()
-                        const filtered = JOURNAL_CAPTURE_TYPES.filter(t =>
-                          q === '' || t.type.startsWith(q) || t.label.startsWith('/' + q)
+
+                {/* Block editor — each line is its own element */}
+                <div
+                  className="flex-1 min-h-[160px] flex flex-col gap-0"
+                  onClick={e => {
+                    // If click is on the container (not a child), focus last text line
+                    if (e.target === e.currentTarget) {
+                      const lines = journalValue.split('\n')
+                      const lastTextIdx = [...lines].map((l, i) => ({ l, i }))
+                        .filter(({ l }) => !l.trim().match(/^\/(\w+)\s+.+$/))
+                        .slice(-1)[0]?.i ?? lines.length - 1
+                      segmentRefs.current[lastTextIdx]?.focus()
+                    }
+                  }}
+                >
+                  {journalValue === '' ? (
+                    // Empty state — single editable line
+                    <textarea
+                      ref={el => { segmentRefs.current[0] = el; if (el) journalRef.current = el }}
+                      rows={1}
+                      value=""
+                      placeholder="What's on your mind…"
+                      className="w-full bg-transparent border-none p-0 text-xs text-burnham resize-none placeholder-shuttle/30 focus:ring-0 outline-none leading-relaxed"
+                      style={{ minHeight: '1.5rem' }}
+                      onFocus={() => { setJournalEditing(true); journalRef.current = segmentRefs.current[0] ?? null }}
+                      onBlur={() => setJournalEditing(false)}
+                      onChange={e => handleJournalChange(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleJournalChange('\n')
+                          setTimeout(() => segmentRefs.current[1]?.focus(), 20)
+                        }
+                      }}
+                    />
+                  ) : (
+                    splitJournalIntoSegments(journalValue).map((seg, lineIdx) => {
+                      if (seg.kind === 'capture') {
+                        return (
+                          <div key={`cap-${lineIdx}`} className="my-1">
+                            <CaptureChip
+                              type={seg.captureType}
+                              title={seg.title}
+                              onClick={e => {
+                                e.stopPropagation()
+                                openOrCreateCapture(seg.captureType, seg.title)
+                              }}
+                            />
+                          </div>
                         )
-                        if (filtered.length > 0) {
-                          setJournalDropdown({ items: filtered, selectedIdx: 0 })
-                        } else {
-                          setJournalDropdown(null)
-                        }
-                      } else {
-                        setJournalDropdown(null)
                       }
-                    }}
-                    onBlur={() => { setJournalEditing(false); setJournalDropdown(null); saveCaptures(journalValue) }}
-                    onKeyDown={e => {
-                      // Handle journal capture dropdown
-                      if (journalDropdown && journalDropdown.items.length > 0) {
-                        if (e.key === 'ArrowDown') {
-                          e.preventDefault()
-                          setJournalDropdown(d => d ? { ...d, selectedIdx: Math.min(d.selectedIdx + 1, d.items.length - 1) } : d)
-                          return
-                        }
-                        if (e.key === 'ArrowUp') {
-                          e.preventDefault()
-                          setJournalDropdown(d => d ? { ...d, selectedIdx: Math.max(d.selectedIdx - 1, 0) } : d)
-                          return
-                        }
-                        if (e.key === 'Tab' || e.key === 'Enter') {
-                          e.preventDefault()
-                          const selected = journalDropdown.items[journalDropdown.selectedIdx]
-                          // Replace the current /xxx with /type (a space after)
-                          const ta = e.currentTarget
-                          const pos = ta.selectionStart ?? ta.value.length
-                          const lineStart = ta.value.lastIndexOf('\n', pos - 1) + 1
-                          const before = ta.value.slice(0, lineStart)
-                          const after = ta.value.slice(pos)
-                          const newVal = before + '/' + selected.type + ' ' + after
-                          handleJournalChange(newVal)
-                          setJournalDropdown(null)
-                          // Move cursor after the inserted text
-                          setTimeout(() => {
-                            ta.selectionStart = ta.selectionEnd = lineStart + selected.type.length + 2
-                          }, 0)
-                          return
-                        }
-                        if (e.key === 'Escape') {
-                          setJournalDropdown(null)
-                          return
-                        }
-                      }
-                      if (e.key === 'Enter') {
-                        const ta = e.currentTarget
-                        const { selectionStart, value } = ta
-                        const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1
-                        const currentLine = value.substring(lineStart, selectionStart)
-                        // If current line is a capture (/type title), create & open modal immediately
-                        const captureMatch = currentLine.trim().match(/^\/(\w+)\s+(.+)$/)
-                        const CAPTURE_TYPES_LIST = ['idea', 'learning', 'reflection', 'decision', 'win', 'question']
-                        if (captureMatch && CAPTURE_TYPES_LIST.includes(captureMatch[1])) {
-                          e.preventDefault()
-                          setJournalEditing(false)
-                          setJournalDropdown(null)
-                          openOrCreateCapture(captureMatch[1] as import('@/types').CaptureType, captureMatch[2].trim())
-                          return
-                        }
-                        if (currentLine.startsWith('- ')) {
-                          e.preventDefault()
-                          if (currentLine.trim() === '-') {
-                            const newVal = value.substring(0, lineStart) + '\n' + value.substring(selectionStart)
-                            handleJournalChange(newVal)
-                            setTimeout(() => { ta.selectionStart = ta.selectionEnd = lineStart + 1 }, 0)
-                          } else {
-                            const newVal = value.substring(0, selectionStart) + '\n- ' + value.substring(selectionStart)
-                            handleJournalChange(newVal)
-                            setTimeout(() => { ta.selectionStart = ta.selectionEnd = selectionStart + 3 }, 0)
-                          }
-                          return
-                        }
-                        const numMatch = currentLine.match(/^(\d+)\. (.+)/)
-                        if (numMatch) {
-                          e.preventDefault()
-                          const nextNum = parseInt(numMatch[1]) + 1
-                          const insert = `\n${nextNum}. `
-                          const newVal = value.substring(0, selectionStart) + insert + value.substring(selectionStart)
-                          handleJournalChange(newVal)
-                          setTimeout(() => { ta.selectionStart = ta.selectionEnd = selectionStart + insert.length }, 0)
-                        }
-                      }
-                    }}
-                  />
-                ) : (
-                  <div
-                    onClick={() => { setJournalEditing(true); setTimeout(() => journalRef.current?.focus(), 0) }}
-                    className="min-h-[160px] cursor-text text-xs text-burnham leading-relaxed"
-                  >
-                    {journalValue ? splitJournalIntoSegments(journalValue).map((seg, i) =>
-                      seg.kind === 'capture'
-                        ? <CaptureChip
-                            key={i}
-                            type={seg.captureType}
-                            title={seg.title}
-                            onClick={e => {
-                              e.stopPropagation()
-                              openOrCreateCapture(seg.captureType, seg.title)
-                            }}
-                          />
-                        : <span key={i} dangerouslySetInnerHTML={{ __html: renderMarkdown(seg.content) }} className="block" />
-                    ) : <span className="text-shuttle/25 italic">What's on your mind…</span>}
-                  </div>
-                )}
+                      return (
+                        <textarea
+                          key={`txt-${lineIdx}`}
+                          ref={el => { segmentRefs.current[lineIdx] = el }}
+                          rows={1}
+                          value={seg.content}
+                          placeholder={lineIdx === 0 ? "What's on your mind…" : ''}
+                          className="w-full bg-transparent border-none p-0 text-xs text-burnham resize-none placeholder-shuttle/30 focus:ring-0 outline-none leading-relaxed"
+                          style={{ minHeight: '1.5rem', height: 'auto' }}
+                          onFocus={() => {
+                            setJournalEditing(true)
+                            journalRef.current = segmentRefs.current[lineIdx] ?? null
+                          }}
+                          onBlur={() => setJournalEditing(false)}
+                          onChange={e => {
+                            // Auto-resize
+                            e.target.style.height = 'auto'
+                            e.target.style.height = e.target.scrollHeight + 'px'
+                            updateJournalLine(lineIdx, e.target.value)
+                            // Detect /type trigger
+                            const val = e.target.value
+                            const slashIdx = val.lastIndexOf('/')
+                            if (slashIdx >= 0) {
+                              const q = val.slice(slashIdx).toLowerCase()
+                              const filtered = JOURNAL_CAPTURE_TYPES.filter(t => t.label.startsWith(q))
+                              if (filtered.length > 0) {
+                                setJournalDropdown({ items: filtered, selectedIdx: 0 })
+                              } else {
+                                setJournalDropdown(null)
+                              }
+                            } else {
+                              setJournalDropdown(null)
+                            }
+                          }}
+                          onKeyDown={e => {
+                            // Autocomplete navigation
+                            if (journalDropdown && journalDropdown.items.length > 0) {
+                              if (e.key === 'ArrowDown') { e.preventDefault(); setJournalDropdown(d => d ? { ...d, selectedIdx: Math.min(d.selectedIdx + 1, d.items.length - 1) } : d); return }
+                              if (e.key === 'ArrowUp') { e.preventDefault(); setJournalDropdown(d => d ? { ...d, selectedIdx: Math.max(d.selectedIdx - 1, 0) } : d); return }
+                              if (e.key === 'Tab') { e.preventDefault(); setJournalDropdown(null); return }
+                              if (e.key === 'Escape') { setJournalDropdown(null); return }
+                            }
+                            if (e.key === 'Enter') {
+                              const val = seg.content
+                              // Check for capture pattern
+                              const captureMatch = val.trim().match(/^\/(\w+)\s+(.+)$/)
+                              const CAPTURE_TYPES_LIST = ['idea', 'learning', 'reflection', 'decision', 'win', 'question']
+                              if (captureMatch && CAPTURE_TYPES_LIST.includes(captureMatch[1])) {
+                                e.preventDefault()
+                                setJournalDropdown(null)
+                                // Insert an empty line after this capture line so user can keep writing
+                                const lines = journalValue.split('\n')
+                                if (!lines[lineIdx + 1]?.trim()) {
+                                  // already an empty line after, just open modal
+                                } else {
+                                  lines.splice(lineIdx + 1, 0, '')
+                                  handleJournalChange(lines.join('\n'))
+                                }
+                                openOrCreateCapture(captureMatch[1] as import('@/types').CaptureType, captureMatch[2].trim())
+                                // Focus next line after modal closes
+                                setTimeout(() => segmentRefs.current[lineIdx + 1]?.focus(), 50)
+                                return
+                              }
+                              // Normal Enter: insert new empty line after
+                              e.preventDefault()
+                              insertJournalLineAfter(lineIdx)
+                              return
+                            }
+                            if (e.key === 'Backspace') {
+                              if (seg.content === '') {
+                                e.preventDefault()
+                                removeJournalLine(lineIdx)
+                                return
+                              }
+                            }
+                          }}
+                        />
+                      )
+                    })
+                  )}
+                </div>
                 </div>
               </div>
 
