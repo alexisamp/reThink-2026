@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import {
   Lightbulb, BookOpen, Eye, Scales, Trophy, Question,
-  ArrowSquareOut, X, Link, Target
+  ArrowSquareOut, X, Link, Target, Trash
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Capture, CaptureType } from '@/types'
@@ -79,9 +79,10 @@ interface CaptureModalProps {
   goals: GoalOption[]
   milestones: MilestoneOption[]
   onUpdate: (updated: Capture) => void
+  onDelete?: (capture: Capture) => void
 }
 
-export default function CaptureModal({ capture, onClose, goals, onUpdate }: CaptureModalProps) {
+export default function CaptureModal({ capture, onClose, goals, onUpdate, onDelete }: CaptureModalProps) {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [url, setUrl] = useState('')
@@ -269,9 +270,21 @@ export default function CaptureModal({ capture, onClose, goals, onUpdate }: Capt
           {/* ── Footer ── */}
           <div className="px-6 py-3 border-t border-mercury/50 flex items-center justify-between shrink-0">
             <span className="text-[9px] font-mono text-shuttle/25">{formattedDate} · {cfg.label.toLowerCase()}</span>
-            <span className="text-[9px] font-mono text-shuttle/25">
-              {saveStatus === 'saving' ? 'guardando…' : saveStatus === 'saved' ? 'guardado ✓' : 'Esc para cerrar'}
-            </span>
+            <div className="flex items-center gap-3">
+              {onDelete && (
+                <button
+                  onClick={() => { onDelete(capture); onClose() }}
+                  className="flex items-center gap-1 text-[11px] text-shuttle/40 hover:text-red-400 transition-colors"
+                  title="Eliminar captura"
+                >
+                  <Trash size={12} />
+                  <span>eliminar</span>
+                </button>
+              )}
+              <span className="text-[9px] font-mono text-shuttle/25">
+                {saveStatus === 'saving' ? 'guardando…' : saveStatus === 'saved' ? 'guardado ✓' : 'Esc para cerrar'}
+              </span>
+            </div>
           </div>
 
         </div>

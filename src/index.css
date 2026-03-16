@@ -46,3 +46,10 @@
 .animate-confetti-fall {
   animation: confetti-fall 3s ease-in forwards;
 }
+
+/* Journal editor: placeholder via data-placeholder attr */
+.journal-editor:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(83, 100, 113, 0.3);
+  pointer-events: none;
+}

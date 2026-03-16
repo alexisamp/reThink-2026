@@ -3,8 +3,8 @@ import {
   Lightning, Check, Play, Pause, Stop,
   Timer, CalendarBlank, SidebarSimple,
   Flame, TrashSimple, NotePencil, GearSix,
-  TextB, TextItalic, TextStrikethrough, DotsSixVertical,
-  X, ListBullets, ListNumbers, Flag, ChartLine,
+  DotsSixVertical,
+  X, Flag, ChartLine,
 } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -16,8 +16,9 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
 import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog, Capture } from '@/types'
-import { parseJournalCaptures, splitJournalIntoSegments } from '@/lib/captureParser'
-import CaptureModal, { CaptureChip } from '@/components/CaptureModal'
+import { parseJournalCaptures } from '@/lib/captureParser'
+import CaptureModal from '@/components/CaptureModal'
+import { JournalEditor } from '@/components/JournalEditor'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useHabitNotifications } from '@/hooks/useHabitNotifications'
 import StreakCelebration from '@/components/StreakCelebration'
@@ -30,14 +31,6 @@ const FOCUS_DURATIONS = [
   { label: '90', minutes: 90, desc: 'Deep Work' },
 ]
 
-const JOURNAL_CAPTURE_TYPES = [
-  { type: 'idea',       label: '/idea',       desc: 'idea o concepto' },
-  { type: 'learning',   label: '/learning',   desc: 'algo aprendido' },
-  { type: 'reflection', label: '/reflection', desc: 'reflexión personal' },
-  { type: 'decision',   label: '/decision',   desc: 'decisión tomada' },
-  { type: 'win',        label: '/win',        desc: 'logro o victoria' },
-  { type: 'question',   label: '/question',   desc: 'pregunta abierta' },
-]
 
 function formatMilestoneDate(date: string): string {
   const parts = date.split('-')
@@ -77,21 +70,6 @@ function renderMarkdown(text: string): string {
 }
 
 /** Wrap textarea selection in markdown syntax markers. */
-function wrapSelection(
-  ta: HTMLTextAreaElement,
-  before: string,
-  after: string,
-  onChange: (v: string) => void,
-) {
-  const { selectionStart: s, selectionEnd: e, value } = ta
-  const selected = value.slice(s, e)
-  const newValue = value.slice(0, s) + before + selected + after + value.slice(e)
-  onChange(newValue)
-  setTimeout(() => {
-    ta.setSelectionRange(s + before.length, e + before.length)
-    ta.focus()
-  }, 0)
-}
 
 /** Local YYYY-MM-DD (avoids UTC offset shifting date at night) */
 function localDate(d = new Date()) {
@@ -265,14 +243,8 @@ export default function Today() {
   const [journalValue, setJournalValue] = useState('')
   const [onethingValue, setOnethingValue] = useState('')
   const [journalEditing, setJournalEditing] = useState(false)
-  const journalRef = useRef<HTMLTextAreaElement | null>(null)
-  const segmentRefs = useRef<(HTMLTextAreaElement | null)[]>([])
   const [captures, setCaptures] = useState<Capture[]>([])
   const [activeCapture, setActiveCapture] = useState<Capture | null>(null)
-  const [journalDropdown, setJournalDropdown] = useState<{
-    items: Array<{ type: string; label: string; desc: string }>
-    selectedIdx: number
-  } | null>(null)
 
   // Day State Machine
   const [dayStartedLocal, setDayStartedLocal] = useState(() =>
@@ -604,34 +576,6 @@ export default function Today() {
     }, 800)
   }
 
-  const updateJournalLine = (lineIdx: number, newContent: string) => {
-    const lines = journalValue.split('\n')
-    lines[lineIdx] = newContent
-    handleJournalChange(lines.join('\n'))
-  }
-
-  const insertJournalLineAfter = (lineIdx: number, content = '') => {
-    const lines = journalValue.split('\n')
-    lines.splice(lineIdx + 1, 0, content)
-    handleJournalChange(lines.join('\n'))
-    setTimeout(() => {
-      const next = segmentRefs.current[lineIdx + 1]
-      next?.focus()
-      next?.setSelectionRange(0, 0)
-    }, 20)
-  }
-
-  const removeJournalLine = (lineIdx: number) => {
-    const lines = journalValue.split('\n')
-    if (lines.length <= 1) return
-    lines.splice(lineIdx, 1)
-    handleJournalChange(lines.join('\n'))
-    setTimeout(() => {
-      const prev = segmentRefs.current[Math.max(0, lineIdx - 1)]
-      prev?.focus()
-      if (prev) prev.setSelectionRange(prev.value.length, prev.value.length)
-    }, 20)
-  }
 
   const openOrCreateCapture = useCallback(async (type: import('@/types').CaptureType, title: string) => {
     let record = captures.find(c => c.type === type && c.title === title)
@@ -649,6 +593,27 @@ export default function Today() {
     }
     if (record) setActiveCapture(record)
   }, [captures, userId])
+
+  /** When modal updates title → also update the inline marker in journalValue */
+  const handleCaptureUpdate = useCallback((updated: import('@/types').Capture) => {
+    setCaptures(prev => prev.map(c => c.id === updated.id ? updated : c))
+    // Find old capture to get its old title
+    const old = captures.find(c => c.id === updated.id)
+    if (old && old.title !== updated.title) {
+      setJournalValue(prev =>
+        prev.replace(`[~${old.type}:${old.title}~]`, `[~${updated.type}:${updated.title}~]`)
+      )
+    }
+  }, [captures])
+
+  /** Delete a capture from modal: remove from DB, captures state, and journal text */
+  const handleCaptureDelete = useCallback(async (capture: import('@/types').Capture) => {
+    await supabase.from('captures').delete().eq('id', capture.id)
+    setCaptures(prev => prev.filter(c => c.id !== capture.id))
+    setJournalValue(prev =>
+      prev.replace(`[~${capture.type}:${capture.title}~]`, '').replace(/\n{3,}/g, '\n\n').trim()
+    )
+  }, [])
 
   const handleOnethingChange = (value: string) => {
     setOnethingValue(value)
@@ -1607,245 +1572,24 @@ export default function Today() {
                 </div>
               </div>
 
-              {/* JOURNALING — rich text with markdown storage */}
+              {/* JOURNALING — inline rich editor with capture pills */}
               <div className="flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-[10px] font-semibold text-shuttle/70 uppercase tracking-widest flex items-center gap-1.5">
                     <NotePencil size={11} /> Journal
                   </h3>
                   {journalEditing && (
-                    <div className="flex items-center gap-0.5">
-                      <button
-                        onMouseDown={e => { e.preventDefault(); if (journalRef.current) wrapSelection(journalRef.current, '**', '**', handleJournalChange) }}
-                        className="w-5 h-5 rounded flex items-center justify-center text-shuttle hover:text-burnham hover:bg-mercury/30 transition-colors"
-                        title="Bold"
-                      >
-                        <TextB size={11} weight="bold" />
-                      </button>
-                      <button
-                        onMouseDown={e => { e.preventDefault(); if (journalRef.current) wrapSelection(journalRef.current, '*', '*', handleJournalChange) }}
-                        className="w-5 h-5 rounded flex items-center justify-center text-shuttle hover:text-burnham hover:bg-mercury/30 transition-colors"
-                        title="Italic"
-                      >
-                        <TextItalic size={11} />
-                      </button>
-                      <button
-                        onMouseDown={e => { e.preventDefault(); if (journalRef.current) wrapSelection(journalRef.current, '~~', '~~', handleJournalChange) }}
-                        className="w-5 h-5 rounded flex items-center justify-center text-shuttle hover:text-burnham hover:bg-mercury/30 transition-colors"
-                        title="Strikethrough"
-                      >
-                        <TextStrikethrough size={11} />
-                      </button>
-                      <button
-                        onMouseDown={e => {
-                          e.preventDefault()
-                          const ta = journalRef.current
-                          if (!ta) return
-                          const { selectionStart, value } = ta
-                          const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1
-                          const lineContent = value.substring(lineStart, selectionStart)
-                          if (!lineContent.startsWith('- ')) {
-                            const newVal = value.substring(0, lineStart) + '- ' + lineContent + value.substring(selectionStart)
-                            handleJournalChange(newVal)
-                            setTimeout(() => { ta.selectionStart = ta.selectionEnd = selectionStart + 2 }, 0)
-                          }
-                        }}
-                        className="w-5 h-5 rounded flex items-center justify-center text-shuttle hover:text-burnham hover:bg-mercury/30 transition-colors"
-                        title="Bullet list"
-                      ><ListBullets size={11} /></button>
-                      <button
-                        onMouseDown={e => {
-                          e.preventDefault()
-                          const ta = journalRef.current
-                          if (!ta) return
-                          const { selectionStart, value } = ta
-                          const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1
-                          const lineContent = value.substring(lineStart, selectionStart)
-                          if (!lineContent.match(/^\d+\. /)) {
-                            const lines = value.substring(0, lineStart).split('\n')
-                            const prevNum = lines.reduce((n: number, l: string) => { const m = l.match(/^(\d+)\. /); return m ? parseInt(m[1]) : n }, 0)
-                            const nextNum = prevNum + 1
-                            const newVal = value.substring(0, lineStart) + `${nextNum}. ` + lineContent + value.substring(selectionStart)
-                            handleJournalChange(newVal)
-                            setTimeout(() => { ta.selectionStart = ta.selectionEnd = selectionStart + `${nextNum}. `.length }, 0)
-                          }
-                        }}
-                        className="w-5 h-5 rounded flex items-center justify-center text-shuttle hover:text-burnham hover:bg-mercury/30 transition-colors"
-                        title="Numbered list"
-                      ><ListNumbers size={11} /></button>
-                    </div>
+                    <span className="text-[9px] font-mono text-shuttle/25">/ para capturar</span>
                   )}
                 </div>
 
-                <div className="relative flex-1 flex flex-col min-h-0">
-                {/* Journal capture autocomplete — inline, appears above active line */}
-                {journalEditing && journalDropdown && journalDropdown.items.length > 0 && (
-                  <div className="mb-1 bg-white border border-mercury rounded-xl shadow-sm overflow-hidden">
-                    <div className="px-3 py-1.5 border-b border-mercury/40">
-                      <span className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono">Tipo de captura</span>
-                    </div>
-                    {journalDropdown.items.map((item, i) => (
-                      <button
-                        key={item.type}
-                        onMouseDown={e => {
-                          e.preventDefault()
-                          // Find the active textarea and insert the type
-                          const ta = journalRef.current
-                          if (ta) {
-                            const pos = ta.selectionStart ?? ta.value.length
-                            const before = ta.value.slice(0, ta.value.lastIndexOf('/', pos))
-                            const after = ta.value.slice(pos)
-                            const newVal = before + '/' + item.type + ' ' + after
-                            // Update via updateJournalLine — find which line index this is
-                            const lineIdx = segmentRefs.current.indexOf(ta)
-                            if (lineIdx >= 0) updateJournalLine(lineIdx, newVal)
-                          }
-                          setJournalDropdown(null)
-                          setTimeout(() => journalRef.current?.focus(), 0)
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${
-                          i === journalDropdown.selectedIdx ? 'bg-gossip/30 text-burnham' : 'text-burnham hover:bg-mercury/20'
-                        }`}
-                      >
-                        <span className="text-[12px] font-medium font-mono">{item.label}</span>
-                        <span className="text-[10px] text-shuttle/40">{item.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Block editor — each line is its own element */}
-                <div
-                  className="flex-1 min-h-[160px] flex flex-col gap-0"
-                  onClick={e => {
-                    // If click is on the container (not a child), focus last text line
-                    if (e.target === e.currentTarget) {
-                      const lines = journalValue.split('\n')
-                      const lastTextIdx = [...lines].map((l, i) => ({ l, i }))
-                        .filter(({ l }) => !l.trim().match(/^\/(\w+)\s+.+$/))
-                        .slice(-1)[0]?.i ?? lines.length - 1
-                      segmentRefs.current[lastTextIdx]?.focus()
-                    }
-                  }}
-                >
-                  {journalValue === '' ? (
-                    // Empty state — single editable line
-                    <textarea
-                      ref={el => { segmentRefs.current[0] = el; if (el) journalRef.current = el }}
-                      rows={1}
-                      value=""
-                      placeholder="What's on your mind…"
-                      className="w-full bg-transparent border-none p-0 text-xs text-burnham resize-none placeholder-shuttle/30 focus:ring-0 outline-none leading-relaxed"
-                      style={{ minHeight: '1.5rem' }}
-                      onFocus={() => { setJournalEditing(true); journalRef.current = segmentRefs.current[0] ?? null }}
-                      onBlur={() => setJournalEditing(false)}
-                      onChange={e => handleJournalChange(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleJournalChange('\n')
-                          setTimeout(() => segmentRefs.current[1]?.focus(), 20)
-                        }
-                      }}
-                    />
-                  ) : (
-                    splitJournalIntoSegments(journalValue).map((seg, lineIdx) => {
-                      if (seg.kind === 'capture') {
-                        return (
-                          <div key={`cap-${lineIdx}`} className="my-1">
-                            <CaptureChip
-                              type={seg.captureType}
-                              title={seg.title}
-                              onClick={e => {
-                                e.stopPropagation()
-                                openOrCreateCapture(seg.captureType, seg.title)
-                              }}
-                            />
-                          </div>
-                        )
-                      }
-                      return (
-                        <textarea
-                          key={`txt-${lineIdx}`}
-                          ref={el => { segmentRefs.current[lineIdx] = el }}
-                          rows={1}
-                          value={seg.content}
-                          placeholder={lineIdx === 0 ? "What's on your mind…" : ''}
-                          className="w-full bg-transparent border-none p-0 text-xs text-burnham resize-none placeholder-shuttle/30 focus:ring-0 outline-none leading-relaxed"
-                          style={{ minHeight: '1.5rem', height: 'auto' }}
-                          onFocus={() => {
-                            setJournalEditing(true)
-                            journalRef.current = segmentRefs.current[lineIdx] ?? null
-                          }}
-                          onBlur={() => setJournalEditing(false)}
-                          onChange={e => {
-                            // Auto-resize
-                            e.target.style.height = 'auto'
-                            e.target.style.height = e.target.scrollHeight + 'px'
-                            updateJournalLine(lineIdx, e.target.value)
-                            // Detect /type trigger
-                            const val = e.target.value
-                            const slashIdx = val.lastIndexOf('/')
-                            if (slashIdx >= 0) {
-                              const q = val.slice(slashIdx).toLowerCase()
-                              const filtered = JOURNAL_CAPTURE_TYPES.filter(t => t.label.startsWith(q))
-                              if (filtered.length > 0) {
-                                setJournalDropdown({ items: filtered, selectedIdx: 0 })
-                              } else {
-                                setJournalDropdown(null)
-                              }
-                            } else {
-                              setJournalDropdown(null)
-                            }
-                          }}
-                          onKeyDown={e => {
-                            // Autocomplete navigation
-                            if (journalDropdown && journalDropdown.items.length > 0) {
-                              if (e.key === 'ArrowDown') { e.preventDefault(); setJournalDropdown(d => d ? { ...d, selectedIdx: Math.min(d.selectedIdx + 1, d.items.length - 1) } : d); return }
-                              if (e.key === 'ArrowUp') { e.preventDefault(); setJournalDropdown(d => d ? { ...d, selectedIdx: Math.max(d.selectedIdx - 1, 0) } : d); return }
-                              if (e.key === 'Tab') { e.preventDefault(); setJournalDropdown(null); return }
-                              if (e.key === 'Escape') { setJournalDropdown(null); return }
-                            }
-                            if (e.key === 'Enter') {
-                              const val = seg.content
-                              // Check for capture pattern
-                              const captureMatch = val.trim().match(/^\/(\w+)\s+(.+)$/)
-                              const CAPTURE_TYPES_LIST = ['idea', 'learning', 'reflection', 'decision', 'win', 'question']
-                              if (captureMatch && CAPTURE_TYPES_LIST.includes(captureMatch[1])) {
-                                e.preventDefault()
-                                setJournalDropdown(null)
-                                // Insert an empty line after this capture line so user can keep writing
-                                const lines = journalValue.split('\n')
-                                if (!lines[lineIdx + 1]?.trim()) {
-                                  // already an empty line after, just open modal
-                                } else {
-                                  lines.splice(lineIdx + 1, 0, '')
-                                  handleJournalChange(lines.join('\n'))
-                                }
-                                openOrCreateCapture(captureMatch[1] as import('@/types').CaptureType, captureMatch[2].trim())
-                                // Focus next line after modal closes
-                                setTimeout(() => segmentRefs.current[lineIdx + 1]?.focus(), 50)
-                                return
-                              }
-                              // Normal Enter: insert new empty line after
-                              e.preventDefault()
-                              insertJournalLineAfter(lineIdx)
-                              return
-                            }
-                            if (e.key === 'Backspace') {
-                              if (seg.content === '') {
-                                e.preventDefault()
-                                removeJournalLine(lineIdx)
-                                return
-                              }
-                            }
-                          }}
-                        />
-                      )
-                    })
-                  )}
-                </div>
-                </div>
+                <JournalEditor
+                  value={journalValue}
+                  onChange={handleJournalChange}
+                  onPillClick={openOrCreateCapture}
+                  onFocus={() => setJournalEditing(true)}
+                  onBlur={() => setJournalEditing(false)}
+                />
               </div>
 
             </div>
@@ -2517,7 +2261,8 @@ export default function Today() {
         onClose={() => setActiveCapture(null)}
         goals={goals}
         milestones={milestones}
-        onUpdate={updated => setCaptures(prev => prev.map(c => c.id === updated.id ? updated : c))}
+        onUpdate={handleCaptureUpdate}
+        onDelete={handleCaptureDelete}
       />
     </div>
   )
