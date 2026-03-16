@@ -4,7 +4,7 @@ import {
   Timer, CalendarBlank, SidebarSimple,
   Flame, TrashSimple, NotePencil, GearSix,
   DotsSixVertical,
-  X, Flag, ChartLine,
+  X, Flag, ChartLine, HourglassMedium, MagicWand, Pencil,
 } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -24,6 +24,9 @@ import { useHabitNotifications } from '@/hooks/useHabitNotifications'
 import StreakCelebration from '@/components/StreakCelebration'
 import EndOfDayDrawer from '@/components/EndOfDayDrawer'
 import NewsletterPill from '@/components/NewsletterPill'
+import MilestoneDetailModal from '@/components/MilestoneDetailModal'
+import HabitEditModal from '@/components/HabitEditModal'
+import { useGeminiScorer, hasGeminiKey } from '@/hooks/useGeminiScorer'
 
 const FOCUS_DURATIONS = [
   { label: '25', minutes: 25, desc: 'Pomodoro' },
@@ -100,9 +103,10 @@ interface SortableTodoRowProps {
   onEditCancel: () => void
   onToggle: () => void
   onDelete: () => void
+  onMarkWaiting?: () => void
 }
 
-function SortableTodoRow({ todo, goal, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete }: SortableTodoRowProps) {
+function SortableTodoRow({ todo, goal, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting }: SortableTodoRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: todo.id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
 
@@ -176,6 +180,15 @@ function SortableTodoRow({ todo, goal, isEditing, editingText, onEditStart, onEd
       <div className="flex items-center gap-1 shrink-0">
         {todo.block && (
           <span className="text-[9px] font-mono text-shuttle/40">{todo.block}</span>
+        )}
+        {onMarkWaiting && (
+          <button
+            onClick={onMarkWaiting}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-shuttle p-0.5 rounded"
+            title="Mark as waiting"
+          >
+            <HourglassMedium size={12} />
+          </button>
         )}
         <button
           onClick={onDelete}
@@ -375,9 +388,19 @@ export default function Today() {
   const [timerIntention, setTimerIntention] = useState('')
   const [showIntentionInput, setShowIntentionInput] = useState(false)
   const [timerHabitId, setTimerHabitId] = useState<string | null>(null)
+  const [timerTodoId, setTimerTodoId] = useState<string | null>(null)
   const [ambientSound, setAmbientSound] = useState<'brown' | 'rain' | 'none'>('none')
   const [timerStartedAt, setTimerStartedAt] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Milestone detail modal (Phase 5)
+  const [selectedMilestoneDetail, setSelectedMilestoneDetail] = useState<Milestone | null>(null)
+
+  // Habit edit modal (Phase 6)
+  const [editingHabit, setEditingHabit] = useState<Habit | null>(null)
+
+  // AI scorer (Phase 8)
+  const gemini = useGeminiScorer()
 
   useHabitNotifications(habits, logs, today)
 
@@ -638,10 +661,17 @@ export default function Today() {
   }
 
   // Computed
-  const pendingTodos = todos.filter(t => !t.completed)
+  const pendingTodos = todos.filter(t => !t.completed && !t.waiting)
+  const waitingTodos = todos.filter(t => !t.completed && t.waiting)
   const doneTodos = todos.filter(t => t.completed)
   const pendingMilestones = milestones.filter(m => m.status !== 'COMPLETE')
   const doneMilestones = milestones.filter(m => m.status === 'COMPLETE')
+
+  // Filter habits by scheduled_days (null = every day)
+  const todayDayOfWeek = new Date().getDay()
+  const scheduledHabits = habits.filter(h =>
+    !h.scheduled_days || h.scheduled_days.includes(todayDayOfWeek)
+  )
 
   // Pill visibility logic — only show when actionable
   const urgentMilestone = pendingMilestones
@@ -672,11 +702,11 @@ export default function Today() {
     return log.value === 1
   }
 
-  const doneHabits = habits.filter(h => isHabitDone(h))
-  const pendingHabits = habits.filter(h => !isHabitDone(h))
+  const doneHabits = scheduledHabits.filter(h => isHabitDone(h))
+  const pendingHabits = scheduledHabits.filter(h => !isHabitDone(h))
 
   const todosProgress = todos.length > 0 ? Math.round((doneTodos.length / todos.length) * 100) : 0
-  const habitsProgress = habits.length > 0 ? Math.round((doneHabits.length / habits.length) * 100) : 0
+  const habitsProgress = scheduledHabits.length > 0 ? Math.round((doneHabits.length / scheduledHabits.length) * 100) : 0
   const milestonesProgress = milestones.length > 0 ? Math.round((doneMilestones.length / milestones.length) * 100) : 0
 
   // Streak per habit
@@ -1025,6 +1055,7 @@ export default function Today() {
           user_id: userId,
           goal_id: timerGoalId,
           habit_id: timerHabitId,
+          todo_id: timerTodoId,
           started_at: timerStartedAt,
           ended_at: new Date().toISOString(),
           duration_minutes: timerDuration,
@@ -1155,14 +1186,14 @@ export default function Today() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest flex items-center gap-2">
                     Habits
-                    <span className="font-mono font-normal text-shuttle/40 normal-case">{doneHabits.length}/{habits.length}</span>
+                    <span className="font-mono font-normal text-shuttle/40 normal-case">{doneHabits.length}/{scheduledHabits.length}</span>
                   </h3>
                   <span className="text-[9px] font-mono text-shuttle/25 border border-mercury/50 rounded px-1">⌘H</span>
                 </div>
 
                 {/* Chip strip — all habits always visible */}
                 <div className="flex flex-nowrap gap-1.5 overflow-x-auto pb-1 mb-2" style={{ scrollbarWidth: 'none' }}>
-                  {[...pendingHabits, ...doneHabits].map(habit => {
+                  {[...pendingHabits, ...doneHabits].filter(h => !h.scheduled_days || h.scheduled_days.includes(todayDayOfWeek)).map(habit => {
                     const currentLog = logs.find(l => l.habit_id === habit.id)
                     const currentVal = currentLog?.value ?? 0
                     const isDone = isHabitDone(habit)
@@ -1276,6 +1307,13 @@ export default function Today() {
                           <div className="mt-1.5 ml-1 flex items-center flex-wrap gap-3 text-[10px] text-shuttle/50">
                             {habit.default_time && <span className="font-mono">{habit.default_time}</span>}
                             {(() => { const adh = getAdherence(habit.id); return adh < 90 ? <span>{adh}% adherence</span> : null })()}
+                            <button
+                              onClick={() => setEditingHabit(habit)}
+                              className="flex items-center gap-1 hover:text-burnham transition-colors"
+                              title="Edit habit"
+                            >
+                              <Pencil size={10} /> edit
+                            </button>
                             <button
                               onClick={() => setCalendarDialogHabitId(prev => prev === habit.id ? null : habit.id)}
                               className="flex items-center gap-1 hover:text-burnham transition-colors"
@@ -1444,6 +1482,10 @@ export default function Today() {
                           onEditCancel={() => setEditingTodoId(null)}
                           onToggle={() => toggleTodo(todo.id)}
                           onDelete={() => deleteTodo(todo.id)}
+                          onMarkWaiting={async () => {
+                            await supabase.from('todos').update({ waiting: true } as any).eq('id', todo.id)
+                            setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, waiting: true } : t))
+                          }}
                         />
                       ))}
                       <button
@@ -1456,6 +1498,44 @@ export default function Today() {
                     </div>
                   </SortableContext>
                 </DndContext>
+                {waitingTodos.length > 0 && (
+                  <div className="pt-4 mb-4">
+                    <h4 className="text-[10px] font-semibold text-shuttle/40 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                      <HourglassMedium size={10} className="text-shuttle/30" /> Waiting · {waitingTodos.length}
+                    </h4>
+                    <div className="space-y-0.5">
+                      {waitingTodos.map(todo => {
+                        const goal = todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null
+                        return (
+                          <div key={todo.id} className="group flex items-center gap-2 py-1.5 px-2 -mx-2 opacity-60 hover:opacity-90 transition-opacity rounded">
+                            <HourglassMedium size={13} className="text-shuttle/30 shrink-0" />
+                            <span className="text-[13px] text-shuttle flex-1 truncate italic">{todo.text}</span>
+                            {goal && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 leading-none"
+                                style={{ backgroundColor: goal.color ? `${goal.color}20` : '#E5F9BD', color: goal.color ?? '#003720' }}>
+                                {goal.alias ?? goal.text.slice(0, 6)}
+                              </span>
+                            )}
+                            <button
+                              onClick={async () => {
+                                await supabase.from('todos').update({ waiting: false }).eq('id', todo.id)
+                                setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, waiting: false } : t))
+                              }}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] text-shuttle/40 hover:text-burnham font-mono"
+                            >unblock</button>
+                            <button onClick={async () => {
+                              await supabase.from('todos').delete().eq('id', todo.id)
+                              setTodos(prev => prev.filter(t => t.id !== todo.id))
+                            }} className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded">
+                              <TrashSimple size={12} />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {doneTodos.length > 0 && (
                   <div className="pt-5 border-t border-dashed border-mercury">
                     <h4 className="text-[10px] font-semibold text-shuttle/60 uppercase tracking-widest mb-3">Done</h4>
@@ -1605,7 +1685,28 @@ export default function Today() {
                   onPillClick={openOrCreateCapture}
                   onFocus={() => setJournalEditing(true)}
                   onBlur={() => setJournalEditing(false)}
+                  onScoreText={gemini.scoreText}
+                  hasAiScorer={hasGeminiKey}
                 />
+                {/* AI scorer result */}
+                {gemini.result && (
+                  <div className="mt-2 p-2 bg-gossip/20 border border-pastel/30 rounded-lg relative">
+                    <button onClick={gemini.clear} className="absolute top-1.5 right-1.5 text-shuttle/30 hover:text-shuttle transition-colors">
+                      <X size={10} />
+                    </button>
+                    <div className="flex items-center gap-2 mb-1">
+                      <MagicWand size={10} className="text-pastel shrink-0" />
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-burnham/60">Score {gemini.result.score}/10</span>
+                    </div>
+                    {gemini.result.corrected !== gemini.result.explanation && (
+                      <p className="text-[10px] text-burnham italic mb-1 leading-relaxed">"{gemini.result.corrected}"</p>
+                    )}
+                    <p className="text-[10px] text-shuttle/60 leading-relaxed">{gemini.result.explanation}</p>
+                  </div>
+                )}
+                {gemini.loading && (
+                  <p className="text-[10px] text-shuttle/30 mt-1 animate-pulse font-mono">evaluando…</p>
+                )}
               </div>
 
             </div>
@@ -1730,6 +1831,15 @@ export default function Today() {
                   .map(h => <option key={h.id} value={h.id}>{h.text}</option>)}
               </select>
             </div>
+            <select
+              value={timerTodoId ?? ''}
+              onChange={e => setTimerTodoId(e.target.value || null)}
+              disabled={timerRunning}
+              className="w-full text-[10px] border border-mercury rounded px-1 py-0.5 bg-white text-burnham outline-none disabled:opacity-50"
+            >
+              <option value="">No todo linked</option>
+              {pendingTodos.map(t => <option key={t.id} value={t.id}>{t.text.slice(0, 40)}</option>)}
+            </select>
           </div>
         )}
 
@@ -1787,18 +1897,18 @@ export default function Today() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-mercury shrink-0">
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-semibold text-burnham">Habits</h2>
-                <span className="text-[10px] font-mono text-shuttle/40">{doneHabits.length}/{habits.length}</span>
+                <span className="text-[10px] font-mono text-shuttle/40">{doneHabits.length}/{scheduledHabits.length}</span>
               </div>
               <button onClick={() => setHabitDrawerOpen(false)} className="text-shuttle hover:text-burnham transition-colors p-1">
                 <X size={16} />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
-              {habits.filter(h => h.habit_type !== 'QUANTIFIED').length > 0 && (
+              {scheduledHabits.filter(h => h.habit_type !== 'QUANTIFIED').length > 0 && (
                 <div>
                   <p className="text-[9px] font-semibold uppercase tracking-widest text-shuttle/40 mb-3">Yes / No</p>
                   <div className="space-y-1">
-                    {habits.filter(h => h.habit_type !== 'QUANTIFIED').map((habit, idx) => {
+                    {scheduledHabits.filter(h => h.habit_type !== 'QUANTIFIED').map((habit, idx) => {
                       const done = isHabitDone(habit)
                       const streak = getStreak(habit.id)
                       return (
@@ -1826,11 +1936,11 @@ export default function Today() {
                   </div>
                 </div>
               )}
-              {habits.filter(h => h.habit_type === 'QUANTIFIED').length > 0 && (
+              {scheduledHabits.filter(h => h.habit_type === 'QUANTIFIED').length > 0 && (
                 <div>
                   <p className="text-[9px] font-semibold uppercase tracking-widest text-shuttle/40 mb-3">Track Progress</p>
                   <div className="space-y-4">
-                    {habits.filter(h => h.habit_type === 'QUANTIFIED').map(habit => {
+                    {scheduledHabits.filter(h => h.habit_type === 'QUANTIFIED').map(habit => {
                       const currentLog = logs.find(l => l.habit_id === habit.id)
                       const currentVal = currentLog?.value ?? 0
                       const pct = habit.daily_target ? Math.min(100, (currentVal / habit.daily_target) * 100) : 0
@@ -1874,8 +1984,10 @@ export default function Today() {
                   </div>
                 </div>
               )}
-              {habits.length === 0 && (
-                <p className="text-xs text-shuttle/40 italic text-center py-8">No habits configured yet.</p>
+              {scheduledHabits.length === 0 && (
+                <p className="text-xs text-shuttle/40 italic text-center py-8">
+                  {habits.length === 0 ? 'No habits configured yet.' : 'No habits scheduled for today.'}
+                </p>
               )}
             </div>
             <div className="px-5 py-3 border-t border-mercury shrink-0">
@@ -1919,7 +2031,10 @@ export default function Today() {
                       <div key={m.id} className="flex items-start gap-2 py-1.5 hover:bg-gray-50/60 px-1 -mx-1 rounded group/row transition-colors">
                         <input type="checkbox" className="custom-checkbox mt-0.5 shrink-0" checked={false} onChange={() => toggleMilestone(m.id)} />
                         <div className="flex-1 min-w-0">
-                          <span className="text-[13px] text-burnham leading-snug">{m.text}</span>
+                          <button
+                            onClick={() => setSelectedMilestoneDetail(m)}
+                            className="text-[13px] text-burnham leading-snug text-left hover:text-burnham/70 transition-colors w-full"
+                          >{m.text}</button>
                           <div className="mt-0.5">
                             {editingMilestoneDateId === m.id ? (
                               <input
@@ -2136,33 +2251,62 @@ export default function Today() {
             {indicators.length === 0 ? (
               <p className="text-sm text-shuttle/40 italic">No leading indicators configured yet.</p>
             ) : (
-              <div className="space-y-4">
-                {indicators.filter(ind => !ind.habit_id).map(ind => {
-                  const weekTotal = weekIndicatorLogs
-                    .filter(l => l.leading_indicator_id === ind.id)
-                    .reduce((sum, l) => sum + Number(l.value), 0)
-                  return (
-                    <div key={ind.id} className="flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-burnham truncate">{ind.name}</p>
-                        <p className="text-[10px] text-shuttle/40">
-                          {weekTotal % 1 === 0 ? weekTotal : weekTotal.toFixed(1)}{ind.unit ? ` ${ind.unit}` : ''} this week
-                          {ind.target ? ` · target ${ind.target}` : ''}
-                        </p>
+              <div className="space-y-5">
+                {/* Manual indicators grouped by goal */}
+                {(() => {
+                  const manual = indicators.filter(ind => !ind.habit_id)
+                  const grouped = manual.reduce<Record<string, typeof manual>>((acc, ind) => {
+                    const key = ind.goal_id ?? '__none__'
+                    ;(acc[key] ??= []).push(ind)
+                    return acc
+                  }, {})
+                  const goalOrder = goals.map(g => g.id)
+                  const sortedKeys = Object.keys(grouped).sort((a, b) => {
+                    const ai = goalOrder.indexOf(a), bi = goalOrder.indexOf(b)
+                    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+                  })
+                  return sortedKeys.map(key => {
+                    const goal = goals.find(g => g.id === key)
+                    return (
+                      <div key={key}>
+                        {goal && (
+                          <p className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono mb-2">
+                            {goal.emoji ? `${goal.emoji} ` : ''}{goal.alias ?? goal.text.slice(0, 24)}
+                          </p>
+                        )}
+                        <div className="space-y-3">
+                          {grouped[key].map(ind => {
+                            const weekTotal = weekIndicatorLogs
+                              .filter(l => l.leading_indicator_id === ind.id)
+                              .reduce((sum, l) => sum + Number(l.value), 0)
+                            return (
+                              <div key={ind.id} className="flex items-center gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-burnham truncate">{ind.name}</p>
+                                  <p className="text-[10px] text-shuttle/40">
+                                    {weekTotal % 1 === 0 ? weekTotal : weekTotal.toFixed(1)}{ind.unit ? ` ${ind.unit}` : ''} this week
+                                    {ind.target ? ` · target ${ind.target}` : ''}
+                                  </p>
+                                </div>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={liDraftValues[ind.id] ?? ''}
+                                  onChange={e => setLiDraftValues(prev => ({ ...prev, [ind.id]: e.target.value }))}
+                                  onKeyDown={e => { if (e.key === 'Enter') saveIndicatorLogs() }}
+                                  placeholder="0"
+                                  className="w-20 text-right text-sm text-burnham border border-mercury rounded-lg px-2 py-1.5 focus:outline-none focus:border-shuttle transition-colors"
+                                />
+                                {ind.unit && <span className="text-xs text-shuttle/40 w-8 shrink-0">{ind.unit}</span>}
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
-                      <input
-                        type="number"
-                        min={0}
-                        value={liDraftValues[ind.id] ?? ''}
-                        onChange={e => setLiDraftValues(prev => ({ ...prev, [ind.id]: e.target.value }))}
-                        onKeyDown={e => { if (e.key === 'Enter') saveIndicatorLogs() }}
-                        placeholder="0"
-                        className="w-20 text-right text-sm text-burnham border border-mercury rounded-lg px-2 py-1.5 focus:outline-none focus:border-shuttle transition-colors"
-                      />
-                      {ind.unit && <span className="text-xs text-shuttle/40 w-8 shrink-0">{ind.unit}</span>}
-                    </div>
-                  )
-                })}
+                    )
+                  })
+                })()}
+                {/* Habit-driven indicators */}
                 {indicators.filter(ind => !!ind.habit_id).map(ind => {
                   const todayLog = indicatorLogs.find(l => l.leading_indicator_id === ind.id)
                   const weekTotal = weekIndicatorLogs
@@ -2280,6 +2424,36 @@ export default function Today() {
         onUpdate={handleCaptureUpdate}
         onDelete={handleCaptureDelete}
       />
+
+      {/* ── Milestone Detail Modal (Phase 5) ───────────────────────────── */}
+      {selectedMilestoneDetail && userId && (
+        <MilestoneDetailModal
+          milestone={selectedMilestoneDetail}
+          goal={goals.find(g => g.id === selectedMilestoneDetail.goal_id) ?? null}
+          userId={userId}
+          today={today}
+          onClose={() => setSelectedMilestoneDetail(null)}
+          onMilestoneUpdate={updated => {
+            setMilestones(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated } : m))
+          }}
+          onTodoCreate={todo => setTodos(prev => [...prev, todo])}
+          onTodoUpdate={todo => setTodos(prev => prev.map(t => t.id === todo.id ? todo : t))}
+          onTodoDelete={todoId => setTodos(prev => prev.filter(t => t.id !== todoId))}
+        />
+      )}
+
+      {/* ── Habit Edit Modal (Phase 6) ──────────────────────────────────── */}
+      {editingHabit && (
+        <HabitEditModal
+          habit={editingHabit}
+          goals={goals}
+          onClose={() => setEditingHabit(null)}
+          onUpdate={updated => {
+            setHabits(prev => prev.map(h => h.id === updated.id ? updated : h))
+            setEditingHabit(null)
+          }}
+        />
+      )}
     </div>
   )
 }
