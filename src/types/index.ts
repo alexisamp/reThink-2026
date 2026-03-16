@@ -101,6 +101,7 @@ export interface Habit {
   emoji: string | null            // optional emoji icon for habit chip
   habit_type: 'BINARY' | 'QUANTIFIED'  // default 'BINARY'
   daily_target: number | null     // target value per day (QUANTIFIED only)
+  scheduled_days: number[] | null
   linked_indicator_id: string | null   // optional link to leading indicator
   created_at: string
   updated_at: string
@@ -126,6 +127,7 @@ export interface Todo {
   effort: string | null
   block: TodoBlock
   completed: boolean
+  waiting?: boolean
   completed_at: string | null
   date: string | null
   sort_order: number
@@ -164,6 +166,7 @@ export interface FocusSession {
   user_id: string
   goal_id: string | null
   habit_id: string | null
+  todo_id: string | null
   started_at: string
   ended_at: string | null
   duration_minutes: number | null
@@ -223,6 +226,7 @@ export interface Capture {
   url: string | null
   linked_goal_id: string | null
   linked_milestone_id: string | null
+  linked_todo_id: string | null
   captured_date: string
   created_at: string
   updated_at: string
