@@ -1327,7 +1327,7 @@ export default function Today() {
                                   <button
                                     onClick={() => blockHabitTime(habit)}
                                     disabled={calSaving}
-                                    className="text-xs bg-burnham text-white px-3 py-1.5 rounded hover:bg-burnham/90 disabled:opacity-50 transition-colors"
+                                    className="text-xs bg-burnham text-[#72eb7e] px-3 py-1.5 rounded hover:bg-burnham/90 disabled:opacity-50 transition-colors"
                                   >
                                     {calSaving ? 'Blocking...' : 'Block time'}
                                   </button>
@@ -1687,7 +1687,7 @@ export default function Today() {
             <div className="px-6 py-5 border-t border-mercury">
               <button
                 onClick={() => setShowEndOfDay(true)}
-                className="w-full flex items-center justify-center gap-2 bg-burnham hover:bg-burnham/90 text-white py-3 rounded-lg text-xs font-medium transition-all"
+                className="w-full flex items-center justify-center gap-2 bg-burnham hover:bg-burnham/90 text-[#72eb7e] py-3 rounded-lg text-xs font-medium transition-all"
               >
                 <span>Done for today</span>
                 <span className="opacity-60">→</span>
@@ -1794,7 +1794,7 @@ export default function Today() {
                   disabled={timerRunning}
                   className={`flex-1 py-1 rounded text-[10px] font-bold transition-all disabled:opacity-50 ${
                     timerDuration === d.minutes
-                      ? 'bg-burnham text-white'
+                      ? 'bg-burnham text-[#72eb7e]'
                       : 'border border-mercury text-shuttle hover:border-shuttle bg-white'
                   }`}
                   title={d.desc}
@@ -1851,7 +1851,7 @@ export default function Today() {
             <div className="flex gap-2">
               <button
                 onClick={() => { setShowIntentionInput(false); setTimerStartedAt(new Date().toISOString()); startTimer() }}
-                className="text-[10px] font-semibold text-white bg-burnham px-2 py-1 rounded"
+                className="text-[10px] font-semibold text-[#72eb7e] bg-burnham px-2 py-1 rounded"
               >Begin</button>
               <button
                 onClick={() => { setShowIntentionInput(false); setTimerIntention(''); setTimerStartedAt(new Date().toISOString()); startTimer() }}
@@ -1866,7 +1866,7 @@ export default function Today() {
           <div className="bg-white border border-mercury rounded-xl shadow-lg p-3 space-y-2 w-52">
             <p className="text-[10px] uppercase tracking-widest text-shuttle text-center">Did you finish?</p>
             <div className="flex gap-1">
-              <button onClick={() => saveSession('COMPLETE')} className="flex-1 text-[10px] font-semibold text-white bg-burnham py-1 rounded">Yes</button>
+              <button onClick={() => saveSession('COMPLETE')} className="flex-1 text-[10px] font-semibold text-[#72eb7e] bg-burnham py-1 rounded">Yes</button>
               <button onClick={() => saveSession('CARRIED_OVER')} className="flex-1 text-[10px] text-shuttle border border-mercury py-1 rounded">Carry</button>
               <button onClick={() => saveSession('INCOMPLETE')} className="flex-1 text-[10px] text-shuttle border border-mercury py-1 rounded">No</button>
             </div>
@@ -2113,7 +2113,7 @@ export default function Today() {
               urgentMilestone.daysLeft < 0
                 ? 'bg-burnham/10 text-burnham'
                 : urgentMilestone.daysLeft <= 3
-                ? 'bg-burnham text-white'
+                ? 'bg-burnham text-[#72eb7e]'
                 : 'bg-mercury text-shuttle'
             }`}>
               {urgentMilestone.daysLeft < 0 ? 'vencido' : `${urgentMilestone.daysLeft}d`}
@@ -2127,7 +2127,7 @@ export default function Today() {
           >
             <ChartLine size={12} className="text-shuttle/60" />
             <span>Indicators</span>
-            <span className="bg-burnham text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+            <span className="bg-burnham text-[#72eb7e] text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
               {unloggedIndicatorsCount}
             </span>
           </button>
@@ -2144,7 +2144,7 @@ export default function Today() {
             <div className="flex gap-2">
               <button
                 onClick={() => { submitTodo(frictionPendingTodo.text, frictionPendingTodo.block ?? undefined, true); setFrictionPendingTodo(null) }}
-                className="flex-1 text-xs bg-burnham text-white py-2 rounded-lg hover:bg-burnham/90 transition-colors"
+                className="flex-1 text-xs bg-burnham text-[#72eb7e] py-2 rounded-lg hover:bg-burnham/90 transition-colors"
               >
                 Agregar hoy
               </button>
@@ -2418,7 +2418,7 @@ export default function Today() {
 
       {/* ─── Toasts ──────────────────────────────────────────────────── */}
       {calToast && (
-        <div className="fixed bottom-24 right-4 bg-burnham text-white text-xs px-4 py-2.5 rounded-lg shadow-lg z-50 max-w-xs">
+        <div className="fixed bottom-24 right-4 bg-burnham text-[#72eb7e] text-xs px-4 py-2.5 rounded-lg shadow-lg z-50 max-w-xs">
           {calToast}
         </div>
       )}
