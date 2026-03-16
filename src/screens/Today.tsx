@@ -1761,6 +1761,8 @@ export default function Today() {
                         const CAPTURE_TYPES_LIST = ['idea', 'learning', 'reflection', 'decision', 'win', 'question']
                         if (captureMatch && CAPTURE_TYPES_LIST.includes(captureMatch[1])) {
                           e.preventDefault()
+                          setJournalEditing(false)
+                          setJournalDropdown(null)
                           openOrCreateCapture(captureMatch[1] as import('@/types').CaptureType, captureMatch[2].trim())
                           return
                         }

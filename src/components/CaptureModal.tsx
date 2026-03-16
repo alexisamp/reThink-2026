@@ -18,12 +18,12 @@ const CAPTURE_CONFIG: Record<CaptureType, {
   badgeBg: string
   badgeText: string
 }> = {
-  idea:       { label: 'Idea',       Icon: Lightbulb, chipBg: 'bg-gossip',      chipText: 'text-burnham', badgeBg: 'bg-gossip',      badgeText: 'text-burnham' },
-  learning:   { label: 'Learning',   Icon: BookOpen,  chipBg: 'bg-pastel/20',   chipText: 'text-burnham', badgeBg: 'bg-pastel/20',   badgeText: 'text-burnham' },
-  reflection: { label: 'Reflection', Icon: Eye,       chipBg: 'bg-mercury',     chipText: 'text-shuttle', badgeBg: 'bg-mercury',     badgeText: 'text-shuttle' },
-  decision:   { label: 'Decision',   Icon: Scales,    chipBg: 'bg-burnham/10',  chipText: 'text-burnham', badgeBg: 'bg-burnham/10',  badgeText: 'text-burnham' },
-  win:        { label: 'Win',        Icon: Trophy,    chipBg: 'bg-pastel',      chipText: 'text-burnham', badgeBg: 'bg-pastel',      badgeText: 'text-burnham' },
-  question:   { label: 'Question',   Icon: Question,  chipBg: 'bg-mercury',     chipText: 'text-shuttle', badgeBg: 'bg-mercury',     badgeText: 'text-shuttle' },
+  idea:       { label: 'Idea',       Icon: Lightbulb, chipBg: 'bg-gossip',         chipText: 'text-burnham', badgeBg: 'bg-gossip',         badgeText: 'text-burnham' },
+  learning:   { label: 'Learning',   Icon: BookOpen,  chipBg: 'bg-pastel/30',      chipText: 'text-burnham', badgeBg: 'bg-pastel/30',      badgeText: 'text-burnham' },
+  reflection: { label: 'Reflection', Icon: Eye,       chipBg: 'bg-shuttle/10',     chipText: 'text-shuttle', badgeBg: 'bg-shuttle/10',     badgeText: 'text-shuttle' },
+  decision:   { label: 'Decision',   Icon: Scales,    chipBg: 'bg-burnham/15',     chipText: 'text-burnham', badgeBg: 'bg-burnham/15',     badgeText: 'text-burnham' },
+  win:        { label: 'Win',        Icon: Trophy,    chipBg: 'bg-pastel',         chipText: 'text-burnham', badgeBg: 'bg-pastel',         badgeText: 'text-burnham' },
+  question:   { label: 'Question',   Icon: Question,  chipBg: 'bg-mercury',        chipText: 'text-shuttle', badgeBg: 'bg-mercury',        badgeText: 'text-shuttle' },
 }
 
 // ── Markdown renderer (same as journal) ─────────────────────────────
