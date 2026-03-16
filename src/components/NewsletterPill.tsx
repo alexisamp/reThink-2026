@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Tray, ArrowSquareOut } from '@phosphor-icons/react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Tray, ArrowSquareOut, ArrowCounterClockwise, ArrowClockwise } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 
 async function openLink(url: string) {
@@ -64,8 +64,10 @@ export default function NewsletterPill() {
   const [items, setItems] = useState<NewsletterItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [dismissing, setDismissing] = useState<Set<string>>(new Set())
   const [lastSync, setLastSync] = useState<string | null>(null)
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   const fetchCount = useCallback(async () => {
     const { count } = await supabase
@@ -78,8 +80,9 @@ export default function NewsletterPill() {
 
   useEffect(() => { fetchCount() }, [fetchCount])
 
-  const fetchItems = useCallback(async () => {
-    setLoading(true)
+  const fetchItems = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
     const { data } = await supabase
       .from('newsletter_items')
       .select('id, newsletter, subject, received_at, gmail_link, read_at')
@@ -88,13 +91,30 @@ export default function NewsletterPill() {
     const result = data ?? []
     setItems(result)
     if (result.length > 0) setLastSync(result[0].received_at)
-    setLoading(false)
-  }, [])
+    if (isRefresh) setRefreshing(false)
+    else setLoading(false)
+    fetchCount()
+  }, [fetchCount])
 
-  const handleOpen = () => {
-    setOpen(true)
+  // Subscribe to realtime inserts when modal opens
+  useEffect(() => {
+    if (!open) return
     fetchItems()
-  }
+
+    const channel = supabase
+      .channel('newsletter_items_realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'newsletter_items' }, () => {
+        fetchItems()
+      })
+      .subscribe()
+
+    channelRef.current = channel
+
+    return () => {
+      channel.unsubscribe()
+      channelRef.current = null
+    }
+  }, [open, fetchItems])
 
   const markRead = async (item: NewsletterItem) => {
     if (item.read_at || dismissing.has(item.id)) return
@@ -113,6 +133,15 @@ export default function NewsletterPill() {
       .eq('id', item.id)
   }
 
+  const markUnread = async (item: NewsletterItem) => {
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, read_at: null } : i))
+    setUnreadCount(c => c + 1)
+    await supabase
+      .from('newsletter_items')
+      .update({ read_at: null })
+      .eq('id', item.id)
+  }
+
   // Hide completely when nothing to show
   if (unreadCount === 0 && !open) return null
 
@@ -123,7 +152,7 @@ export default function NewsletterPill() {
     <>
       {/* Pill */}
       <button
-        onClick={handleOpen}
+        onClick={() => setOpen(true)}
         className="flex items-center gap-2 bg-white border border-mercury rounded-full px-3 py-1.5 shadow-md text-[11px] text-shuttle hover:border-shuttle/40 transition-colors"
       >
         <Tray size={12} className="text-shuttle/60" />
@@ -152,12 +181,22 @@ export default function NewsletterPill() {
                     Feed
                   </p>
                 </div>
-                <button
-                  onClick={() => setOpen(false)}
-                  className="text-shuttle/40 hover:text-shuttle transition-colors text-lg leading-none"
-                >
-                  ×
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => fetchItems(true)}
+                    disabled={refreshing}
+                    className="text-shuttle/40 hover:text-shuttle transition-colors disabled:opacity-30"
+                    title="Actualizar"
+                  >
+                    <ArrowClockwise size={14} className={refreshing ? 'animate-spin' : ''} />
+                  </button>
+                  <button
+                    onClick={() => setOpen(false)}
+                    className="text-shuttle/40 hover:text-shuttle transition-colors text-lg leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
 
               {/* Content */}
@@ -194,6 +233,7 @@ export default function NewsletterPill() {
                             item={item}
                             dismissing={false}
                             onMark={() => {}}
+                            onUnmark={() => markUnread(item)}
                           />
                         ))}
                       </div>
@@ -221,20 +261,21 @@ function FeedRow({
   item,
   dismissing,
   onMark,
+  onUnmark,
 }: {
   item: NewsletterItem
   dismissing: boolean
   onMark: () => void
+  onUnmark?: () => void
 }) {
   const isRead = !!item.read_at
   const style = getSenderStyle(item.newsletter)
 
   return (
     <div
-      className={`group flex items-start gap-3 px-5 py-3 hover:bg-mercury/10 transition-all duration-500 cursor-pointer ${
+      className={`group flex items-start gap-3 px-5 py-3 hover:bg-mercury/10 transition-all duration-500 ${
         dismissing ? 'opacity-0 scale-95 -translate-x-2' : 'opacity-100'
-      } ${isRead ? 'opacity-40' : ''}`}
-      onClick={() => { openLink(item.gmail_link); onMark() }}
+      } ${isRead ? 'opacity-50' : ''}`}
     >
       {/* Sender avatar */}
       <div className={`shrink-0 w-6 h-6 rounded-full ${style.bgClass} ${style.textClass} flex items-center justify-center text-[8px] font-bold mt-0.5`}>
@@ -247,31 +288,51 @@ function FeedRow({
           <span className="text-[10px] text-shuttle/50 font-medium truncate">{item.newsletter}</span>
           <span className="text-[9px] text-shuttle/30 ml-auto shrink-0">{formatRelative(item.received_at)}</span>
         </div>
-        <div className="flex items-start gap-1">
-          <span className={`text-[12px] leading-snug flex-1 min-w-0 ${
-            isRead ? 'line-through text-shuttle/40' : 'text-burnham'
-          }`}>
-            {item.subject}
-          </span>
-          <ArrowSquareOut
-            size={11}
-            className="shrink-0 mt-0.5 text-shuttle/20 group-hover:text-shuttle/50 transition-colors"
-          />
-        </div>
+        <span className={`text-[12px] leading-snug block ${
+          isRead ? 'line-through text-shuttle/40' : 'text-burnham'
+        }`}>
+          {item.subject}
+        </span>
       </div>
 
-      {/* Checkbox */}
-      <div onClick={e => e.stopPropagation()}>
+      {/* Actions */}
+      <div className="flex items-center gap-1.5 shrink-0 mt-0.5" onClick={e => e.stopPropagation()}>
+        {/* Open in Gmail — always visible */}
+        {item.gmail_link && (
+          <button
+            onClick={() => openLink(item.gmail_link)}
+            className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-mercury text-[9px] text-shuttle/50 hover:border-shuttle/40 hover:text-shuttle transition-colors"
+            title="Abrir en Gmail"
+          >
+            <ArrowSquareOut size={9} />
+            <span>Abrir</span>
+          </button>
+        )}
+
+        {/* Mark as read checkbox (unread only) */}
         {!isRead && (
           <button
             onClick={onMark}
-            className="shrink-0 mt-0.5 w-4 h-4 rounded border border-mercury hover:border-pastel transition-colors flex items-center justify-center group/check"
+            className="w-4 h-4 rounded border border-mercury hover:border-pastel transition-colors flex items-center justify-center group/check"
           >
             <span className="text-[8px] text-pastel opacity-0 group-hover/check:opacity-100 transition-opacity">✓</span>
           </button>
         )}
+
+        {/* Unmark button (read items only, visible on hover) */}
+        {isRead && onUnmark && (
+          <button
+            onClick={onUnmark}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-shuttle"
+            title="Marcar como no leído"
+          >
+            <ArrowCounterClockwise size={11} />
+          </button>
+        )}
+
+        {/* Read checkmark indicator */}
         {isRead && (
-          <span className="shrink-0 mt-0.5 w-4 h-4 rounded bg-gossip/40 border border-pastel/40 flex items-center justify-center">
+          <span className="w-4 h-4 rounded bg-gossip/40 border border-pastel/40 flex items-center justify-center">
             <span className="text-[8px] text-pastel">✓</span>
           </span>
         )}

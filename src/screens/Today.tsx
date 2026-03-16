@@ -408,9 +408,15 @@ export default function Today() {
         if (liPanelOpen) { setLiPanelOpen(false); return }
         if (habitDrawerOpen) { setHabitDrawerOpen(false); return }
         if (showEndOfDay) { setShowEndOfDay(false); return }
+        if (showPomSettings) { setShowPomSettings(false); return }
       }
 
       if ((e.key === 'm' || e.key === 'M') && !inInput && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setMilestonesOpen(v => !v)
+        return
+      }
+      if ((e.key === 'm' || e.key === 'M') && e.metaKey && e.shiftKey) {
         e.preventDefault()
         setMilestonesOpen(v => !v)
         return
