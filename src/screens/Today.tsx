@@ -1714,7 +1714,7 @@ export default function Today() {
                         setJournalDropdown(null)
                       }
                     }}
-                    onBlur={() => { setJournalEditing(false); setJournalDropdown(null); saveCaptures() }}
+                    onBlur={() => { setJournalEditing(false); setJournalDropdown(null); saveCaptures(journalValue) }}
                     onKeyDown={e => {
                       // Handle journal capture dropdown
                       if (journalDropdown && journalDropdown.items.length > 0) {
