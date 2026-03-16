@@ -318,19 +318,27 @@ export default function Today() {
   const [qaDropdown, setQaDropdown] = useState<{
     type: 'goal' | 'milestone' | 'command'
     query: string
-    items: Array<{ label: string; insert: string; sub?: string }>
+    items: Array<{ label: string; insert: string; sub?: string; id?: string; goalId?: string }>
     selectedIdx: number
   } | null>(null)
 
+  // Linked entity chip for quick-add (@mention selection)
+  const [quickAddLinked, setQuickAddLinked] = useState<{
+    milestoneId: string | null
+    goalId: string | null
+    name: string
+    type: 'milestone' | 'goal'
+  } | null>(null)
+
   const QA_COMMANDS = [
-    { label: '/am', insert: '/am ', sub: 'bloque mañana' },
-    { label: '/pm', insert: '/pm ', sub: 'bloque tarde' },
-    { label: '/deep', insert: '/deep ', sub: 'trabajo profundo' },
-    { label: '/url', insert: '/url ', sub: 'agregar link' },
+    { label: '/am', insert: '/am ', sub: 'morning block' },
+    { label: '/pm', insert: '/pm ', sub: 'afternoon block' },
+    { label: '/deep', insert: '/deep ', sub: 'deep work' },
+    { label: '/url', insert: '/url ', sub: 'add link' },
   ]
 
   const computeQaDropdown = (text: string) => {
-    // Check for / command trigger
+    // / command trigger
     const slashMatch = text.match(/(^|\s)(\/\S*)$/)
     if (slashMatch) {
       const q = slashMatch[2].toLowerCase()
@@ -340,35 +348,85 @@ export default function Today() {
         return
       }
     }
-    // Check for @m milestone trigger
+    // @m — milestones only
     const milestoneMatch = text.match(/@m(\S*)$/)
     if (milestoneMatch) {
       const q = milestoneMatch[1].toLowerCase()
       const items = milestones
         .filter(m => m.status !== 'COMPLETE' && m.text.toLowerCase().includes(q))
-        .slice(0, 6)
-        .map(m => ({ label: m.text, insert: `@m${m.text.split(' ')[0]} `, sub: goals.find(g => g.id === m.goal_id)?.alias ?? '' }))
+        .slice(0, 8)
+        .map(m => {
+          const g = goals.find(g => g.id === m.goal_id)
+          return { label: m.text, insert: '', sub: g?.alias ?? g?.text?.slice(0, 20) ?? '', id: m.id, goalId: m.goal_id ?? undefined }
+        })
       setQaDropdown({ type: 'milestone', query: q, items, selectedIdx: 0 })
       return
     }
-    // Check for @goal trigger (not followed by m)
-    const goalMatch = text.match(/@(?!m)(\S*)$/)
-    if (goalMatch) {
-      const q = goalMatch[1].toLowerCase()
+    // @g — goals only
+    const goalTagMatch = text.match(/@g(\S*)$/)
+    if (goalTagMatch) {
+      const q = goalTagMatch[1].toLowerCase()
       const items = goals
         .filter(g => g.text.toLowerCase().includes(q) || (g.alias ?? '').toLowerCase().includes(q))
         .slice(0, 6)
-        .map(g => ({ label: g.alias ?? g.text.slice(0, 20), insert: `@${g.alias ?? g.text.split(' ')[0]} `, sub: g.text.slice(0, 30) }))
+        .map(g => ({ label: g.alias ?? g.text.slice(0, 24), insert: '', sub: g.text.slice(0, 32), id: g.id }))
       setQaDropdown({ type: 'goal', query: q, items, selectedIdx: 0 })
       return
+    }
+    // bare @ — milestones first, then goals
+    const atMatch = text.match(/@(\S*)$/)
+    if (atMatch) {
+      const q = atMatch[1].toLowerCase()
+      const msItems = milestones
+        .filter(m => m.status !== 'COMPLETE' && (q === '' || m.text.toLowerCase().includes(q)))
+        .slice(0, 5)
+        .map(m => {
+          const g = goals.find(g => g.id === m.goal_id)
+          return { label: m.text, insert: '', sub: g?.alias ?? '', id: m.id, goalId: m.goal_id ?? undefined }
+        })
+      const gItems = goals
+        .filter(g => q === '' || g.text.toLowerCase().includes(q) || (g.alias ?? '').toLowerCase().includes(q))
+        .slice(0, 3)
+        .map(g => ({ label: g.alias ?? g.text.slice(0, 24), insert: '', sub: g.text.slice(0, 32), id: g.id }))
+      const combined = [
+        ...msItems.map(i => ({ ...i, _isMilestone: true })),
+        ...gItems.map(i => ({ ...i, _isMilestone: false })),
+      ]
+      if (combined.length > 0) {
+        // Store milestone vs goal info in the type field — use 'milestone' since milestones are first
+        setQaDropdown({ type: 'milestone', query: q, items: combined as any, selectedIdx: 0 })
+        return
+      }
     }
     setQaDropdown(null)
   }
 
-  const applyQaDropdownItem = (item: { label: string; insert: string }) => {
-    // Replace the trigger in quickAddText with the selected insert
-    const newText = quickAddText.replace(/(@m?\S*|\/\S*)$/, item.insert)
-    setQuickAddText(newText)
+  const applyQaDropdownItem = (item: { label: string; insert: string; id?: string; goalId?: string; _isMilestone?: boolean }) => {
+    if (qaDropdown?.type === 'command') {
+      // Commands: insert text as before
+      const newText = quickAddText.replace(/(@m?\S*|\/\S*)$/, item.insert)
+      setQuickAddText(newText)
+    } else if (item.id) {
+      // Milestone or goal: store as chip, clear @... from input
+      const isMilestone = !!(item as any)._isMilestone || !!(item.goalId) || qaDropdown?.type === 'milestone'
+      if (isMilestone && item.goalId !== undefined) {
+        // It's a milestone
+        setQuickAddLinked({ milestoneId: item.id, goalId: item.goalId ?? null, name: item.label, type: 'milestone' })
+      } else if (isMilestone && !item.goalId) {
+        // Could be milestone without goal or a goal — check by id presence in milestones
+        const ms = milestones.find(m => m.id === item.id)
+        if (ms) {
+          setQuickAddLinked({ milestoneId: item.id, goalId: ms.goal_id ?? null, name: item.label, type: 'milestone' })
+        } else {
+          setQuickAddLinked({ milestoneId: null, goalId: item.id, name: item.label, type: 'goal' })
+        }
+      } else {
+        // Goal
+        setQuickAddLinked({ milestoneId: null, goalId: item.id, name: item.label, type: 'goal' })
+      }
+      // Remove @... trigger from text
+      setQuickAddText(prev => prev.replace(/(@m?\S*|@g?\S*|@\S*)$/, '').trimEnd())
+    }
     setQaDropdown(null)
     quickAddRef.current?.focus()
   }
@@ -942,8 +1000,18 @@ export default function Today() {
   // Quick-add from overlay
   const submitQuickAdd = async () => {
     if (!quickAddText.trim()) return
-    await submitTodo(quickAddText, null)
+    let text = quickAddText
+    // If a chip link is set, inject milestone/goal into text for submitTodo to parse
+    if (quickAddLinked?.milestoneId) {
+      const ms = milestones.find(m => m.id === quickAddLinked.milestoneId)
+      if (ms) text = `${text} @m${ms.text.split(' ')[0]}`
+    } else if (quickAddLinked?.goalId) {
+      const g = goals.find(g => g.id === quickAddLinked.goalId)
+      if (g) text = `${text} @${g.alias ?? g.text.split(' ')[0]}`
+    }
+    await submitTodo(text, null)
     setQuickAddText('')
+    setQuickAddLinked(null)
     setQuickAddOpen(false)
   }
 
@@ -2142,7 +2210,7 @@ export default function Today() {
       {quickAddOpen && (
         <div
           className="fixed inset-0 z-[200] flex items-start justify-center pt-40 bg-black/10 backdrop-blur-[2px]"
-          onClick={e => { if (e.target === e.currentTarget) { setQuickAddOpen(false); setQaDropdown(null) } }}
+          onClick={e => { if (e.target === e.currentTarget) { setQuickAddOpen(false); setQaDropdown(null); setQuickAddLinked(null) } }}
         >
           <div className="bg-white rounded-2xl shadow-2xl border border-mercury p-6 w-full max-w-lg mx-4 relative">
             <p className="text-[9px] uppercase tracking-[0.15em] text-shuttle/30 mb-4 font-mono">Quick Add · ⌘N</p>
@@ -2167,7 +2235,7 @@ export default function Today() {
                     if (e.key === 'Escape') { setQaDropdown(null); return }
                   }
                   if (e.key === 'Enter') { submitQuickAdd() }
-                  if (e.key === 'Escape') { setQuickAddOpen(false); setQuickAddText(''); setQaDropdown(null) }
+                  if (e.key === 'Escape') { setQuickAddOpen(false); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked(null) }
                 }}
                 placeholder="What needs to get done? Use @ for goals, /am /pm /url..."
                 className="flex-1 text-base text-burnham placeholder-shuttle/20 border-none outline-none bg-transparent pr-8"
@@ -2183,6 +2251,18 @@ export default function Today() {
                 </button>
               )}
             </div>
+            {/* @mention linked chip */}
+            {quickAddLinked && (
+              <div className="flex items-center gap-1 mt-1.5">
+                <span className="text-[10px] text-shuttle/40">linked to</span>
+                <span className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[10px] text-burnham font-medium max-w-[200px]">
+                  <span className="truncate">{quickAddLinked.name}</span>
+                  <button onClick={() => setQuickAddLinked(null)} className="text-shuttle/40 hover:text-burnham ml-0.5 flex-shrink-0">
+                    <X size={9} />
+                  </button>
+                </span>
+              </div>
+            )}
             {gemini.loading && (
               <p className="text-[10px] text-shuttle/30 mt-2 animate-pulse font-mono">evaluando…</p>
             )}
