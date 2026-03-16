@@ -4,7 +4,7 @@ import {
   Timer, CalendarBlank, SidebarSimple,
   Flame, TrashSimple, NotePencil, GearSix,
   DotsSixVertical,
-  X, Flag, ChartLine, HourglassMedium, MagicWand, Pencil,
+  X, Flag, ChartLine, HourglassMedium, MagicWand, Pencil, ArrowsOut, ArrowsIn,
 } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -95,6 +95,7 @@ function getUrlChip(url: string): { icon: string; label: string; color: string }
 interface SortableTodoRowProps {
   todo: Todo
   goal: Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'> | null | undefined
+  milestone: Pick<Milestone, 'id' | 'text'> | null | undefined
   isEditing: boolean
   editingText: string
   onEditStart: () => void
@@ -106,7 +107,7 @@ interface SortableTodoRowProps {
   onMarkWaiting?: () => void
 }
 
-function SortableTodoRow({ todo, goal, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting }: SortableTodoRowProps) {
+function SortableTodoRow({ todo, goal, milestone, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting }: SortableTodoRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: todo.id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
 
@@ -148,16 +149,10 @@ function SortableTodoRow({ todo, goal, isEditing, editingText, onEditStart, onEd
             {todo.text}
           </span>
         )}
-        {goal && (
-          <span
-            className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 leading-none"
-            style={{
-              backgroundColor: goal.color ? `${goal.color}25` : '#E5F9BD',
-              color: goal.color ?? '#003720',
-              border: `1px solid ${goal.color ? `${goal.color}40` : '#79D65E40'}`,
-            }}
-          >
-            {goal.emoji ? `${goal.emoji} ` : ''}{goal.alias ?? goal.text.slice(0, 6)}
+        {milestone && (
+          <span className="bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 leading-none">
+            {milestone.text.length > 18 ? milestone.text.slice(0, 18) + '…' : milestone.text}
+            {goal ? ` · ${goal.alias ?? goal.text?.slice(0, 6) ?? ''}` : ''}
           </span>
         )}
         {todo.url && (() => {
@@ -258,6 +253,7 @@ export default function Today() {
   const [journalValue, setJournalValue] = useState('')
   const [onethingValue, setOnethingValue] = useState('')
   const [journalEditing, setJournalEditing] = useState(false)
+  const [journalExpanded, setJournalExpanded] = useState(false)
   const [captures, setCaptures] = useState<Capture[]>([])
   const [activeCapture, setActiveCapture] = useState<Capture | null>(null)
 
@@ -313,10 +309,6 @@ export default function Today() {
   const [editingMilestoneDateId, setEditingMilestoneDateId] = useState<string | null>(null)
   const [addingMilestoneForGoalId, setAddingMilestoneForGoalId] = useState<string | null>(null)
   const [newMilestoneDraft, setNewMilestoneDraft] = useState({ text: '', date: '' })
-
-  // QUANTIFIED habit inline editing
-  const [editingQuantifiedHabitId, setEditingQuantifiedHabitId] = useState<string | null>(null)
-  const [quantifiedInputValue, setQuantifiedInputValue] = useState('')
 
   // Quick-add overlay (⌘N — works from anywhere)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
@@ -427,6 +419,9 @@ export default function Today() {
       const target = e.target as HTMLElement
       const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true'
 
+      if (e.key === 'Escape' && journalExpanded) { setJournalExpanded(false); return }
+      if (e.key === 'j' && e.metaKey && e.shiftKey) { e.preventDefault(); setJournalExpanded(v => !v); return }
+
       if (e.key === 'Escape') {
         if (liPanelOpen) { setLiPanelOpen(false); return }
         if (habitDrawerOpen) { setHabitDrawerOpen(false); return }
@@ -465,7 +460,7 @@ export default function Today() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [timerRunning, timerComplete, timerElapsed, showEndOfDay, habitDrawerOpen, liPanelOpen, habits, logs])
+  }, [timerRunning, timerComplete, timerElapsed, showEndOfDay, habitDrawerOpen, liPanelOpen, habits, logs, journalExpanded])
 
   useEffect(() => {
     const load = async () => {
@@ -1051,9 +1046,13 @@ export default function Today() {
   const saveSession = async (completionStatus: 'COMPLETE' | 'CARRIED_OVER' | 'INCOMPLETE') => {
     if (userId && timerStartedAt) {
       try {
+        const selectedTodo = timerTodoId ? [...todos, ...yesterdayTodos].find(t => t.id === timerTodoId) : null
+        const derivedGoalId = selectedTodo?.goal_id
+          ?? (selectedTodo?.milestone_id ? milestones.find(m => m.id === selectedTodo.milestone_id)?.goal_id : null)
+          ?? timerGoalId
         await supabase.from('focus_sessions').insert({
           user_id: userId,
-          goal_id: timerGoalId,
+          goal_id: derivedGoalId,
           habit_id: timerHabitId,
           todo_id: timerTodoId,
           started_at: timerStartedAt,
@@ -1222,55 +1221,23 @@ export default function Today() {
                         {/* The pill itself */}
                         <div className={`flex items-center gap-1.5 rounded-full border text-[11px] font-medium transition-all duration-200 ${chipClass}`}>
                           {habit.habit_type === 'QUANTIFIED' ? (
-                            /* QUANTIFIED chip */
-                            <button
-                              onClick={() => {
-                                setEditingQuantifiedHabitId(habit.id)
-                                setQuantifiedInputValue(String(currentVal))
-                              }}
-                              className="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full"
-                              title={habit.text}
-                            >
+                            /* QUANTIFIED chip — always-visible +/- */
+                            <div className="flex items-center gap-1 pl-2 pr-1 py-1">
                               {habit.emoji && <span className="leading-none text-[13px]" style={{ filter: 'grayscale(1)' }}>{habit.emoji}</span>}
-                              {editingQuantifiedHabitId === habit.id ? (
-                                <input
-                                  autoFocus
-                                  type="number"
-                                  min={0}
-                                  className="w-14 text-center text-xs bg-transparent border-b border-current outline-none"
-                                  value={quantifiedInputValue}
-                                  onChange={e => setQuantifiedInputValue(e.target.value)}
-                                  onClick={e => e.stopPropagation()}
-                                  onKeyDown={e => {
-                                    e.stopPropagation()
-                                    if (e.key === 'Enter') {
-                                      const val = Math.max(0, parseInt(quantifiedInputValue) || 0)
-                                      logHabitValue(habit.id, val)
-                                      setEditingQuantifiedHabitId(null)
-                                    }
-                                    if (e.key === 'Escape') setEditingQuantifiedHabitId(null)
-                                  }}
-                                  onBlur={() => {
-                                    const val = Math.max(0, parseInt(quantifiedInputValue) || 0)
-                                    logHabitValue(habit.id, val)
-                                    setEditingQuantifiedHabitId(null)
-                                  }}
-                                />
-                              ) : (
-                                <span className="whitespace-nowrap">{label}</span>
-                              )}
-                              <span className="text-[9px] font-mono opacity-60 whitespace-nowrap">{currentVal}/{habit.daily_target}</span>
-                              {isDone
-                                ? <Check size={10} weight="bold" className="text-pastel shrink-0" />
-                                : <span className="w-1.5 h-1.5 rounded-full bg-mercury/80 shrink-0" />
-                              }
-                              {streak > 0 && (
-                                <span className="flex items-center gap-0.5 text-[9px] opacity-60">
-                                  <Flame size={8} weight="fill" className="text-pastel" />
-                                  {streak}
-                                </span>
-                              )}
-                            </button>
+                              <span className="whitespace-nowrap text-[11px]">{label}</span>
+                              <button
+                                onClick={e => { e.stopPropagation(); logHabitValue(habit.id, Math.max(0, currentVal - 1)) }}
+                                className="w-4 h-4 flex items-center justify-center text-shuttle/50 hover:text-burnham transition-colors font-bold text-[13px] leading-none"
+                              >−</button>
+                              <span className="text-[10px] font-mono font-semibold w-6 text-center">{currentVal}</span>
+                              <button
+                                onClick={e => { e.stopPropagation(); logHabitValue(habit.id, currentVal + 1) }}
+                                className="w-4 h-4 flex items-center justify-center text-shuttle/50 hover:text-burnham transition-colors font-bold text-[13px] leading-none"
+                              >+</button>
+                              {habit.daily_target && <span className="text-[9px] font-mono opacity-40">/{habit.daily_target}</span>}
+                              {isDone && <Check size={10} weight="bold" className="text-pastel shrink-0" />}
+                              {streak > 0 && <span className="flex items-center gap-0.5 text-[9px] opacity-60"><Flame size={8} weight="fill" className="text-pastel" />{streak}</span>}
+                            </div>
                           ) : (
                             /* BINARY chip */
                             <button
@@ -1474,6 +1441,7 @@ export default function Today() {
                           key={todo.id}
                           todo={todo}
                           goal={todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null}
+                          milestone={todo.milestone_id ? milestones.find(m => m.id === todo.milestone_id) : null}
                           isEditing={editingTodoId === todo.id}
                           editingText={editingTodoText}
                           onEditStart={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text) }}
@@ -1542,16 +1510,15 @@ export default function Today() {
                     <div className="space-y-1">
                       {doneTodos.map(todo => {
                         const goal = todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null
+                        const doneMilestone = todo.milestone_id ? milestones.find(m => m.id === todo.milestone_id) : null
                         return (
                           <div key={todo.id} className="group flex items-center gap-2 py-1.5 px-2 -mx-2 opacity-50 hover:opacity-70 transition-opacity">
                             <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleTodo(todo.id)} />
                             <span className="text-[13px] text-shuttle line-through decoration-pastel flex-1 truncate">{todo.text}</span>
-                            {goal && (
-                              <span
-                                className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 opacity-60"
-                                style={{ backgroundColor: goal.color ? `${goal.color}20` : '#E5F9BD', color: goal.color ?? '#003720' }}
-                              >
-                                {goal.alias ?? goal.text.slice(0, 6)}
+                            {doneMilestone && (
+                              <span className="bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 leading-none opacity-50">
+                                {doneMilestone.text.length > 18 ? doneMilestone.text.slice(0, 18) + '…' : doneMilestone.text}
+                                {goal ? ` · ${goal.alias ?? goal.text?.slice(0, 6) ?? ''}` : ''}
                               </span>
                             )}
                             {todo.url && (() => {
@@ -1674,9 +1641,14 @@ export default function Today() {
                   <h3 className="text-[10px] font-semibold text-shuttle/70 uppercase tracking-widest flex items-center gap-1.5">
                     <NotePencil size={11} /> Journal
                   </h3>
-                  {journalEditing && (
-                    <span className="text-[9px] font-mono text-shuttle/25">/ para capturar</span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {journalEditing && (
+                      <span className="text-[9px] font-mono text-shuttle/25">/ para capturar</span>
+                    )}
+                    <button onClick={() => setJournalExpanded(v => !v)} className="text-shuttle/30 hover:text-shuttle transition-colors" title="Expandir ⌘⇧J">
+                      <ArrowsOut size={11} />
+                    </button>
+                  </div>
                 </div>
 
                 <JournalEditor
@@ -1724,6 +1696,44 @@ export default function Today() {
           </>
         )}
       </aside>
+
+      {/* ─── Journal Expand Modal (⌘⇧J) ──────────────────────────────── */}
+      {journalExpanded && (
+        <>
+          <div className="fixed inset-0 z-[180] bg-black/20 backdrop-blur-[2px]" onClick={() => setJournalExpanded(false)} />
+          <div className="fixed inset-0 z-[185] flex items-center justify-center pointer-events-none">
+            <div className="pointer-events-auto w-full max-w-3xl max-h-[85vh] bg-white rounded-2xl border border-mercury shadow-2xl flex flex-col overflow-hidden mx-6">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-mercury/50 shrink-0">
+                <h3 className="text-[10px] font-semibold text-shuttle/70 uppercase tracking-widest flex items-center gap-1.5">
+                  <NotePencil size={11} /> Journal
+                </h3>
+                <button onClick={() => setJournalExpanded(false)} className="text-shuttle/40 hover:text-shuttle transition-colors" title="Cerrar ⌘⇧J">
+                  <ArrowsIn size={11} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                <JournalEditor
+                  value={journalValue}
+                  onChange={handleJournalChange}
+                  onPillClick={openOrCreateCapture}
+                  onFocus={() => setJournalEditing(true)}
+                  onBlur={() => setJournalEditing(false)}
+                  onScoreText={gemini.scoreText}
+                  hasAiScorer={hasGeminiKey}
+                />
+                {gemini.result && (
+                  <div className="mt-2 p-2 bg-gossip/20 border border-pastel/30 rounded-lg relative">
+                    <button onClick={gemini.clear} className="absolute top-1.5 right-1.5 text-shuttle/30 hover:text-shuttle transition-colors"><X size={10} /></button>
+                    <div className="flex items-center gap-2 mb-1"><MagicWand size={10} className="text-pastel shrink-0" /><span className="text-[9px] font-semibold uppercase tracking-wider text-burnham/60">Score {gemini.result.score}/10</span></div>
+                    <p className="text-[10px] text-burnham italic mb-1">"{gemini.result.corrected}"</p>
+                    <p className="text-[10px] text-shuttle/60">{gemini.result.explanation}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ─── Floating Pomodoro Widget ────────────────────────────────── */}
       <div className="fixed top-4 right-14 z-40 flex flex-col items-end gap-1.5">
@@ -1809,28 +1819,6 @@ export default function Today() {
                 </button>
               ))}
             </div>
-            <div className="flex gap-1.5">
-              <select
-                className="flex-1 text-[10px] border border-mercury rounded px-1 py-0.5 bg-white text-burnham outline-none disabled:opacity-50"
-                value={timerGoalId ?? ''}
-                onChange={e => setTimerGoalId(e.target.value || null)}
-                disabled={timerRunning}
-              >
-                <option value="">No goal</option>
-                {goals.map(g => <option key={g.id} value={g.id}>{g.text}</option>)}
-              </select>
-              <select
-                value={timerHabitId ?? ''}
-                onChange={e => setTimerHabitId(e.target.value || null)}
-                disabled={timerRunning}
-                className="flex-1 text-[10px] border border-mercury rounded px-1 py-0.5 bg-white text-burnham outline-none disabled:opacity-50"
-              >
-                <option value="">No habit</option>
-                {habits
-                  .filter(h => !timerGoalId || h.goal_id === timerGoalId)
-                  .map(h => <option key={h.id} value={h.id}>{h.text}</option>)}
-              </select>
-            </div>
             <select
               value={timerTodoId ?? ''}
               onChange={e => setTimerTodoId(e.target.value || null)}
@@ -1912,7 +1900,7 @@ export default function Today() {
                       const done = isHabitDone(habit)
                       const streak = getStreak(habit.id)
                       return (
-                        <div key={habit.id} className="flex items-center gap-3 py-2 px-2 -mx-2 rounded hover:bg-gray-50/60 transition-colors">
+                        <div key={habit.id} className="group flex items-center gap-3 py-2 px-2 -mx-2 rounded hover:bg-gray-50/60 transition-colors">
                           <input
                             type="checkbox"
                             className="custom-checkbox shrink-0"
@@ -1929,6 +1917,9 @@ export default function Today() {
                               {streak}
                             </span>
                           )}
+                          <button onClick={() => setEditingHabit(habit)} className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-shuttle p-0.5" title="Editar">
+                            <Pencil size={11} />
+                          </button>
                           <span className="text-[9px] font-mono text-shuttle/20 border border-mercury/40 rounded px-1 shrink-0">{idx + 1}</span>
                         </div>
                       )
@@ -1948,7 +1939,7 @@ export default function Today() {
                       const streak = getStreak(habit.id)
                       return (
                         <div key={habit.id} className="space-y-2">
-                          <div className="flex items-center gap-2">
+                          <div className="group flex items-center gap-2">
                             {habit.emoji && <span className="text-base leading-none shrink-0">{habit.emoji}</span>}
                             <span className="flex-1 text-sm font-medium text-burnham">{habit.text}</span>
                             {streak > 0 && (
@@ -1957,6 +1948,9 @@ export default function Today() {
                                 {streak}
                               </span>
                             )}
+                            <button onClick={() => setEditingHabit(habit)} className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-shuttle p-0.5" title="Editar">
+                              <Pencil size={11} />
+                            </button>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
@@ -2177,31 +2171,54 @@ export default function Today() {
         >
           <div className="bg-white rounded-2xl shadow-2xl border border-mercury p-6 w-full max-w-lg mx-4 relative">
             <p className="text-[9px] uppercase tracking-[0.15em] text-shuttle/30 mb-4 font-mono">Quick Add · ⌘N</p>
-            <input
-              ref={quickAddRef}
-              autoFocus
-              value={quickAddText}
-              onChange={e => {
-                setQuickAddText(e.target.value)
-                computeQaDropdown(e.target.value)
-              }}
-              onKeyDown={e => {
-                if (qaDropdown && qaDropdown.items.length > 0) {
-                  if (e.key === 'ArrowDown') { e.preventDefault(); setQaDropdown(d => d ? { ...d, selectedIdx: Math.min(d.selectedIdx + 1, d.items.length - 1) } : d) }
-                  if (e.key === 'ArrowUp') { e.preventDefault(); setQaDropdown(d => d ? { ...d, selectedIdx: Math.max(d.selectedIdx - 1, 0) } : d) }
-                  if (e.key === 'Tab' || (e.key === 'Enter' && qaDropdown)) {
-                    e.preventDefault()
-                    applyQaDropdownItem(qaDropdown.items[qaDropdown.selectedIdx])
-                    return
+            <div className="relative flex items-center">
+              <input
+                ref={quickAddRef}
+                autoFocus
+                value={quickAddText}
+                onChange={e => {
+                  setQuickAddText(e.target.value)
+                  computeQaDropdown(e.target.value)
+                }}
+                onKeyDown={e => {
+                  if (qaDropdown && qaDropdown.items.length > 0) {
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setQaDropdown(d => d ? { ...d, selectedIdx: Math.min(d.selectedIdx + 1, d.items.length - 1) } : d) }
+                    if (e.key === 'ArrowUp') { e.preventDefault(); setQaDropdown(d => d ? { ...d, selectedIdx: Math.max(d.selectedIdx - 1, 0) } : d) }
+                    if (e.key === 'Tab' || (e.key === 'Enter' && qaDropdown)) {
+                      e.preventDefault()
+                      applyQaDropdownItem(qaDropdown.items[qaDropdown.selectedIdx])
+                      return
+                    }
+                    if (e.key === 'Escape') { setQaDropdown(null); return }
                   }
-                  if (e.key === 'Escape') { setQaDropdown(null); return }
-                }
-                if (e.key === 'Enter') { submitQuickAdd() }
-                if (e.key === 'Escape') { setQuickAddOpen(false); setQuickAddText(''); setQaDropdown(null) }
-              }}
-              placeholder="What needs to get done? Use @ for goals, /am /pm /url..."
-              className="w-full text-base text-burnham placeholder-shuttle/20 border-none outline-none bg-transparent"
-            />
+                  if (e.key === 'Enter') { submitQuickAdd() }
+                  if (e.key === 'Escape') { setQuickAddOpen(false); setQuickAddText(''); setQaDropdown(null) }
+                }}
+                placeholder="What needs to get done? Use @ for goals, /am /pm /url..."
+                className="flex-1 text-base text-burnham placeholder-shuttle/20 border-none outline-none bg-transparent pr-8"
+              />
+              {hasGeminiKey && (
+                <button
+                  onClick={() => { if (quickAddText.trim()) gemini.scoreText(quickAddText) }}
+                  className="absolute right-0 text-shuttle/30 hover:text-pastel transition-colors"
+                  title="AI score"
+                  disabled={!quickAddText.trim()}
+                >
+                  <MagicWand size={14} />
+                </button>
+              )}
+            </div>
+            {gemini.loading && (
+              <p className="text-[10px] text-shuttle/30 mt-2 animate-pulse font-mono">evaluando…</p>
+            )}
+            {gemini.result && (
+              <div className="mt-2 p-2 bg-gossip/20 border border-pastel/30 rounded-lg relative">
+                <button onClick={gemini.clear} className="absolute top-1.5 right-1.5 text-shuttle/30 hover:text-shuttle transition-colors"><X size={10} /></button>
+                <div className="flex items-center gap-2 mb-1"><MagicWand size={10} className="text-pastel shrink-0" /><span className="text-[9px] font-semibold uppercase tracking-wider text-burnham/60">Score {gemini.result.score}/10</span></div>
+                <p className="text-[10px] text-burnham italic mb-1">"{gemini.result.corrected}"</p>
+                <p className="text-[10px] text-shuttle/60">{gemini.result.explanation}</p>
+              </div>
+            )}
 
             {/* Autocomplete dropdown */}
             {qaDropdown && qaDropdown.items.length > 0 && (
