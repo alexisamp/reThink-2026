@@ -155,8 +155,8 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
             <select value={tracksOutreach} onChange={e => setTracksOutreach(e.target.value as 'networking' | 'prospecting' | '')}
               className="w-full text-[11px] text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors bg-white">
               <option value="">None</option>
-              <option value="networking">Networking contacts</option>
-              <option value="prospecting">Prospecting contacts</option>
+              <option value="networking">People talked to today</option>
+              <option value="prospecting">New contacts mapped</option>
             </select>
             <p className="text-[9px] text-shuttle/30 mt-1">Auto-increments this habit when a contact is logged in Outreach</p>
           </div>

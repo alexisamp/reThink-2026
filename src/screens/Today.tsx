@@ -18,6 +18,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
 import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog, Capture, Contact, ContactStatus } from '@/types'
 import { useContacts, type ContactInput } from '@/hooks/useContacts'
+import { createAttioTask, completeAttioTask, hasAttioKey } from '@/lib/attio'
 import ContactDetailDrawer from '@/components/ContactDetailDrawer'
 import { parseJournalCaptures } from '@/lib/captureParser'
 import CaptureModal from '@/components/CaptureModal'
@@ -412,6 +413,10 @@ export default function Today() {
     type: 'milestone' | 'goal'
   } | null>(null)
 
+  // Attio task creation in quick-add
+  const [linkedContactId, setLinkedContactId] = useState<string | null>(null)
+  const [shouldCreateAttioTask, setShouldCreateAttioTask] = useState(false)
+
   const QA_COMMANDS = [
     { label: '/am', insert: '/am ', sub: 'morning block' },
     { label: '/pm', insert: '/pm ', sub: 'afternoon block' },
@@ -561,6 +566,7 @@ export default function Today() {
 
   const {
     todayLogs: todayOutreach,
+    contacts: allContacts,
     syncing: outreachSyncing,
     syncError: outreachSyncError,
     addContact,
@@ -924,6 +930,10 @@ export default function Today() {
     const newVal = !t.completed
     await supabase.from('todos').update({ completed: newVal }).eq('id', id).eq('user_id', userId)
     setTodos(prev => prev.map(t => t.id === id ? { ...t, completed: newVal } : t))
+    // Fire-and-forget Attio task completion
+    if (newVal && t.attio_task_id) {
+      completeAttioTask(t.attio_task_id)
+    }
   }
 
   const toggleMilestone = async (id: string) => {
@@ -1126,9 +1136,31 @@ export default function Today() {
       const g = goals.find(g => g.id === quickAddLinked.goalId)
       if (g) text = `${text} @${g.alias ?? g.text.split(' ')[0]}`
     }
+    // Capture state before clearing
+    const capturedLinkedContactId = linkedContactId
+    const capturedShouldCreate = shouldCreateAttioTask
+    const capturedTodoText = text
     await submitTodo(text, null)
+    // If Attio task creation was requested, fire it after todo is saved
+    if (capturedShouldCreate && capturedLinkedContactId) {
+      const contact = allContacts.find(c => c.id === capturedLinkedContactId)
+      if (contact?.attio_record_id) {
+        const result = await createAttioTask(contact.attio_record_id, capturedTodoText, today)
+        if (result?.task_id) {
+          // Find the newly added todo (last in list) and save attio_task_id
+          setTodos(prev => {
+            const last = [...prev].reverse().find(t => t.text === capturedTodoText.trim() && !t.completed)
+            if (!last) return prev
+            supabase.from('todos').update({ attio_task_id: result.task_id } as any).eq('id', last.id)
+            return prev.map(t => t.id === last.id ? { ...t, attio_task_id: result.task_id } : t)
+          })
+        }
+      }
+    }
     setQuickAddText('')
     setQuickAddLinked(null)
+    setLinkedContactId(null)
+    setShouldCreateAttioTask(false)
     setQuickAddOpen(false)
   }
 
@@ -2368,7 +2400,7 @@ export default function Today() {
       {quickAddOpen && (
         <div
           className="fixed inset-0 z-[200] flex items-start justify-center pt-40 bg-black/10 backdrop-blur-[2px]"
-          onClick={e => { if (e.target === e.currentTarget) { setQuickAddOpen(false); setQaDropdown(null); setQuickAddLinked(null) } }}
+          onClick={e => { if (e.target === e.currentTarget) { setQuickAddOpen(false); setQaDropdown(null); setQuickAddLinked(null); setLinkedContactId(null); setShouldCreateAttioTask(false) } }}
         >
           <div className="bg-white rounded-2xl shadow-2xl border border-mercury p-6 w-full max-w-lg mx-4 relative">
             <p className="text-[9px] uppercase tracking-[0.15em] text-shuttle/30 mb-4 font-mono">Quick Add · ⌘N</p>
@@ -2393,7 +2425,7 @@ export default function Today() {
                     if (e.key === 'Escape') { setQaDropdown(null); return }
                   }
                   if (e.key === 'Enter') { submitQuickAdd() }
-                  if (e.key === 'Escape') { setQuickAddOpen(false); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked(null) }
+                  if (e.key === 'Escape') { setQuickAddOpen(false); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked(null); setLinkedContactId(null); setShouldCreateAttioTask(false) }
                 }}
                 placeholder="What needs to get done? Use @ for goals, /am /pm /url..."
                 className="flex-1 text-base text-burnham placeholder-shuttle/20 border-none outline-none bg-transparent pr-8"
@@ -2456,6 +2488,40 @@ export default function Today() {
                 <div className="px-3 py-1 border-t border-mercury/40">
                   <span className="text-[9px] text-shuttle/25 font-mono">↑↓ navigate · Tab select · Esc close</span>
                 </div>
+              </div>
+            )}
+
+            {/* Contact link picker (opt-in Attio task) */}
+            {allContacts.length > 0 && (
+              <div className="mt-3 flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <label className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono shrink-0">Link to person (optional)</label>
+                  <select
+                    value={linkedContactId ?? ''}
+                    onChange={e => {
+                      const val = e.target.value || null
+                      setLinkedContactId(val)
+                      if (!val) setShouldCreateAttioTask(false)
+                    }}
+                    className="flex-1 text-[10px] text-burnham border border-mercury/60 rounded px-2 py-1 bg-white focus:outline-none focus:border-shuttle transition-colors"
+                  >
+                    <option value="">— none —</option>
+                    {allContacts.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}{c.company ? ` · ${c.company}` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+                {linkedContactId && allContacts.find(c => c.id === linkedContactId)?.attio_record_id && hasAttioKey() && (
+                  <label className="flex items-center gap-2 cursor-pointer self-start">
+                    <input
+                      type="checkbox"
+                      checked={shouldCreateAttioTask}
+                      onChange={e => setShouldCreateAttioTask(e.target.checked)}
+                      className="w-3 h-3 accent-burnham"
+                    />
+                    <span className="text-[10px] text-shuttle/60">Create task in Attio</span>
+                  </label>
+                )}
               </div>
             )}
 

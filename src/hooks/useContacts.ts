@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { hasAttioKey, syncFullContact, pullFromAttio, diffAttioFields } from '@/lib/attio'
 import { computeHealthScore, daysSince } from '@/lib/funnelDefaults'
@@ -39,6 +39,7 @@ export function useContacts(
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const dormantFlaggedRef = useRef(false)
 
   const today = localDate()
   const todayContacts = contacts.filter(c => c.log_date === today)
@@ -187,22 +188,32 @@ export function useContacts(
     setContacts(prev => prev.map(c => c.id === contactId ? { ...c, health_score: score } : c))
   }, [])
 
-  // Auto-flag DORMANT: contacts with last_interaction_at > 90 days and status is NURTURING/ENGAGED
-  const autoFlagDormant = useCallback(async (): Promise<void> => {
+  // Auto-flag DORMANT: contacts with last_interaction_at null or > 90 days and status is NURTURING/ENGAGED
+  const autoFlagDormant = useCallback(async (): Promise<number> => {
     const staleContacts = contacts.filter(c => {
       if (!['NURTURING','ENGAGED'].includes(c.status)) return false
-      if (!c.last_interaction_at) return false
+      if (!c.last_interaction_at) return true
       return daysSince(c.last_interaction_at) > 90
     })
-    for (const c of staleContacts) {
-      await supabase.from('outreach_logs').update({ status: 'DORMANT' }).eq('id', c.id)
-    }
     if (staleContacts.length > 0) {
+      const ids = staleContacts.map(c => c.id)
+      await supabase.from('outreach_logs')
+        .update({ status: 'DORMANT', updated_at: new Date().toISOString() })
+        .in('id', ids)
       setContacts(prev => prev.map(c =>
-        staleContacts.find(s => s.id === c.id) ? { ...c, status: 'DORMANT' as ContactStatus } : c
+        ids.includes(c.id) ? { ...c, status: 'DORMANT' as ContactStatus } : c
       ))
     }
+    return staleContacts.length
   }, [contacts])
+
+  // Auto-run dormant flagging once per session after contacts load
+  useEffect(() => {
+    if (loading || dormantFlaggedRef.current || contacts.length === 0) return
+    dormantFlaggedRef.current = true
+    autoFlagDormant()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading])
 
   return {
     contacts,
