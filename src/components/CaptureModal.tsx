@@ -27,33 +27,6 @@ const CAPTURE_CONFIG: Record<CaptureType, {
   question:   { label: 'Question',   Icon: Question,  chipBg: 'bg-mercury',        chipText: 'text-shuttle', badgeBg: 'bg-mercury',        badgeText: 'text-shuttle' },
 }
 
-// ── Markdown renderer (same as journal) ─────────────────────────────
-function renderMarkdown(text: string): string {
-  return text
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/~~(.+?)~~/g, '<s>$1</s>')
-    .replace(/^### (.+)$/gm, '<h3 class="font-semibold text-burnham mt-2">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="font-semibold text-burnham mt-3 text-base">$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1 class="font-bold text-burnham mt-3 text-lg">$1</h1>')
-    .replace(/^- (.+)$/gm, '<li class="ml-3 list-disc list-outside">$1</li>')
-    .replace(/^\d+\. (.+)$/gm, '<li class="ml-3 list-decimal list-outside">$1</li>')
-    .replace(/\n/g, '<br />')
-}
-
-// ── Toolbar button ───────────────────────────────────────────────────
-function ToolbarBtn({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onMouseDown={e => { e.preventDefault(); onClick() }}
-      className="text-[10px] font-mono text-shuttle/50 hover:text-shuttle px-1.5 py-0.5 rounded hover:bg-mercury/40 transition-colors leading-none"
-    >
-      {label}
-    </button>
-  )
-}
-
 // ── Chip (rendered in journal non-edit view) ─────────────────────────
 export function CaptureChip({ type, title, onClick }: {
   type: CaptureType
@@ -73,9 +46,22 @@ export function CaptureChip({ type, title, onClick }: {
   )
 }
 
+// ── Toolbar button ───────────────────────────────────────────────────
+function ToolbarBtn({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onMouseDown={e => { e.preventDefault(); onClick() }}
+      className="text-[10px] font-mono text-shuttle/50 hover:text-shuttle px-1.5 py-0.5 rounded hover:bg-mercury/40 transition-colors leading-none"
+    >
+      {label}
+    </button>
+  )
+}
+
 // ── Main Modal ───────────────────────────────────────────────────────
 interface CaptureModalProps {
-  capture: Capture | null          // null = not open
+  capture: Capture | null
   onClose: () => void
   goals: GoalOption[]
   milestones: MilestoneOption[]
@@ -89,15 +75,30 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
   const [url, setUrl] = useState('')
   const [linkedGoalId, setLinkedGoalId] = useState<string>('')
   const [linkedMilestoneId, setLinkedMilestoneId] = useState('')
-  const [bodyEditing, setBodyEditing] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'idle'>('idle')
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // ── Refs always hold the latest values (bypass stale-closure issues) ──
+  const captureRef = useRef<Capture | null>(capture)
+  const titleRef = useRef(title)
+  const bodyValRef = useRef(body)
+  const urlRef = useRef(url)
+  const linkedGoalIdRef = useRef(linkedGoalId)
+  const linkedMilestoneIdRef = useRef(linkedMilestoneId)
+
+  // Keep refs in sync with state every render
+  captureRef.current = capture
+  titleRef.current = title
+  bodyValRef.current = body
+  urlRef.current = url
+  linkedGoalIdRef.current = linkedGoalId
+  linkedMilestoneIdRef.current = linkedMilestoneId
+
   // AI scorer for title
   const { result: aiResult, loading: aiLoading, scoreText: runScore, clear: clearAi } = useGeminiScorer()
 
-  // Sync state when capture changes
+  // Sync state when a different capture opens
   useEffect(() => {
     if (!capture) return
     setTitle(capture.title)
@@ -105,62 +106,73 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
     setUrl(capture.url ?? '')
     setLinkedGoalId(capture.linked_goal_id ?? '')
     setLinkedMilestoneId(capture.linked_milestone_id ?? '')
-    setBodyEditing(false)
     setSaveStatus('idle')
     clearAi()
+    // Focus body after a tick so title doesn't steal focus on reopen
+    setTimeout(() => bodyRef.current?.focus(), 80)
   }, [capture?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save all pending changes immediately then close
-  const flushAndClose = useCallback(() => {
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current)
-      saveTimer.current = null
-    }
-    if (capture) {
-      supabase
-        .from('captures')
-        .update({
-          title,
-          body,
-          url: url || null,
-          linked_goal_id: linkedGoalId || null,
-          linked_milestone_id: linkedMilestoneId || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', capture.id)
-        .select()
-        .single()
-        .then(({ data }) => { if (data) onUpdate(data as Capture) })
-    }
-    onClose()
-  }, [capture, title, body, url, linkedGoalId, linkedMilestoneId, onClose, onUpdate])
-
-  // Keyboard: Esc to close (with flush)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') flushAndClose() }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [flushAndClose])
-
+  // ── persist: saves a patch immediately, shows status indicator ──
   const persist = useCallback(async (patch: Partial<Capture>) => {
-    if (!capture) return
+    const cap = captureRef.current
+    if (!cap) return
     setSaveStatus('saving')
     const { data } = await supabase
       .from('captures')
       .update({ ...patch, updated_at: new Date().toISOString() })
-      .eq('id', capture.id)
+      .eq('id', cap.id)
       .select()
       .single()
     if (data) { onUpdate(data as Capture); setSaveStatus('saved') }
     setTimeout(() => setSaveStatus('idle'), 1500)
-  }, [capture, onUpdate])
+  }, [onUpdate])
 
+  // ── scheduleSave: debounced persist ──
   const scheduleSave = useCallback((patch: Partial<Capture>) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => persist(patch), 600)
   }, [persist])
 
-  // Markdown toolbar actions
+  // ── flushAndClose: reads from refs → always has latest values ──
+  const flushAndClose = useCallback(() => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+    const cap = captureRef.current
+    if (cap) {
+      // Fire-and-forget with CURRENT values from refs (not stale closures)
+      supabase
+        .from('captures')
+        .update({
+          title: titleRef.current,
+          body: bodyValRef.current,
+          url: urlRef.current || null,
+          linked_goal_id: linkedGoalIdRef.current || null,
+          linked_milestone_id: linkedMilestoneIdRef.current || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', cap.id)
+        .select()
+        .single()
+        .then(({ data }) => { if (data) onUpdate(data as Capture) })
+    }
+    onClose()
+  }, [onClose, onUpdate]) // stable deps — reads live values from refs
+
+  // ESC to close with flush
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && captureRef.current) {
+        e.stopPropagation()
+        flushAndClose()
+      }
+    }
+    window.addEventListener('keydown', handler, { capture: true })
+    return () => window.removeEventListener('keydown', handler, { capture: true })
+  }, [flushAndClose])
+
+  // Markdown toolbar helpers
   const wrapSelection = (before: string, after = before) => {
     const el = bodyRef.current
     if (!el) return
@@ -186,7 +198,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
 
   const formattedDate = (() => {
     const d = new Date(capture.captured_date + 'T12:00:00')
-    const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
     return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`
   })()
 
@@ -202,7 +214,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
       <div className="fixed inset-0 z-[205] flex items-center justify-center pointer-events-none">
         <div className="pointer-events-auto w-[560px] max-h-[80vh] bg-white rounded-2xl border border-mercury shadow-2xl flex flex-col overflow-hidden">
 
-          {/* ── Header: type badge + close ── */}
+          {/* ── Header ── */}
           <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-mercury/50 shrink-0">
             <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${cfg.badgeBg} ${cfg.badgeText}`}>
               <Icon size={12} weight="bold" />
@@ -223,7 +235,9 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                   setTitle(e.target.value)
                   scheduleSave({ title: e.target.value })
                 }}
-                onBlur={e => persist({ title: e.target.value })}
+                onBlur={e => {
+                  if (e.target.value.trim()) persist({ title: e.target.value })
+                }}
                 className="w-full text-xl font-semibold text-burnham bg-transparent border-none outline-none placeholder-shuttle/20 pr-8"
                 placeholder="Title…"
               />
@@ -231,23 +245,23 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                 <button
                   type="button"
                   onClick={() => runScore(title)}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 text-shuttle/30 hover:text-shuttle transition-colors"
-                  title="Evaluar escritura con AI"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 text-shuttle/20 hover:text-shuttle/60 transition-colors"
+                  title="Score with AI"
                 >
-                  <MagicWand size={14} />
+                  <MagicWand size={13} />
                 </button>
               )}
-              {aiLoading && <p className="text-[10px] text-shuttle/50 mt-1 animate-pulse">Evaluando…</p>}
+              {aiLoading && <p className="text-[10px] text-shuttle/50 mt-1 animate-pulse">Scoring…</p>}
               {aiResult && (
                 <div className="mt-2 p-2 bg-gossip/20 rounded-lg border border-gossip/40 text-[11px]">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-semibold text-burnham">Nota: {aiResult.score}/10</span>
+                    <span className="font-semibold text-burnham">Score: {aiResult.score}/10</span>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => { setTitle(aiResult.corrected); scheduleSave({ title: aiResult.corrected }); clearAi() }}
                         className="text-[10px] text-burnham underline"
                       >
-                        Aplicar
+                        Apply
                       </button>
                       <button onClick={clearAi} className="text-shuttle/40 hover:text-shuttle transition-colors">
                         <X size={10} />
@@ -261,9 +275,8 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
             </div>
           </div>
 
-          {/* ── Body (rich text) ── */}
+          {/* ── Body — always editable textarea, no toggle ── */}
           <div className="flex-1 overflow-y-auto px-6 pb-4 min-h-0">
-            {/* Toolbar */}
             <div className="flex items-center gap-0.5 mb-2 -ml-1">
               <ToolbarBtn label="B"  onClick={() => wrapSelection('**')} />
               <ToolbarBtn label="I"  onClick={() => wrapSelection('*')} />
@@ -272,30 +285,25 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
               <ToolbarBtn label="•"  onClick={() => prependLine('- ')} />
               <ToolbarBtn label="1." onClick={() => prependLine('1. ')} />
             </div>
-
-            {/* Edit / View toggle */}
-            {bodyEditing ? (
-              <textarea
-                ref={bodyRef}
-                autoFocus
-                value={body}
-                onChange={e => { setBody(e.target.value); scheduleSave({ body: e.target.value }) }}
-                onBlur={() => { setBodyEditing(false); persist({ title, body, url: url || null, linked_goal_id: linkedGoalId || null, linked_milestone_id: linkedMilestoneId || null }) }}
-                className="w-full min-h-[140px] bg-transparent border-none outline-none text-sm text-burnham resize-none leading-relaxed placeholder-shuttle/20 focus:ring-0"
-                placeholder="Agrega contexto, notas, reflexiones…"
-              />
-            ) : (
-              <div
-                onClick={() => setBodyEditing(true)}
-                className="min-h-[140px] cursor-text text-sm text-burnham leading-relaxed"
-              >
-                {body ? (
-                  <div dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }} />
-                ) : (
-                  <span className="text-shuttle/25 italic">Agrega contexto, notas, reflexiones…</span>
-                )}
-              </div>
-            )}
+            <textarea
+              ref={bodyRef}
+              value={body}
+              onChange={e => {
+                setBody(e.target.value)
+                scheduleSave({ body: e.target.value })
+              }}
+              onBlur={e => {
+                persist({
+                  title: titleRef.current,
+                  body: e.target.value,
+                  url: urlRef.current || null,
+                  linked_goal_id: linkedGoalIdRef.current || null,
+                  linked_milestone_id: linkedMilestoneIdRef.current || null,
+                })
+              }}
+              className="w-full min-h-[140px] bg-transparent border-none outline-none text-sm text-burnham resize-none leading-relaxed placeholder-shuttle/20 focus:ring-0"
+              placeholder="Add context, notes, reflections…"
+            />
           </div>
 
           {/* ── Meta fields ── */}
@@ -307,6 +315,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                 type="url"
                 value={url}
                 onChange={e => { setUrl(e.target.value); scheduleSave({ url: e.target.value || null }) }}
+                onBlur={e => persist({ url: e.target.value || null })}
                 placeholder="https://…"
                 className="flex-1 text-[12px] text-burnham bg-transparent border-none outline-none placeholder-shuttle/20"
               />
@@ -317,38 +326,42 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
               )}
             </div>
 
-            {/* Milestone link — first */}
+            {/* Milestone — first */}
             <div className="flex items-center gap-2">
               <Flag size={12} className="text-shuttle/30 shrink-0" />
               <select
                 value={linkedMilestoneId}
                 onChange={e => {
-                  const mid = e.target.value || null
-                  setLinkedMilestoneId(mid ?? '')
+                  const mid = e.target.value || ''
+                  setLinkedMilestoneId(mid)
                   if (mid) {
                     const ms = milestones.find(m => m.id === mid)
                     if (ms?.goal_id) setLinkedGoalId(ms.goal_id)
                   }
-                  scheduleSave({ linked_milestone_id: mid })
+                  // Persist immediately on select change (don't debounce)
+                  persist({ linked_milestone_id: mid || null })
                 }}
                 className="flex-1 text-[12px] text-burnham bg-transparent border-none outline-none cursor-pointer"
               >
-                <option value="">Sin milestone vinculado</option>
+                <option value="">No milestone linked</option>
                 {milestones.map(m => (
                   <option key={m.id} value={m.id}>{m.text}</option>
                 ))}
               </select>
             </div>
 
-            {/* Goal link — second */}
+            {/* Goal — second */}
             <div className="flex items-center gap-2">
               <Target size={12} className="text-shuttle/30 shrink-0" />
               <select
                 value={linkedGoalId}
-                onChange={e => { setLinkedGoalId(e.target.value); scheduleSave({ linked_goal_id: e.target.value || null }) }}
+                onChange={e => {
+                  setLinkedGoalId(e.target.value)
+                  persist({ linked_goal_id: e.target.value || null })
+                }}
                 className="flex-1 text-[12px] text-burnham bg-transparent border-none outline-none cursor-pointer"
               >
-                <option value="">Sin objetivo vinculado</option>
+                <option value="">No goal linked</option>
                 {goals.map(g => (
                   <option key={g.id} value={g.id}>{g.alias ?? g.text}</option>
                 ))}
@@ -359,21 +372,20 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
           {/* ── Footer ── */}
           <div className="px-6 py-3 border-t border-mercury/50 flex items-center justify-between shrink-0">
             <span className="text-[9px] font-mono text-shuttle/25">
-              {formattedDate} · {cfg.label.toLowerCase()} · editado {new Date(capture.updated_at).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+              {formattedDate} · {cfg.label.toLowerCase()}
             </span>
             <div className="flex items-center gap-3">
               {onDelete && (
                 <button
                   onClick={() => { onDelete(capture); onClose() }}
                   className="flex items-center gap-1 text-[11px] text-shuttle/40 hover:text-red-400 transition-colors"
-                  title="Eliminar captura"
                 >
                   <Trash size={12} />
-                  <span>eliminar</span>
+                  <span>delete</span>
                 </button>
               )}
               <span className="text-[9px] font-mono text-shuttle/25">
-                {saveStatus === 'saving' ? 'guardando…' : saveStatus === 'saved' ? 'guardado ✓' : 'Esc para cerrar'}
+                {saveStatus === 'saving' ? 'saving…' : saveStatus === 'saved' ? 'saved ✓' : 'Esc to close'}
               </span>
             </div>
           </div>

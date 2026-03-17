@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { MagicWand } from '@phosphor-icons/react'
 import type { CaptureType } from '@/types'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -241,9 +240,14 @@ export function JournalEditor({
       cur.collapse(true)
       cur.insertNode(pill)
 
-      // Move cursor right after pill
+      // Insert a text node right after pill so the user can continue typing
+      // on the same line without Chrome creating a new block element
+      const spacerText = document.createTextNode('\u00A0') // non-breaking space
+      pill.after(spacerText)
+
+      // Move cursor to the start of the spacer text node
       const after = document.createRange()
-      after.setStartAfter(pill)
+      after.setStart(spacerText, 0)
       after.collapse(true)
       sel.removeAllRanges()
       sel.addRange(after)
@@ -474,23 +478,7 @@ export function JournalEditor({
           className={`min-h-[160px] w-full text-xs text-burnham leading-relaxed outline-none journal-editor ${className}`}
           style={{ wordBreak: 'break-word' }}
         />
-        {hasAiScorer && onScoreText && (
-          <button
-            type="button"
-            onMouseDown={e => {
-              e.preventDefault()
-              const editorEl = editorRef.current
-              if (editorEl) {
-                const text = editorEl.innerText.trim()
-                if (text) onScoreText(text)
-              }
-            }}
-            className="absolute bottom-1 right-1 text-shuttle/20 hover:text-shuttle/50 transition-colors"
-            title="Evaluar escritura con AI"
-          >
-            <MagicWand size={13} />
-          </button>
-        )}
+        {/* AI wand lives in CaptureModal title, not here */}
       </div>
     </div>
   )
