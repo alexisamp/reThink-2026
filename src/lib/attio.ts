@@ -29,14 +29,12 @@ export async function createAttioPerson(values: {
   const lastName = nameParts.slice(1).join(' ') || ''
 
   const personValues: Record<string, unknown> = {
-    name: {
-      first_name: firstName,
-      last_name: lastName,
-      full_name: values.fullName.trim(),
-    },
+    // Attio v2: name must be an array of name objects
+    name: [{ first_name: firstName, last_name: lastName, full_name: values.fullName.trim() }],
   }
   if (values.linkedinUrl) {
-    personValues['linkedin_profile_url'] = [values.linkedinUrl]
+    // Attio v2: URL attributes must be array of { value: "..." } objects
+    personValues['linkedin_profile_url'] = [{ value: values.linkedinUrl }]
   }
 
   const res = await fetch(`${BASE}/v2/objects/people/records`, {
@@ -71,14 +69,10 @@ export async function updateAttioPerson(
 
   if (values.fullName) {
     const nameParts = values.fullName.trim().split(' ')
-    personValues['name'] = {
-      first_name: nameParts[0] ?? '',
-      last_name: nameParts.slice(1).join(' ') || '',
-      full_name: values.fullName.trim(),
-    }
+    personValues['name'] = [{ first_name: nameParts[0] ?? '', last_name: nameParts.slice(1).join(' ') || '', full_name: values.fullName.trim() }]
   }
   if (values.linkedinUrl !== undefined) {
-    personValues['linkedin_profile_url'] = values.linkedinUrl ? [values.linkedinUrl] : []
+    personValues['linkedin_profile_url'] = values.linkedinUrl ? [{ value: values.linkedinUrl }] : []
   }
 
   if (Object.keys(personValues).length === 0) return
@@ -104,7 +98,8 @@ export async function searchAttioPersons(query: string): Promise<AttioPersonResu
   if (!apiKey || !query.trim()) return []
 
   try {
-    const res = await fetch(`${BASE}/v2/records/search`, {
+    // Attio v2: correct endpoint is /v2/objects/people/records/query
+    const res = await fetch(`${BASE}/v2/objects/people/records/query`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -112,7 +107,6 @@ export async function searchAttioPersons(query: string): Promise<AttioPersonResu
       },
       body: JSON.stringify({
         filter: {
-          object: 'people',
           name: { $contains: query.trim() },
         },
         limit: 5,
