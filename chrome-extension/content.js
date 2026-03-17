@@ -73,6 +73,16 @@ function extractProfilePageData() {
     'h1',
   ])
 
+  // Fallback: derive name from URL slug (e.g. maria-jose-zuniga → Maria Jose Zuniga)
+  if (!name && url) {
+    var slugMatch = url.match(/\/in\/([^/]+)/)
+    if (slugMatch) {
+      name = slugMatch[1].split('-').map(function(w) {
+        return w.charAt(0).toUpperCase() + w.slice(1)
+      }).join(' ')
+    }
+  }
+
   var headline = extractText([
     '.text-body-medium.break-words',
     '.pv-text-details__left-panel .text-body-medium',

@@ -100,22 +100,12 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== 'rethink-outreach-page' && info.menuItemId !== 'rethink-outreach-link') return
 
-  // Determine URL: for page context use tab URL, for link context use linkUrl
-  const rawUrl = info.menuItemId === 'rethink-outreach-page'
-    ? (tab?.url || '')
-    : (info.linkUrl || '')
-
-  const cleanUrl = cleanLinkedInUrl(rawUrl)
-  if (!cleanUrl) {
-    showNotification('reThink Outreach', 'Not a LinkedIn profile URL')
-    return
-  }
-
-  // Get contact data from the content script
+  // Get contact data from the content script first — it knows the real current URL
   let name = null
   let job_title = null
   let company = null
   let location = null
+  let contentUrl = null
 
   try {
     if (tab && tab.id) {
@@ -126,10 +116,33 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         job_title = response.job_title || null
         company = response.company || null
         location = response.location || null
+        // Trust the content script URL (window.location.href) over tab.url
+        contentUrl = response.url || null
       }
     }
   } catch (_err) {
-    // Content script may not be ready — continue with name = null
+    // Content script may not be ready — fall back to tab/link URL
+  }
+
+  // Determine URL: prefer content script URL, fall back to link/tab URL
+  const rawUrl = contentUrl
+    || (info.menuItemId === 'rethink-outreach-link' ? (info.linkUrl || '') : (tab?.url || ''))
+
+  const cleanUrl = cleanLinkedInUrl(rawUrl)
+  if (!cleanUrl) {
+    showNotification('reThink Outreach', 'Not a LinkedIn profile URL')
+    return
+  }
+
+  // If name extraction failed, derive a best-guess name from the URL slug
+  if (!name) {
+    const slugMatch = cleanUrl.match(/\/in\/([^/]+)/)
+    if (slugMatch) {
+      name = slugMatch[1]
+        .split('-')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')
+    }
   }
 
   // Get auth token
