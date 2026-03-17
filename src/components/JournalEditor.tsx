@@ -109,6 +109,7 @@ interface JournalEditorProps {
   value: string
   onChange: (value: string) => void
   onPillClick: (type: CaptureType, title: string) => void
+  onCaptureCreate?: (type: CaptureType, title: string) => void
   onFocus?: () => void
   onBlur?: () => void
   placeholder?: string
@@ -121,6 +122,7 @@ export function JournalEditor({
   value,
   onChange,
   onPillClick,
+  onCaptureCreate,
   onFocus,
   onBlur,
   placeholder = "What's on your mind…",
@@ -161,6 +163,37 @@ export function JournalEditor({
       }
     })
   }
+
+  // ── Replace /type... text with /type + space so user can type the title ──
+  const startTitleInput = useCallback((type: CaptureType) => {
+    const el = editorRef.current
+    const sel = window.getSelection()
+    if (!sel || !sel.rangeCount || !el) return
+    const range = sel.getRangeAt(0)
+    const textNode = range.startContainer
+    if (textNode.nodeType === Node.TEXT_NODE) {
+      const text = textNode.textContent || ''
+      const cur = range.startOffset
+      const slashIdx = text.lastIndexOf('/', cur)
+      if (slashIdx >= 0) {
+        const prefix = `/${type} `
+        textNode.textContent = text.slice(0, slashIdx) + prefix + text.slice(cur)
+        const newOffset = slashIdx + prefix.length
+        const r = document.createRange()
+        r.setStart(textNode, newOffset)
+        r.collapse(true)
+        sel.removeAllRanges()
+        sel.addRange(r)
+      }
+    }
+    setDropdown(null)
+    // Emit updated value
+    if (el) {
+      const s = serializeFromDOM(el)
+      lastExternal.current = s
+      onChange(s)
+    }
+  }, [onChange])
 
   // ── Insert a pill at cursor ────────────────────────────────────────────────
   const insertPill = useCallback(
@@ -293,24 +326,16 @@ export function JournalEditor({
           // Check for /type title pattern before cursor
           const m = before.match(/\/(\w+)\s+(.+)$/)
           if (m && CAPTURE_TYPES.includes(m[1] as CaptureType)) {
-            insertPill(m[1] as CaptureType, m[2].trim())
+            const captureType = m[1] as CaptureType
+            const captureTitle = m[2].trim()
+            insertPill(captureType, captureTitle)
+            onCaptureCreate?.(captureType, captureTitle)
             return
           }
-          // If dropdown open and user presses Enter — commit with selected type but no title yet,
-          // insert pill with placeholder so user can rename in modal
+          // If dropdown open and user presses Enter — switch to title-input mode
           if (dd && dd.items.length > 0) {
             const selected = dd.items[dd.selectedIdx]
-            // Remove the /type text before cursor
-            const slashIdx = before.lastIndexOf('/')
-            if (slashIdx >= 0) {
-              node.textContent = text.slice(0, slashIdx) + text.slice(cur)
-              const r = document.createRange()
-              r.setStart(node, slashIdx)
-              r.collapse(true)
-              sel.removeAllRanges()
-              sel.addRange(r)
-            }
-            insertPill(selected.type, `nueva ${selected.type}`)
+            startTitleInput(selected.type)
             return
           }
         }
@@ -383,7 +408,7 @@ export function JournalEditor({
         }
       }
     },
-    [insertPill, onChange]
+    [insertPill, startTitleInput, onCaptureCreate, onChange]
   )
 
   // ── Paste: strip HTML, keep plain text ────────────────────────────────────
@@ -403,7 +428,7 @@ export function JournalEditor({
               key={item.type}
               onMouseDown={e => {
                 e.preventDefault()
-                insertPill(item.type, `nueva ${item.type}`)
+                startTitleInput(item.type)
               }}
               className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
                 idx === dropdown.selectedIdx
@@ -417,6 +442,22 @@ export function JournalEditor({
           ))}
         </div>
       )}
+
+      {/* ── Hint: shown after type is selected, waiting for title ── */}
+      {!dropdown && (() => {
+        const el = editorRef.current
+        if (!el) return null
+        const text = el.innerText || ''
+        const m = text.match(/\/(\w+) $/)
+        if (m && CAPTURE_TYPES.includes(m[1] as CaptureType)) {
+          return (
+            <p className="text-[10px] text-shuttle/30 font-mono mb-1">
+              type title, then ↵ to create {m[1]}
+            </p>
+          )
+        }
+        return null
+      })()}
 
       {/* ── Editor ── */}
       <div className="relative">

@@ -1927,6 +1927,7 @@ export default function Today() {
                   value={journalValue}
                   onChange={handleJournalChange}
                   onPillClick={openOrCreateCapture}
+                  onCaptureCreate={openOrCreateCapture}
                   onFocus={() => setJournalEditing(true)}
                   onBlur={() => setJournalEditing(false)}
                   onScoreText={gemini.scoreText}
@@ -1988,6 +1989,7 @@ export default function Today() {
                   value={journalValue}
                   onChange={handleJournalChange}
                   onPillClick={openOrCreateCapture}
+                  onCaptureCreate={openOrCreateCapture}
                   onFocus={() => setJournalEditing(true)}
                   onBlur={() => setJournalEditing(false)}
                   onScoreText={gemini.scoreText}

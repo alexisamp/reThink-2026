@@ -110,12 +110,37 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
     clearAi()
   }, [capture?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keyboard: Esc to close
+  // Save all pending changes immediately then close
+  const flushAndClose = useCallback(() => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+    if (capture) {
+      supabase
+        .from('captures')
+        .update({
+          title,
+          body,
+          url: url || null,
+          linked_goal_id: linkedGoalId || null,
+          linked_milestone_id: linkedMilestoneId || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', capture.id)
+        .select()
+        .single()
+        .then(({ data }) => { if (data) onUpdate(data as Capture) })
+    }
+    onClose()
+  }, [capture, title, body, url, linkedGoalId, linkedMilestoneId, onClose, onUpdate])
+
+  // Keyboard: Esc to close (with flush)
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') flushAndClose() }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+  }, [flushAndClose])
 
   const persist = useCallback(async (patch: Partial<Capture>) => {
     if (!capture) return
@@ -170,7 +195,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
       {/* Backdrop */}
       <div
         className="fixed inset-0 z-[200] bg-black/10 backdrop-blur-[2px]"
-        onClick={onClose}
+        onClick={flushAndClose}
       />
 
       {/* Panel */}
@@ -183,7 +208,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
               <Icon size={12} weight="bold" />
               <span>{cfg.label}</span>
             </div>
-            <button onClick={onClose} className="text-shuttle/30 hover:text-shuttle transition-colors">
+            <button onClick={flushAndClose} className="text-shuttle/30 hover:text-shuttle transition-colors">
               <X size={16} />
             </button>
           </div>
@@ -198,8 +223,9 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                   setTitle(e.target.value)
                   scheduleSave({ title: e.target.value })
                 }}
+                onBlur={e => persist({ title: e.target.value })}
                 className="w-full text-xl font-semibold text-burnham bg-transparent border-none outline-none placeholder-shuttle/20 pr-8"
-                placeholder="Título…"
+                placeholder="Title…"
               />
               {title.trim() && hasGeminiKey && (
                 <button
