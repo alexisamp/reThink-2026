@@ -143,6 +143,73 @@ function extractProfilePageData() {
   return { name: name, url: url, job_title: parsed.job_title, company: finalCompany, location: location, connections_count: connections_count, followers_count: followers_count, about: about }
 }
 
+// ── Contact info overlay extraction ─────────────────────────────────────────
+
+function extractContactInfoFromOverlay() {
+  var result = {}
+  var all = Array.from(document.querySelectorAll('*'))
+  var contactSection = null
+  for (var i = 0; i < all.length; i++) {
+    var e = all[i]
+    var t = e.textContent.trim()
+    if (t.indexOf('Contact info') === 0 && t.length < 1200 && e.children.length > 0) {
+      contactSection = e; break
+    }
+  }
+  if (!contactSection) return result
+  var fullText = contactSection.textContent.trim()
+  var emailMatch = fullText.match(/Email([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/)
+  if (emailMatch) result.email = emailMatch[1].trim()
+  var phoneMatch = fullText.match(/Phone([+\d\s().\-]+?)(?=\s*(?:Email|Birthday|Connected|Website|Twitter|Address|$))/)
+  if (phoneMatch) result.phone = phoneMatch[1].trim().substring(0, 30)
+  var websiteMatch = fullText.match(/Website(https?:\/\/\S+)/)
+  if (websiteMatch) result.website = websiteMatch[1].trim().substring(0, 200)
+  return result
+}
+
+function getContactInfo(callback) {
+  var col = document.querySelector('[data-testid="lazy-column"]')
+  var contactLink = col ? Array.from(col.querySelectorAll('a')).find(function(e) {
+    return e.textContent.trim() === 'Contact info'
+  }) : null
+  if (!contactLink) { callback({}); return }
+
+  var done = false
+  function finish(result) {
+    if (done) return
+    done = true
+    window.__rethinkFetchingContact = false
+    callback(result || {})
+  }
+
+  window.__rethinkFetchingContact = true
+  contactLink.click()
+
+  var attempts = 0
+  var poller = setInterval(function() {
+    attempts++
+    if (window.location.href.indexOf('/overlay/contact-info/') !== -1) {
+      clearInterval(poller)
+      setTimeout(function() {
+        var result = extractContactInfoFromOverlay()
+        history.back()
+        var backAttempts = 0
+        var backPoller = setInterval(function() {
+          backAttempts++
+          if (window.location.href.indexOf('/overlay/contact-info/') === -1 || backAttempts > 20) {
+            clearInterval(backPoller)
+            finish(result)
+          }
+        }, 100)
+      }, 1000)
+    } else if (attempts > 50) {
+      clearInterval(poller)
+      finish({})
+    }
+  }, 100)
+  setTimeout(function() { finish({}) }, 8000)
+}
+
 // ── Floating button ──────────────────────────────────────────────────────────
 
 var BUTTON_ID = 'rethink-outreach-btn'
@@ -184,8 +251,16 @@ function injectButton() {
       setButtonState(btn, 'error', 'Not a profile URL')
       return
     }
-    setButtonState(btn, 'loading', 'Saving…')
-    chrome.runtime.sendMessage({ type: 'SAVE_CONTACT', data: data }, function(response) {
+    setButtonState(btn, 'loading', 'Getting contact info…')
+    getContactInfo(function(contactInfo) {
+      if (contactInfo.email) data.email = contactInfo.email
+      if (contactInfo.phone) data.phone = contactInfo.phone
+      if (contactInfo.website) data.website = contactInfo.website
+      // Re-extract profile data in case DOM changed after navigation back
+      var refreshed = extractProfilePageData()
+      if (!data.name && refreshed.name) data.name = refreshed.name
+      setButtonState(btn, 'loading', 'Saving…')
+      chrome.runtime.sendMessage({ type: 'SAVE_CONTACT', data: data }, function(response) {
       if (chrome.runtime.lastError) {
         setButtonState(btn, 'error', 'Extension error')
         setTimeout(function() { setButtonState(btn, 'idle') }, 2500)
@@ -198,6 +273,7 @@ function injectButton() {
         setButtonState(btn, 'error', response && response.error ? response.error.substring(0, 40) : 'Error')
         setTimeout(function() { setButtonState(btn, 'idle') }, 3000)
       }
+    })
     })
   })
 
@@ -245,6 +321,7 @@ var lastUrl = window.location.href
 var navObserver = new MutationObserver(function() {
   if (window.location.href !== lastUrl) {
     lastUrl = window.location.href
+    if (window.__rethinkFetchingContact) return
     removeButton()
     if (isProfilePage()) {
       setTimeout(injectButton, 800)
