@@ -92,7 +92,7 @@ function injectButton() {
   btn.innerHTML = '<img src="' + chrome.runtime.getURL('icon48.png') + '" style="width:16px;height:16px;border-radius:3px;vertical-align:middle;margin-right:6px;" /><span>Add to Outreach</span>'
   btn.style.cssText = [
     'position:fixed',
-    'bottom:24px',
+    'top:80px',
     'right:24px',
     'z-index:99999',
     'background:#003720',
