@@ -234,7 +234,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       user_id: userId,
       name: name || 'Unknown',
       linkedin_url: cleanUrl,
-      category: 'peer',
+      category: null,
       status: 'PROSPECT',
       log_date: today,
     }
