@@ -150,3 +150,147 @@ export async function getAttioPerson(recordId: string): Promise<Record<string, u
     return null
   }
 }
+
+/** Syncs all available fields for a contact to Attio. Creates or updates. */
+export async function syncFullContact(contact: {
+  attio_record_id?: string | null
+  name: string
+  email?: string | null
+  phone?: string | null
+  job_title?: string | null
+  about?: string | null
+  linkedin_url?: string | null
+  location?: string | null
+  category?: string | null
+  skills?: string | null
+}): Promise<{ record_id: string }> {
+  const apiKey = getApiKey()
+  if (!apiKey) throw new Error('No Attio API key configured')
+  if (contact.category === 'family') throw new Error('Family contacts are not synced to Attio')
+
+  const nameParts = contact.name.trim().split(' ')
+  const firstName = nameParts[0] ?? ''
+  const lastName = nameParts.slice(1).join(' ') || ''
+
+  const values: Record<string, unknown> = {
+    name: [{ first_name: firstName, last_name: lastName, full_name: contact.name.trim() }],
+  }
+  if (contact.email) values['email_addresses'] = [{ email_address: contact.email }]
+  if (contact.phone) values['phone_numbers'] = [{ phone_number: contact.phone }]
+  if (contact.job_title) values['job_title'] = contact.job_title
+  if (contact.about) values['description'] = contact.about
+  if (contact.linkedin_url) values['linkedin_profile_url'] = [{ value: contact.linkedin_url }]
+  if (contact.location) values['primary_location'] = [{ locality: contact.location }]
+  if (contact.category) values['category'] = contact.category
+  if (contact.skills) values['skills'] = contact.skills
+
+  if (contact.attio_record_id) {
+    // Update existing
+    const res = await fetch(`${BASE}/v2/objects/people/records/${contact.attio_record_id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { values } }),
+    })
+    if (!res.ok) { const t = await res.text(); throw new Error(`Attio update error ${res.status}: ${t}`) }
+    return { record_id: contact.attio_record_id }
+  } else {
+    // Create new
+    const res = await fetch(`${BASE}/v2/objects/people/records`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { values } }),
+    })
+    if (!res.ok) { const t = await res.text(); throw new Error(`Attio create error ${res.status}: ${t}`) }
+    const json = await res.json()
+    const recordId = json?.data?.id?.record_id as string | undefined
+    if (!recordId) throw new Error('Attio response missing record_id')
+    return { record_id: recordId }
+  }
+}
+
+/** Pulls contact data from Attio (only fields Attio may update). Used for auto-pull on drawer open. */
+export async function pullFromAttio(recordId: string): Promise<{
+  name?: string; email?: string; phone?: string; job_title?: string; location?: string
+} | null> {
+  const apiKey = getApiKey()
+  if (!apiKey) return null
+  try {
+    const res = await fetch(`${BASE}/v2/objects/people/records/${recordId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    const v = json?.data?.values as Record<string, unknown> | undefined
+    if (!v) return null
+
+    const nameArr = v['name'] as Array<{ full_name?: string }> | undefined
+    const emailArr = v['email_addresses'] as Array<{ email_address?: string }> | undefined
+    const phoneArr = v['phone_numbers'] as Array<{ phone_number?: string }> | undefined
+    const locArr = v['primary_location'] as Array<{ locality?: string }> | undefined
+
+    return {
+      name: nameArr?.[0]?.full_name,
+      email: emailArr?.[0]?.email_address,
+      phone: phoneArr?.[0]?.phone_number,
+      job_title: v['job_title'] as string | undefined,
+      location: locArr?.[0]?.locality,
+    }
+  } catch { return null }
+}
+
+/** Returns a patch object with only fields that differ between contact and Attio data.
+ *  Only touches contact-data fields, never relationship fields. */
+export function diffAttioFields(
+  contact: { name: string; email?: string | null; phone?: string | null; job_title?: string | null; location?: string | null },
+  attioData: { name?: string; email?: string; phone?: string; job_title?: string; location?: string } | null
+): Record<string, string> {
+  if (!attioData) return {}
+  const diff: Record<string, string> = {}
+  if (attioData.name && attioData.name !== contact.name) diff.name = attioData.name
+  if (attioData.email && attioData.email !== contact.email) diff.email = attioData.email
+  if (attioData.phone && attioData.phone !== contact.phone) diff.phone = attioData.phone
+  if (attioData.job_title && attioData.job_title !== contact.job_title) diff.job_title = attioData.job_title
+  if (attioData.location && attioData.location !== contact.location) diff.location = attioData.location
+  return diff
+}
+
+/** Creates a task in Attio linked to a person record. */
+export async function createAttioTask(
+  attioRecordId: string,
+  text: string,
+  dueDate?: string | null
+): Promise<{ task_id: string } | null> {
+  const apiKey = getApiKey()
+  if (!apiKey) return null
+  try {
+    const res = await fetch(`${BASE}/v2/tasks`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data: {
+          content: text,
+          deadline_at: dueDate ? `${dueDate}T23:59:59Z` : null,
+          linked_records: [{ target_object: 'people', target_record_id: attioRecordId }],
+          is_completed: false,
+        },
+      }),
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    const taskId = json?.data?.id?.task_id as string | undefined
+    return taskId ? { task_id: taskId } : null
+  } catch { return null }
+}
+
+/** Marks an Attio task as completed. Fire-and-forget. */
+export async function completeAttioTask(taskId: string): Promise<void> {
+  const apiKey = getApiKey()
+  if (!apiKey) return
+  try {
+    await fetch(`${BASE}/v2/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { is_completed: true } }),
+    })
+  } catch { /* fire and forget */ }
+}
