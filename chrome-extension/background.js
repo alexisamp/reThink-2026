@@ -76,24 +76,89 @@ function showNotification(title, message) {
   })
 }
 
-// Register context menus on install
+// Register context menus on install (remove first to avoid duplicate ID errors on reload)
 chrome.runtime.onInstalled.addListener(() => {
-  // "page" context: works when right-clicking anywhere on a profile page
-  chrome.contextMenus.create({
-    id: 'rethink-outreach-page',
-    title: 'Add to reThink Outreach',
-    contexts: ['page'],
-    documentUrlPatterns: ['https://www.linkedin.com/in/*'],
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: 'rethink-outreach-page',
+      title: 'Add to reThink Outreach',
+      contexts: ['page'],
+      documentUrlPatterns: ['https://www.linkedin.com/in/*'],
+    })
+    chrome.contextMenus.create({
+      id: 'rethink-outreach-link',
+      title: 'Add to reThink Outreach',
+      contexts: ['link'],
+      documentUrlPatterns: ['https://www.linkedin.com/*'],
+      targetUrlPatterns: ['https://www.linkedin.com/in/*'],
+    })
   })
+})
 
-  // "link" context: works when right-clicking a profile link in feed/search
-  chrome.contextMenus.create({
-    id: 'rethink-outreach-link',
-    title: 'Add to reThink Outreach',
-    contexts: ['link'],
-    documentUrlPatterns: ['https://www.linkedin.com/*'],
-    targetUrlPatterns: ['https://www.linkedin.com/in/*'],
-  })
+// ── Message handler (from floating button in content script) ─────────────────
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type !== 'SAVE_CONTACT') return false
+
+  const { data } = message
+  const cleanUrl = cleanLinkedInUrl(data.url || '')
+  if (!cleanUrl) {
+    sendResponse({ ok: false, error: 'Invalid URL' })
+    return false
+  }
+
+  // Async handler — must return true to keep the channel open
+  ;(async () => {
+    const token = await getValidToken()
+    if (!token) {
+      sendResponse({ ok: false, error: 'Not connected' })
+      return
+    }
+
+    const result = await chrome.storage.local.get('authData')
+    const userId = result.authData?.user_id
+    const today = new Date().toISOString().split('T')[0]
+
+    const name = data.name || (() => {
+      const m = cleanUrl.match(/\/in\/([^/]+)/)
+      return m ? m[1].split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ') : 'Unknown'
+    })()
+
+    const body = {
+      user_id: userId,
+      name,
+      linkedin_url: cleanUrl,
+      contact_type: 'networking',
+      status: 'CONTACTED',
+      log_date: today,
+    }
+    if (data.job_title) body.job_title = data.job_title
+    if (data.company) body.company = data.company
+    if (data.location) body.location = data.location
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/outreach_logs`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify(body),
+      })
+
+      if (res.ok) {
+        sendResponse({ ok: true })
+      } else {
+        const errText = await res.text().catch(() => '')
+        sendResponse({ ok: false, error: `${res.status}: ${errText.substring(0, 60)}` })
+      }
+    } catch (err) {
+      sendResponse({ ok: false, error: err.message || 'Network error' })
+    }
+  })()
+
+  return true // keep message channel open for async response
 })
 
 // Handle context menu click
