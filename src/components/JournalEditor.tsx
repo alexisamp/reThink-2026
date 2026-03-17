@@ -15,13 +15,14 @@ const CAPTURE_MENU = [
 ]
 
 // Inline styles per capture type (avoids Tailwind purge issues in innerHTML)
+// goal/milestone/win/idea/learning/decision → green tones; question/reflection → gray
 const PILL_STYLE: Record<CaptureType, string> = {
-  idea:       'background:#E5F9BD;color:#003720',
-  learning:   'background:rgba(121,214,94,0.3);color:#003720',
-  reflection: 'background:rgba(83,100,113,0.12);color:#536471',
-  decision:   'background:rgba(0,55,32,0.15);color:#003720',
-  win:        'background:#79D65E;color:#003720',
-  question:   'background:#E3E3E3;color:#536471',
+  idea:       'background:#E5F9BD;border:1px solid rgba(121,214,94,0.4);color:#003720',
+  learning:   'background:rgba(121,214,94,0.3);border:1px solid rgba(121,214,94,0.4);color:#003720',
+  reflection: 'background:rgba(227,227,227,0.4);border:1px solid rgba(227,227,227,0.8);color:rgba(83,100,113,0.7)',
+  decision:   'background:rgba(0,55,32,0.08);border:1px solid rgba(0,55,32,0.15);color:#003720',
+  win:        'background:#79D65E;border:1px solid rgba(121,214,94,0.6);color:#003720',
+  question:   'background:rgba(227,227,227,0.5);border:1px solid #E3E3E3;color:#536471',
 }
 
 const PILL_BASE = [
