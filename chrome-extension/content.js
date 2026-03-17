@@ -44,14 +44,21 @@ function parseHeadline(headline) {
 function extractProfilePageData() {
   var url = cleanLinkedInUrl(window.location.href)
 
-  var name = extractText([
-    'h1.text-heading-xlarge',
-    'h1[class*="text-heading-xlarge"]',
-    '.pv-text-details__left-panel h1',
-    '.ph5 h1',
-    'h1',
-  ])
+  // LinkedIn uses data-testid="lazy-column" as the profile card container
+  var col = document.querySelector('[data-testid="lazy-column"]')
 
+  // Name: first h1 or h2 that isn't a section title
+  var name = null
+  var SECTION_TITLES = ['Highlights','About','Activity','Experience','Education','Skills',
+    'Following','Followers','Recommendations','Courses','Languages','Certifications',
+    'Volunteering','Projects','Publications','Honors','Organizations']
+  if (col) {
+    var nameEl = Array.from(col.querySelectorAll('h1, h2')).find(function(e) {
+      var t = e.textContent.trim()
+      return t.length > 2 && t.length < 80 && SECTION_TITLES.indexOf(t) === -1
+    })
+    if (nameEl) name = nameEl.textContent.trim().split('\n')[0].trim().substring(0, 120)
+  }
   // Fallback: derive name from URL slug
   if (!name && url) {
     var slugMatch = url.match(/\/in\/([^/]+)/)
@@ -62,20 +69,27 @@ function extractProfilePageData() {
     }
   }
 
-  var headline = extractText([
-    '.text-body-medium.break-words',
-    '.pv-text-details__left-panel .text-body-medium',
-    '.ph5 .text-body-medium',
-  ])
+  var headline = null
+  var location = null
+  if (col) {
+    var ps = Array.from(col.querySelectorAll('p'))
+      .map(function(p) { return p.textContent.trim() })
+      .filter(function(t) { return t.length > 15 })
+
+    // Headline: first p with meaningful length
+    for (var i = 0; i < ps.length; i++) {
+      if (ps[i].length <= 250) { headline = ps[i].substring(0, 200); break }
+    }
+    // Location: first p with comma, no pipe/bullet, short enough
+    for (var j = 0; j < ps.length; j++) {
+      var t = ps[j]
+      if (t.indexOf(',') !== -1 && t.indexOf('|') === -1 && t.indexOf('•') === -1 && t.length < 80) {
+        location = t.substring(0, 120); break
+      }
+    }
+  }
 
   var parsed = parseHeadline(headline)
-
-  var location = extractText([
-    '.pv-text-details__left-panel .text-body-small.inline',
-    '.text-body-small.inline.t-black--light',
-    '.ph5 .text-body-small.inline',
-  ])
-
   return { name: name, url: url, job_title: parsed.job_title, company: parsed.company, location: location }
 }
 
