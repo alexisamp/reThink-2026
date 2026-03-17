@@ -106,10 +106,18 @@ function extractProfilePageData() {
     }
   }
 
+  // About: data-testid="expandable-text-box" holds the About section text
+  var about = null
+  var aboutEl = document.querySelector('[data-testid="expandable-text-box"]')
+  if (aboutEl) {
+    var aboutText = aboutEl.textContent.trim()
+    if (aboutText.length > 20) about = aboutText.substring(0, 2000)
+  }
+
   var parsed = parseHeadline(headline)
   // Prefer explicit company over headline-parsed company
   var finalCompany = company || parsed.company
-  return { name: name, url: url, job_title: parsed.job_title, company: finalCompany, location: location, connections_count: connections_count }
+  return { name: name, url: url, job_title: parsed.job_title, company: finalCompany, location: location, connections_count: connections_count, about: about }
 }
 
 // ── Floating button ──────────────────────────────────────────────────────────
