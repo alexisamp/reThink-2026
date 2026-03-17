@@ -158,7 +158,7 @@ function extractContactInfoFromOverlay() {
   }
   if (!contactSection) return result
   var fullText = contactSection.textContent.trim()
-  var emailMatch = fullText.match(/Email([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/)
+  var emailMatch = fullText.match(/Email([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-z]{2,6})(?=[^a-z]|$)/)
   if (emailMatch) result.email = emailMatch[1].trim()
   var phoneMatch = fullText.match(/Phone([+\d\s().\-]+?)(?=\s*(?:Email|Birthday|Connected|Website|Twitter|Address|$))/)
   if (phoneMatch) result.phone = phoneMatch[1].trim().substring(0, 30)
