@@ -5,7 +5,7 @@ import {
   Flame, TrashSimple, NotePencil, GearSix,
   DotsSixVertical,
   X, Flag, ChartLine, HourglassMedium, MagicWand, Pencil, ArrowsOut, ArrowsIn, Circle,
-  ArrowSquareOut,
+  ArrowSquareOut, CaretRight,
 } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -1389,21 +1389,21 @@ export default function Today() {
                     return (
                       <div key={habit.id} className="flex flex-col items-start">
                         {/* The pill itself */}
-                        <div className={`flex items-center gap-1.5 rounded-full border text-[11px] font-medium transition-all duration-200 ${chipClass}`}>
+                        <div className={`flex items-center gap-1.5 h-7 rounded-full border text-[11px] font-medium transition-all duration-200 ${chipClass}`}>
                           {habit.habit_type === 'QUANTIFIED' ? (
                             /* QUANTIFIED chip — vertical +/- to save horizontal space */
-                            <div className="flex items-center gap-1 pl-2 pr-1 py-1">
+                            <div className="flex items-center gap-1 pl-2 pr-1 h-full">
                               {habit.emoji && <span className="leading-none text-[13px]" style={{ filter: 'grayscale(1)' }}>{habit.emoji}</span>}
                               <span className="whitespace-nowrap text-[11px]">{label}</span>
-                              <div className="flex flex-col items-center ml-1" style={{ gap: 0 }}>
+                              <div className="flex flex-col items-center justify-center h-full ml-1" style={{ gap: 0 }}>
                                 <button
                                   onClick={e => { e.stopPropagation(); logHabitValue(habit.id, currentVal + 1) }}
-                                  className="w-3.5 h-3.5 flex items-center justify-center text-[9px] text-shuttle/50 hover:text-burnham leading-none"
+                                  className="w-3.5 flex items-center justify-center text-[8px] text-shuttle/50 hover:text-burnham leading-none"
                                 >+</button>
-                                <span className="text-[10px] font-mono font-semibold w-5 text-center text-burnham">{currentVal}</span>
+                                <span className="text-[10px] font-mono font-semibold w-5 text-center text-burnham leading-none">{currentVal}</span>
                                 <button
                                   onClick={e => { e.stopPropagation(); logHabitValue(habit.id, Math.max(0, currentVal - 1)) }}
-                                  className="w-3.5 h-3.5 flex items-center justify-center text-[9px] text-shuttle/50 hover:text-burnham leading-none"
+                                  className="w-3.5 flex items-center justify-center text-[8px] text-shuttle/50 hover:text-burnham leading-none"
                                 >−</button>
                               </div>
                               {habit.daily_target && <span className="text-[9px] font-mono opacity-40">/{habit.daily_target}</span>}
@@ -1414,7 +1414,7 @@ export default function Today() {
                             /* BINARY chip */
                             <button
                               onClick={() => toggleHabit(habit.id)}
-                              className="flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full"
+                              className="flex items-center gap-1.5 pl-2 pr-1 h-full rounded-full"
                               title={habit.text}
                             >
                               {habit.emoji && <span className="leading-none text-[13px]" style={{ filter: 'grayscale(1)' }}>{habit.emoji}</span>}
@@ -1434,7 +1434,7 @@ export default function Today() {
                           {/* Expand toggle — tiny dot, visible on hover */}
                           <button
                             onClick={() => setExpandedHabitId(isExpanded ? null : habit.id)}
-                            className={`pr-1.5 py-1 transition-colors rounded-r-full ${isExpanded ? 'text-shuttle/50' : 'text-shuttle/15 hover:text-shuttle/40'}`}
+                            className={`pr-1.5 h-full flex items-center transition-colors rounded-r-full ${isExpanded ? 'text-shuttle/50' : 'text-shuttle/15 hover:text-shuttle/40'}`}
                             title="Details"
                           >
                             <span className="text-[8px]">{isExpanded ? '▲' : '▾'}</span>
@@ -1900,7 +1900,7 @@ export default function Today() {
                   </div>
                 )}
                 {gemini.loading && (
-                  <p className="text-[10px] text-shuttle/30 mt-1 animate-pulse font-mono">evaluando…</p>
+                  <p className="text-[10px] text-shuttle/30 mt-1 animate-pulse font-mono">scoring…</p>
                 )}
               </div>
 
@@ -2008,7 +2008,11 @@ export default function Today() {
 
         {/* Settings panel */}
         {showPomSettings && (
-          <div className="bg-white border border-mercury rounded-xl shadow-lg p-3 space-y-2 w-52">
+          <div
+            className="bg-white border border-mercury rounded-xl shadow-lg p-3 space-y-2 w-52"
+            tabIndex={-1}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setShowPomSettings(false) } }}
+          >
             <div className="flex gap-1">
               {FOCUS_DURATIONS.map(d => (
                 <button
@@ -2223,7 +2227,11 @@ export default function Today() {
           {/* Backdrop */}
           <div className="fixed inset-0 z-[189]" onClick={() => setMilestonesOpen(false)} />
           {/* Sidebar */}
-          <div className="fixed right-0 top-0 bottom-0 z-[190] w-80 bg-white border-l border-mercury shadow-2xl flex flex-col">
+          <div
+            className="fixed right-0 top-0 bottom-0 z-[190] w-80 bg-white border-l border-mercury shadow-2xl flex flex-col"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Escape') setMilestonesOpen(false) }}
+          >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-mercury">
               <span className="text-xs font-semibold text-burnham uppercase tracking-wide">Milestones</span>
@@ -2246,11 +2254,12 @@ export default function Today() {
                       <button
                         key={ms.id}
                         onClick={() => { setSelectedMilestoneDetail(ms); setMilestonesOpen(false) }}
-                        className="w-full text-left px-2 py-2 rounded-lg hover:bg-mercury/30 transition-colors group"
+                        className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-mercury/30 transition-colors group cursor-pointer"
                       >
                         <div className="flex items-start gap-2">
                           <Circle size={8} weight="fill" className="mt-1 text-mercury flex-shrink-0" />
-                          <span className="text-xs text-burnham leading-snug">{ms.text}</span>
+                          <span className="text-[11px] text-burnham leading-snug flex-1">{ms.text}</span>
+                          <CaretRight size={10} className="mt-0.5 text-shuttle/30 flex-shrink-0" />
                         </div>
                         {ms.target_date && (
                           <span className="text-[10px] font-mono text-shuttle/40 ml-4">
@@ -2314,14 +2323,14 @@ export default function Today() {
       {frictionPendingTodo && (
         <div className="fixed inset-0 z-[205] flex items-start justify-center pt-40 bg-black/10 backdrop-blur-[2px]" onClick={() => setFrictionPendingTodo(null)}>
           <div className="bg-white rounded-2xl shadow-2xl border border-mercury p-5 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-medium text-burnham mb-1">Ya tienes 5 tareas hoy</p>
-            <p className="text-xs text-shuttle/60 mb-4">"{frictionPendingTodo.text}" — ¿es para hoy o para después?</p>
+            <p className="text-sm font-medium text-burnham mb-1">You already have 5 tasks today</p>
+            <p className="text-xs text-shuttle/60 mb-4">"{frictionPendingTodo.text}" — for today or later?</p>
             <div className="flex gap-2">
               <button
                 onClick={() => { submitTodo(frictionPendingTodo.text, frictionPendingTodo.block ?? undefined, true); setFrictionPendingTodo(null) }}
                 className="flex-1 text-xs bg-burnham text-[#72eb7e] py-2 rounded-lg hover:bg-burnham/90 transition-colors"
               >
-                Agregar hoy
+                Add today
               </button>
               <button
                 onClick={async () => {
@@ -2331,7 +2340,7 @@ export default function Today() {
                 }}
                 className="flex-1 text-xs bg-mercury/30 text-shuttle py-2 rounded-lg hover:bg-mercury/50 transition-colors"
               >
-                Al backlog
+                Save for later
               </button>
             </div>
           </div>
@@ -2396,7 +2405,7 @@ export default function Today() {
               </div>
             )}
             {gemini.loading && (
-              <p className="text-[10px] text-shuttle/30 mt-2 animate-pulse font-mono">evaluando…</p>
+              <p className="text-[10px] text-shuttle/30 mt-2 animate-pulse font-mono">scoring…</p>
             )}
             {gemini.result && (
               <div className="mt-2 p-2 bg-gossip/20 border border-pastel/30 rounded-lg relative">
@@ -2412,7 +2421,7 @@ export default function Today() {
               <div className="absolute left-6 right-6 top-full mt-2 bg-white border border-mercury rounded-xl shadow-lg z-10">
                 <div className="px-3 py-1.5 border-b border-mercury/40">
                   <span className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono">
-                    {qaDropdown.type === 'command' ? 'Comandos' : qaDropdown.type === 'milestone' ? 'Milestones' : 'Objetivos'}
+                    {qaDropdown.type === 'command' ? 'Commands' : qaDropdown.type === 'milestone' ? 'Milestones' : 'Goals'}
                   </span>
                 </div>
                 <div className="max-h-44 overflow-y-auto">
@@ -2428,7 +2437,7 @@ export default function Today() {
                   ))}
                 </div>
                 <div className="px-3 py-1 border-t border-mercury/40">
-                  <span className="text-[9px] text-shuttle/25 font-mono">↑↓ navegar · Tab seleccionar · Esc cerrar</span>
+                  <span className="text-[9px] text-shuttle/25 font-mono">↑↓ navigate · Tab select · Esc close</span>
                 </div>
               </div>
             )}
