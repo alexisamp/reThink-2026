@@ -104,12 +104,8 @@ export function useOutreach(
             l.id === data.id ? { ...l, attio_record_id: result.record_id, attio_synced_at: now } : l
           ))
         })
-        .catch(async (err) => {
-          const errMsg = err instanceof Error ? err.message : 'unknown error'
-          // Temporarily store Attio error in notes for debugging
-          await supabase.from('outreach_logs')
-            .update({ notes: `[ATTIO_DEBUG] ${errMsg}` }).eq('id', data.id)
-          setSyncError(`Attio sync failed: ${errMsg}`)
+        .catch(err => {
+          setSyncError(`Attio sync failed: ${err instanceof Error ? err.message : 'unknown error'}`)
         })
         .finally(() => setSyncing(false))
     }
