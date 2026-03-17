@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X, ArrowClockwise, CheckCircle, WarningCircle, DownloadSimple, RocketLaunch, Eye, EyeSlash } from '@phosphor-icons/react'
 import type { UpdaterState } from '@/hooks/useUpdater'
+import { supabase } from '@/lib/supabase'
 
 interface SettingsModalProps {
   open: boolean
@@ -18,10 +19,31 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
   const [attioKey, setAttioKey] = useState('')
   const [attioKeyVisible, setAttioKeyVisible] = useState(false)
   const [attioSaved, setAttioSaved] = useState(false)
+  const [chromeExtCopied, setChromeExtCopied] = useState(false)
 
   useEffect(() => {
     if (open) setAttioKey(localStorage.getItem('attio_api_key') ?? '')
   }, [open])
+
+  const copyExtensionCode = async () => {
+    try {
+      const { data } = await supabase.auth.getSession()
+      const session = data.session
+      if (!session) return
+      const payload = {
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        user_id: session.user.id,
+        expires_at: session.expires_at,
+      }
+      const code = btoa(JSON.stringify(payload))
+      await navigator.clipboard.writeText(code)
+      setChromeExtCopied(true)
+      setTimeout(() => setChromeExtCopied(false), 2000)
+    } catch (_err) {
+      // silently fail — clipboard may be unavailable
+    }
+  }
 
   const saveAttioKey = () => {
     const trimmed = attioKey.trim()
@@ -93,6 +115,19 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
           {/* Integrations */}
           <div className="space-y-3">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/50">Integrations</p>
+
+            {/* Chrome Extension */}
+            <div>
+              <p className="text-xs font-medium text-burnham mb-0.5">Chrome Extension</p>
+              <p className="text-[10px] text-shuttle/60 mb-2">Paste this code in the extension popup to connect</p>
+              <button
+                onClick={copyExtensionCode}
+                className="px-3 py-2 text-xs font-medium bg-burnham text-white rounded-lg hover:bg-burnham/90 transition-colors"
+              >
+                {chromeExtCopied ? 'Copied ✓' : 'Copy connect code'}
+              </button>
+            </div>
+
             <div>
               <p className="text-xs font-medium text-burnham mb-1.5">Attio API key</p>
               <div className="flex gap-2">
