@@ -4,6 +4,54 @@ function getApiKey(): string | null {
   return localStorage.getItem('attio_api_key')?.trim() ?? null
 }
 
+// ── Attio select option ID maps (workspace-specific) ──────────────────────────
+const ATTIO_CATEGORY_OPTIONS: Record<string, string> = {
+  peer:          '7f69457d-db06-4c23-84af-1f4d8d35497c',
+  mentor:        'bdfae3cb-fa6d-4d90-9b0f-e8280c3f10b6',
+  investor:      '12837d45-cc1c-43a7-b324-04ec21696814',
+  client:        '2038c16d-d170-4709-a9e3-a780efca8fe2',
+  collaborator:  'c5627708-856c-460d-ac22-025256f68360',
+  community:     '6e63fbf0-5356-44c3-b11a-10e9b256c94f',
+  family:        'af467c1c-ba81-45a1-bb1a-10bec578009a',
+  other:         'd8df078a-e373-455c-90e4-c2bb8da84e97',
+}
+
+const ATTIO_STATUS_OPTIONS: Record<string, string> = {
+  PROSPECT:  '4c74e487-8324-47a0-acca-7c217b2e3507',
+  INTRO:     '5d60f4bd-b96e-45e6-ad0a-219f3b388691',
+  CONNECTED: 'a1783f4e-530c-401d-a6f0-e6da89c92e7c',
+  RECONNECT: 'c748396f-45c5-4b5f-aa08-f80059fcfc40',
+  ENGAGED:   'f91b13ba-c8e8-461b-a672-6fb1c1eb95d2',
+  NURTURING: '6ee1ef55-e590-46f5-b3d0-18169f01d720',
+  DORMANT:   '8a3108aa-4fba-4760-a0f8-e8ef1d3d25ca',
+}
+
+// Known skills option IDs — new skills are created on-the-fly via API
+const ATTIO_KNOWN_SKILLS: Record<string, string> = {
+  'design':             '4e9a6739-d689-4123-b774-6d50a4c176cd',
+  'community building': '0385e961-381d-46b2-9cfc-da2e9d98d410',
+  'pr':                 'fecf8475-f9c1-4963-ba8d-b4777a3ff4e5',
+  'product':            'ffb0d33c-5e2a-47b0-bae5-c2c8b006c69a',
+}
+
+/** Gets or creates a skill option in Attio, returns the option_id */
+async function resolveSkillOption(apiKey: string, skillTitle: string): Promise<string | null> {
+  const normalized = skillTitle.toLowerCase().trim()
+  if (ATTIO_KNOWN_SKILLS[normalized]) return ATTIO_KNOWN_SKILLS[normalized]
+  try {
+    const res = await fetch(`${BASE}/v2/objects/people/attributes/skills/options`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { title: skillTitle.trim() } }),
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    const id = json?.data?.id?.option_id as string | undefined
+    if (id) ATTIO_KNOWN_SKILLS[normalized] = id // cache for session
+    return id ?? null
+  } catch { return null }
+}
+
 export const hasAttioKey = (): boolean => !!getApiKey()
 
 export interface AttioPersonResult {
@@ -163,6 +211,9 @@ export async function syncFullContact(contact: {
   linkedin_url?: string | null
   location?: string | null
   category?: string | null
+  status?: string | null
+  health_score?: number | null
+  skills?: string | null
 }): Promise<{ record_id: string }> {
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('No Attio API key configured')
@@ -176,12 +227,30 @@ export async function syncFullContact(contact: {
   const values: Record<string, unknown> = {
     name: [{ first_name: firstName, last_name: lastName, full_name: contact.name.trim() }],
   }
-  if (contact.email)        values['email_addresses'] = [{ email_address: contact.email }]
-  if (contact.phone)        values['phone_numbers']   = [{ original_phone_number: contact.phone }]
-  if (contact.job_title)    values['job_title']       = [{ value: contact.job_title }]
-  if (contact.about)        values['description']     = [{ value: contact.about }]
-  if (contact.linkedin_url) values['linkedin']        = [{ value: contact.linkedin_url }]
-  if (contact.location)     values['primary_location'] = { locality: contact.location }
+  if (contact.email)        values['email_addresses']   = [{ email_address: contact.email }]
+  if (contact.phone)        values['phone_numbers']     = [{ original_phone_number: contact.phone }]
+  if (contact.job_title)    values['job_title']         = [{ value: contact.job_title }]
+  if (contact.about)        values['description']       = [{ value: contact.about }]
+  if (contact.linkedin_url) values['linkedin']          = [{ value: contact.linkedin_url }]
+  if (contact.location)     values['primary_location']  = { locality: contact.location }
+  if (contact.health_score) values['health_score']      = [{ value: contact.health_score }]
+
+  // Custom select fields — map reThink values to Attio option IDs
+  if (contact.category && ATTIO_CATEGORY_OPTIONS[contact.category]) {
+    values['category'] = [{ option: ATTIO_CATEGORY_OPTIONS[contact.category] }]
+  }
+  if (contact.status && ATTIO_STATUS_OPTIONS[contact.status]) {
+    values['relationship_status'] = [{ option: ATTIO_STATUS_OPTIONS[contact.status] }]
+  }
+
+  // Skills — multi-select: resolve each skill to an option ID (creates new options as needed)
+  if (contact.skills) {
+    const skillTitles = contact.skills.split(',').map(s => s.trim()).filter(Boolean)
+    const optionIds = (await Promise.all(skillTitles.map(s => resolveSkillOption(apiKey, s)))).filter(Boolean)
+    if (optionIds.length > 0) {
+      values['skills'] = optionIds.map(id => ({ option: id }))
+    }
+  }
 
   if (contact.attio_record_id) {
     // Update existing
