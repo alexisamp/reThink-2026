@@ -70,27 +70,46 @@ function extractProfilePageData() {
   }
 
   var headline = null
+  var company = null
   var location = null
+  var connections_count = null
   if (col) {
     var ps = Array.from(col.querySelectorAll('p'))
       .map(function(p) { return p.textContent.trim() })
       .filter(function(t) { return t.length > 15 })
 
-    // Headline: first p with meaningful length
-    for (var i = 0; i < ps.length; i++) {
-      if (ps[i].length <= 250) { headline = ps[i].substring(0, 200); break }
+    // Headline: first p (may contain | or •)
+    if (ps.length > 0) headline = ps[0].substring(0, 200)
+
+    // Company: second p — no pipe, no bullet, no comma, no "connections", len < 80
+    if (ps.length > 1) {
+      var c = ps[1]
+      if (c.indexOf('|') === -1 && c.indexOf('•') === -1 && c.indexOf(',') === -1 &&
+          c.toLowerCase().indexOf('connections') === -1 && c.length < 80) {
+        company = c.substring(0, 100)
+      }
     }
-    // Location: first p with comma, no pipe/bullet, short enough
+
+    // Location: first p with comma, no pipe/bullet, len < 80
     for (var j = 0; j < ps.length; j++) {
       var t = ps[j]
       if (t.indexOf(',') !== -1 && t.indexOf('|') === -1 && t.indexOf('•') === -1 && t.length < 80) {
         location = t.substring(0, 120); break
       }
     }
+
+    // Connections count: p matching "NNN+ connections" or "NNN connections"
+    for (var k = 0; k < ps.length; k++) {
+      if (/\d[\d,+]* connections/i.test(ps[k])) {
+        connections_count = ps[k].replace(/\s*connections.*/i, '').trim().substring(0, 20); break
+      }
+    }
   }
 
   var parsed = parseHeadline(headline)
-  return { name: name, url: url, job_title: parsed.job_title, company: parsed.company, location: location }
+  // Prefer explicit company over headline-parsed company
+  var finalCompany = company || parsed.company
+  return { name: name, url: url, job_title: parsed.job_title, company: finalCompany, location: location, connections_count: connections_count }
 }
 
 // ── Floating button ──────────────────────────────────────────────────────────
