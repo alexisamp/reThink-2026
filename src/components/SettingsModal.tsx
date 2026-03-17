@@ -20,12 +20,13 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
   const [attioKeyVisible, setAttioKeyVisible] = useState(false)
   const [attioSaved, setAttioSaved] = useState(false)
   const [chromeExtCopied, setChromeExtCopied] = useState(false)
+  const [chromeExtCode, setChromeExtCode] = useState('')
 
   useEffect(() => {
     if (open) setAttioKey(localStorage.getItem('attio_api_key') ?? '')
   }, [open])
 
-  const copyExtensionCode = async () => {
+  const generateExtensionCode = async () => {
     try {
       const { data } = await supabase.auth.getSession()
       const session = data.session
@@ -37,12 +38,33 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
         expires_at: session.expires_at,
       }
       const code = btoa(JSON.stringify(payload))
-      await navigator.clipboard.writeText(code)
+      setChromeExtCode(code)
+    } catch (_err) {
+      // silently fail
+    }
+  }
+
+  const copyExtensionCode = () => {
+    if (!chromeExtCode) return
+    // Try execCommand first (works reliably in Tauri WebView)
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = chromeExtCode
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
       setChromeExtCopied(true)
       setTimeout(() => setChromeExtCopied(false), 2000)
-    } catch (_err) {
-      // silently fail — clipboard may be unavailable
-    }
+      return
+    } catch (_) {}
+    // Fallback to clipboard API
+    navigator.clipboard.writeText(chromeExtCode).then(() => {
+      setChromeExtCopied(true)
+      setTimeout(() => setChromeExtCopied(false), 2000)
+    }).catch(() => {})
   }
 
   const saveAttioKey = () => {
@@ -119,13 +141,30 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
             {/* Chrome Extension */}
             <div>
               <p className="text-xs font-medium text-burnham mb-0.5">Chrome Extension</p>
-              <p className="text-[10px] text-shuttle/60 mb-2">Paste this code in the extension popup to connect</p>
-              <button
-                onClick={copyExtensionCode}
-                className="px-3 py-2 text-xs font-medium bg-burnham text-white rounded-lg hover:bg-burnham/90 transition-colors"
-              >
-                {chromeExtCopied ? 'Copied ✓' : 'Copy connect code'}
-              </button>
+              <p className="text-[10px] text-shuttle/60 mb-2">Generate a code and paste it in the extension popup to connect</p>
+              {!chromeExtCode ? (
+                <button
+                  onClick={generateExtensionCode}
+                  className="px-3 py-2 text-xs font-medium bg-burnham text-white rounded-lg hover:bg-burnham/90 transition-colors"
+                >
+                  Generate connect code
+                </button>
+              ) : (
+                <div className="space-y-1.5">
+                  <input
+                    readOnly
+                    value={chromeExtCode}
+                    onFocus={e => e.target.select()}
+                    className="w-full px-2 py-1.5 text-[10px] font-mono bg-mercury/40 border border-mercury rounded-lg text-shuttle truncate cursor-text"
+                  />
+                  <button
+                    onClick={copyExtensionCode}
+                    className="px-3 py-1.5 text-xs font-medium bg-burnham text-white rounded-lg hover:bg-burnham/90 transition-colors"
+                  >
+                    {chromeExtCopied ? 'Copied ✓' : 'Copy'}
+                  </button>
+                </div>
+              )}
             </div>
 
             <div>
