@@ -93,6 +93,8 @@ export default function ContactDetailDrawer({
   const config: ContactFunnelConfig = funnelConfig ?? DEFAULT_FUNNEL_CONFIG
 
   // ── local editable state ─────────────────────────────────────────────────
+  const [localStatus, setLocalStatus] = useState<ContactStatus | null>(null)
+  const [localCategory, setLocalCategory] = useState<ContactCategory | null>(null)
   const [personalContext, setPersonalContext] = useState('')
   const [notes, setNotes] = useState('')
   const [skillsInput, setSkillsInput] = useState('')
@@ -120,6 +122,8 @@ export default function ContactDetailDrawer({
   // ── sync contact state when contact changes ───────────────────────────────
   useEffect(() => {
     if (!contact) return
+    setLocalStatus(contact.status)
+    setLocalCategory(contact.category ?? null)
     setPersonalContext(contact.personal_context ?? '')
     setNotes(contact.notes ?? '')
     setSkillsList(
@@ -199,7 +203,15 @@ export default function ContactDetailDrawer({
   // ── status change ─────────────────────────────────────────────────────────
   function handleStatusChange(status: ContactStatus) {
     if (!contact) return
+    setLocalStatus(status)
     onUpdate(contact.id, { status })
+  }
+
+  // ── category change ───────────────────────────────────────────────────────
+  function handleCategoryChange(category: ContactCategory) {
+    if (!contact) return
+    setLocalCategory(category)
+    onUpdate(contact.id, { category })
   }
 
   // ── log interaction ───────────────────────────────────────────────────────
@@ -282,11 +294,15 @@ export default function ContactDetailDrawer({
                     {contact.name}'s profile
                   </h2>
                 </div>
-                {contact.category && (
-                  <span className="ml-6 inline-block text-[9px] uppercase bg-mercury/40 text-shuttle rounded px-1.5 py-0.5">
-                    {CATEGORY_LABELS[contact.category as ContactCategory] ?? contact.category}
-                  </span>
-                )}
+                <select
+                  value={localCategory ?? ''}
+                  onChange={e => handleCategoryChange(e.target.value as ContactCategory)}
+                  className="ml-6 text-[9px] uppercase bg-mercury/30 text-shuttle rounded px-1.5 py-0.5 border-0 focus:outline-none focus:ring-1 focus:ring-burnham/20 cursor-pointer"
+                >
+                  {(Object.entries(CATEGORY_LABELS) as [ContactCategory, string][]).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
               </div>
               <button
                 onClick={onClose}
@@ -307,7 +323,7 @@ export default function ContactDetailDrawer({
                       key={s}
                       onClick={() => handleStatusChange(s)}
                       className={`text-[10px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
-                        contact.status === s
+                        (localStatus ?? contact.status) === s
                           ? 'bg-burnham text-white border-burnham'
                           : 'bg-white text-shuttle border-mercury hover:border-shuttle/40'
                       }`}

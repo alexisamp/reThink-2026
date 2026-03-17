@@ -151,7 +151,8 @@ export async function getAttioPerson(recordId: string): Promise<Record<string, u
   }
 }
 
-/** Syncs all available fields for a contact to Attio. Creates or updates. */
+/** Syncs all available fields for a contact to Attio. Creates or updates.
+ *  Only sends standard Attio People attributes (free plan compatible). */
 export async function syncFullContact(contact: {
   attio_record_id?: string | null
   name: string
@@ -159,10 +160,7 @@ export async function syncFullContact(contact: {
   phone?: string | null
   job_title?: string | null
   about?: string | null
-  linkedin_url?: string | null
-  location?: string | null
   category?: string | null
-  skills?: string | null
 }): Promise<{ record_id: string }> {
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('No Attio API key configured')
@@ -172,6 +170,7 @@ export async function syncFullContact(contact: {
   const firstName = nameParts[0] ?? ''
   const lastName = nameParts.slice(1).join(' ') || ''
 
+  // Only standard Attio People fields — no custom attributes required
   const values: Record<string, unknown> = {
     name: [{ first_name: firstName, last_name: lastName, full_name: contact.name.trim() }],
   }
@@ -179,10 +178,6 @@ export async function syncFullContact(contact: {
   if (contact.phone) values['phone_numbers'] = [{ phone_number: contact.phone }]
   if (contact.job_title) values['job_title'] = contact.job_title
   if (contact.about) values['description'] = contact.about
-  if (contact.linkedin_url) values['linkedin_profile_url'] = [{ value: contact.linkedin_url }]
-  if (contact.location) values['primary_location'] = [{ locality: contact.location }]
-  if (contact.category) values['category'] = contact.category
-  if (contact.skills) values['skills'] = contact.skills
 
   if (contact.attio_record_id) {
     // Update existing

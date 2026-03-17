@@ -40,6 +40,7 @@ export default function OutreachPanel({
 }: OutreachPanelProps) {
   const [name, setName] = useState('')
   const [linkedinUrl, setLinkedinUrl] = useState('')
+  const [linkedinError, setLinkedinError] = useState(false)
   const [category, setCategory] = useState<ContactCategory>('peer')
   const [status, setStatus] = useState<ContactStatus>('PROSPECT')
   const [notes, setNotes] = useState('')
@@ -73,6 +74,7 @@ export default function OutreachPanel({
     setLocation(editingLog?.location ?? '')
     setSaving(false)
     setNameError(false)
+    setLinkedinError(false)
     setSpawnTodo(false)
     setSpawnTodoText('')
     setAttioSearchResults([])
@@ -117,13 +119,31 @@ export default function OutreachPanel({
     setAttioSearchResults([])
   }
 
+  const normalizeLinkedinUrl = (raw: string): string => {
+    const trimmed = raw.trim()
+    if (!trimmed) return ''
+    // If it already looks like a full URL, return as-is
+    if (trimmed.startsWith('http')) return trimmed
+    // If it's just a handle like "john-doe", prefix the full URL
+    if (!trimmed.includes('/')) return `https://linkedin.com/in/${trimmed}`
+    // If it's linkedin.com/in/... without protocol
+    if (trimmed.startsWith('linkedin.com') || trimmed.startsWith('www.linkedin.com')) {
+      return `https://${trimmed}`
+    }
+    return trimmed
+  }
+
   const handleSave = async () => {
     if (!name.trim()) { setNameError(true); return }
+    const normalizedLinkedin = normalizeLinkedinUrl(linkedinUrl)
+    if (normalizedLinkedin && !normalizedLinkedin.includes('linkedin.com')) {
+      setLinkedinError(true); return
+    }
     setSaving(true)
     try {
       await onSave({
         name: name.trim(),
-        linkedin_url: linkedinUrl.trim() || null,
+        linkedin_url: normalizedLinkedin || null,
         category,
         status,
         notes: notes.trim() || null,
@@ -234,10 +254,15 @@ export default function OutreachPanel({
             <input
               type="text"
               value={linkedinUrl}
-              onChange={e => setLinkedinUrl(e.target.value)}
-              placeholder="linkedin.com/in/…"
-              className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-burnham transition-colors"
+              onChange={e => { setLinkedinUrl(e.target.value); setLinkedinError(false) }}
+              placeholder="linkedin.com/in/… or just the handle"
+              className={`w-full text-sm text-burnham border rounded-lg px-3 py-2 focus:outline-none focus:border-burnham transition-colors ${
+                linkedinError ? 'border-red-300' : 'border-mercury'
+              }`}
             />
+            {linkedinError && (
+              <p className="text-[10px] text-red-400 mt-0.5">Must be a LinkedIn URL</p>
+            )}
           </div>
 
           {/* Job title + Company (2-col) */}
