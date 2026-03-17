@@ -152,7 +152,7 @@ export async function getAttioPerson(recordId: string): Promise<Record<string, u
 }
 
 /** Syncs all available fields for a contact to Attio. Creates or updates.
- *  Only sends standard Attio People attributes (free plan compatible). */
+ *  Attribute formats follow Attio REST API v2 spec for the People object. */
 export async function syncFullContact(contact: {
   attio_record_id?: string | null
   name: string
@@ -161,6 +161,7 @@ export async function syncFullContact(contact: {
   job_title?: string | null
   about?: string | null
   linkedin_url?: string | null
+  location?: string | null
   category?: string | null
 }): Promise<{ record_id: string }> {
   const apiKey = getApiKey()
@@ -171,16 +172,16 @@ export async function syncFullContact(contact: {
   const firstName = nameParts[0] ?? ''
   const lastName = nameParts.slice(1).join(' ') || ''
 
-  // Standard Attio People fields (free plan compatible)
+  // Standard Attio People attribute formats per API v2 docs
   const values: Record<string, unknown> = {
     name: [{ first_name: firstName, last_name: lastName, full_name: contact.name.trim() }],
   }
-  if (contact.email) values['email_addresses'] = [{ email_address: contact.email }]
-  if (contact.phone) values['phone_numbers'] = [{ phone_number: contact.phone }]
-  if (contact.job_title) values['job_title'] = contact.job_title
-  if (contact.about) values['description'] = contact.about
-  // Standard Attio slug for LinkedIn URL is "linkedin"
-  if (contact.linkedin_url) values['linkedin'] = [{ value: contact.linkedin_url }]
+  if (contact.email)        values['email_addresses'] = [{ email_address: contact.email }]
+  if (contact.phone)        values['phone_numbers']   = [{ original_phone_number: contact.phone }]
+  if (contact.job_title)    values['job_title']       = [{ value: contact.job_title }]
+  if (contact.about)        values['description']     = [{ value: contact.about }]
+  if (contact.linkedin_url) values['linkedin']        = [{ value: contact.linkedin_url }]
+  if (contact.location)     values['primary_location'] = { locality: contact.location }
 
   if (contact.attio_record_id) {
     // Update existing
