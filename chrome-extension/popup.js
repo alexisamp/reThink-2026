@@ -5,6 +5,8 @@ const disconnectedState = document.getElementById('disconnectedState')
 const userIdDisplay = document.getElementById('userIdDisplay')
 const connectBtn = document.getElementById('connectBtn')
 const disconnectBtn = document.getElementById('disconnectBtn')
+const saveContactBtn = document.getElementById('saveContactBtn')
+const categorySelect = document.getElementById('category-select')
 const codeInput = document.getElementById('codeInput')
 const statusMsg = document.getElementById('statusMsg')
 
@@ -81,6 +83,44 @@ connectBtn.addEventListener('click', () => {
   chrome.storage.local.set({ authData }, () => {
     showConnected(authData.user_id)
     setStatus('Connected successfully!', 'success')
+  })
+})
+
+// Save contact button — sends current LinkedIn profile to background with selected category
+saveContactBtn.addEventListener('click', () => {
+  const category = categorySelect ? categorySelect.value : 'peer'
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs[0]
+    if (!tab || !tab.id) {
+      setStatus('No active tab found.', 'error')
+      return
+    }
+    if (!tab.url || !/linkedin\.com\/in\//.test(tab.url)) {
+      setStatus('Navigate to a LinkedIn profile first.', 'error')
+      return
+    }
+    saveContactBtn.disabled = true
+    setStatus('Saving…', '')
+    chrome.tabs.sendMessage(tab.id, { type: 'GET_PROFILE_DATA' }, (profileData) => {
+      if (chrome.runtime.lastError || !profileData) {
+        saveContactBtn.disabled = false
+        setStatus('Could not read profile. Refresh the page.', 'error')
+        return
+      }
+      const data = { ...profileData, category }
+      chrome.runtime.sendMessage({ type: 'SAVE_CONTACT', data }, (response) => {
+        saveContactBtn.disabled = false
+        if (chrome.runtime.lastError) {
+          setStatus('Extension error.', 'error')
+          return
+        }
+        if (response && response.ok) {
+          setStatus('Saved successfully!', 'success')
+        } else {
+          setStatus((response && response.error ? response.error.substring(0, 50) : 'Error saving contact.'), 'error')
+        }
+      })
+    })
   })
 })
 

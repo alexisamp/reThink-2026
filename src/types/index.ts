@@ -1,8 +1,28 @@
+// ─── People / CRM ────────────────────────────────────────────────────────────
+
+export type ContactStatus =
+  | 'PROSPECT' | 'INTRO' | 'CONNECTED' | 'RECONNECT'
+  | 'ENGAGED'  | 'NURTURING' | 'DORMANT'
+
+export type ContactCategory =
+  | 'business_dev' | 'partner' | 'client' | 'mentor'
+  | 'job_us' | 'peer' | 'friend' | 'family'
+
+export interface FunnelStageConfig {
+  label: string
+  description: string
+  entry_criteria: string
+  exit_criteria: string
+}
+
+export type ContactFunnelConfig = Record<ContactStatus, FunnelStageConfig>
+
 export interface Profile {
   id: string
   email: string
   full_name: string | null
   avatar_url: string | null
+  contact_funnel_config: ContactFunnelConfig | null
   created_at: string
   updated_at: string
 }
@@ -214,7 +234,7 @@ export interface MonthlyKpiEntry {
   updated_at: string
 }
 
-export type NavRoute = '/today' | '/monthly' | '/strategy' | '/dashboard' | '/weekly-review' | '/library'
+export type NavRoute = '/today' | '/monthly' | '/strategy' | '/dashboard' | '/weekly-review' | '/library' | '/people'
 
 export type CaptureType = 'idea' | 'learning' | 'reflection' | 'decision' | 'win' | 'question'
 
@@ -233,27 +253,47 @@ export interface Capture {
   updated_at: string
 }
 
-export type OutreachStatus =
-  | 'CONTACTED' | 'RESPONDED' | 'MEETING_SCHEDULED'
-  | 'MET' | 'FOLLOWING_UP' | 'CLOSED_WON' | 'CLOSED_LOST' | 'NURTURING'
-
-export type OutreachType = 'networking' | 'prospecting'
-
-export interface OutreachLog {
+export interface Contact {
   id: string
   user_id: string
   goal_id: string | null
   name: string
   linkedin_url: string | null
-  contact_type: OutreachType
-  status: OutreachStatus
+  category: ContactCategory | null
+  status: ContactStatus
+  personal_context: string | null
+  skills: string | null
   notes: string | null
   job_title: string | null
   company: string | null
   location: string | null
+  connections_count: number | null
+  followers_count: number | null
+  email: string | null
+  phone: string | null
+  website: string | null
+  about: string | null
+  health_score: number
+  last_interaction_at: string | null
   log_date: string
   attio_record_id: string | null
   attio_synced_at: string | null
   created_at: string
   updated_at: string
 }
+
+export interface Interaction {
+  id: string
+  user_id: string
+  contact_id: string
+  type: 'whatsapp' | 'linkedin_msg' | 'email' | 'call' | 'virtual_coffee' | 'in_person'
+  direction: 'outbound' | 'inbound'
+  notes: string | null
+  interaction_date: string
+  created_at: string
+}
+
+// Backward compat alias — remove after all callers migrated to Contact
+export type OutreachLog = Contact
+export type OutreachStatus = ContactStatus
+export type OutreachType = ContactCategory

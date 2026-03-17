@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "reThink Outreach",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Add LinkedIn contacts to reThink Outreach with one right-click",
-  "permissions": ["contextMenus", "storage", "notifications"],
+  "permissions": ["contextMenus", "storage", "notifications", "tabs"],
   "host_permissions": [
     "https://www.linkedin.com/*",
     "https://amvezbymrnvrwcypivkf.supabase.co/*"

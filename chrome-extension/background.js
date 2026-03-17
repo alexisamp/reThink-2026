@@ -127,8 +127,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       user_id: userId,
       name,
       linkedin_url: cleanUrl,
-      contact_type: 'networking',
-      status: 'CONTACTED',
+      category: data.category || 'peer',
+      status: 'PROSPECT',
       log_date: today,
     }
     if (data.job_title) body.job_title = data.job_title
@@ -234,8 +234,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       user_id: userId,
       name: name || 'Unknown',
       linkedin_url: cleanUrl,
-      contact_type: 'networking',
-      status: 'CONTACTED',
+      category: 'peer',
+      status: 'PROSPECT',
       log_date: today,
     }
 
