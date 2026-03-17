@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { computeHealthScore } from '@/lib/funnelDefaults'
 import type { Interaction, Habit } from '@/types'
 
 function localDate(d = new Date()) {
@@ -69,6 +70,14 @@ export function useInteractions(
     ]
     await updateNetworkingHabit(allTodayFlat)
 
+    // Recompute and save health score for this contact
+    const newScore = Math.min(10, Math.max(1, computeHealthScore(allForContact)))
+    const now = new Date().toISOString()
+    supabase.from('outreach_logs')
+      .update({ health_score: newScore, last_interaction_at: now, updated_at: now })
+      .eq('id', contactId)
+      .then(() => {})
+
     return newItem
   }, [userId, today, interactionsByContact, updateNetworkingHabit])
 
@@ -84,6 +93,13 @@ export function useInteractions(
         .flatMap(([, ints]) => ints.filter(i => i.interaction_date === today)),
     ]
     await updateNetworkingHabit(allTodayFlat)
+
+    // Recompute and save health score for this contact
+    const newScore = Math.min(10, Math.max(1, computeHealthScore(updated)))
+    supabase.from('outreach_logs')
+      .update({ health_score: newScore, updated_at: new Date().toISOString() })
+      .eq('id', interaction.contact_id)
+      .then(() => {})
   }, [userId, today, interactionsByContact, updateNetworkingHabit])
 
   const getInteractions = useCallback((contactId: string): Interaction[] => {

@@ -70,15 +70,8 @@ export function useContacts(
     await upsertHabitCount(habit.id, count)
   }, [habits, today, upsertHabitCount])
 
-  // Habit: networking habit fires when status → INTRO (count distinct INTRO transitions today)
-  // Called from updateContact when status changes to INTRO
-  const incrementNetworkingHabit = useCallback(async (updatedContacts: Contact[]) => {
-    const habit = habits.find(h => h.tracks_outreach === 'networking' && h.is_active)
-    if (!habit) return
-    // Count contacts updated to INTRO today — approximate by using todayContacts with INTRO status
-    const count = updatedContacts.filter(c => c.log_date === today && c.status === 'INTRO').length
-    await upsertHabitCount(habit.id, count)
-  }, [habits, today, upsertHabitCount])
+  // Note: networking habit is owned exclusively by useInteractions.ts (distinct contacts per day)
+  // useContacts does NOT fire the networking habit — only prospecting (new contacts mapped)
 
   const addContact = useCallback(async (input: ContactInput): Promise<Contact | null> => {
     if (!userId) return null
@@ -134,17 +127,12 @@ export function useContacts(
     const updatedContacts = contacts.map(c => c.id === id ? { ...c, ...patch } : c)
     setContacts(updatedContacts)
 
-    // Fire networking habit when status changes to INTRO
-    if (updates.status === 'INTRO' && existing.status !== 'INTRO') {
-      await incrementNetworkingHabit(updatedContacts)
-    }
-
     // Attio: update if synced
     if (existing.attio_record_id && hasAttioKey()) {
       syncFullContact({ ...existing, ...patch } as Contact)
         .catch(err => setSyncError(`Attio update failed: ${err instanceof Error ? err.message : 'unknown'}`))
     }
-  }, [userId, contacts, incrementNetworkingHabit])
+  }, [userId, contacts, incrementProspectingHabit])
 
   const deleteContact = useCallback(async (id: string): Promise<void> => {
     if (!userId) return

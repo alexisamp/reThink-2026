@@ -153,6 +153,7 @@ export interface Todo {
   date: string | null
   sort_order: number
   url: string | null
+  outreach_log_id: string | null
   attio_task_id: string | null
   created_at: string
 }
