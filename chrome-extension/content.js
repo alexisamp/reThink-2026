@@ -106,6 +106,29 @@ function extractProfilePageData() {
     }
   }
 
+  // Followers: p with "follower" text near the Activity h2
+  var followers_count = null
+  if (col) {
+    var activityH2 = Array.from(col.querySelectorAll('h2')).find(function(e) {
+      return e.textContent.trim() === 'Activity'
+    })
+    if (activityH2) {
+      // Walk up to find a container with the followers p sibling
+      var actContainer = activityH2
+      for (var fi = 0; fi < 5; fi++) {
+        actContainer = actContainer.parentElement
+        if (!actContainer) break
+        var followerP = Array.from(actContainer.querySelectorAll('p')).find(function(p) {
+          return /\d[\d,]* followers?/i.test(p.textContent) && p.children.length === 0
+        })
+        if (followerP) {
+          followers_count = followerP.textContent.trim().substring(0, 30)
+          break
+        }
+      }
+    }
+  }
+
   // About: data-testid="expandable-text-box" holds the About section text
   var about = null
   var aboutEl = document.querySelector('[data-testid="expandable-text-box"]')
@@ -117,7 +140,7 @@ function extractProfilePageData() {
   var parsed = parseHeadline(headline)
   // Prefer explicit company over headline-parsed company
   var finalCompany = company || parsed.company
-  return { name: name, url: url, job_title: parsed.job_title, company: finalCompany, location: location, connections_count: connections_count, about: about }
+  return { name: name, url: url, job_title: parsed.job_title, company: finalCompany, location: location, connections_count: connections_count, followers_count: followers_count, about: about }
 }
 
 // ── Floating button ──────────────────────────────────────────────────────────
