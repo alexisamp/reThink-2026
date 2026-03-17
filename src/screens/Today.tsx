@@ -234,7 +234,14 @@ function OutreachRow({ log, onEdit, onDelete }: OutreachRowProps) {
       }`}>
         {log.contact_type === 'networking' ? 'NET' : 'PRO'}
       </span>
-      <span className="text-[13px] font-medium text-burnham flex-1 truncate">{log.name}</span>
+      <div className="flex-1 min-w-0">
+        <span className="text-[13px] font-medium text-burnham block truncate">{log.name}</span>
+        {(log.company || log.job_title) && (
+          <span className="text-[10px] text-shuttle/50 truncate block leading-tight">
+            {[log.job_title, log.company].filter(Boolean).join(' · ')}
+          </span>
+        )}
+      </div>
       <StatusBadge status={log.status} />
       {log.linkedin_url && (
         <a

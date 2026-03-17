@@ -16,6 +16,9 @@ export interface OutreachLogInput {
   goal_id?: string | null
   log_date?: string
   existing_attio_record_id?: string
+  job_title?: string | null
+  company?: string | null
+  location?: string | null
 }
 
 export function useOutreach(
@@ -76,6 +79,9 @@ export function useOutreach(
       log_date: input.log_date ?? today,
       attio_record_id: input.existing_attio_record_id ?? null,
       attio_synced_at: input.existing_attio_record_id ? new Date().toISOString() : null,
+      job_title: input.job_title ?? null,
+      company: input.company ?? null,
+      location: input.location ?? null,
     }
 
     const { data, error } = await supabase
@@ -127,6 +133,9 @@ export function useOutreach(
     if (updates.status !== undefined) patch.status = updates.status
     if (updates.notes !== undefined) patch.notes = updates.notes ?? null
     if (updates.goal_id !== undefined) patch.goal_id = updates.goal_id ?? null
+    if (updates.job_title !== undefined) patch.job_title = updates.job_title ?? null
+    if (updates.company !== undefined) patch.company = updates.company ?? null
+    if (updates.location !== undefined) patch.location = updates.location ?? null
 
     await supabase.from('outreach_logs').update(patch).eq('id', id)
     const updatedLogs = logs.map(l => l.id === id ? { ...l, ...patch } : l)

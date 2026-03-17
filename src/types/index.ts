@@ -248,6 +248,9 @@ export interface OutreachLog {
   contact_type: OutreachType
   status: OutreachStatus
   notes: string | null
+  job_title: string | null
+  company: string | null
+  location: string | null
   log_date: string
   attio_record_id: string | null
   attio_synced_at: string | null

@@ -40,6 +40,9 @@ export default function OutreachPanel({
   const [status, setStatus] = useState<OutreachStatus>('CONTACTED')
   const [notes, setNotes] = useState('')
   const [goalId, setGoalId] = useState('')
+  const [jobTitle, setJobTitle] = useState('')
+  const [company, setCompany] = useState('')
+  const [location, setLocation] = useState('')
   const [saving, setSaving] = useState(false)
   const [nameError, setNameError] = useState(false)
   const [spawnTodo, setSpawnTodo] = useState(false)
@@ -61,6 +64,9 @@ export default function OutreachPanel({
     setStatus(editingLog?.status ?? 'CONTACTED')
     setNotes(editingLog?.notes ?? '')
     setGoalId(editingLog?.goal_id ?? '')
+    setJobTitle(editingLog?.job_title ?? '')
+    setCompany(editingLog?.company ?? '')
+    setLocation(editingLog?.location ?? '')
     setSaving(false)
     setNameError(false)
     setSpawnTodo(false)
@@ -119,6 +125,9 @@ export default function OutreachPanel({
         notes: notes.trim() || null,
         goal_id: goalId || null,
         existing_attio_record_id: selectedAttioRecord?.record_id,
+        job_title: jobTitle.trim() || null,
+        company: company.trim() || null,
+        location: location.trim() || null,
       })
       if (spawnTodo && spawnTodoText.trim()) {
         onSpawnTodo(spawnTodoText.trim(), linkedinUrl.trim() || null, goalId || null)
@@ -223,6 +232,48 @@ export default function OutreachPanel({
               value={linkedinUrl}
               onChange={e => setLinkedinUrl(e.target.value)}
               placeholder="linkedin.com/in/…"
+              className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-burnham transition-colors"
+            />
+          </div>
+
+          {/* Job title + Company (2-col) */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">
+                Job title
+              </label>
+              <input
+                type="text"
+                value={jobTitle}
+                onChange={e => setJobTitle(e.target.value)}
+                placeholder="e.g. Head of Growth"
+                className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-burnham transition-colors"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">
+                Company
+              </label>
+              <input
+                type="text"
+                value={company}
+                onChange={e => setCompany(e.target.value)}
+                placeholder="e.g. Acme Corp"
+                className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-burnham transition-colors"
+              />
+            </div>
+          </div>
+
+          {/* Location */}
+          <div>
+            <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">
+              Location
+            </label>
+            <input
+              type="text"
+              value={location}
+              onChange={e => setLocation(e.target.value)}
+              placeholder="e.g. Buenos Aires"
               className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-burnham transition-colors"
             />
           </div>

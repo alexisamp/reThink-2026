@@ -6,7 +6,6 @@ const SUPABASE_ANON_KEY =
 
 /**
  * Cleans a LinkedIn URL to only keep https://www.linkedin.com/in/{slug}
- * Strips query params, hash fragments, and anything after the slug.
  * @param {string} url
  * @returns {string|null}
  */
@@ -20,7 +19,6 @@ function cleanLinkedInUrl(url) {
 /**
  * Gets a valid access token, refreshing if expired.
  * Returns null if not authenticated.
- * @returns {Promise<string|null>}
  */
 async function getValidToken() {
   const result = await chrome.storage.local.get('authData')
@@ -68,59 +66,73 @@ async function getValidToken() {
 
 /**
  * Shows a Chrome notification.
- * @param {string} title
- * @param {string} message
  */
 function showNotification(title, message) {
   chrome.notifications.create({
     type: 'basic',
-    iconUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    iconUrl: 'icon48.png',
     title,
     message,
   })
 }
 
-// Register the context menu on install
+// Register context menus on install
 chrome.runtime.onInstalled.addListener(() => {
+  // "page" context: works when right-clicking anywhere on a profile page
   chrome.contextMenus.create({
-    id: 'rethink-outreach',
+    id: 'rethink-outreach-page',
+    title: 'Add to reThink Outreach',
+    contexts: ['page'],
+    documentUrlPatterns: ['https://www.linkedin.com/in/*'],
+  })
+
+  // "link" context: works when right-clicking a profile link in feed/search
+  chrome.contextMenus.create({
+    id: 'rethink-outreach-link',
     title: 'Add to reThink Outreach',
     contexts: ['link'],
     documentUrlPatterns: ['https://www.linkedin.com/*'],
+    targetUrlPatterns: ['https://www.linkedin.com/in/*'],
   })
 })
 
 // Handle context menu click
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== 'rethink-outreach') return
+  if (info.menuItemId !== 'rethink-outreach-page' && info.menuItemId !== 'rethink-outreach-link') return
 
-  const rawUrl = info.linkUrl || ''
+  // Determine URL: for page context use tab URL, for link context use linkUrl
+  const rawUrl = info.menuItemId === 'rethink-outreach-page'
+    ? (tab?.url || '')
+    : (info.linkUrl || '')
+
   const cleanUrl = cleanLinkedInUrl(rawUrl)
-
   if (!cleanUrl) {
     showNotification('reThink Outreach', 'Not a LinkedIn profile URL')
     return
   }
 
-  // Try to get contact name from the content script
+  // Get contact data from the content script
   let name = null
+  let job_title = null
+  let company = null
+  let location = null
+
   try {
     if (tab && tab.id) {
-      const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_CONTACT' })
-      if (response && response.name) {
-        name = response.name
-      }
-      // If the content script returns a URL too, prefer it (cleaner extraction)
-      if (response && response.url) {
-        // Already cleaned in content.js, but let's trust background's clean too
+      const msgType = info.menuItemId === 'rethink-outreach-page' ? 'GET_PROFILE_DATA' : 'GET_CONTACT'
+      const response = await chrome.tabs.sendMessage(tab.id, { type: msgType })
+      if (response) {
+        name = response.name || null
+        job_title = response.job_title || null
+        company = response.company || null
+        location = response.location || null
       }
     }
   } catch (_err) {
-    // Tab may not have the content script loaded (e.g. extension just installed)
-    // Fall through with name = null
+    // Content script may not be ready — continue with name = null
   }
 
-  // Get a valid auth token
+  // Get auth token
   const token = await getValidToken()
   if (!token) {
     showNotification('reThink Outreach', 'Not connected. Open the extension popup to connect.')
@@ -134,6 +146,19 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const today = new Date().toISOString().split('T')[0]
 
   try {
+    const body = {
+      user_id: userId,
+      name: name || 'Unknown',
+      linkedin_url: cleanUrl,
+      contact_type: 'networking',
+      status: 'CONTACTED',
+      log_date: today,
+    }
+
+    if (job_title) body.job_title = job_title
+    if (company) body.company = company
+    if (location) body.location = location
+
     const res = await fetch(`${SUPABASE_URL}/rest/v1/outreach_logs`, {
       method: 'POST',
       headers: {
@@ -142,18 +167,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         'Content-Type': 'application/json',
         Prefer: 'return=minimal',
       },
-      body: JSON.stringify({
-        user_id: userId,
-        name: name || 'Unknown',
-        linkedin_url: cleanUrl,
-        contact_type: 'networking',
-        status: 'CONTACTED',
-        log_date: today,
-      }),
+      body: JSON.stringify(body),
     })
 
     if (res.ok) {
-      showNotification('reThink Outreach', `Added "${name || 'Unknown'}" to Outreach`)
+      const details = [company, job_title].filter(Boolean).join(' · ')
+      const msg = details ? `${name || 'Unknown'} · ${details}` : (name || 'Unknown')
+      showNotification('reThink Outreach ✓', msg)
     } else {
       const errText = await res.text().catch(() => '')
       showNotification('reThink Outreach', `Error saving contact (${res.status})${errText ? ': ' + errText.substring(0, 80) : ''}`)
