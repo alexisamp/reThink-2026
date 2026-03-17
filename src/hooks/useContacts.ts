@@ -27,6 +27,7 @@ export interface ContactInput {
   about?: string | null
   skills?: string | null
   personal_context?: string | null
+  existing_attio_record_id?: string | null
 }
 
 export function useContacts(
@@ -102,6 +103,7 @@ export function useContacts(
       skills: input.skills ?? null,
       personal_context: input.personal_context ?? null,
       health_score: 1,
+      attio_record_id: input.existing_attio_record_id ?? null,
     }
     const { data, error } = await supabase
       .from('outreach_logs').insert(payload).select().single()

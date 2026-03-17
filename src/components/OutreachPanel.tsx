@@ -1,29 +1,33 @@
 import { useState, useEffect, useRef } from 'react'
 import { X } from '@phosphor-icons/react'
 import { searchAttioPersons, hasAttioKey, type AttioPersonResult } from '@/lib/attio'
-import type { OutreachLog, OutreachType, OutreachStatus, Goal } from '@/types'
-import type { OutreachLogInput } from '@/hooks/useOutreach'
+import type { Contact, ContactCategory, ContactStatus, Goal } from '@/types'
+import type { ContactInput } from '@/hooks/useContacts'
+import { CATEGORY_LABELS } from '@/lib/funnelDefaults'
 
 interface OutreachPanelProps {
   open: boolean
   onClose: () => void
-  editingLog: OutreachLog | null
+  editingLog: Contact | null
   goals: Pick<Goal, 'id' | 'text' | 'alias'>[]
-  onSave: (input: OutreachLogInput) => Promise<void>
+  onSave: (input: ContactInput) => Promise<void>
   syncing: boolean
   onSpawnTodo: (text: string, linkedinUrl: string | null, goalId: string | null) => void
 }
 
-const STATUS_OPTIONS: { value: OutreachStatus; label: string }[] = [
-  { value: 'CONTACTED',         label: 'Contacted' },
-  { value: 'RESPONDED',         label: 'Responded' },
-  { value: 'MEETING_SCHEDULED', label: 'Meeting Scheduled' },
-  { value: 'MET',               label: 'Met' },
-  { value: 'FOLLOWING_UP',      label: 'Following Up' },
-  { value: 'CLOSED_WON',        label: 'Closed Won' },
-  { value: 'CLOSED_LOST',       label: 'Closed Lost' },
-  { value: 'NURTURING',         label: 'Nurturing' },
+const STATUS_OPTIONS: { value: ContactStatus; label: string }[] = [
+  { value: 'PROSPECT',  label: 'Prospect' },
+  { value: 'INTRO',     label: 'Intro' },
+  { value: 'CONNECTED', label: 'Connected' },
+  { value: 'RECONNECT', label: 'Reconnect' },
+  { value: 'ENGAGED',   label: 'Engaged' },
+  { value: 'NURTURING', label: 'Nurturing' },
+  { value: 'DORMANT',   label: 'Dormant' },
 ]
+
+const CATEGORY_OPTIONS: { value: ContactCategory; label: string }[] = (
+  Object.entries(CATEGORY_LABELS) as [ContactCategory, string][]
+).map(([value, label]) => ({ value, label }))
 
 export default function OutreachPanel({
   open,
@@ -36,8 +40,8 @@ export default function OutreachPanel({
 }: OutreachPanelProps) {
   const [name, setName] = useState('')
   const [linkedinUrl, setLinkedinUrl] = useState('')
-  const [contactType, setContactType] = useState<OutreachType>('networking')
-  const [status, setStatus] = useState<OutreachStatus>('CONTACTED')
+  const [category, setCategory] = useState<ContactCategory>('peer')
+  const [status, setStatus] = useState<ContactStatus>('PROSPECT')
   const [notes, setNotes] = useState('')
   const [goalId, setGoalId] = useState('')
   const [jobTitle, setJobTitle] = useState('')
@@ -60,8 +64,8 @@ export default function OutreachPanel({
     if (!open) return
     setName(editingLog?.name ?? '')
     setLinkedinUrl(editingLog?.linkedin_url ?? '')
-    setContactType(editingLog?.contact_type ?? 'networking')
-    setStatus(editingLog?.status ?? 'CONTACTED')
+    setCategory(editingLog?.category ?? 'peer')
+    setStatus(editingLog?.status ?? 'PROSPECT')
     setNotes(editingLog?.notes ?? '')
     setGoalId(editingLog?.goal_id ?? '')
     setJobTitle(editingLog?.job_title ?? '')
@@ -120,7 +124,7 @@ export default function OutreachPanel({
       await onSave({
         name: name.trim(),
         linkedin_url: linkedinUrl.trim() || null,
-        contact_type: contactType,
+        category,
         status,
         notes: notes.trim() || null,
         goal_id: goalId || null,
@@ -278,28 +282,20 @@ export default function OutreachPanel({
             />
           </div>
 
-          {/* Type toggle */}
+          {/* Category */}
           <div>
-            <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1.5">
-              Type
+            <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">
+              Category
             </label>
-            <div className="flex gap-2">
-              {(['networking', 'prospecting'] as OutreachType[]).map(t => (
-                <button
-                  key={t}
-                  onClick={() => setContactType(t)}
-                  className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    contactType === t
-                      ? t === 'networking'
-                        ? 'bg-burnham text-white'
-                        : 'bg-shuttle text-white'
-                      : 'bg-mercury/30 text-shuttle hover:bg-mercury/50'
-                  }`}
-                >
-                  {t === 'networking' ? 'Networking' : 'Prospecting'}
-                </button>
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value as ContactCategory)}
+              className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-burnham transition-colors bg-white"
+            >
+              {CATEGORY_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
-            </div>
+            </select>
           </div>
 
           {/* Status */}
@@ -309,7 +305,7 @@ export default function OutreachPanel({
             </label>
             <select
               value={status}
-              onChange={e => setStatus(e.target.value as OutreachStatus)}
+              onChange={e => setStatus(e.target.value as ContactStatus)}
               className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-burnham transition-colors bg-white"
             >
               {STATUS_OPTIONS.map(opt => (

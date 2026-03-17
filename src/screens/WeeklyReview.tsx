@@ -6,7 +6,7 @@ import { getMomentumScore, getMomentumBadge } from '@/lib/momentum'
 import AICoach from '@/components/AICoach'
 import type {
   Goal, Milestone, Habit, HabitLog, Todo, Review,
-  LeadingIndicator, MonthlyKpiEntry, FrictionLog, OutreachLog,
+  LeadingIndicator, MonthlyKpiEntry, FrictionLog, Contact,
 } from '@/types'
 
 const FRICTION_OPTIONS = ['Travel', 'Forgot', 'Too tired', 'External blocker', 'Other']
@@ -81,7 +81,7 @@ export default function WeeklyReview() {
   const [indicators, setIndicators] = useState<LeadingIndicator[]>([])
   const [kpiEntries, setKpiEntries] = useState<MonthlyKpiEntry[]>([])
   const [recentReviews, setRecentReviews] = useState<Review[]>([])
-  const [weekOutreach, setWeekOutreach] = useState<OutreachLog[]>([])
+  const [weekOutreach, setWeekOutreach] = useState<Contact[]>([])
 
   // ── form state ──
   const [wins, setWins] = useState('')
@@ -362,29 +362,30 @@ export default function WeeklyReview() {
 
               {/* Outreach stats */}
               {weekOutreach.length > 0 && (() => {
-                const networking = weekOutreach.filter(l => l.contact_type === 'networking').length
-                const prospecting = weekOutreach.filter(l => l.contact_type === 'prospecting').length
-                const responded = weekOutreach.filter(l =>
-                  ['RESPONDED', 'MEETING_SCHEDULED', 'MET', 'FOLLOWING_UP', 'CLOSED_WON'].includes(l.status)
-                ).length
-                const meetings = weekOutreach.filter(l =>
-                  ['MEETING_SCHEDULED', 'MET'].includes(l.status)
-                ).length
-                const responseRate = weekOutreach.length > 0
-                  ? Math.round((responded / weekOutreach.length) * 100)
+                const outreachStats = {
+                  total: weekOutreach.length,
+                  byCategory: {
+                    business_dev: weekOutreach.filter(l => l.category === 'business_dev').length,
+                    peer: weekOutreach.filter(l => l.category === 'peer').length,
+                  },
+                  responded: weekOutreach.filter(l => ['CONNECTED', 'ENGAGED', 'NURTURING'].includes(l.status)).length,
+                  meetings: weekOutreach.filter(l => l.status === 'ENGAGED').length,
+                }
+                const responseRate = outreachStats.total > 0
+                  ? Math.round((outreachStats.responded / outreachStats.total) * 100)
                   : 0
                 return (
                   <div>
                     <p className="text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-3">
-                      Outreach this week
+                      People this week
                     </p>
                     <div className="grid grid-cols-3 gap-2 mb-2">
-                      <StatBox label="Contacted" value={weekOutreach.length} />
-                      <StatBox label="Responded" value={responded} />
-                      <StatBox label="Meetings" value={meetings} />
+                      <StatBox label="Added" value={outreachStats.total} />
+                      <StatBox label="Connected" value={outreachStats.responded} />
+                      <StatBox label="Engaged" value={outreachStats.meetings} />
                     </div>
                     <p className="text-[9px] text-shuttle/50 font-mono">
-                      {responseRate}% response rate · {networking} network · {prospecting} prospects
+                      {responseRate}% connection rate · {outreachStats.byCategory.business_dev} biz dev · {outreachStats.byCategory.peer} peers
                     </p>
                   </div>
                 )

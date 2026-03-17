@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
-import { X, ArrowClockwise, CheckCircle, WarningCircle, DownloadSimple, RocketLaunch, Eye, EyeSlash } from '@phosphor-icons/react'
+import { X, ArrowClockwise, CheckCircle, WarningCircle, DownloadSimple, RocketLaunch, Eye, EyeSlash, TrashSimple } from '@phosphor-icons/react'
 import type { UpdaterState } from '@/hooks/useUpdater'
 import { supabase } from '@/lib/supabase'
+import { useFunnelConfig } from '@/hooks/useFunnelConfig'
+import { FUNNEL_STAGE_ORDER, UNDELETABLE_STAGES } from '@/lib/funnelDefaults'
+import type { ContactStatus, Profile } from '@/types'
 
 interface SettingsModalProps {
   open: boolean
@@ -22,8 +25,28 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
   const [chromeExtCopied, setChromeExtCopied] = useState(false)
   const [chromeExtCode, setChromeExtCode] = useState('')
 
+  // User + profile for funnel config
+  const [userId, setUserId] = useState<string | undefined>(undefined)
+  const [profile, setProfile] = useState<Profile | null>(null)
+
+  // Delete stage confirmation state
+  const [deletingStage, setDeletingStage] = useState<ContactStatus | null>(null)
+  const [migrateTo, setMigrateTo] = useState<ContactStatus>('PROSPECT')
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false)
+
+  const { config, getStageConfig, updateStage, deleteStage, getActiveStages } = useFunnelConfig(userId, profile)
+
   useEffect(() => {
-    if (open) setAttioKey(localStorage.getItem('attio_api_key') ?? '')
+    if (!open) return
+    setAttioKey(localStorage.getItem('attio_api_key') ?? '')
+    // Load user + profile
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return
+      setUserId(data.user.id)
+      supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle().then(({ data: p }) => {
+        if (p) setProfile(p as Profile)
+      })
+    })
   }, [open])
 
   const generateExtensionCode = async () => {
@@ -119,7 +142,7 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
         </div>
 
         {/* Content */}
-        <div className="px-5 py-4 space-y-5">
+        <div className="px-5 py-4 space-y-5 max-h-[70vh] overflow-y-auto">
 
           {/* App version */}
           <div className="space-y-1">
@@ -204,6 +227,113 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                 }
               </p>
             </div>
+          </div>
+
+          {/* Relationship Funnel */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/50">Relationship Funnel</p>
+            <p className="text-[10px] text-shuttle/60">Customize your funnel stage labels and criteria.</p>
+            <div className="space-y-4">
+              {FUNNEL_STAGE_ORDER.filter(s => getActiveStages().includes(s)).map(status => {
+                const cfg = getStageConfig(status)
+                const isDeletable = !UNDELETABLE_STAGES.includes(status)
+                return (
+                  <div key={status} className="border border-mercury rounded-lg p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-burnham">{status}</span>
+                      {isDeletable && (
+                        <button
+                          onClick={() => { setDeletingStage(status); setMigrateTo('PROSPECT'); setDeleteConfirmed(false) }}
+                          className="text-shuttle/30 hover:text-red-400 transition-colors"
+                          title={`Delete ${status} stage`}
+                        >
+                          <TrashSimple size={12} />
+                        </button>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-shuttle/50 uppercase tracking-wide">Label</label>
+                      <input
+                        type="text"
+                        defaultValue={cfg.label}
+                        onBlur={e => updateStage(status, { label: e.target.value })}
+                        className="w-full mt-0.5 text-xs text-burnham border border-mercury rounded px-2 py-1 focus:outline-none focus:border-shuttle transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-shuttle/50 uppercase tracking-wide">Description</label>
+                      <textarea
+                        rows={2}
+                        defaultValue={cfg.description}
+                        onBlur={e => updateStage(status, { description: e.target.value })}
+                        className="w-full mt-0.5 text-xs text-burnham border border-mercury rounded px-2 py-1 focus:outline-none focus:border-shuttle transition-colors resize-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-shuttle/50 uppercase tracking-wide">Entry criteria</label>
+                      <textarea
+                        rows={2}
+                        defaultValue={cfg.entry_criteria}
+                        onBlur={e => updateStage(status, { entry_criteria: e.target.value })}
+                        className="w-full mt-0.5 text-xs text-burnham border border-mercury rounded px-2 py-1 focus:outline-none focus:border-shuttle transition-colors resize-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-shuttle/50 uppercase tracking-wide">Exit criteria</label>
+                      <textarea
+                        rows={2}
+                        defaultValue={cfg.exit_criteria}
+                        onBlur={e => updateStage(status, { exit_criteria: e.target.value })}
+                        className="w-full mt-0.5 text-xs text-burnham border border-mercury rounded px-2 py-1 focus:outline-none focus:border-shuttle transition-colors resize-none"
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Delete stage confirmation */}
+            {deletingStage && (
+              <div className="border border-red-200 bg-red-50 rounded-lg p-3 space-y-2">
+                <p className="text-xs font-semibold text-red-700">
+                  Delete stage "{config[deletingStage]?.label ?? deletingStage}"?
+                </p>
+                <p className="text-[10px] text-red-600">
+                  All contacts in this stage will be moved to the selected stage.
+                </p>
+                <div>
+                  <label className="text-[9px] text-red-600/80 uppercase tracking-wide">Move contacts to</label>
+                  <select
+                    value={migrateTo}
+                    onChange={e => setMigrateTo(e.target.value as ContactStatus)}
+                    className="w-full mt-0.5 text-xs text-burnham border border-mercury rounded px-2 py-1 bg-white focus:outline-none"
+                  >
+                    {FUNNEL_STAGE_ORDER.filter(s => s !== deletingStage && getActiveStages().includes(s)).map(s => (
+                      <option key={s} value={s}>{config[s]?.label ?? s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => setDeletingStage(null)}
+                    className="flex-1 text-xs text-shuttle/60 border border-mercury rounded px-3 py-1.5 hover:bg-mercury/20 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!deleteConfirmed) { setDeleteConfirmed(true); return }
+                      await deleteStage(deletingStage, migrateTo)
+                      setDeletingStage(null)
+                      setDeleteConfirmed(false)
+                    }}
+                    className="flex-1 text-xs bg-red-500 text-white rounded px-3 py-1.5 hover:bg-red-600 transition-colors"
+                  >
+                    {deleteConfirmed ? 'Confirm delete' : 'Delete stage'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Update section */}

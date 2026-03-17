@@ -16,8 +16,9 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
-import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog, Capture, OutreachLog, OutreachStatus } from '@/types'
-import { useOutreach, type OutreachLogInput } from '@/hooks/useOutreach'
+import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog, Capture, Contact, ContactStatus } from '@/types'
+import { useContacts, type ContactInput } from '@/hooks/useContacts'
+import ContactDetailDrawer from '@/components/ContactDetailDrawer'
 import { parseJournalCaptures } from '@/lib/captureParser'
 import CaptureModal from '@/components/CaptureModal'
 import { JournalEditor } from '@/components/JournalEditor'
@@ -200,19 +201,18 @@ function SortableTodoRow({ todo, goal, milestone, isEditing, editingText, onEdit
 }
 
 // ── Outreach status config ───────────────────────────────────────────────────
-const STATUS_CONFIG: Record<OutreachStatus, { label: string; classes: string }> = {
-  CONTACTED:         { label: 'contacted',  classes: 'bg-mercury/50 text-shuttle/60' },
-  RESPONDED:         { label: 'responded',  classes: 'bg-gossip text-burnham' },
-  MEETING_SCHEDULED: { label: 'meeting',    classes: 'bg-pastel/30 text-burnham' },
-  MET:               { label: 'met',        classes: 'bg-pastel/60 text-burnham' },
-  FOLLOWING_UP:      { label: 'follow up',  classes: 'bg-gossip text-shuttle' },
-  CLOSED_WON:        { label: 'won',        classes: 'bg-pastel text-burnham font-semibold' },
-  CLOSED_LOST:       { label: 'lost',       classes: 'bg-mercury text-shuttle/50' },
-  NURTURING:         { label: 'nurturing',  classes: 'bg-mercury/30 text-shuttle/50' },
+const STATUS_CONFIG: Record<ContactStatus, { label: string; classes: string }> = {
+  PROSPECT:   { label: 'prospect',   classes: 'bg-mercury/50 text-shuttle/60' },
+  INTRO:      { label: 'intro',      classes: 'bg-gossip text-burnham' },
+  CONNECTED:  { label: 'connected',  classes: 'bg-pastel/30 text-burnham' },
+  RECONNECT:  { label: 'reconnect',  classes: 'bg-pastel/20 text-shuttle' },
+  ENGAGED:    { label: 'engaged',    classes: 'bg-pastel/60 text-burnham' },
+  NURTURING:  { label: 'nurturing',  classes: 'bg-pastel text-burnham font-semibold' },
+  DORMANT:    { label: 'dormant',    classes: 'bg-mercury text-shuttle/50' },
 }
 
-function StatusBadge({ status }: { status: OutreachStatus }) {
-  const cfg = STATUS_CONFIG[status]
+function StatusBadge({ status }: { status: ContactStatus }) {
+  const cfg = STATUS_CONFIG[status] ?? { label: status.toLowerCase(), classes: 'bg-mercury/50 text-shuttle/60' }
   return (
     <span className={`text-[8px] px-1.5 py-0.5 rounded font-mono shrink-0 ${cfg.classes}`}>
       {cfg.label}
@@ -221,18 +221,22 @@ function StatusBadge({ status }: { status: OutreachStatus }) {
 }
 
 interface OutreachRowProps {
-  log: OutreachLog
+  log: Contact
   onEdit: () => void
   onDelete: () => void
+  onOpenDetail: () => void
 }
 
-function OutreachRow({ log, onEdit, onDelete }: OutreachRowProps) {
+function OutreachRow({ log, onEdit, onDelete, onOpenDetail }: OutreachRowProps) {
   return (
-    <div className="group flex items-center gap-2 py-1.5 px-2 -mx-2 rounded hover:bg-gossip/20 transition-colors">
+    <div
+      className="group flex items-center gap-2 py-1.5 px-2 -mx-2 rounded hover:bg-gossip/20 transition-colors cursor-pointer"
+      onClick={onOpenDetail}
+    >
       <span className={`text-[8px] font-mono uppercase px-1.5 py-0.5 rounded shrink-0 ${
-        log.contact_type === 'networking' ? 'bg-burnham/10 text-burnham' : 'bg-shuttle/10 text-shuttle'
+        log.category ? 'bg-burnham/10 text-burnham' : 'bg-shuttle/10 text-shuttle'
       }`}>
-        {log.contact_type === 'networking' ? 'NET' : 'PRO'}
+        {log.category ? log.category.slice(0, 3).toUpperCase() : 'PEE'}
       </span>
       <div className="flex-1 min-w-0">
         <span className="text-[13px] font-medium text-burnham block truncate">{log.name}</span>
@@ -259,13 +263,13 @@ function OutreachRow({ log, onEdit, onDelete }: OutreachRowProps) {
         <span className="opacity-0 group-hover:opacity-40 text-[8px] font-mono text-pastel shrink-0">attio</span>
       )}
       <button
-        onClick={onEdit}
+        onClick={e => { e.stopPropagation(); onEdit() }}
         className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-burnham p-0.5"
       >
         <Pencil size={11} />
       </button>
       <button
-        onClick={onDelete}
+        onClick={e => { e.stopPropagation(); onDelete() }}
         className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5"
       >
         <TrashSimple size={11} />
@@ -529,7 +533,11 @@ export default function Today() {
 
   // Outreach panel
   const [outreachPanelOpen, setOutreachPanelOpen] = useState(false)
-  const [editingOutreachLog, setEditingOutreachLog] = useState<OutreachLog | null>(null)
+  const [editingOutreachLog, setEditingOutreachLog] = useState<Contact | null>(null)
+
+  // Contact detail drawer
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
+  const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
 
   // AI scorer (Phase 8)
   const gemini = useGeminiScorer()
@@ -558,7 +566,8 @@ export default function Today() {
     addContact,
     updateContact,
     deleteContact,
-  } = useOutreach(userId ?? undefined, habits, upsertHabitCountLocal)
+    syncContactToAttio,
+  } = useContacts(userId ?? undefined, habits, upsertHabitCountLocal)
 
   useKeyboardShortcuts({
     'cmd+b': () => setSidebarOpen(p => !p),
@@ -1765,6 +1774,7 @@ export default function Today() {
                       log={log}
                       onEdit={() => { setEditingOutreachLog(log); setOutreachPanelOpen(true) }}
                       onDelete={() => deleteContact(log.id)}
+                      onOpenDetail={() => { setSelectedContact(log); setDetailDrawerOpen(true) }}
                     />
                   ))}
                 </div>
@@ -2596,7 +2606,7 @@ export default function Today() {
         onClose={() => setOutreachPanelOpen(false)}
         editingLog={editingOutreachLog}
         goals={goals}
-        onSave={async (input: OutreachLogInput) => {
+        onSave={async (input: ContactInput) => {
           if (editingOutreachLog) {
             await updateContact(editingOutreachLog.id, input)
           } else {
@@ -2608,6 +2618,20 @@ export default function Today() {
           submitTodo(text + (linkedinUrl ? ` /url ${linkedinUrl}` : ''), null)
           void goalId
         }}
+      />
+
+      {/* ─── Contact Detail Drawer ───────────────────────────────────── */}
+      <ContactDetailDrawer
+        open={detailDrawerOpen}
+        contact={selectedContact}
+        userId={userId ?? ''}
+        habits={habits}
+        upsertHabitCount={upsertHabitCountLocal}
+        funnelConfig={null}
+        onClose={() => setDetailDrawerOpen(false)}
+        onUpdate={async (id, updates) => { await updateContact(id, updates as Parameters<typeof updateContact>[1]) }}
+        onDelete={async (id) => { await deleteContact(id); setDetailDrawerOpen(false) }}
+        onSyncToAttio={syncContactToAttio}
       />
 
       {/* ─── End of Day Drawer ───────────────────────────────────────── */}

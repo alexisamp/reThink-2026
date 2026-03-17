@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { House, ArrowRight, Lightning, TrendUp, TrendDown, Minus } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import type { Goal, Milestone, LeadingIndicator, Habit, HabitLog, Review, MonthlyKpiEntry, Todo, OutreachLog } from '@/types'
+import type { Goal, Milestone, LeadingIndicator, Habit, HabitLog, Review, MonthlyKpiEntry, Todo, Contact, ContactStatus } from '@/types'
 import { getMomentumScore, getMomentumBadge } from '@/lib/momentum'
 import AICoach from '@/components/AICoach'
 
@@ -259,7 +259,7 @@ export default function Dashboard() {
   const [reviews, setReviews] = useState<Review[]>([])
   const [monthlyKpiEntries, setMonthlyKpiEntries] = useState<MonthlyKpiEntry[]>([])
   const [completedTodos, setCompletedTodos] = useState<Todo[]>([])
-  const [outreach30, setOutreach30] = useState<OutreachLog[]>([])
+  const [outreach30, setOutreach30] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -527,33 +527,24 @@ export default function Dashboard() {
 
         {/* Outreach Funnel · 30 days */}
         {outreach30.length > 0 && (() => {
-          const contacted = outreach30.length
-          const responded = outreach30.filter(l =>
-            ['RESPONDED', 'MEETING_SCHEDULED', 'MET', 'FOLLOWING_UP', 'CLOSED_WON'].includes(l.status)
-          ).length
-          const meetings = outreach30.filter(l =>
-            ['MEETING_SCHEDULED', 'MET'].includes(l.status)
-          ).length
-          const won = outreach30.filter(l => l.status === 'CLOSED_WON').length
+          const funnelStatuses: ContactStatus[] = ['PROSPECT', 'INTRO', 'CONNECTED', 'ENGAGED', 'NURTURING']
+          const steps = funnelStatuses.map(s => ({
+            label: s.charAt(0) + s.slice(1).toLowerCase(),
+            value: outreach30.filter(l => l.status === s).length,
+          }))
 
-          const steps = [
-            { label: 'Contacted', value: contacted },
-            { label: 'Responded', value: responded },
-            { label: 'Meetings', value: meetings },
-            { label: 'Won', value: won },
-          ]
-
+          const total = outreach30.length
           return (
             <section className="py-8 border-b border-mercury">
               <p className="text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-4">
-                Outreach · 30 days
+                People · 30 days
               </p>
               <div className="flex gap-4">
                 {steps.map((s, i) => {
-                  const prev = i === 0 ? contacted : steps[i - 1].value
-                  const pct = prev > 0 ? Math.round((s.value / contacted) * 100) : 0
+                  const prev = i === 0 ? total : steps[i - 1].value
+                  const pct = total > 0 ? Math.round((s.value / total) * 100) : 0
                   const convPct = prev > 0 && i > 0 ? Math.round((s.value / prev) * 100) : null
-                  const barHeight = Math.max(4, Math.round((s.value / Math.max(contacted, 1)) * 60))
+                  const barHeight = Math.max(4, Math.round((s.value / Math.max(total, 1)) * 60))
                   return (
                     <div key={s.label} className="flex-1 flex flex-col items-center gap-1.5">
                       <div className="relative w-full bg-mercury/20 rounded-lg" style={{ height: 60 }}>
@@ -565,7 +556,7 @@ export default function Dashboard() {
                       <p className="text-lg font-bold text-burnham font-mono">{s.value}</p>
                       <p className="text-[9px] text-shuttle/50 uppercase tracking-widest">{s.label}</p>
                       <p className="text-[9px] text-shuttle/40 font-mono">
-                        {i === 0 ? `${pct}%` : convPct !== null ? `${convPct}% from prev` : '—'}
+                        {i === 0 ? `${pct}% of total` : convPct !== null ? `${convPct}% from prev` : '—'}
                       </p>
                     </div>
                   )
