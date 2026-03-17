@@ -80,6 +80,8 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Refs always hold the latest values (bypass stale-closure issues) ──
+  // IMPORTANT: also write-through immediately in every onChange handler below
+  // so flushAndClose always reads current values even before the next render.
   const captureRef = useRef<Capture | null>(capture)
   const titleRef = useRef(title)
   const bodyValRef = useRef(body)
@@ -87,7 +89,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
   const linkedGoalIdRef = useRef(linkedGoalId)
   const linkedMilestoneIdRef = useRef(linkedMilestoneId)
 
-  // Keep refs in sync with state every render
+  // Fallback: keep refs in sync with state every render (handles any missed write-throughs)
   captureRef.current = capture
   titleRef.current = title
   bodyValRef.current = body
@@ -98,9 +100,16 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
   // AI scorer for title
   const { result: aiResult, loading: aiLoading, scoreText: runScore, clear: clearAi } = useGeminiScorer()
 
-  // Sync state when a different capture opens
+  // Sync state AND refs when a different capture opens
   useEffect(() => {
     if (!capture) return
+    // Write-through refs first so flushAndClose has correct values even on rapid close
+    titleRef.current = capture.title
+    bodyValRef.current = capture.body ?? ''
+    urlRef.current = capture.url ?? ''
+    linkedGoalIdRef.current = capture.linked_goal_id ?? ''
+    linkedMilestoneIdRef.current = capture.linked_milestone_id ?? ''
+    // Then update state for rendering
     setTitle(capture.title)
     setBody(capture.body ?? '')
     setUrl(capture.url ?? '')
@@ -178,6 +187,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
     if (!el) return
     const { selectionStart: s, selectionEnd: e, value } = el
     const newVal = value.slice(0, s) + before + value.slice(s, e) + after + value.slice(e)
+    bodyValRef.current = newVal  // write-through immediately
     setBody(newVal)
     scheduleSave({ body: newVal })
     setTimeout(() => { el.selectionStart = s + before.length; el.selectionEnd = e + before.length; el.focus() }, 0)
@@ -188,6 +198,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
     const { selectionStart: s, value } = el
     const lineStart = value.lastIndexOf('\n', s - 1) + 1
     const newVal = value.slice(0, lineStart) + prefix + value.slice(lineStart)
+    bodyValRef.current = newVal  // write-through immediately
     setBody(newVal)
     scheduleSave({ body: newVal })
   }
@@ -232,8 +243,10 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                 type="text"
                 value={title}
                 onChange={e => {
-                  setTitle(e.target.value)
-                  scheduleSave({ title: e.target.value })
+                  const v = e.target.value
+                  titleRef.current = v  // write-through immediately
+                  setTitle(v)
+                  scheduleSave({ title: v })
                 }}
                 onBlur={e => {
                   if (e.target.value.trim()) persist({ title: e.target.value })
@@ -289,10 +302,14 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
               ref={bodyRef}
               value={body}
               onChange={e => {
-                setBody(e.target.value)
-                scheduleSave({ body: e.target.value })
+                const v = e.target.value
+                bodyValRef.current = v  // write-through immediately
+                setBody(v)
+                scheduleSave({ body: v })
               }}
               onBlur={e => {
+                // onBlur fires when user clicks something else (selects, backdrop, etc.)
+                // Read all current refs so we save everything, not just body
                 persist({
                   title: titleRef.current,
                   body: e.target.value,
@@ -314,7 +331,12 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
               <input
                 type="url"
                 value={url}
-                onChange={e => { setUrl(e.target.value); scheduleSave({ url: e.target.value || null }) }}
+                onChange={e => {
+                  const v = e.target.value
+                  urlRef.current = v  // write-through immediately
+                  setUrl(v)
+                  scheduleSave({ url: v || null })
+                }}
                 onBlur={e => persist({ url: e.target.value || null })}
                 placeholder="https://…"
                 className="flex-1 text-[12px] text-burnham bg-transparent border-none outline-none placeholder-shuttle/20"
@@ -333,13 +355,22 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                 value={linkedMilestoneId}
                 onChange={e => {
                   const mid = e.target.value || ''
+                  // Write-through refs IMMEDIATELY before setState (so flushAndClose
+                  // reads the new values even if called before the next render)
+                  linkedMilestoneIdRef.current = mid
                   setLinkedMilestoneId(mid)
+                  // Auto-populate goal from milestone
+                  let newGoalId = linkedGoalIdRef.current
                   if (mid) {
                     const ms = milestones.find(m => m.id === mid)
-                    if (ms?.goal_id) setLinkedGoalId(ms.goal_id)
+                    if (ms?.goal_id) {
+                      newGoalId = ms.goal_id
+                      linkedGoalIdRef.current = newGoalId  // write-through immediately
+                      setLinkedGoalId(newGoalId)
+                    }
                   }
-                  // Persist immediately on select change (don't debounce)
-                  persist({ linked_milestone_id: mid || null })
+                  // Persist BOTH milestone and goal together so neither is lost
+                  persist({ linked_milestone_id: mid || null, linked_goal_id: newGoalId || null })
                 }}
                 className="flex-1 text-[12px] text-burnham bg-transparent border-none outline-none cursor-pointer"
               >
@@ -356,8 +387,10 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
               <select
                 value={linkedGoalId}
                 onChange={e => {
-                  setLinkedGoalId(e.target.value)
-                  persist({ linked_goal_id: e.target.value || null })
+                  const gid = e.target.value
+                  linkedGoalIdRef.current = gid  // write-through immediately
+                  setLinkedGoalId(gid)
+                  persist({ linked_goal_id: gid || null })
                 }}
                 className="flex-1 text-[12px] text-burnham bg-transparent border-none outline-none cursor-pointer"
               >
