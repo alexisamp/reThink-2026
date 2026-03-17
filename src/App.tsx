@@ -16,6 +16,7 @@ import GoalDetail from '@/screens/GoalDetail'
 import WeeklyReview from '@/screens/WeeklyReview'
 import ReflectionLibrary from '@/screens/ReflectionLibrary'
 import YearAtAGlance from '@/screens/YearAtAGlance'
+import People from '@/screens/People'
 import { checkNotificationTriggers, formatNotificationMessage } from '@/lib/notifications'
 import { useUpdater } from '@/hooks/useUpdater'
 
@@ -144,6 +145,7 @@ export default function App() {
                   <Route path="/weekly-review" element={<WeeklyReview />} />
                   <Route path="/library" element={<ReflectionLibrary />} />
                   <Route path="/year" element={<YearAtAGlance />} />
+                  <Route path="/people" element={<People />} />
                   <Route path="*" element={<Navigate to="/today" replace />} />
                 </Routes>
               </AppShell>
