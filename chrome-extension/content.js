@@ -129,12 +129,25 @@ function extractProfilePageData() {
     }
   }
 
-  // About: data-testid="expandable-text-box" holds the About section text
+  // About: find the h2 "About", walk up to its section, then get the expandable-text-box inside it
   var about = null
-  var aboutEl = document.querySelector('[data-testid="expandable-text-box"]')
-  if (aboutEl) {
-    var aboutText = aboutEl.textContent.trim()
-    if (aboutText.length > 20) about = aboutText.substring(0, 2000)
+  if (col) {
+    var aboutH2 = Array.from(col.querySelectorAll('h2')).find(function(e) {
+      return e.textContent.trim() === 'About'
+    })
+    if (aboutH2) {
+      var aboutContainer = aboutH2
+      for (var ai = 0; ai < 6; ai++) {
+        aboutContainer = aboutContainer.parentElement
+        if (!aboutContainer) break
+        var aboutEl = aboutContainer.querySelector('[data-testid="expandable-text-box"]')
+        if (aboutEl) {
+          var aboutText = aboutEl.textContent.trim()
+          if (aboutText.length > 20) about = aboutText.substring(0, 2000)
+          break
+        }
+      }
+    }
   }
 
   var parsed = parseHeadline(headline)
