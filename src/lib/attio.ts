@@ -251,13 +251,15 @@ export async function syncFullContact(contact: {
     if (optionIds.length > 0) customValues['skills'] = optionIds.map(id => ({ option: id }))
   }
 
-  const patchCustom = async (recordId: string) => {
-    if (Object.keys(customValues).length === 0) return
-    await fetch(`${BASE}/v2/objects/people/records/${recordId}`, {
+  const patchCustom = async (recordId: string): Promise<string | null> => {
+    if (Object.keys(customValues).length === 0) return null
+    const res = await fetch(`${BASE}/v2/objects/people/records/${recordId}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: { values: customValues } }),
-    }) // silently ignore errors — custom attribute slugs may vary by workspace
+    })
+    if (!res.ok) { const t = await res.text(); return `Custom fields error ${res.status}: ${t}` }
+    return null
   }
 
   if (contact.attio_record_id) {
@@ -267,7 +269,8 @@ export async function syncFullContact(contact: {
       body: JSON.stringify({ data: { values: coreValues } }),
     })
     if (!res.ok) { const t = await res.text(); throw new Error(`Attio update error ${res.status}: ${t}`) }
-    await patchCustom(contact.attio_record_id)
+    const customErr = await patchCustom(contact.attio_record_id)
+    if (customErr) throw new Error(customErr)
     return { record_id: contact.attio_record_id }
   } else {
     const res = await fetch(`${BASE}/v2/objects/people/records`, {
@@ -279,7 +282,8 @@ export async function syncFullContact(contact: {
     const json = await res.json()
     const recordId = json?.data?.id?.record_id as string | undefined
     if (!recordId) throw new Error('Attio response missing record_id')
-    await patchCustom(recordId)
+    const customErr = await patchCustom(recordId)
+    if (customErr) throw new Error(customErr)
     return { record_id: recordId }
   }
 }
