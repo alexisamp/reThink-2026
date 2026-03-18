@@ -215,6 +215,10 @@ export async function syncFullContact(contact: {
   health_score?: number | null
   skills?: string | null
   notes?: string | null
+  followers_count?: string | null
+  connections_count?: string | null
+  company_domain?: string | null
+  attio_company_id?: string | null
 }, options?: { includeNotes?: boolean }): Promise<{ record_id: string }> {
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('No Attio API key configured')
@@ -251,6 +255,9 @@ export async function syncFullContact(contact: {
     const optionIds = (await Promise.all(skillTitles.map(s => resolveSkillOption(apiKey, s)))).filter(Boolean)
     if (optionIds.length > 0) customValues['skills'] = optionIds.map(id => ({ option: id }))
   }
+  // LinkedIn social stats — slugs: linkedin_followers, linkedin_contacts (custom attributes)
+  if (contact.followers_count) customValues['linkedin_followers'] = [{ value: contact.followers_count }]
+  if (contact.connections_count) customValues['linkedin_contacts'] = [{ value: contact.connections_count }]
 
   const patchCustom = async (recordId: string): Promise<string | null> => {
     if (Object.keys(customValues).length === 0) return null
@@ -290,6 +297,16 @@ export async function syncFullContact(contact: {
     const customErr = await patchCustom(contact.attio_record_id)
     if (customErr) throw new Error(customErr)
     await pushNote(contact.attio_record_id)
+    // Link person to their company in Attio
+    if (contact.attio_company_id) {
+      try {
+        await fetch(`${BASE}/v2/objects/companies/records/${contact.attio_company_id}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { values: { team: [{ target_object: 'people', target_record_id: contact.attio_record_id }] } } }),
+        })
+      } catch (_) {} // non-critical
+    }
     return { record_id: contact.attio_record_id }
   } else {
     const res = await fetch(`${BASE}/v2/objects/people/records`, {
@@ -304,6 +321,16 @@ export async function syncFullContact(contact: {
     const customErr = await patchCustom(recordId)
     if (customErr) throw new Error(customErr)
     await pushNote(recordId)
+    // Link person to their company in Attio
+    if (contact.attio_company_id) {
+      try {
+        await fetch(`${BASE}/v2/objects/companies/records/${contact.attio_company_id}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { values: { team: [{ target_object: 'people', target_record_id: recordId }] } } }),
+        })
+      } catch (_) {} // non-critical
+    }
     return { record_id: recordId }
   }
 }
@@ -393,4 +420,41 @@ export async function completeAttioTask(taskId: string): Promise<void> {
       body: JSON.stringify({ data: { is_completed: true } }),
     })
   } catch { /* fire and forget */ }
+}
+
+/** Creates or updates a Company record in Attio using the domain for enrichment.
+ *  Returns the Attio company record_id. */
+export async function syncCompanyToAttio(opts: {
+  name?: string | null
+  domain: string
+  existingCompanyId?: string | null
+}): Promise<{ record_id: string }> {
+  const apiKey = getApiKey()
+  if (!apiKey) throw new Error('No Attio API key configured')
+
+  const values: Record<string, unknown> = {
+    domains: [{ domain: opts.domain.replace(/^https?:\/\//, '').replace(/\/$/, '') }],
+  }
+  if (opts.name) values['name'] = [{ value: opts.name }]
+
+  if (opts.existingCompanyId) {
+    const res = await fetch(`${BASE}/v2/objects/companies/records/${opts.existingCompanyId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { values } }),
+    })
+    if (!res.ok) { const t = await res.text(); throw new Error(`Attio company update error ${res.status}: ${t}`) }
+    return { record_id: opts.existingCompanyId }
+  } else {
+    const res = await fetch(`${BASE}/v2/objects/companies/records`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { values } }),
+    })
+    if (!res.ok) { const t = await res.text(); throw new Error(`Attio company create error ${res.status}: ${t}`) }
+    const json = await res.json()
+    const recordId = json?.data?.id?.record_id as string | undefined
+    if (!recordId) throw new Error('Attio company response missing record_id')
+    return { record_id: recordId }
+  }
 }
