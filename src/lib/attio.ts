@@ -234,8 +234,8 @@ export async function syncFullContact(contact: {
   }
   if (contact.email)     coreValues['email_addresses'] = [{ email_address: contact.email }]
   if (contact.phone)     coreValues['phone_numbers']   = [{ original_phone_number: contact.phone }]
-  if (contact.job_title) coreValues['job_title']       = [{ value: contact.job_title }]
-  if (contact.about)     coreValues['description']     = [{ value: contact.about }]
+  if (contact.job_title) coreValues['job_title']   = contact.job_title   // plain string
+  if (contact.about)     coreValues['description'] = contact.about       // plain string
   // primary_location requires full structured address (line_1, country_code, lat/long) — skip
 
   // ── Custom fields (our 4 custom attributes + skills) — sent separately ───
@@ -418,6 +418,34 @@ export async function completeAttioTask(taskId: string): Promise<void> {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: { is_completed: true } }),
+    })
+  } catch { /* fire and forget */ }
+}
+
+/** Creates a Note in Attio for a logged interaction. Fire-and-forget. */
+export async function pushInteractionNote(
+  attioRecordId: string,
+  interaction: { type: string; direction: string; notes?: string | null; interaction_date: string }
+): Promise<void> {
+  const apiKey = getApiKey()
+  if (!apiKey) return
+  const typeLabel = interaction.type.charAt(0).toUpperCase() + interaction.type.slice(1).toLowerCase()
+  const dirLabel = interaction.direction === 'inbound' ? '↙ Inbound' : '↗ Outbound'
+  const title = `${typeLabel} — ${dirLabel} (${interaction.interaction_date})`
+  const content = interaction.notes?.trim() || `${typeLabel} interaction logged from reThink`
+  try {
+    await fetch(`${BASE}/v2/notes`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data: {
+          parent_object: 'people',
+          parent_record_id: attioRecordId,
+          title,
+          content,
+          format: 'plaintext',
+        },
+      }),
     })
   } catch { /* fire and forget */ }
 }

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { computeHealthScore } from '@/lib/funnelDefaults'
+import { pushInteractionNote, hasAttioKey } from '@/lib/attio'
 import type { Interaction, Habit } from '@/types'
 
 function localDate(d = new Date()) {
@@ -46,7 +47,8 @@ export function useInteractions(
     type: Interaction['type'],
     direction: Interaction['direction'] = 'outbound',
     notes: string | null = null,
-    interaction_date: string = today
+    interaction_date: string = today,
+    attioRecordId?: string | null
   ): Promise<Interaction | null> => {
     if (!userId) return null
     const { data, error } = await supabase
@@ -59,6 +61,11 @@ export function useInteractions(
       ...prev,
       [contactId]: [newItem, ...(prev[contactId] ?? [])],
     }))
+
+    // Push interaction as a Note to Attio (fire-and-forget)
+    if (attioRecordId && hasAttioKey()) {
+      pushInteractionNote(attioRecordId, { type, direction, notes, interaction_date })
+    }
 
     // Update networking habit
     const allForContact = [newItem, ...(interactionsByContact[contactId] ?? [])]
