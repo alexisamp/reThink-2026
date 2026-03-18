@@ -41,6 +41,16 @@ function parseHeadline(headline) {
   return { job_title: headline.substring(0, 100), company: null }
 }
 
+function extractCompanyLinkedInUrl() {
+  var links = Array.from(document.querySelectorAll('a[href*="/company/"]'))
+  for (var i = 0; i < links.length; i++) {
+    var href = links[i].href || ''
+    var match = href.match(/linkedin\.com\/company\/([^/?#&]+)/)
+    if (match) return 'https://www.linkedin.com/company/' + match[1]
+  }
+  return null
+}
+
 function extractProfilePageData() {
   var url = cleanLinkedInUrl(window.location.href)
 
@@ -150,10 +160,12 @@ function extractProfilePageData() {
     }
   }
 
+  var company_linkedin_url = extractCompanyLinkedInUrl()
+
   var parsed = parseHeadline(headline)
   // Prefer explicit company over headline-parsed company
   var finalCompany = company || parsed.company
-  return { name: name, url: url, job_title: parsed.job_title, company: finalCompany, location: location, connections_count: connections_count, followers_count: followers_count, about: about }
+  return { name: name, url: url, job_title: parsed.job_title, company: finalCompany, location: location, connections_count: connections_count, followers_count: followers_count, about: about, company_linkedin_url: company_linkedin_url }
 }
 
 // ── Contact info overlay extraction ─────────────────────────────────────────

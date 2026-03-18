@@ -140,6 +140,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (data.email) body.email = data.email
     if (data.phone) body.phone = data.phone
     if (data.website) body.website = data.website
+    body.company_linkedin_url = data.company_linkedin_url || null
+    body.company_domain = data.company_domain || null
 
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/outreach_logs`, {
