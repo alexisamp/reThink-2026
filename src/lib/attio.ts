@@ -231,7 +231,7 @@ export async function syncFullContact(contact: {
   if (contact.phone)     coreValues['phone_numbers']   = [{ original_phone_number: contact.phone }]
   if (contact.job_title) coreValues['job_title']       = [{ value: contact.job_title }]
   if (contact.about)     coreValues['description']     = [{ value: contact.about }]
-  if (contact.location)  coreValues['primary_location']= [{ locality: contact.location }]
+  // primary_location requires full structured address (line_1, country_code, lat/long) — skip
 
   // ── Custom fields (our 4 custom attributes + skills) — sent separately ───
   // Sent in a second PATCH so a bad slug never kills the core sync
