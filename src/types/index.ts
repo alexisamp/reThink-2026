@@ -280,6 +280,9 @@ export interface Contact {
   log_date: string
   attio_record_id: string | null
   attio_synced_at: string | null
+  company_domain?: string | null
+  company_linkedin_url?: string | null
+  attio_company_id?: string | null
   created_at: string
   updated_at: string
 }

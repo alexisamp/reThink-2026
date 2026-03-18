@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { hasAttioKey, syncFullContact, pullFromAttio, diffAttioFields } from '@/lib/attio'
+import { hasAttioKey, syncFullContact, syncCompanyToAttio, pullFromAttio, diffAttioFields } from '@/lib/attio'
 import { computeHealthScore, daysSince } from '@/lib/funnelDefaults'
 import type { Contact, ContactStatus, ContactCategory, Interaction, Habit } from '@/types'
 
@@ -169,6 +169,30 @@ export function useContacts(
     }
   }, [contacts])
 
+  const syncCompanyToAttioHook = useCallback(async (contactId: string): Promise<void> => {
+    const contact = contacts.find(c => c.id === contactId)
+    if (!contact?.company_domain || !hasAttioKey()) return
+    setSyncing(true)
+    setSyncError(null)
+    try {
+      const result = await syncCompanyToAttio({
+        name: contact.company ?? undefined,
+        domain: contact.company_domain,
+        existingCompanyId: contact.attio_company_id,
+      })
+      await supabase.from('outreach_logs')
+        .update({ attio_company_id: result.record_id })
+        .eq('id', contactId)
+      setContacts(prev => prev.map(c =>
+        c.id === contactId ? { ...c, attio_company_id: result.record_id } : c
+      ))
+    } catch (err) {
+      setSyncError(`Company sync failed: ${err instanceof Error ? err.message : 'unknown'}`)
+    } finally {
+      setSyncing(false)
+    }
+  }, [userId, contacts, hasAttioKey])
+
   const updateHealthScore = useCallback(async (contactId: string, interactions: Array<{ type: string; interaction_date: string }>): Promise<void> => {
     const score = computeHealthScore(interactions)
     const lastDate = interactions.length > 0
@@ -218,6 +242,7 @@ export function useContacts(
     deleteContact,
     fetchContacts,
     syncContactToAttio,
+    syncCompany: syncCompanyToAttioHook,
     updateHealthScore,
     autoFlagDormant,
     // Legacy aliases for callers still using old names

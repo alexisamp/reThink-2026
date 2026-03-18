@@ -99,6 +99,7 @@ export default function People() {
     updateContact,
     deleteContact,
     syncContactToAttio,
+    syncCompany,
   } = useContacts(userId ?? undefined, habits, upsertHabitCount)
 
   const { getLabel, getActiveStages } = useFunnelConfig(userId ?? undefined, profile)
@@ -343,6 +344,7 @@ export default function People() {
         onUpdate={handleUpdateContact}
         onDelete={handleDeleteContact}
         onSyncToAttio={handleSyncToAttio}
+        onSyncCompany={syncCompany}
         funnelConfig={profile?.contact_funnel_config ?? null}
         userId={userId ?? ''}
         habits={habits}

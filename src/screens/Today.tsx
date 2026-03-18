@@ -573,6 +573,7 @@ export default function Today() {
     updateContact,
     deleteContact,
     syncContactToAttio,
+    syncCompany,
   } = useContacts(userId ?? undefined, habits, upsertHabitCountLocal)
 
   useKeyboardShortcuts({
@@ -2700,6 +2701,7 @@ export default function Today() {
         onUpdate={async (id, updates) => { await updateContact(id, updates as Parameters<typeof updateContact>[1]) }}
         onDelete={async (id) => { await deleteContact(id); setDetailDrawerOpen(false) }}
         onSyncToAttio={syncContactToAttio}
+        onSyncCompany={syncCompany}
       />
 
       {/* ─── End of Day Drawer ───────────────────────────────────────── */}

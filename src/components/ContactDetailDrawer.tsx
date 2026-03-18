@@ -70,6 +70,7 @@ interface ContactDetailDrawerProps {
   onUpdate: (id: string, updates: Partial<Contact>) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onSyncToAttio: (id: string) => Promise<void>
+  onSyncCompany?: (id: string) => Promise<void>
   funnelConfig: ContactFunnelConfig | null
   userId: string
   habits: Habit[]
@@ -86,6 +87,7 @@ export default function ContactDetailDrawer({
   onUpdate,
   onDelete,
   onSyncToAttio,
+  onSyncCompany,
   funnelConfig,
   userId,
   habits,
@@ -106,6 +108,8 @@ export default function ContactDetailDrawer({
   const [attioToast, setAttioToast] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [companyDomain, setCompanyDomain] = useState('')
+  const [syncingCompany, setSyncingCompany] = useState(false)
 
   // Log form state
   const [logType, setLogType] = useState<Interaction['type']>('whatsapp')
@@ -137,6 +141,7 @@ export default function ContactDetailDrawer({
     setLogFormOpen(false)
     setConfirmDelete(false)
     setAboutExpanded(false)
+    setCompanyDomain(contact.company_domain ?? '')
 
     // Fetch interactions for this contact
     fetchInteractions(contact.id)
@@ -239,6 +244,19 @@ export default function ContactDetailDrawer({
       setTimeout(() => setAttioToast(''), 3000)
     } finally {
       setSyncing(false)
+    }
+  }
+
+  // ── sync company to Attio ─────────────────────────────────────────────────
+  async function handleSyncCompany() {
+    if (!contact || !onSyncCompany) return
+    setSyncingCompany(true)
+    try {
+      await onSyncCompany(contact.id)
+      setAttioToast('Company synced to Attio')
+      setTimeout(() => setAttioToast(''), 3000)
+    } finally {
+      setSyncingCompany(false)
     }
   }
 
@@ -370,9 +388,47 @@ export default function ContactDetailDrawer({
               <div className={sectionLabel}>Profile</div>
               <div className="space-y-1.5">
                 {(contact.job_title || contact.company) && (
-                  <p className="text-xs text-burnham/80">
-                    {[contact.job_title, contact.company].filter(Boolean).join(' · ')}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs text-burnham/80">
+                      {[contact.job_title, contact.company].filter(Boolean).join(' · ')}
+                    </p>
+                    {contact.company_linkedin_url && (
+                      <a
+                        href={contact.company_linkedin_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-shuttle/50 hover:text-burnham transition-colors flex-shrink-0"
+                        title="Company LinkedIn"
+                      >
+                        <ArrowSquareOut size={12} />
+                      </a>
+                    )}
+                  </div>
+                )}
+                {/* Company domain field */}
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={companyDomain}
+                    onChange={e => setCompanyDomain(e.target.value)}
+                    onBlur={() => {
+                      if (!contact) return
+                      onUpdate(contact.id, { company_domain: companyDomain || null })
+                    }}
+                    placeholder="fintual.com"
+                    className="flex-1 text-xs bg-mercury/10 border border-mercury rounded px-2 py-1 placeholder-shuttle/30 text-burnham focus:outline-none focus:border-burnham/30"
+                  />
+                  <span className="text-[9px] text-shuttle/40 flex-shrink-0">Domain</span>
+                </div>
+                {/* Sync Company button */}
+                {companyDomain && hasAttioKey() && onSyncCompany && (
+                  <button
+                    onClick={handleSyncCompany}
+                    disabled={syncingCompany}
+                    className="text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors disabled:opacity-40"
+                  >
+                    {syncingCompany ? 'Syncing…' : 'Sync Company →'}
+                  </button>
                 )}
                 {contact.location && (
                   <p className="text-xs text-shuttle/60">{contact.location}</p>
