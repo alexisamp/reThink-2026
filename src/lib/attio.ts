@@ -214,7 +214,8 @@ export async function syncFullContact(contact: {
   status?: string | null
   health_score?: number | null
   skills?: string | null
-}): Promise<{ record_id: string }> {
+  notes?: string | null
+}, options?: { includeNotes?: boolean }): Promise<{ record_id: string }> {
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('No Attio API key configured')
   if (contact.category === 'family') throw new Error('Family contacts are not synced to Attio')
@@ -262,6 +263,23 @@ export async function syncFullContact(contact: {
     return null
   }
 
+  const pushNote = async (recordId: string) => {
+    if (!options?.includeNotes || !contact.notes?.trim()) return
+    await fetch(`${BASE}/v2/notes`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        data: {
+          parent_object: 'people',
+          parent_record_id: recordId,
+          title: 'reThink Notes',
+          content: contact.notes.trim(),
+          format: 'plaintext',
+        },
+      }),
+    }) // fire-and-forget — notes are additive, failures are non-critical
+  }
+
   if (contact.attio_record_id) {
     const res = await fetch(`${BASE}/v2/objects/people/records/${contact.attio_record_id}`, {
       method: 'PATCH',
@@ -271,6 +289,7 @@ export async function syncFullContact(contact: {
     if (!res.ok) { const t = await res.text(); throw new Error(`Attio update error ${res.status}: ${t}`) }
     const customErr = await patchCustom(contact.attio_record_id)
     if (customErr) throw new Error(customErr)
+    await pushNote(contact.attio_record_id)
     return { record_id: contact.attio_record_id }
   } else {
     const res = await fetch(`${BASE}/v2/objects/people/records`, {
@@ -284,6 +303,7 @@ export async function syncFullContact(contact: {
     if (!recordId) throw new Error('Attio response missing record_id')
     const customErr = await patchCustom(recordId)
     if (customErr) throw new Error(customErr)
+    await pushNote(recordId)
     return { record_id: recordId }
   }
 }

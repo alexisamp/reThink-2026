@@ -154,7 +154,7 @@ export function useContacts(
     setSyncing(true)
     setSyncError(null)
     try {
-      const result = await syncFullContact(contact)
+      const result = await syncFullContact(contact, { includeNotes: true })
       const now = new Date().toISOString()
       await supabase.from('outreach_logs')
         .update({ attio_record_id: result.record_id, attio_synced_at: now })
