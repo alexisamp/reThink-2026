@@ -54,6 +54,38 @@ function extractCompanyLinkedInUrl() {
   return null
 }
 
+function cleanDomain(url) {
+  try {
+    var u = new URL(url.startsWith('http') ? url : 'https://' + url)
+    return u.hostname.replace(/^www\./, '')
+  } catch (_) { return null }
+}
+
+// Fetch the company page (with session cookies) and extract the website domain
+function fetchCompanyDomain(companyUrl, callback) {
+  if (!companyUrl) { callback(null); return }
+  fetch(companyUrl, { credentials: 'include' })
+    .then(function(res) { return res.text() })
+    .then(function(html) {
+      // Try multiple patterns LinkedIn uses for the website field
+      var patterns = [
+        /data-tracking-control-name="about_website"[^>]*href="([^"]+)"/,
+        /"websiteUrl"\s*:\s*"([^"]+)"/,
+        /"website"\s*:\s*\{\s*"value"\s*:\s*"([^"]+)"/,
+        /companyPageUrl"\s*:\s*"([^"\\]+)"/
+      ]
+      for (var i = 0; i < patterns.length; i++) {
+        var m = html.match(patterns[i])
+        if (m && m[1] && m[1].indexOf('linkedin.com') === -1) {
+          var domain = cleanDomain(m[1])
+          if (domain) { callback(domain); return }
+        }
+      }
+      callback(null)
+    })
+    .catch(function() { callback(null) })
+}
+
 function extractProfilePageData() {
   var url = cleanLinkedInUrl(window.location.href)
 
@@ -289,8 +321,12 @@ function injectButton() {
       // Re-extract profile data in case DOM changed after navigation back
       var refreshed = extractProfilePageData()
       if (!data.name && refreshed.name) data.name = refreshed.name
-      setButtonState(btn, 'loading', 'Saving…')
-      chrome.runtime.sendMessage({ type: 'SAVE_CONTACT', data: data }, function(response) {
+
+      // Fetch company domain from the company page (has session cookies in content script)
+      fetchCompanyDomain(data.company_linkedin_url, function(domain) {
+        if (domain) data.company_domain = domain
+        setButtonState(btn, 'loading', 'Saving…')
+        chrome.runtime.sendMessage({ type: 'SAVE_CONTACT', data: data }, function(response) {
       if (chrome.runtime.lastError) {
         setButtonState(btn, 'error', 'Extension error')
         setTimeout(function() { setButtonState(btn, 'idle') }, 2500)
