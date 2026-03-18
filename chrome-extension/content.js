@@ -395,3 +395,19 @@ var navObserver = new MutationObserver(function() {
   }
 })
 navObserver.observe(document.body, { childList: true, subtree: true })
+
+// Respond to popup's GET_PROFILE_DATA request
+chrome.runtime.onMessage.addListener(function(message, _sender, sendResponse) {
+  if (message.type !== 'GET_PROFILE_DATA') return false
+  if (!isProfilePage()) {
+    sendResponse(null)
+    return false
+  }
+  var data = extractProfilePageData()
+  // Fetch company domain async, then respond
+  fetchCompanyDomain(data.company_linkedin_url, function(domain) {
+    if (domain) data.company_domain = domain
+    sendResponse(data)
+  })
+  return true // keep channel open for async response
+})
