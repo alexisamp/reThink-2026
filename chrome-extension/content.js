@@ -33,9 +33,12 @@ function parseHeadline(headline) {
   if (!headline) return { job_title: null, company: null }
   var atMatch = headline.match(/^(.+?)\s+(?:at|en|@)\s+(.+)$/i)
   if (atMatch) {
+    // Company may have extra context after · | • — take only the first part
+    var companyRaw = atMatch[2].trim()
+    var company = companyRaw.split(/\s*[\u00B7|•]\s*/)[0].trim().substring(0, 100)
     return {
       job_title: atMatch[1].trim().substring(0, 100),
-      company: atMatch[2].trim().substring(0, 100),
+      company: company,
     }
   }
   return { job_title: headline.substring(0, 100), company: null }
@@ -100,10 +103,12 @@ function extractProfilePageData() {
       }
     }
 
-    // Location: first p with comma, no pipe/bullet, len < 80
+    // Location: first p with comma, no pipe/bullet/parens, len < 80
+    // Excludes taglines that have parentheses like "Keep moving.(by riding the bus)"
     for (var j = 0; j < ps.length; j++) {
       var t = ps[j]
-      if (t.indexOf(',') !== -1 && t.indexOf('|') === -1 && t.indexOf('•') === -1 && t.length < 80) {
+      if (t.indexOf(',') !== -1 && t.indexOf('|') === -1 && t.indexOf('•') === -1 &&
+          t.indexOf('(') === -1 && t.indexOf(')') === -1 && t.length < 80) {
         location = t.substring(0, 120); break
       }
     }
