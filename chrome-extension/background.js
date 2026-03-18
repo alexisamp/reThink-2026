@@ -17,6 +17,41 @@ function cleanLinkedInUrl(url) {
 }
 
 /**
+ * Fetches a LinkedIn company page and extracts the website domain.
+ * LinkedIn company pages show the website in the About section.
+ * Returns the domain string (e.g. "fintual.com") or null if not found.
+ */
+async function extractCompanyDomain(companyLinkedInUrl) {
+  try {
+    const res = await fetch(companyLinkedInUrl, { credentials: 'include' })
+    if (!res.ok) return null
+    const html = await res.text()
+
+    // LinkedIn encodes the website in multiple ways — try each:
+    // 1. data-tracking-control-name="about_website" href="..."
+    const trackingMatch = html.match(/data-tracking-control-name="about_website"[^>]*href="([^"]+)"/)
+    if (trackingMatch) return cleanDomain(trackingMatch[1])
+
+    // 2. "companyPageUrl":"https://..." near website context
+    const jsonMatch = html.match(/"websiteUrl"\s*:\s*"([^"]+)"/)
+    if (jsonMatch) return cleanDomain(jsonMatch[1])
+
+    // 3. Plain text pattern: website URL after "Website" label in structured data
+    const aboutMatch = html.match(/"website"\s*:\s*\{\s*"value"\s*:\s*"([^"]+)"/)
+    if (aboutMatch) return cleanDomain(aboutMatch[1])
+
+    return null
+  } catch { return null }
+}
+
+function cleanDomain(url) {
+  try {
+    const u = new URL(url.startsWith('http') ? url : 'https://' + url)
+    return u.hostname.replace(/^www\./, '')
+  } catch { return null }
+}
+
+/**
  * Gets a valid access token, refreshing if expired.
  * Returns null if not authenticated.
  */
@@ -123,6 +158,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return m ? m[1].split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ') : 'Unknown'
     })()
 
+    // Try to extract company domain from the LinkedIn company page
+    let companyDomain = data.company_domain || null
+    if (!companyDomain && data.company_linkedin_url) {
+      companyDomain = await extractCompanyDomain(data.company_linkedin_url)
+    }
+
     const body = {
       user_id: userId,
       name,
@@ -141,7 +182,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (data.phone) body.phone = data.phone
     if (data.website) body.website = data.website
     body.company_linkedin_url = data.company_linkedin_url || null
-    body.company_domain = data.company_domain || null
+    body.company_domain = companyDomain
 
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/outreach_logs`, {
