@@ -225,7 +225,7 @@ export default function ContactDetailDrawer({
   async function handleLogSave() {
     if (!contact) return
     setLogSaving(true)
-    await logInteraction(contact.id, logType, logDirection, logNotes || null, logDate)
+    await logInteraction(contact.id, logType, logDirection, logNotes || null, logDate, contact.attio_record_id)
     setLogSaving(false)
     setLogFormOpen(false)
     setLogNotes('')
