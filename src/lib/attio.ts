@@ -236,6 +236,8 @@ export async function syncFullContact(contact: {
   // ── Custom fields (our 4 custom attributes + skills) — sent separately ───
   // Sent in a second PATCH so a bad slug never kills the core sync
   const customValues: Record<string, unknown> = {}
+  // LinkedIn — slug varies by workspace; try 'linkedin' (fails silently if wrong)
+  if (contact.linkedin_url) customValues['linkedin'] = [{ value: contact.linkedin_url }]
   if (contact.health_score != null) customValues['health_score'] = [{ value: contact.health_score }]
   if (contact.category && ATTIO_CATEGORY_OPTIONS[contact.category]) {
     customValues['category'] = [{ option: ATTIO_CATEGORY_OPTIONS[contact.category] }]
