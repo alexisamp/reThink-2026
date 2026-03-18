@@ -94,6 +94,7 @@ export default function People() {
     contacts,
     loading,
     syncing,
+    syncError,
     addContact,
     updateContact,
     deleteContact,
@@ -346,6 +347,7 @@ export default function People() {
         userId={userId ?? ''}
         habits={habits}
         upsertHabitCount={upsertHabitCount}
+        saveError={syncError}
       />
     </div>
   )

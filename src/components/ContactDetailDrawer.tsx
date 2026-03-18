@@ -74,6 +74,7 @@ interface ContactDetailDrawerProps {
   userId: string
   habits: Habit[]
   upsertHabitCount: (habitId: string, count: number) => Promise<void>
+  saveError?: string | null
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -89,6 +90,7 @@ export default function ContactDetailDrawer({
   userId,
   habits,
   upsertHabitCount,
+  saveError,
 }: ContactDetailDrawerProps) {
   const config: ContactFunnelConfig = funnelConfig ?? DEFAULT_FUNNEL_CONFIG
 
@@ -314,6 +316,12 @@ export default function ContactDetailDrawer({
 
             {/* ── Status + Health ─────────────────────────────────────────── */}
             <div className="px-4 py-3 border-b border-mercury">
+              {/* Error banner */}
+              {saveError && (
+                <div className="mb-2 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
+                  {saveError}
+                </div>
+              )}
               {/* Status selector */}
               <div className="mb-3">
                 <div className={sectionLabel}>Status</div>

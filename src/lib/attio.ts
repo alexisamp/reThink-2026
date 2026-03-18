@@ -223,55 +223,61 @@ export async function syncFullContact(contact: {
   const firstName = nameParts[0] ?? ''
   const lastName = nameParts.slice(1).join(' ') || ''
 
-  // Standard Attio People attribute formats per API v2 docs
-  const values: Record<string, unknown> = {
+  // ── Core fields (standard Attio People attributes — always sent) ─────────
+  const coreValues: Record<string, unknown> = {
     name: [{ first_name: firstName, last_name: lastName, full_name: contact.name.trim() }],
   }
-  if (contact.email)        values['email_addresses']   = [{ email_address: contact.email }]
-  if (contact.phone)        values['phone_numbers']     = [{ original_phone_number: contact.phone }]
-  if (contact.job_title)    values['job_title']         = [{ value: contact.job_title }]
-  if (contact.about)        values['description']       = [{ value: contact.about }]
-  if (contact.linkedin_url) values['linkedin']          = [{ value: contact.linkedin_url }]
-  if (contact.location)     values['primary_location']  = { locality: contact.location }
-  if (contact.health_score) values['health_score']      = [{ value: contact.health_score }]
+  if (contact.email)     coreValues['email_addresses'] = [{ email_address: contact.email }]
+  if (contact.phone)     coreValues['phone_numbers']   = [{ original_phone_number: contact.phone }]
+  if (contact.job_title) coreValues['job_title']       = [{ value: contact.job_title }]
+  if (contact.about)     coreValues['description']     = [{ value: contact.about }]
+  if (contact.location)  coreValues['primary_location']= [{ locality: contact.location }]
 
-  // Custom select fields — map reThink values to Attio option IDs
+  // ── Custom fields (our 4 custom attributes + skills) — sent separately ───
+  // Sent in a second PATCH so a bad slug never kills the core sync
+  const customValues: Record<string, unknown> = {}
+  if (contact.health_score != null) customValues['health_score'] = [{ value: contact.health_score }]
   if (contact.category && ATTIO_CATEGORY_OPTIONS[contact.category]) {
-    values['category'] = [{ option: ATTIO_CATEGORY_OPTIONS[contact.category] }]
+    customValues['category'] = [{ option: ATTIO_CATEGORY_OPTIONS[contact.category] }]
   }
   if (contact.status && ATTIO_STATUS_OPTIONS[contact.status]) {
-    values['relationship_status'] = [{ option: ATTIO_STATUS_OPTIONS[contact.status] }]
+    customValues['relationship_status'] = [{ option: ATTIO_STATUS_OPTIONS[contact.status] }]
   }
-
-  // Skills — multi-select: resolve each skill to an option ID (creates new options as needed)
   if (contact.skills) {
     const skillTitles = contact.skills.split(',').map(s => s.trim()).filter(Boolean)
     const optionIds = (await Promise.all(skillTitles.map(s => resolveSkillOption(apiKey, s)))).filter(Boolean)
-    if (optionIds.length > 0) {
-      values['skills'] = optionIds.map(id => ({ option: id }))
-    }
+    if (optionIds.length > 0) customValues['skills'] = optionIds.map(id => ({ option: id }))
+  }
+
+  const patchCustom = async (recordId: string) => {
+    if (Object.keys(customValues).length === 0) return
+    await fetch(`${BASE}/v2/objects/people/records/${recordId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: { values: customValues } }),
+    }) // silently ignore errors — custom attribute slugs may vary by workspace
   }
 
   if (contact.attio_record_id) {
-    // Update existing
     const res = await fetch(`${BASE}/v2/objects/people/records/${contact.attio_record_id}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: { values } }),
+      body: JSON.stringify({ data: { values: coreValues } }),
     })
     if (!res.ok) { const t = await res.text(); throw new Error(`Attio update error ${res.status}: ${t}`) }
+    await patchCustom(contact.attio_record_id)
     return { record_id: contact.attio_record_id }
   } else {
-    // Create new
     const res = await fetch(`${BASE}/v2/objects/people/records`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: { values } }),
+      body: JSON.stringify({ data: { values: coreValues } }),
     })
     if (!res.ok) { const t = await res.text(); throw new Error(`Attio create error ${res.status}: ${t}`) }
     const json = await res.json()
     const recordId = json?.data?.id?.record_id as string | undefined
     if (!recordId) throw new Error('Attio response missing record_id')
+    await patchCustom(recordId)
     return { record_id: recordId }
   }
 }

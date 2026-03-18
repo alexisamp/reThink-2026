@@ -123,14 +123,18 @@ export function useContacts(
     }
     if (patch.name) patch.name = (patch.name as string).trim()
 
-    await supabase.from('outreach_logs').update(patch).eq('id', id)
+    const { error } = await supabase.from('outreach_logs').update(patch).eq('id', id)
+    if (error) {
+      setSyncError(`Save failed: ${error.message}`)
+      return
+    }
     const updatedContacts = contacts.map(c => c.id === id ? { ...c, ...patch } : c)
     setContacts(updatedContacts)
 
-    // Attio: update if synced
+    // Attio: update if synced (fire-and-forget — errors surface via syncError)
     if (existing.attio_record_id && hasAttioKey()) {
       syncFullContact({ ...existing, ...patch } as Contact)
-        .catch(err => setSyncError(`Attio update failed: ${err instanceof Error ? err.message : 'unknown'}`))
+        .catch(err => setSyncError(`Attio sync: ${err instanceof Error ? err.message : 'unknown'}`))
     }
   }, [userId, contacts, incrementProspectingHabit])
 
