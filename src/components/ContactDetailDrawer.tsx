@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   X, ArrowLeft, ArrowSquareOut, ChatCircle, Envelope, Phone,
   VideoCamera, Users, CaretDown, CaretUp, Trash, Plus, Check,
+  Globe,
 } from '@phosphor-icons/react'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useContactEnricher, hasGeminiEnrichKey } from '@/hooks/useContactEnricher'
@@ -112,8 +113,9 @@ export default function ContactDetailDrawer({
   const [companyDomain, setCompanyDomain] = useState('')
   const [syncingCompany, setSyncingCompany] = useState(false)
   const [enrichToast, setEnrichToast] = useState('')
+  const [syncErrorExpanded, setSyncErrorExpanded] = useState(false)
 
-  const { enriching, enrich } = useContactEnricher()
+  const { enriching, enrichError, enrich } = useContactEnricher()
 
   // Log form state
   const [logType, setLogType] = useState<Interaction['type']>('whatsapp')
@@ -146,6 +148,7 @@ export default function ContactDetailDrawer({
     setConfirmDelete(false)
     setAboutExpanded(false)
     setCompanyDomain(contact.company_domain ?? '')
+    setSyncErrorExpanded(false)
 
     // Fetch interactions for this contact
     fetchInteractions(contact.id)
@@ -304,6 +307,10 @@ export default function ContactDetailDrawer({
 
   // ── derived ───────────────────────────────────────────────────────────────
   const interactions = contact ? getInteractions(contact.id) : []
+  // Sort most recent first
+  const sortedInteractions = [...interactions].sort(
+    (a, b) => new Date(b.interaction_date).getTime() - new Date(a.interaction_date).getTime()
+  )
   const healthScore = contact?.health_score ?? 1
   const healthDotClass = healthDotColor(healthScore)
   const lastDays = daysSince(contact?.last_interaction_at ?? null)
@@ -312,6 +319,12 @@ export default function ContactDetailDrawer({
     (contact?.category ?? '') as typeof ATTIO_ELIGIBLE_CATEGORIES[number]
   )
   const attioSyncedDays = daysSince(contact?.attio_synced_at ?? null)
+
+  // Sync error display helpers
+  const syncErrRaw = saveError ?? null
+  const syncErrShort = syncErrRaw && syncErrRaw.length > 100
+    ? syncErrRaw.slice(0, 100) + '…'
+    : syncErrRaw
 
   // ── section label style ───────────────────────────────────────────────────
   const sectionLabel = 'text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-2'
@@ -335,7 +348,7 @@ export default function ContactDetailDrawer({
       >
         {!contact ? null : (
           <>
-            {/* ── Header ─────────────────────────────────────────────────── */}
+            {/* ── 1. Header ───────────────────────────────────────────────── */}
             <div className="p-4 border-b border-mercury flex items-start justify-between sticky top-0 bg-white z-10">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
@@ -349,15 +362,6 @@ export default function ContactDetailDrawer({
                     {contact.name}'s profile
                   </h2>
                 </div>
-                <select
-                  value={localCategory ?? ''}
-                  onChange={e => handleCategoryChange(e.target.value as ContactCategory)}
-                  className="ml-6 text-[9px] uppercase bg-mercury/30 text-shuttle rounded px-1.5 py-0.5 border-0 focus:outline-none focus:ring-1 focus:ring-burnham/20 cursor-pointer"
-                >
-                  {(Object.entries(CATEGORY_LABELS) as [ContactCategory, string][]).map(([val, label]) => (
-                    <option key={val} value={val}>{label}</option>
-                  ))}
-                </select>
               </div>
               <button
                 onClick={onClose}
@@ -367,16 +371,56 @@ export default function ContactDetailDrawer({
               </button>
             </div>
 
-            {/* ── Status + Health ─────────────────────────────────────────── */}
+            {/* ── 2. Profile section ───────────────────────────────────────── */}
             <div className="px-4 py-3 border-b border-mercury">
-              {/* Error banner */}
-              {saveError && (
-                <div className="mb-2 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
-                  {saveError}
+              {/* Avatar initial + name + category + status */}
+              <div className="flex items-start gap-3 mb-3">
+                {/* Avatar */}
+                <div className="w-10 h-10 rounded-full bg-burnham/10 flex items-center justify-center flex-shrink-0">
+                  <span className="text-base font-semibold text-burnham">
+                    {contact.name.charAt(0).toUpperCase()}
+                  </span>
                 </div>
-              )}
-              {/* Status selector */}
-              <div className="mb-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-burnham truncate">{contact.name}</p>
+                    {/* Category badge */}
+                    <select
+                      value={localCategory ?? ''}
+                      onChange={e => handleCategoryChange(e.target.value as ContactCategory)}
+                      className="text-[9px] uppercase bg-mercury/30 text-shuttle rounded px-1.5 py-0.5 border-0 focus:outline-none focus:ring-1 focus:ring-burnham/20 cursor-pointer"
+                    >
+                      {(Object.entries(CATEGORY_LABELS) as [ContactCategory, string][]).map(([val, label]) => (
+                        <option key={val} value={val}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {(contact.job_title || contact.company) && (
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <p className="text-xs text-burnham/70 truncate">
+                        {[contact.job_title, contact.company].filter(Boolean).join(' · ')}
+                      </p>
+                      {contact.company_linkedin_url && (
+                        <a
+                          href={contact.company_linkedin_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-shuttle/50 hover:text-burnham transition-colors flex-shrink-0"
+                          title="Company LinkedIn"
+                        >
+                          <ArrowSquareOut size={11} />
+                        </a>
+                      )}
+                    </div>
+                  )}
+                  {contact.location && (
+                    <p className="text-xs text-shuttle/50 mt-0.5">{contact.location}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Status selector (funnel pill) */}
+              <div className="mb-1">
                 <div className={sectionLabel}>Status</div>
                 <div className="flex gap-1.5 flex-wrap">
                   {FUNNEL_STAGE_ORDER.filter(s => config[s]).map(s => (
@@ -394,146 +438,70 @@ export default function ContactDetailDrawer({
                   ))}
                 </div>
               </div>
-
-              {/* Health score */}
-              <div className="flex items-center gap-3">
-                <div>
-                  <div className={sectionLabel}>Health</div>
-                  <div className="flex items-center gap-1">
-                    <span className={`text-base leading-none tracking-tight ${healthDotClass}`}>
-                      {'●'.repeat(healthScore)}{'○'.repeat(Math.max(0, 10 - healthScore))}
-                    </span>
-                    <span className={`text-xs font-semibold ml-1 ${healthDotClass}`}>
-                      {healthScore}/10
-                    </span>
-                  </div>
-                </div>
-                <div className="ml-auto text-right">
-                  <span className="text-[10px] text-shuttle/50">
-                    {lastDays === null
-                      ? 'No interactions yet'
-                      : `Last seen ${formatAgo(lastDays)}`}
-                  </span>
-                </div>
-              </div>
             </div>
 
-            {/* ── Profile info ─────────────────────────────────────────────── */}
+            {/* ── 3. Contact info ──────────────────────────────────────────── */}
             <div className="px-4 py-3 border-b border-mercury">
-              <div className={sectionLabel}>Profile</div>
+              <div className={sectionLabel}>Contact info</div>
               <div className="space-y-1.5">
-                {(contact.job_title || contact.company) && (
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs text-burnham/80">
-                      {[contact.job_title, contact.company].filter(Boolean).join(' · ')}
-                    </p>
-                    {contact.company_linkedin_url && (
-                      <a
-                        href={contact.company_linkedin_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-shuttle/50 hover:text-burnham transition-colors flex-shrink-0"
-                        title="Company LinkedIn"
-                      >
-                        <ArrowSquareOut size={12} />
-                      </a>
-                    )}
-                  </div>
-                )}
-                {/* Company domain field */}
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={companyDomain}
-                    onChange={e => setCompanyDomain(e.target.value)}
-                    onBlur={() => {
-                      if (!contact) return
-                      onUpdate(contact.id, { company_domain: companyDomain || null })
-                    }}
-                    placeholder="fintual.com"
-                    className="flex-1 text-xs bg-mercury/10 border border-mercury rounded px-2 py-1 placeholder-shuttle/30 text-burnham focus:outline-none focus:border-burnham/30"
-                  />
-                  <span className="text-[9px] text-shuttle/40 flex-shrink-0">Domain</span>
-                </div>
-                {/* Sync Company button */}
-                {companyDomain && hasAttioKey() && onSyncCompany && (
-                  <button
-                    onClick={handleSyncCompany}
-                    disabled={syncingCompany}
-                    className="text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors disabled:opacity-40"
-                  >
-                    {syncingCompany ? 'Syncing…' : 'Sync Company →'}
-                  </button>
-                )}
-                {contact.location && (
-                  <p className="text-xs text-shuttle/60">{contact.location}</p>
-                )}
                 {contact.email && (
                   <a
                     href={`mailto:${contact.email}`}
-                    className="text-xs text-burnham/70 hover:text-burnham underline underline-offset-2 block"
+                    className="flex items-center gap-2 text-xs text-burnham/70 hover:text-burnham transition-colors"
                   >
-                    {contact.email}
+                    <Envelope size={13} className="text-shuttle/50 flex-shrink-0" />
+                    <span className="truncate">{contact.email}</span>
                   </a>
                 )}
                 {contact.phone && (
-                  <p className="text-xs text-shuttle/60">{contact.phone}</p>
+                  <div className="flex items-center gap-2">
+                    <Phone size={13} className="text-shuttle/50 flex-shrink-0" />
+                    <span className="text-xs text-shuttle/70">{contact.phone}</span>
+                  </div>
                 )}
                 {contact.linkedin_url && (
                   <a
                     href={contact.linkedin_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-shuttle/60 hover:text-burnham transition-colors"
+                    className="flex items-center gap-2 text-xs text-shuttle/60 hover:text-burnham transition-colors"
                   >
-                    <ArrowSquareOut size={12} />
-                    LinkedIn
+                    <ArrowSquareOut size={13} className="text-shuttle/50 flex-shrink-0" />
+                    <span>LinkedIn</span>
                   </a>
                 )}
                 {(contact.connections_count !== null || contact.followers_count !== null) && (
-                  <p className="text-[10px] text-shuttle/40">
+                  <p className="text-[10px] text-shuttle/40 pl-5">
                     {[
                       contact.connections_count !== null ? `${contact.connections_count} connections` : null,
                       contact.followers_count !== null ? `${contact.followers_count} followers` : null,
                     ].filter(Boolean).join(' · ')}
                   </p>
                 )}
-
-                {/* Attio status */}
-                <div className="pt-1 flex items-center justify-between">
-                  <span className="text-[10px] text-shuttle/40">
-                    {contact.attio_record_id
-                      ? `Synced to Attio${attioSyncedDays !== null ? ` · ${attioSyncedDays}d ago` : ''}`
-                      : 'Not synced to Attio'}
-                  </span>
-                  {attioEligible && (
-                    <button
-                      onClick={handleSyncToAttio}
-                      disabled={syncing}
-                      className="text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors disabled:opacity-40"
-                    >
-                      {syncing ? 'Syncing…' : 'Sync'}
-                    </button>
-                  )}
-                </div>
               </div>
             </div>
 
-            {/* ── Personal context ─────────────────────────────────────────── */}
-            <div className="px-4 py-3 border-b border-mercury">
-              <div className={sectionLabel}>Personal context</div>
-              <textarea
-                ref={personalContextRef}
-                value={personalContext}
-                onChange={e => setPersonalContext(e.target.value)}
-                onBlur={savePersonalContext}
-                rows={3}
-                placeholder="What do you know about this person? What matters to them?"
-                className="w-full text-xs text-burnham/80 bg-mercury/10 border border-mercury rounded-lg p-2 placeholder-shuttle/30 resize-none focus:outline-none focus:border-burnham/30"
-              />
-            </div>
+            {/* ── 4. About ─────────────────────────────────────────────────── */}
+            {contact.about && (
+              <div className="px-4 py-3 border-b border-mercury">
+                <button
+                  onClick={() => setAboutExpanded(p => !p)}
+                  className="flex items-center justify-between w-full"
+                >
+                  <span className={sectionLabel + ' mb-0'}>About</span>
+                  {aboutExpanded
+                    ? <CaretUp size={12} className="text-shuttle/50" />
+                    : <CaretDown size={12} className="text-shuttle/50" />}
+                </button>
+                {aboutExpanded && (
+                  <p className="text-xs text-shuttle/70 mt-2 leading-relaxed whitespace-pre-wrap">
+                    {contact.about}
+                  </p>
+                )}
+              </div>
+            )}
 
-            {/* ── Skills ───────────────────────────────────────────────────── */}
+            {/* ── 5. Skills ────────────────────────────────────────────────── */}
             <div className="px-4 py-3 border-b border-mercury">
               <div className={sectionLabel}>Skills</div>
               <div className="flex flex-wrap gap-1.5 mb-2">
@@ -564,27 +532,41 @@ export default function ContactDetailDrawer({
               />
             </div>
 
-            {/* ── About (collapsible) ──────────────────────────────────────── */}
-            {contact.about && (
-              <div className="px-4 py-3 border-b border-mercury">
-                <button
-                  onClick={() => setAboutExpanded(p => !p)}
-                  className="flex items-center justify-between w-full"
-                >
-                  <span className={sectionLabel + ' mb-0'}>About</span>
-                  {aboutExpanded
-                    ? <CaretUp size={12} className="text-shuttle/50" />
-                    : <CaretDown size={12} className="text-shuttle/50" />}
-                </button>
-                {aboutExpanded && (
-                  <p className="text-xs text-shuttle/70 mt-2 leading-relaxed whitespace-pre-wrap">
-                    {contact.about}
-                  </p>
-                )}
-              </div>
-            )}
+            {/* ── 6. Personal context ──────────────────────────────────────── */}
+            <div className="px-4 py-3 border-b border-mercury">
+              <div className={sectionLabel}>Personal context</div>
+              <textarea
+                ref={personalContextRef}
+                value={personalContext}
+                onChange={e => setPersonalContext(e.target.value)}
+                onBlur={savePersonalContext}
+                rows={3}
+                placeholder="What do you know about this person? What matters to them?"
+                className="w-full text-xs text-burnham/80 bg-mercury/10 border border-mercury rounded-lg p-2 placeholder-shuttle/30 resize-none focus:outline-none focus:border-burnham/30"
+              />
+            </div>
 
-            {/* ── Interactions ─────────────────────────────────────────────── */}
+            {/* ── 7. Health score ──────────────────────────────────────────── */}
+            <div className="px-4 py-3 border-b border-mercury">
+              <div className={sectionLabel}>Relationship health</div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <span className={`text-base leading-none tracking-tight ${healthDotClass}`}>
+                    {'●'.repeat(healthScore)}{'○'.repeat(Math.max(0, 10 - healthScore))}
+                  </span>
+                  <span className={`text-xs font-semibold ml-1 ${healthDotClass}`}>
+                    {healthScore}/10
+                  </span>
+                </div>
+                <span className="text-[10px] text-shuttle/50">
+                  {lastDays === null
+                    ? 'No interactions yet'
+                    : `Last seen ${formatAgo(lastDays)}`}
+                </span>
+              </div>
+            </div>
+
+            {/* ── 8. Interactions timeline ─────────────────────────────────── */}
             <div className="px-4 py-3 border-b border-mercury">
               <div className="flex items-center justify-between mb-2">
                 <span className={sectionLabel + ' mb-0'}>Interactions</span>
@@ -597,9 +579,58 @@ export default function ContactDetailDrawer({
                 </button>
               </div>
 
-              {/* Log form */}
-              {logFormOpen && (
-                <div className="bg-mercury/10 rounded-lg p-3 mb-3 space-y-2">
+              {/* Timeline — most recent first */}
+              {sortedInteractions.length === 0 ? (
+                <p className="text-[11px] text-shuttle/40">No interactions logged yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {sortedInteractions.map(interaction => {
+                    const days = daysSince(interaction.interaction_date)
+                    return (
+                      <li
+                        key={interaction.id}
+                        className="group flex items-start gap-2"
+                      >
+                        <div className="flex-shrink-0 mt-0.5">
+                          <InteractionIcon type={interaction.type} size={14} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] font-medium text-burnham/80">
+                              {INTERACTION_TYPE_LABELS[interaction.type]}
+                            </span>
+                            <span className="text-[10px] text-shuttle/40">
+                              {interaction.direction === 'outbound' ? '→' : '←'}
+                            </span>
+                            <span className="text-[10px] text-shuttle/40">
+                              {days === null ? interaction.interaction_date : formatAgo(days)}
+                            </span>
+                          </div>
+                          {interaction.notes && (
+                            <p className="text-[10px] text-shuttle/60 truncate mt-0.5">
+                              {interaction.notes}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => deleteInteraction(interaction)}
+                          className="opacity-0 group-hover:opacity-100 text-shuttle/30 hover:text-red-400 transition-all flex-shrink-0 mt-0.5"
+                          aria-label="Delete interaction"
+                        >
+                          <Trash size={12} />
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+
+            {/* ── 9. Log interaction form ──────────────────────────────────── */}
+            {logFormOpen && (
+              <div className="px-4 py-3 border-b border-mercury">
+                <div className={sectionLabel}>Log interaction</div>
+                <div className="space-y-2">
                   {/* Type */}
                   <select
                     value={logType}
@@ -663,56 +694,10 @@ export default function ContactDetailDrawer({
                     </button>
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Timeline */}
-              {interactions.length === 0 ? (
-                <p className="text-[11px] text-shuttle/40">No interactions logged yet.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {interactions.map(interaction => {
-                    const days = daysSince(interaction.interaction_date)
-                    return (
-                      <li
-                        key={interaction.id}
-                        className="group flex items-start gap-2"
-                      >
-                        <div className="flex-shrink-0 mt-0.5">
-                          <InteractionIcon type={interaction.type} size={14} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[11px] font-medium text-burnham/80">
-                              {INTERACTION_TYPE_LABELS[interaction.type]}
-                            </span>
-                            <span className="text-[10px] text-shuttle/40">
-                              {interaction.direction === 'outbound' ? '→' : '←'}
-                            </span>
-                            <span className="text-[10px] text-shuttle/40">
-                              {days === null ? interaction.interaction_date : formatAgo(days)}
-                            </span>
-                          </div>
-                          {interaction.notes && (
-                            <p className="text-[10px] text-shuttle/60 truncate mt-0.5">
-                              {interaction.notes}
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => deleteInteraction(interaction)}
-                          className="opacity-0 group-hover:opacity-100 text-shuttle/30 hover:text-red-400 transition-all flex-shrink-0 mt-0.5"
-                          aria-label="Delete interaction"
-                        >
-                          <Trash size={12} />
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-
-            {/* ── Notes ────────────────────────────────────────────────────── */}
+            {/* ── 10. Notes ────────────────────────────────────────────────── */}
             <div className="px-4 py-3 border-b border-mercury">
               <div className={sectionLabel}>Notes</div>
               <textarea
@@ -726,33 +711,109 @@ export default function ContactDetailDrawer({
               />
             </div>
 
-            {/* ── Actions footer ───────────────────────────────────────────── */}
-            <div className="p-4 border-t border-mercury mt-auto sticky bottom-0 bg-white flex flex-col gap-2">
-              {(enrichToast || attioToast) && (
-                <p className="text-[11px] text-center text-pastel font-medium">{enrichToast || attioToast}</p>
-              )}
-              <div className="flex items-center gap-3">
-              {hasGeminiEnrichKey() && (
+            {/* ── 11. Attio section ─────────────────────────────────────────── */}
+            {attioEligible && (
+              <div className="px-4 py-3 border-b border-mercury">
+                <div className={sectionLabel}>Attio</div>
+
+                {/* Company domain field */}
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Globe size={13} className="text-shuttle/40 flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={companyDomain}
+                    onChange={e => setCompanyDomain(e.target.value)}
+                    onBlur={() => {
+                      if (!contact) return
+                      onUpdate(contact.id, { company_domain: companyDomain || null })
+                    }}
+                    placeholder="company.com"
+                    className="flex-1 text-xs bg-mercury/10 border border-mercury rounded px-2 py-1 placeholder-shuttle/30 text-burnham focus:outline-none focus:border-burnham/30"
+                  />
+                  <span className="text-[9px] text-shuttle/40 flex-shrink-0">Domain</span>
+                </div>
+
+                {/* Sync Company button */}
+                {companyDomain && hasAttioKey() && onSyncCompany && (
+                  <button
+                    onClick={handleSyncCompany}
+                    disabled={syncingCompany}
+                    className="mb-2 text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors disabled:opacity-40"
+                  >
+                    {syncingCompany ? 'Syncing…' : 'Sync Company →'}
+                  </button>
+                )}
+
+                {/* Attio sync status + button */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-shuttle/40">
+                    {contact.attio_record_id
+                      ? `Synced${attioSyncedDays !== null ? ` · ${attioSyncedDays}d ago` : ''}`
+                      : 'Not yet synced'}
+                  </span>
+                  <button
+                    onClick={handleSyncToAttio}
+                    disabled={syncing}
+                    className="text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors disabled:opacity-40"
+                  >
+                    {syncing ? 'Syncing…' : 'Sync to Attio'}
+                  </button>
+                </div>
+
+                {/* Sync error display */}
+                {syncErrRaw && (
+                  <div className="mt-1.5">
+                    <p className="text-xs text-red-500">
+                      {syncErrorExpanded ? syncErrRaw : syncErrShort}
+                      {syncErrRaw.length > 100 && (
+                        <button
+                          onClick={() => setSyncErrorExpanded(p => !p)}
+                          className="ml-1 text-red-400 underline hover:text-red-600"
+                        >
+                          {syncErrorExpanded ? 'Collapse' : 'View full error'}
+                        </button>
+                      )}
+                    </p>
+                  </div>
+                )}
+
+                {/* Toast */}
+                {attioToast && (
+                  <p className="mt-1.5 text-[11px] text-pastel font-medium">{attioToast}</p>
+                )}
+              </div>
+            )}
+
+            {/* ── 12. AI Enrich ─────────────────────────────────────────────── */}
+            {hasGeminiEnrichKey() && (
+              <div className="px-4 py-3 border-b border-mercury">
+                <div className={sectionLabel}>AI enrichment</div>
                 <button
                   onClick={handleEnrich}
                   disabled={enriching}
-                  className="flex-1 text-xs font-medium text-shuttle border border-shuttle/20 hover:border-shuttle/50 rounded-lg px-3 py-2 transition-colors disabled:opacity-40"
+                  className="w-full text-xs font-medium text-shuttle border border-shuttle/20 hover:border-shuttle/50 rounded-lg px-3 py-2 transition-colors disabled:opacity-40"
                 >
                   {enriching ? 'Enriching…' : '✨ Enrich with AI'}
                 </button>
-              )}
-              {attioEligible && (
-                <button
-                  onClick={handleSyncToAttio}
-                  disabled={syncing}
-                  className="flex-1 text-xs font-medium text-burnham border border-burnham/30 hover:border-burnham rounded-lg px-3 py-2 transition-colors disabled:opacity-40"
-                >
-                  {syncing ? 'Syncing…' : 'Sync to Attio'}
-                </button>
-              )}
+                {enrichError && (
+                  <p className="mt-1.5 text-xs text-red-500">{enrichError}</p>
+                )}
+                {enrichToast && !enrichError && (
+                  <p className="mt-1.5 text-[11px] text-pastel font-medium text-center">{enrichToast}</p>
+                )}
+              </div>
+            )}
 
+            {/* ── Footer: delete ────────────────────────────────────────────── */}
+            <div className="p-4 border-t border-mercury mt-auto sticky bottom-0 bg-white">
+              {/* Save error banner */}
+              {saveError && !attioEligible && (
+                <p className="mb-2 text-xs text-red-500 text-center">
+                  {saveError.length > 120 ? saveError.slice(0, 120) + '…' : saveError}
+                </p>
+              )}
               {confirmDelete ? (
-                <div className="flex items-center gap-2 flex-1">
+                <div className="flex items-center gap-2">
                   <span className="text-[11px] text-red-500 flex-1">Sure? This is permanent.</span>
                   <button
                     onClick={handleDelete}
@@ -770,12 +831,11 @@ export default function ContactDetailDrawer({
               ) : (
                 <button
                   onClick={() => setConfirmDelete(true)}
-                  className={`text-xs text-red-400 hover:text-red-500 transition-colors ${attioEligible ? '' : 'ml-auto'}`}
+                  className="text-xs text-red-400 hover:text-red-500 transition-colors"
                 >
                   Delete person
                 </button>
               )}
-              </div>
             </div>
           </>
         )}

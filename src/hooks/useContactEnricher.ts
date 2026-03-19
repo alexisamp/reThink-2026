@@ -32,6 +32,10 @@ export function useContactEnricher(): UseContactEnricherReturn {
     if (!GEMINI_API_KEY) return null
     setEnriching(true)
     setEnrichError(null)
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 3000)
+
     try {
       const prompt = [
         `You are a professional contact enrichment assistant. Use web search to find accurate data.`,
@@ -56,25 +60,46 @@ export function useContactEnricher(): UseContactEnricherReturn {
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             tools: [{ google_search: {} }],
-            generationConfig: { responseMimeType: 'application/json' },
+            // NOTE: responseMimeType is NOT set here — it is incompatible with google_search tool;
+            // the response will be plain text that we parse manually.
           }),
         }
       )
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        const msg = (errBody as any)?.error?.message ?? `HTTP ${res.status}`
+        throw new Error(msg)
+      }
+
       const data = await res.json()
-      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-      const parsed: EnrichResult = JSON.parse(raw.replace(/```json|```/g, '').trim())
+      const raw: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+
+      // Extract JSON from text response (may be wrapped in markdown or prose)
+      const jsonStr = raw.match(/\{[\s\S]*\}/)?.[0] ?? 'null'
+      const parsed: EnrichResult | null = JSON.parse(jsonStr)
+
+      if (!parsed) throw new Error('No JSON found in Gemini response')
+
       return {
         company_domain: parsed.company_domain || null,
         skills_suggestions: Array.isArray(parsed.skills_suggestions) ? parsed.skills_suggestions : [],
         enriched_about: parsed.enriched_about || null,
       }
-    } catch (e) {
-      setEnrichError('Enrichment failed. Try again.')
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        setEnrichError('Enrichment timed out after 3 seconds.')
+      } else {
+        const msg = e instanceof Error ? e.message : String(e)
+        setEnrichError(`Enrichment failed: ${msg}`)
+      }
       return null
     } finally {
+      clearTimeout(timeout)
       setEnriching(false)
     }
   }, [])
