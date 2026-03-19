@@ -1,6 +1,51 @@
 // content.js — runs on linkedin.com pages
 // Injects a floating button on profile pages and handles data extraction
 
+// ── Company page domain caching ───────────────────────────────────────────────
+
+function isCompanyPage() {
+  return /linkedin\.com\/company\/[^/?#]+/.test(window.location.href)
+}
+
+function extractAndCacheCompanyDomain() {
+  var slugMatch = window.location.href.match(/linkedin\.com\/company\/([^/?#&]+)/)
+  if (!slugMatch) return
+  var slug = slugMatch[1]
+
+  // Look for external links in the company About section — the website is an <a> with an external href
+  var links = Array.from(document.querySelectorAll('a[href]'))
+  for (var i = 0; i < links.length; i++) {
+    var href = links[i].href || ''
+    // Skip LinkedIn URLs, javascript: links, mailto:, and empty hrefs
+    if (!href.startsWith('http')) continue
+    if (href.indexOf('linkedin.com') !== -1) continue
+    if (href.indexOf('google.com') !== -1) continue
+    // The company website link is usually in the about section sidebar
+    var parentText = (links[i].closest('section,div,li') || document.body).textContent || ''
+    if (parentText.toLowerCase().indexOf('website') !== -1 ||
+        links[i].getAttribute('data-tracking-control-name') === 'about_website') {
+      var domain = cleanDomain(href)
+      if (domain) {
+        var cacheKey = 'company_domain_' + slug
+        var obj = {}
+        obj[cacheKey] = domain
+        chrome.storage.local.set(obj)
+        return
+      }
+    }
+  }
+}
+
+function getCachedCompanyDomain(companyUrl, callback) {
+  if (!companyUrl) { callback(null); return }
+  var slugMatch = companyUrl.match(/linkedin\.com\/company\/([^/?#&]+)/)
+  if (!slugMatch) { callback(null); return }
+  var cacheKey = 'company_domain_' + slugMatch[1]
+  chrome.storage.local.get(cacheKey, function(result) {
+    callback(result[cacheKey] || null)
+  })
+}
+
 /**
  * Cleans a LinkedIn URL to only keep https://www.linkedin.com/in/{slug}
  */
@@ -127,11 +172,14 @@ function extractProfilePageData() {
     if (ps.length > 0) headline = ps[0].substring(0, 200)
 
     // Company: second p — no pipe, no bullet, no comma, no "connections", len < 80
+    // Also exclude modal/dialog text (accessibility strings injected into DOM)
     if (ps.length > 1) {
       var c = ps[1]
-      if (c.indexOf('|') === -1 && c.indexOf('•') === -1 && c.indexOf(',') === -1 &&
+      var isModal = c.toLowerCase().indexOf('dialog') !== -1 || c.toLowerCase().indexOf('modal window') !== -1
+      if (!isModal && c.indexOf('|') === -1 && c.indexOf('•') === -1 && c.indexOf(',') === -1 &&
           c.toLowerCase().indexOf('connections') === -1 && c.length < 80) {
-        company = c.substring(0, 100)
+        // Clean ` · ` separators (e.g. "Granola · Marketing Week Mini MBA") — take first part
+        company = c.split(/\s*[\u00B7|•]\s*/)[0].trim().substring(0, 100)
       }
     }
 
@@ -169,7 +217,10 @@ function extractProfilePageData() {
           return /\d[\d,]* followers?/i.test(p.textContent) && p.children.length === 0
         })
         if (followerP) {
-          followers_count = followerP.textContent.trim().substring(0, 30)
+          // Extract just the number, strip " followers" suffix and commas
+          var fText = followerP.textContent.trim()
+          var fMatch = fText.match(/([\d,]+)\s*followers?/i)
+          followers_count = fMatch ? fMatch[1].replace(/,/g, '') : fText.substring(0, 20)
           break
         }
       }
@@ -323,7 +374,7 @@ function injectButton() {
       if (!data.name && refreshed.name) data.name = refreshed.name
 
       // Fetch company domain from the company page (has session cookies in content script)
-      fetchCompanyDomain(data.company_linkedin_url, function(domain) {
+      getCachedCompanyDomain(data.company_linkedin_url, function(domain) {
         if (domain) data.company_domain = domain
         setButtonState(btn, 'loading', 'Saving…')
         chrome.runtime.sendMessage({ type: 'SAVE_CONTACT', data: data }, function(response) {
@@ -375,12 +426,15 @@ function removeButton() {
 
 // Inject on load
 if (isProfilePage()) {
-  // Wait for DOM to be ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', injectButton)
   } else {
     setTimeout(injectButton, 800)
   }
+}
+// Cache company domain when on a company page
+if (isCompanyPage()) {
+  setTimeout(extractAndCacheCompanyDomain, 2000)
 }
 
 // Handle LinkedIn's SPA navigation (URL changes without page reload)
@@ -392,6 +446,9 @@ var navObserver = new MutationObserver(function() {
     removeButton()
     if (isProfilePage()) {
       setTimeout(injectButton, 800)
+    }
+    if (isCompanyPage()) {
+      setTimeout(extractAndCacheCompanyDomain, 2000)
     }
   }
 })
@@ -406,7 +463,7 @@ chrome.runtime.onMessage.addListener(function(message, _sender, sendResponse) {
   }
   var data = extractProfilePageData()
   // Fetch company domain async, then respond
-  fetchCompanyDomain(data.company_linkedin_url, function(domain) {
+  getCachedCompanyDomain(data.company_linkedin_url, function(domain) {
     if (domain) data.company_domain = domain
     sendResponse(data)
   })
