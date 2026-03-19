@@ -342,6 +342,7 @@ function injectButton() {
     })
     })
   })
+  })
 
   document.body.appendChild(btn)
 }
