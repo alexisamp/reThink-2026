@@ -32,6 +32,7 @@ import MilestoneDetailModal from '@/components/MilestoneDetailModal'
 import HabitEditModal from '@/components/HabitEditModal'
 import OutreachPanel from '@/components/OutreachPanel'
 import { useGeminiScorer, hasGeminiKey } from '@/hooks/useGeminiScorer'
+import { getSettings } from '@/lib/userSettings'
 
 const FOCUS_DURATIONS = [
   { label: '25', minutes: 25, desc: 'Pomodoro' },
@@ -1515,7 +1516,7 @@ export default function Today() {
                         {isExpanded && (
                           <div className="mt-1.5 ml-1 flex items-center flex-wrap gap-3 text-[10px] text-shuttle/50">
                             {habit.default_time && <span className="font-mono">{habit.default_time}</span>}
-                            {(() => { const adh = getAdherence(habit.id); return adh < 90 ? <span>{adh}% adherence</span> : null })()}
+                            {(() => { const adh = getAdherence(habit.id); return adh < getSettings().adherenceTarget ? <span>{adh}% adherence</span> : null })()}
                             {(() => {
                               const days = ['S','M','T','W','T','F','S']
                               const scheduled = habit.scheduled_days

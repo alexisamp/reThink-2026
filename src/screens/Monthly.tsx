@@ -5,6 +5,7 @@ import { House, CaretLeft, CaretRight, ArrowSquareOut, TrashSimple } from '@phos
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { getSettings } from '@/lib/userSettings'
 import type {
   Goal,
   LeadingIndicator,
@@ -24,9 +25,10 @@ const MONTH_NAMES = [
 
 function getHabitGrade(completedDays: number, daysElapsed: number): { grade: string; color: string } {
   const pct = daysElapsed > 0 ? (completedDays / daysElapsed) * 100 : 0
-  if (pct >= 90) return { grade: 'A', color: 'text-burnham bg-gossip' }
-  if (pct >= 75) return { grade: 'B', color: 'text-burnham bg-pastel/30' }
-  if (pct >= 60) return { grade: 'C', color: 'text-shuttle bg-mercury/40' }
+  const s = getSettings()
+  if (pct >= s.gradeA) return { grade: 'A', color: 'text-burnham bg-gossip' }
+  if (pct >= s.gradeB) return { grade: 'B', color: 'text-burnham bg-pastel/30' }
+  if (pct >= s.gradeC) return { grade: 'C', color: 'text-shuttle bg-mercury/40' }
   return { grade: 'D', color: 'text-shuttle bg-mercury/20' }
 }
 

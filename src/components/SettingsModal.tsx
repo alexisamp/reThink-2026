@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   X, ArrowClockwise, CheckCircle, WarningCircle, DownloadSimple, RocketLaunch,
   Eye, EyeSlash, TrashSimple, Plugs, FunnelSimple, ArrowsClockwise,
-  PuzzlePiece, UserCircle, Bell, Timer, SignOut,
+  PuzzlePiece, UserCircle, Bell, Timer, SignOut, ChartBar,
 } from '@phosphor-icons/react'
 import type { UpdaterState } from '@/hooks/useUpdater'
 import { supabase } from '@/lib/supabase'
@@ -22,15 +22,16 @@ interface SettingsModalProps {
   }
 }
 
-type Section = 'profile' | 'notifications' | 'focus' | 'integrations' | 'funnel' | 'updates'
+type Section = 'profile' | 'notifications' | 'focus' | 'performance' | 'integrations' | 'funnel' | 'updates'
 
 const SECTIONS: { id: Section; label: string; description: string; Icon: React.ElementType }[] = [
-  { id: 'profile',       label: 'Profile',              description: 'Your account info and sign out.',                Icon: UserCircle },
-  { id: 'notifications', label: 'Notifications',         description: 'Configure when the app sends reminders.',       Icon: Bell },
-  { id: 'focus',         label: 'Focus',                 description: 'Pomodoro defaults and ambient sound.',          Icon: Timer },
-  { id: 'integrations',  label: 'Integrations',          description: 'Connect external tools and services.',          Icon: Plugs },
-  { id: 'funnel',        label: 'Relationship Funnel',   description: 'Customize your pipeline stages and criteria.',  Icon: FunnelSimple },
-  { id: 'updates',       label: 'Updates',               description: 'Manage app version and auto-update settings.',  Icon: ArrowsClockwise },
+  { id: 'profile',       label: 'Profile',              description: 'Your account info and sign out.',                  Icon: UserCircle },
+  { id: 'notifications', label: 'Notifications',         description: 'Configure when the app sends reminders.',         Icon: Bell },
+  { id: 'focus',         label: 'Focus',                 description: 'Pomodoro defaults and ambient sound.',            Icon: Timer },
+  { id: 'performance',   label: 'Performance',           description: 'Habit grading thresholds and adherence targets.',  Icon: ChartBar },
+  { id: 'integrations',  label: 'Integrations',          description: 'Connect external tools and services.',            Icon: Plugs },
+  { id: 'funnel',        label: 'Relationship Funnel',   description: 'Customize your pipeline stages and criteria.',    Icon: FunnelSimple },
+  { id: 'updates',       label: 'Updates',               description: 'Manage app version and auto-update settings.',    Icon: ArrowsClockwise },
 ]
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -39,6 +40,8 @@ const FOCUS_DURATIONS = [
   { minutes: 52, label: '52 min', desc: 'Ultradian' },
   { minutes: 90, label: '90 min', desc: 'Deep Work' },
 ]
+const SHORT_BREAKS = [5, 10, 15]
+const LONG_BREAKS  = [15, 20, 30]
 
 export default function SettingsModal({ open, onClose, updater }: SettingsModalProps) {
   const [section, setSection] = useState<Section>('profile')
@@ -151,38 +154,46 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
 
   return (
     <div
-      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/25 backdrop-blur-[3px]"
+      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-[4px]"
       onClick={onClose}
     >
       <div
-        className="w-[820px] h-[580px] bg-white rounded-2xl shadow-2xl overflow-hidden flex border border-mercury/70"
-        style={{ boxShadow: '0 24px 64px rgba(0,55,32,0.14), 0 4px 16px rgba(0,0,0,0.08)' }}
+        className="w-[960px] h-[660px] bg-white rounded-2xl shadow-2xl overflow-hidden flex border border-mercury/60 relative"
+        style={{ boxShadow: '0 32px 80px rgba(0,55,32,0.16), 0 4px 20px rgba(0,0,0,0.10)' }}
         onClick={e => e.stopPropagation()}
       >
+        {/* ── Close button ── */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 w-7 h-7 flex items-center justify-center rounded-full text-shuttle/40 hover:text-shuttle hover:bg-mercury/50 transition-all"
+        >
+          <X size={14} />
+        </button>
+
         {/* ── Left Sidebar ── */}
-        <div className="w-[210px] bg-[#F8FAF8] border-r border-mercury/50 flex flex-col shrink-0">
+        <div className="w-[220px] bg-[#F5F7F5] border-r border-mercury/50 flex flex-col shrink-0">
 
           {/* User identity */}
-          <div className="px-4 pt-5 pb-4">
-            <div className="flex items-center gap-2.5">
+          <div className="px-5 pt-6 pb-5">
+            <div className="flex items-center gap-3">
               {avatarUrl ? (
-                <img src={avatarUrl} alt="" className="w-9 h-9 rounded-full shrink-0 ring-1 ring-mercury" />
+                <img src={avatarUrl} alt="" className="w-10 h-10 rounded-full shrink-0 ring-2 ring-white shadow-sm" />
               ) : (
-                <div className="w-9 h-9 rounded-full bg-burnham flex items-center justify-center text-white text-sm font-bold shrink-0">
+                <div className="w-10 h-10 rounded-full bg-burnham flex items-center justify-center text-white text-sm font-bold shrink-0">
                   {initials}
                 </div>
               )}
               <div className="overflow-hidden min-w-0">
-                <p className="text-xs font-semibold text-burnham truncate leading-tight">{fullName || 'User'}</p>
-                <p className="text-[10px] text-shuttle/55 truncate leading-tight mt-0.5">{email}</p>
+                <p className="text-sm font-semibold text-burnham truncate leading-tight">{fullName || 'User'}</p>
+                <p className="text-xs text-shuttle/50 truncate leading-tight mt-0.5">{email}</p>
               </div>
             </div>
           </div>
 
-          <div className="mx-4 border-t border-mercury/50" />
+          <div className="mx-4 border-t border-mercury/60" />
 
           {/* Nav items */}
-          <nav className="flex-1 px-2 py-3 space-y-0.5">
+          <nav className="flex-1 px-3 py-3 space-y-0.5">
             {SECTIONS.map(({ id, label, Icon }) => {
               const isActive = section === id
               const isUpdates = id === 'updates'
@@ -191,86 +202,72 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                   key={id}
                   onClick={() => setSection(id)}
                   className={[
-                    'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all duration-150 text-left',
+                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150 text-left',
                     isActive
-                      ? 'bg-gossip/70 text-burnham font-medium shadow-sm'
-                      : 'text-shuttle hover:bg-mercury/40 hover:text-burnham',
+                      ? 'bg-gossip/60 text-burnham font-medium shadow-sm'
+                      : 'text-shuttle hover:bg-mercury/50 hover:text-burnham',
                   ].join(' ')}
                 >
-                  <Icon size={14} weight={isActive ? 'bold' : 'regular'} className="shrink-0" />
+                  <Icon size={16} weight={isActive ? 'bold' : 'regular'} className="shrink-0" />
                   <span className="flex-1">{label}</span>
                   {isUpdates && showUpdateDot && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-pastel shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-pastel shrink-0" />
                   )}
                 </button>
               )
             })}
           </nav>
-
-          {/* Close */}
-          <div className="px-3 pb-4">
-            <button
-              onClick={onClose}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-shuttle/60 hover:text-shuttle hover:bg-mercury/30 rounded-lg transition-all"
-            >
-              <X size={13} />
-              Close
-            </button>
-          </div>
         </div>
 
         {/* ── Right Content ── */}
         <div className="flex-1 flex flex-col overflow-hidden">
 
           {/* Section header */}
-          <div className="px-8 pt-7 pb-5 border-b border-mercury/40">
-            <h1 className="text-base font-semibold text-burnham tracking-tight">
+          <div className="px-9 pt-8 pb-5 border-b border-mercury/40">
+            <h1 className="text-lg font-semibold text-burnham tracking-tight">
               {SECTIONS.find(s => s.id === section)?.label}
             </h1>
-            <p className="text-[11px] text-shuttle/55 mt-0.5">
+            <p className="text-xs text-shuttle/60 mt-0.5">
               {SECTIONS.find(s => s.id === section)?.description}
             </p>
           </div>
 
           {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto px-8 py-6">
+          <div className="flex-1 overflow-y-auto px-9 py-7">
 
             {/* ── PROFILE ── */}
             {section === 'profile' && (
               <div className="space-y-5">
-                {/* Avatar + name block */}
-                <div className="flex items-center gap-4 p-4 border border-mercury/70 rounded-xl bg-[#FAFAF9]">
+                <div className="flex items-center gap-5 p-5 border border-mercury/70 rounded-2xl bg-[#FAFAF9]">
                   {avatarUrl ? (
-                    <img src={avatarUrl} alt="" className="w-14 h-14 rounded-full ring-2 ring-mercury shrink-0" />
+                    <img src={avatarUrl} alt="" className="w-16 h-16 rounded-full ring-2 ring-white shadow-md shrink-0" />
                   ) : (
-                    <div className="w-14 h-14 rounded-full bg-burnham flex items-center justify-center text-white text-xl font-bold shrink-0">
+                    <div className="w-16 h-16 rounded-full bg-burnham flex items-center justify-center text-white text-2xl font-bold shrink-0">
                       {initials}
                     </div>
                   )}
                   <div>
-                    <p className="text-sm font-semibold text-burnham">{fullName || 'User'}</p>
-                    <p className="text-xs text-shuttle/60 mt-0.5">{email}</p>
-                    <p className="text-[10px] text-shuttle/40 mt-1">Signed in with Google</p>
+                    <p className="text-base font-semibold text-burnham">{fullName || 'User'}</p>
+                    <p className="text-sm text-shuttle/60 mt-0.5">{email}</p>
+                    <p className="text-xs text-shuttle/40 mt-1.5">Signed in with Google</p>
                   </div>
                 </div>
 
-                {/* App version */}
                 <SettingRow
                   label="App version"
                   description="Your current installed version of reThink."
                 >
-                  <span className="text-xs font-mono text-burnham bg-mercury/30 px-2.5 py-1 rounded-md">
+                  <span className="text-xs font-mono text-burnham bg-mercury/30 px-3 py-1.5 rounded-lg">
                     {appVersion ? `v${appVersion}` : '—'}
                   </span>
                 </SettingRow>
 
-                {/* Sign out */}
                 <div className="pt-1">
                   <button
                     onClick={() => { supabase.auth.signOut(); onClose() }}
-                    className="flex items-center gap-2 text-xs text-red-500 hover:text-red-600 border border-red-200 hover:border-red-300 px-4 py-2 rounded-lg transition-all hover:bg-red-50"
+                    className="flex items-center gap-2 text-sm text-red-500 hover:text-red-600 border border-red-200 hover:border-red-300 px-4 py-2 rounded-xl transition-all hover:bg-red-50"
                   >
-                    <SignOut size={13} />
+                    <SignOut size={15} />
                     Sign out
                   </button>
                 </div>
@@ -280,8 +277,6 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
             {/* ── NOTIFICATIONS ── */}
             {section === 'notifications' && (
               <div className="space-y-px">
-
-                {/* Morning Brief */}
                 <NotifRow
                   label="Morning Brief"
                   description="Daily summary of your habits and One Thing."
@@ -291,7 +286,6 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                   onTimeChange={v => updateSettings({ notifMorningTime: v })}
                 />
 
-                {/* Streak at Risk */}
                 <NotifRow
                   label="Streak at Risk"
                   description="Evening reminder for habits not yet logged."
@@ -302,12 +296,10 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                 />
 
                 {/* Weekly Review */}
-                <div className="flex items-start justify-between gap-4 py-3.5 border-b border-mercury/40 last:border-0">
-                  <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-burnham leading-tight">Weekly Review</p>
-                      <p className="text-[10px] text-shuttle/50 mt-0.5">Reminder to complete your weekly review.</p>
-                    </div>
+                <div className="flex items-start justify-between gap-4 py-4 border-b border-mercury/40 last:border-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-burnham leading-tight">Weekly Review</p>
+                    <p className="text-xs text-shuttle/50 mt-0.5">Reminder to complete your weekly review.</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {settings.notifWeeklyEnabled && (
@@ -315,7 +307,7 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                         <select
                           value={settings.notifWeeklyDay}
                           onChange={e => updateSettings({ notifWeeklyDay: Number(e.target.value) })}
-                          className="text-[11px] text-burnham border border-mercury rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
+                          className="text-xs text-burnham border border-mercury rounded-xl px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
                         >
                           {DAYS.map((d, i) => (
                             <option key={d} value={i}>{d}</option>
@@ -325,7 +317,7 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                           type="time"
                           value={settings.notifWeeklyTime}
                           onChange={e => updateSettings({ notifWeeklyTime: e.target.value })}
-                          className="text-[11px] text-burnham border border-mercury rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
+                          className="text-xs text-burnham border border-mercury rounded-xl px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
                         />
                       </>
                     )}
@@ -336,47 +328,110 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                   </div>
                 </div>
 
+                {/* Morning Ritual window */}
+                <div className="flex items-start justify-between gap-4 py-4 border-b border-mercury/40 last:border-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-burnham leading-tight">Morning Ritual window</p>
+                    <p className="text-xs text-shuttle/50 mt-0.5">Time window when the Morning Ritual wizard appears.</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-shuttle/50">from</span>
+                    <input
+                      type="time"
+                      value={settings.morningRitualStart}
+                      onChange={e => updateSettings({ morningRitualStart: e.target.value })}
+                      className="text-xs text-burnham border border-mercury rounded-xl px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
+                    />
+                    <span className="text-xs text-shuttle/50">to</span>
+                    <input
+                      type="time"
+                      value={settings.morningRitualEnd}
+                      onChange={e => updateSettings({ morningRitualEnd: e.target.value })}
+                      className="text-xs text-burnham border border-mercury rounded-xl px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
             {/* ── FOCUS ── */}
             {section === 'focus' && (
-              <div className="space-y-6">
+              <div className="space-y-7">
 
-                {/* Default duration */}
                 <div>
-                  <p className="text-xs font-medium text-burnham mb-1">Default session duration</p>
-                  <p className="text-[10px] text-shuttle/50 mb-3">Sets the timer when you open a new focus session.</p>
+                  <p className="text-sm font-medium text-burnham mb-1">Default session duration</p>
+                  <p className="text-xs text-shuttle/50 mb-3">Sets the timer when you open a new focus session.</p>
                   <div className="flex gap-2">
                     {FOCUS_DURATIONS.map(({ minutes, label, desc }) => (
                       <button
                         key={minutes}
                         onClick={() => updateSettings({ focusDefaultMinutes: minutes })}
                         className={[
-                          'flex-1 py-2.5 px-3 rounded-xl border text-xs transition-all',
+                          'flex-1 py-3 px-3 rounded-xl border text-sm transition-all',
                           settings.focusDefaultMinutes === minutes
                             ? 'border-burnham bg-burnham/5 text-burnham font-semibold'
                             : 'border-mercury text-shuttle hover:border-shuttle/40 hover:text-burnham',
                         ].join(' ')}
                       >
-                        <div className="font-semibold text-sm">{label}</div>
-                        <div className="text-[10px] opacity-60 mt-0.5">{desc}</div>
+                        <div className="font-semibold">{label}</div>
+                        <div className="text-xs opacity-60 mt-0.5">{desc}</div>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Ambient sound default */}
                 <div>
-                  <p className="text-xs font-medium text-burnham mb-1">Default ambient sound</p>
-                  <p className="text-[10px] text-shuttle/50 mb-3">Plays automatically when a focus session starts.</p>
+                  <p className="text-sm font-medium text-burnham mb-1">Short break</p>
+                  <p className="text-xs text-shuttle/50 mb-3">Duration after each focus session.</p>
+                  <div className="flex gap-2">
+                    {SHORT_BREAKS.map(m => (
+                      <button
+                        key={m}
+                        onClick={() => updateSettings({ focusShortBreak: m })}
+                        className={[
+                          'flex-1 py-2.5 px-3 rounded-xl border text-sm transition-all',
+                          settings.focusShortBreak === m
+                            ? 'border-burnham bg-burnham/5 text-burnham font-semibold'
+                            : 'border-mercury text-shuttle hover:border-shuttle/40 hover:text-burnham',
+                        ].join(' ')}
+                      >
+                        {m} min
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium text-burnham mb-1">Long break</p>
+                  <p className="text-xs text-shuttle/50 mb-3">Duration after every 4 sessions.</p>
+                  <div className="flex gap-2">
+                    {LONG_BREAKS.map(m => (
+                      <button
+                        key={m}
+                        onClick={() => updateSettings({ focusLongBreak: m })}
+                        className={[
+                          'flex-1 py-2.5 px-3 rounded-xl border text-sm transition-all',
+                          settings.focusLongBreak === m
+                            ? 'border-burnham bg-burnham/5 text-burnham font-semibold'
+                            : 'border-mercury text-shuttle hover:border-shuttle/40 hover:text-burnham',
+                        ].join(' ')}
+                      >
+                        {m} min
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium text-burnham mb-1">Default ambient sound</p>
+                  <p className="text-xs text-shuttle/50 mb-3">Plays automatically when a focus session starts.</p>
                   <div className="flex gap-2">
                     {(['none', 'brown', 'rain'] as const).map(s => (
                       <button
                         key={s}
                         onClick={() => updateSettings({ focusAmbientSound: s })}
                         className={[
-                          'flex-1 py-2 px-3 rounded-lg border text-xs transition-all',
+                          'flex-1 py-2.5 px-3 rounded-xl border text-sm transition-all',
                           settings.focusAmbientSound === s
                             ? 'border-burnham bg-burnham/5 text-burnham font-medium'
                             : 'border-mercury text-shuttle hover:border-shuttle/40 hover:text-burnham',
@@ -388,15 +443,14 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                   </div>
                 </div>
 
-                {/* Volume */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs font-medium text-burnham">Ambient volume</p>
-                    <span className="text-[10px] text-shuttle/50 font-mono">
+                    <p className="text-sm font-medium text-burnham">Ambient volume</p>
+                    <span className="text-xs text-shuttle/50 font-mono">
                       {Math.round(settings.focusAmbientVolume * 100)}%
                     </span>
                   </div>
-                  <p className="text-[10px] text-shuttle/50 mb-3">Volume level for ambient sounds during focus.</p>
+                  <p className="text-xs text-shuttle/50 mb-3">Volume level for ambient sounds during focus.</p>
                   <input
                     type="range"
                     min={0}
@@ -412,19 +466,95 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
               </div>
             )}
 
+            {/* ── PERFORMANCE ── */}
+            {section === 'performance' && (
+              <div className="space-y-6">
+
+                <SettingRow
+                  label="Adherence target"
+                  description="Adherence badge shows on a habit when it falls below this threshold."
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={50}
+                      max={100}
+                      step={5}
+                      value={settings.adherenceTarget}
+                      onChange={e => updateSettings({ adherenceTarget: Number(e.target.value) })}
+                      className="w-16 text-sm text-burnham text-center border border-mercury rounded-xl px-2 py-1.5 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
+                    />
+                    <span className="text-sm text-shuttle/60">%</span>
+                  </div>
+                </SettingRow>
+
+                <div>
+                  <p className="text-sm font-medium text-burnham mb-1">Habit grade thresholds</p>
+                  <p className="text-xs text-shuttle/50 mb-5">Minimum adherence % required to earn each grade in Monthly view.</p>
+
+                  <div className="space-y-3">
+                    {[
+                      { key: 'gradeA' as const, label: 'A', color: 'text-burnham bg-gossip border-gossip/70' },
+                      { key: 'gradeB' as const, label: 'B', color: 'text-burnham bg-pastel/30 border-pastel/40' },
+                      { key: 'gradeC' as const, label: 'C', color: 'text-shuttle bg-mercury/40 border-mercury' },
+                    ].map(({ key, label, color }) => (
+                      <div key={key} className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className={`w-7 h-7 rounded-lg border text-xs font-bold flex items-center justify-center ${color}`}>
+                            {label}
+                          </span>
+                          <span className="text-sm text-burnham">Grade {label} ≥</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={5}
+                            value={settings[key]}
+                            onChange={e => updateSettings({ [key]: Number(e.target.value) })}
+                            className="w-16 text-sm text-burnham text-center border border-mercury rounded-xl px-2 py-1.5 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
+                          />
+                          <span className="text-sm text-shuttle/60">%</span>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="flex items-center justify-between opacity-50">
+                      <div className="flex items-center gap-3">
+                        <span className="w-7 h-7 rounded-lg border text-xs font-bold flex items-center justify-center text-shuttle bg-mercury/20 border-mercury">
+                          D
+                        </span>
+                        <span className="text-sm text-burnham">Grade D &lt;</span>
+                      </div>
+                      <span className="text-sm font-mono text-shuttle/70 mr-[72px]">{settings.gradeC}%</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 px-4 py-3 rounded-xl bg-[#F5F7F5] border border-mercury/60">
+                    <p className="text-xs text-shuttle/50 mb-1.5">Grade scale preview</p>
+                    <p className="text-sm text-burnham font-mono">
+                      A ≥ {settings.gradeA}% · B ≥ {settings.gradeB}% · C ≥ {settings.gradeC}% · D &lt; {settings.gradeC}%
+                    </p>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
             {/* ── INTEGRATIONS ── */}
             {section === 'integrations' && (
               <div className="space-y-5">
 
                 <SettingCard
-                  icon={<PuzzlePiece size={15} className="text-shuttle/60" />}
+                  icon={<PuzzlePiece size={16} className="text-shuttle/60" />}
                   label="Chrome Extension"
                   description="Generate a one-time code and paste it in the extension popup to connect your account."
                 >
                   {!chromeExtCode ? (
                     <button
                       onClick={generateExtensionCode}
-                      className="px-3.5 py-1.5 text-xs font-medium bg-burnham text-white rounded-lg hover:bg-burnham/90 transition-colors"
+                      className="px-4 py-2 text-sm font-medium bg-burnham text-white rounded-xl hover:bg-burnham/90 transition-colors"
                     >
                       Generate connect code
                     </button>
@@ -434,11 +564,11 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                         readOnly
                         value={chromeExtCode}
                         onFocus={e => e.target.select()}
-                        className="flex-1 px-2.5 py-1.5 text-[10px] font-mono bg-mercury/30 border border-mercury rounded-lg text-shuttle truncate cursor-text min-w-0"
+                        className="flex-1 px-3 py-2 text-xs font-mono bg-mercury/30 border border-mercury rounded-xl text-shuttle truncate cursor-text min-w-0"
                       />
                       <button
                         onClick={copyExtensionCode}
-                        className="shrink-0 px-3 py-1.5 text-xs font-medium bg-burnham text-white rounded-lg hover:bg-burnham/90 transition-colors"
+                        className="shrink-0 px-4 py-2 text-sm font-medium bg-burnham text-white rounded-xl hover:bg-burnham/90 transition-colors"
                       >
                         {chromeExtCopied ? 'Copied ✓' : 'Copy'}
                       </button>
@@ -447,7 +577,7 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                 </SettingCard>
 
                 <SettingCard
-                  icon={<Plugs size={15} className="text-shuttle/60" />}
+                  icon={<Plugs size={16} className="text-shuttle/60" />}
                   label="Attio API key"
                   description="Connect your Attio workspace to sync contacts and activities."
                 >
@@ -460,24 +590,24 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                         onBlur={saveAttioKey}
                         onKeyDown={e => { if (e.key === 'Enter') saveAttioKey() }}
                         placeholder="Bearer token…"
-                        className="w-full text-xs text-burnham border border-mercury rounded-lg px-3 py-2 pr-8 focus:outline-none focus:border-shuttle/50 transition-colors bg-white"
+                        className="w-full text-sm text-burnham border border-mercury rounded-xl px-3 py-2 pr-9 focus:outline-none focus:border-shuttle/50 transition-colors bg-white"
                       />
                       <button
                         type="button"
                         onClick={() => setAttioKeyVisible(v => !v)}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-shuttle/40 hover:text-shuttle transition-colors"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-shuttle/40 hover:text-shuttle transition-colors"
                       >
-                        {attioKeyVisible ? <EyeSlash size={13} /> : <Eye size={13} />}
+                        {attioKeyVisible ? <EyeSlash size={14} /> : <Eye size={14} />}
                       </button>
                     </div>
                     <button
                       onClick={saveAttioKey}
-                      className="shrink-0 px-3.5 py-2 text-xs font-medium bg-burnham text-white rounded-lg hover:bg-burnham/90 transition-colors"
+                      className="shrink-0 px-4 py-2 text-sm font-medium bg-burnham text-white rounded-xl hover:bg-burnham/90 transition-colors"
                     >
                       Save
                     </button>
                   </div>
-                  <p className="text-[10px] mt-1.5 font-mono">
+                  <p className="text-xs mt-2 font-mono">
                     {attioSaved
                       ? <span className="text-pastel">Saved ✓</span>
                       : attioKey.trim()
@@ -496,7 +626,7 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                   const cfg = getStageConfig(status)
                   const isDeletable = !UNDELETABLE_STAGES.includes(status)
                   return (
-                    <div key={status} className="border border-mercury rounded-xl p-4 space-y-3 bg-white">
+                    <div key={status} className="border border-mercury rounded-2xl p-5 space-y-3 bg-white">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-shuttle/60">{status}</span>
                         {isDeletable && (
@@ -505,45 +635,45 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                             className="text-shuttle/30 hover:text-red-400 transition-colors p-1 rounded hover:bg-red-50"
                             title={`Delete ${status} stage`}
                           >
-                            <TrashSimple size={12} />
+                            <TrashSimple size={13} />
                           </button>
                         )}
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-[9px] text-shuttle/50 uppercase tracking-wide block mb-1">Label</label>
+                          <label className="text-[10px] text-shuttle/50 uppercase tracking-wide block mb-1">Label</label>
                           <input
                             type="text"
                             defaultValue={cfg.label}
                             onBlur={e => updateStage(status, { label: e.target.value })}
-                            className="w-full text-xs text-burnham border border-mercury rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-shuttle/50 transition-colors bg-[#FAFAF9]"
+                            className="w-full text-sm text-burnham border border-mercury rounded-xl px-3 py-2 focus:outline-none focus:border-shuttle/50 transition-colors bg-[#FAFAF9]"
                           />
                         </div>
                         <div>
-                          <label className="text-[9px] text-shuttle/50 uppercase tracking-wide block mb-1">Description</label>
+                          <label className="text-[10px] text-shuttle/50 uppercase tracking-wide block mb-1">Description</label>
                           <input
                             type="text"
                             defaultValue={cfg.description}
                             onBlur={e => updateStage(status, { description: e.target.value })}
-                            className="w-full text-xs text-burnham border border-mercury rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-shuttle/50 transition-colors bg-[#FAFAF9]"
+                            className="w-full text-sm text-burnham border border-mercury rounded-xl px-3 py-2 focus:outline-none focus:border-shuttle/50 transition-colors bg-[#FAFAF9]"
                           />
                         </div>
                         <div>
-                          <label className="text-[9px] text-shuttle/50 uppercase tracking-wide block mb-1">Entry criteria</label>
+                          <label className="text-[10px] text-shuttle/50 uppercase tracking-wide block mb-1">Entry criteria</label>
                           <textarea
                             rows={2}
                             defaultValue={cfg.entry_criteria}
                             onBlur={e => updateStage(status, { entry_criteria: e.target.value })}
-                            className="w-full text-xs text-burnham border border-mercury rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-shuttle/50 transition-colors resize-none bg-[#FAFAF9]"
+                            className="w-full text-sm text-burnham border border-mercury rounded-xl px-3 py-2 focus:outline-none focus:border-shuttle/50 transition-colors resize-none bg-[#FAFAF9]"
                           />
                         </div>
                         <div>
-                          <label className="text-[9px] text-shuttle/50 uppercase tracking-wide block mb-1">Exit criteria</label>
+                          <label className="text-[10px] text-shuttle/50 uppercase tracking-wide block mb-1">Exit criteria</label>
                           <textarea
                             rows={2}
                             defaultValue={cfg.exit_criteria}
                             onBlur={e => updateStage(status, { exit_criteria: e.target.value })}
-                            className="w-full text-xs text-burnham border border-mercury rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-shuttle/50 transition-colors resize-none bg-[#FAFAF9]"
+                            className="w-full text-sm text-burnham border border-mercury rounded-xl px-3 py-2 focus:outline-none focus:border-shuttle/50 transition-colors resize-none bg-[#FAFAF9]"
                           />
                         </div>
                       </div>
@@ -552,19 +682,19 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                 })}
 
                 {deletingStage && (
-                  <div className="border border-red-200 bg-red-50/60 rounded-xl p-4 space-y-3">
-                    <p className="text-xs font-semibold text-red-700">
+                  <div className="border border-red-200 bg-red-50/60 rounded-2xl p-5 space-y-3">
+                    <p className="text-sm font-semibold text-red-700">
                       Delete stage "{config[deletingStage]?.label ?? deletingStage}"?
                     </p>
-                    <p className="text-[10px] text-red-600/80">
+                    <p className="text-xs text-red-600/80">
                       All contacts in this stage will be moved to the selected stage before deletion.
                     </p>
                     <div>
-                      <label className="text-[9px] text-red-600/70 uppercase tracking-wide block mb-1">Move contacts to</label>
+                      <label className="text-[10px] text-red-600/70 uppercase tracking-wide block mb-1">Move contacts to</label>
                       <select
                         value={migrateTo}
                         onChange={e => setMigrateTo(e.target.value as ContactStatus)}
-                        className="text-xs text-burnham border border-red-200 rounded-lg px-2.5 py-1.5 bg-white focus:outline-none"
+                        className="text-sm text-burnham border border-red-200 rounded-xl px-3 py-2 bg-white focus:outline-none"
                       >
                         {FUNNEL_STAGE_ORDER.filter(s => s !== deletingStage && getActiveStages().includes(s)).map(s => (
                           <option key={s} value={s}>{config[s]?.label ?? s}</option>
@@ -574,7 +704,7 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                     <div className="flex gap-2">
                       <button
                         onClick={() => setDeletingStage(null)}
-                        className="flex-1 text-xs text-shuttle/60 border border-mercury rounded-lg px-3 py-1.5 hover:bg-mercury/20 transition-colors"
+                        className="flex-1 text-sm text-shuttle/60 border border-mercury rounded-xl px-3 py-2 hover:bg-mercury/20 transition-colors"
                       >
                         Cancel
                       </button>
@@ -585,7 +715,7 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                           setDeletingStage(null)
                           setDeleteConfirmed(false)
                         }}
-                        className="flex-1 text-xs bg-red-500 text-white rounded-lg px-3 py-1.5 hover:bg-red-600 transition-colors font-medium"
+                        className="flex-1 text-sm bg-red-500 text-white rounded-xl px-3 py-2 hover:bg-red-600 transition-colors font-medium"
                       >
                         {deleteConfirmed ? 'Confirm delete' : 'Delete stage'}
                       </button>
@@ -606,31 +736,31 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                     : 'Not checked yet this session.'
                   }
                 >
-                  <span className="text-xs font-mono text-burnham bg-mercury/30 px-2.5 py-1 rounded-md">
+                  <span className="text-sm font-mono text-burnham bg-mercury/30 px-3 py-1.5 rounded-lg">
                     {appVersion ? `v${appVersion}` : '—'}
                   </span>
                 </SettingRow>
 
                 {updater.status !== 'idle' && (
                   <div className={[
-                    'flex items-start gap-2.5 text-xs px-4 py-3 rounded-xl border',
+                    'flex items-start gap-3 text-sm px-5 py-3.5 rounded-xl border',
                     updater.status === 'error'
                       ? 'bg-red-50 text-red-600 border-red-200'
                       : updater.status === 'available' || updater.status === 'ready'
                         ? 'bg-gossip/30 text-burnham border-gossip/60'
                         : 'bg-mercury/15 text-shuttle border-mercury/40',
                   ].join(' ')}>
-                    {updater.status === 'error'      && <WarningCircle size={14} className="shrink-0 mt-0.5" />}
-                    {updater.status === 'up-to-date' && <CheckCircle size={14} className="shrink-0 mt-0.5 text-pastel" />}
-                    {updater.status === 'ready'      && <CheckCircle size={14} className="shrink-0 mt-0.5 text-pastel" />}
-                    {updater.status === 'available'  && <DownloadSimple size={14} className="shrink-0 mt-0.5 text-burnham" />}
+                    {updater.status === 'error'      && <WarningCircle size={15} className="shrink-0 mt-0.5" />}
+                    {updater.status === 'up-to-date' && <CheckCircle size={15} className="shrink-0 mt-0.5 text-pastel" />}
+                    {updater.status === 'ready'      && <CheckCircle size={15} className="shrink-0 mt-0.5 text-pastel" />}
+                    {updater.status === 'available'  && <DownloadSimple size={15} className="shrink-0 mt-0.5 text-burnham" />}
                     <span>{statusLabel[updater.status]}</span>
                   </div>
                 )}
 
                 {updater.status === 'downloading' && (
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[10px] text-shuttle/50">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-shuttle/50">
                       <span>Downloading update…</span>
                       <span>{updater.progress}%</span>
                     </div>
@@ -648,16 +778,16 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                     <button
                       onClick={updater.checkForUpdates}
                       disabled={!updater.isTauri}
-                      className="flex items-center gap-2 text-xs font-medium bg-burnham text-white px-4 py-2.5 rounded-lg hover:bg-burnham/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="flex items-center gap-2 text-sm font-medium bg-burnham text-white px-5 py-2.5 rounded-xl hover:bg-burnham/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
-                      <ArrowClockwise size={13} />
+                      <ArrowClockwise size={14} />
                       Check for updates
                     </button>
                   )}
 
                   {updater.status === 'checking' && (
-                    <div className="flex items-center gap-2 text-xs text-shuttle py-2">
-                      <div className="w-3.5 h-3.5 border border-shuttle border-t-transparent rounded-full animate-spin" />
+                    <div className="flex items-center gap-2 text-sm text-shuttle py-2">
+                      <div className="w-4 h-4 border border-shuttle border-t-transparent rounded-full animate-spin" />
                       Checking for updates…
                     </div>
                   )}
@@ -665,9 +795,9 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                   {updater.status === 'available' && (
                     <button
                       onClick={updater.downloadAndInstall}
-                      className="flex items-center gap-2 text-xs font-medium bg-burnham text-white px-4 py-2.5 rounded-lg hover:bg-burnham/90 transition-colors"
+                      className="flex items-center gap-2 text-sm font-medium bg-burnham text-white px-5 py-2.5 rounded-xl hover:bg-burnham/90 transition-colors"
                     >
-                      <DownloadSimple size={13} />
+                      <DownloadSimple size={14} />
                       Install v{updater.update?.version}
                     </button>
                   )}
@@ -675,16 +805,16 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                   {updater.status === 'ready' && (
                     <button
                       onClick={updater.restartApp}
-                      className="flex items-center gap-2 text-xs font-medium bg-gossip text-burnham px-4 py-2.5 rounded-lg hover:bg-gossip/80 transition-colors font-semibold"
+                      className="flex items-center gap-2 text-sm font-medium bg-gossip text-burnham px-5 py-2.5 rounded-xl hover:bg-gossip/80 transition-colors font-semibold"
                     >
-                      <RocketLaunch size={13} />
+                      <RocketLaunch size={14} />
                       Restart and update
                     </button>
                   )}
 
                   {updater.status === 'downloading' && (
-                    <div className="flex items-center gap-2 text-xs text-shuttle py-2">
-                      <div className="w-3.5 h-3.5 border border-shuttle border-t-transparent rounded-full animate-spin" />
+                    <div className="flex items-center gap-2 text-sm text-shuttle py-2">
+                      <div className="w-4 h-4 border border-shuttle border-t-transparent rounded-full animate-spin" />
                       Downloading {updater.progress}%
                     </div>
                   )}
@@ -711,11 +841,11 @@ function SettingRow({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3 border-b border-mercury/40 last:border-0">
+    <div className="flex items-center justify-between gap-4 py-4 border-b border-mercury/40 last:border-0">
       <div className="min-w-0">
-        <p className="text-xs font-medium text-burnham leading-tight">{label}</p>
+        <p className="text-sm font-medium text-burnham leading-tight">{label}</p>
         {description && (
-          <p className="text-[10px] text-shuttle/50 mt-0.5 leading-relaxed">{description}</p>
+          <p className="text-xs text-shuttle/50 mt-0.5 leading-relaxed">{description}</p>
         )}
       </div>
       <div className="shrink-0">{children}</div>
@@ -735,13 +865,13 @@ function SettingCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="border border-mercury/70 rounded-xl p-4 space-y-2 bg-white">
-      <div className="flex items-center gap-2">
+    <div className="border border-mercury/70 rounded-2xl p-5 space-y-3 bg-white shadow-sm">
+      <div className="flex items-center gap-2.5">
         <span className="shrink-0">{icon}</span>
-        <p className="text-xs font-semibold text-burnham">{label}</p>
+        <p className="text-sm font-semibold text-burnham">{label}</p>
       </div>
       {description && (
-        <p className="text-[10px] text-shuttle/55 leading-relaxed">{description}</p>
+        <p className="text-xs text-shuttle/55 leading-relaxed">{description}</p>
       )}
       {children}
     </div>
@@ -753,14 +883,14 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean
     <button
       onClick={() => onChange(!enabled)}
       className={[
-        'relative w-9 h-5 rounded-full transition-colors duration-200 shrink-0',
+        'relative w-10 h-[22px] rounded-full transition-colors duration-200 shrink-0',
         enabled ? 'bg-burnham' : 'bg-mercury',
       ].join(' ')}
     >
       <span
         className={[
-          'absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200',
-          enabled ? 'translate-x-4' : 'translate-x-0.5',
+          'absolute top-[3px] w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200',
+          enabled ? 'translate-x-[22px]' : 'translate-x-[3px]',
         ].join(' ')}
       />
     </button>
@@ -783,18 +913,18 @@ function NotifRow({
   onTimeChange: (v: string) => void
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 py-3.5 border-b border-mercury/40 last:border-0">
+    <div className="flex items-start justify-between gap-4 py-4 border-b border-mercury/40 last:border-0">
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-burnham leading-tight">{label}</p>
-        <p className="text-[10px] text-shuttle/50 mt-0.5">{description}</p>
+        <p className="text-sm font-medium text-burnham leading-tight">{label}</p>
+        <p className="text-xs text-shuttle/50 mt-0.5">{description}</p>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2.5 shrink-0">
         {enabled && (
           <input
             type="time"
             value={time}
             onChange={e => onTimeChange(e.target.value)}
-            className="text-[11px] text-burnham border border-mercury rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
+            className="text-xs text-burnham border border-mercury rounded-xl px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
           />
         )}
         <Toggle enabled={enabled} onChange={onToggle} />

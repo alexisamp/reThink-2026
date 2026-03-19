@@ -9,10 +9,19 @@ export interface UserSettings {
   notifWeeklyEnabled: boolean
   notifWeeklyDay: number         // 0=Sun, 1=Mon ... 6=Sat
   notifWeeklyTime: string        // 'HH:MM'
+  morningRitualStart: string     // 'HH:MM' — window when NOT_STARTED overlay appears
+  morningRitualEnd: string       // 'HH:MM'
   // Focus
   focusDefaultMinutes: number    // 25 | 52 | 90
+  focusShortBreak: number        // minutes
+  focusLongBreak: number         // minutes
   focusAmbientSound: 'none' | 'brown' | 'rain'
   focusAmbientVolume: number     // 0–1
+  // Performance
+  adherenceTarget: number        // % below which adherence badge shows (default 90)
+  gradeA: number                 // % threshold for A grade (default 90)
+  gradeB: number                 // % threshold for B grade (default 75)
+  gradeC: number                 // % threshold for C grade (default 60)
 }
 
 const DEFAULTS: UserSettings = {
@@ -23,9 +32,17 @@ const DEFAULTS: UserSettings = {
   notifWeeklyEnabled: true,
   notifWeeklyDay: 0,
   notifWeeklyTime: '17:00',
+  morningRitualStart: '05:00',
+  morningRitualEnd: '10:00',
   focusDefaultMinutes: 25,
+  focusShortBreak: 5,
+  focusLongBreak: 15,
   focusAmbientSound: 'none',
   focusAmbientVolume: 0.25,
+  adherenceTarget: 90,
+  gradeA: 90,
+  gradeB: 75,
+  gradeC: 60,
 }
 
 const KEY = 'rethink_settings'
