@@ -4,6 +4,7 @@ import {
   VideoCamera, Users, CaretDown, CaretUp, Trash, Plus, Check,
 } from '@phosphor-icons/react'
 import { useInteractions } from '@/hooks/useInteractions'
+import { useContactEnricher, hasGeminiEnrichKey } from '@/hooks/useContactEnricher'
 import { hasAttioKey, pullFromAttio, diffAttioFields } from '@/lib/attio'
 import {
   DEFAULT_FUNNEL_CONFIG,
@@ -110,6 +111,9 @@ export default function ContactDetailDrawer({
   const [syncing, setSyncing] = useState(false)
   const [companyDomain, setCompanyDomain] = useState('')
   const [syncingCompany, setSyncingCompany] = useState(false)
+  const [enrichToast, setEnrichToast] = useState('')
+
+  const { enriching, enrich } = useContactEnricher()
 
   // Log form state
   const [logType, setLogType] = useState<Interaction['type']>('whatsapp')
@@ -232,6 +236,37 @@ export default function ContactDetailDrawer({
     setLogType('whatsapp')
     setLogDirection('outbound')
     setLogDate(localDate())
+  }
+
+  // ── AI enrichment ─────────────────────────────────────────────────────────
+  async function handleEnrich() {
+    if (!contact) return
+    const result = await enrich({
+      name: contact.name,
+      company: contact.company,
+      job_title: contact.job_title,
+      about: contact.about,
+    })
+    if (!result) return
+    const updates: Partial<Contact> = {}
+    if (result.company_domain && !contact.company_domain) {
+      updates.company_domain = result.company_domain
+      setCompanyDomain(result.company_domain)
+    }
+    if (result.skills_suggestions?.length && !contact.skills) {
+      const skillsStr = result.skills_suggestions.join(', ')
+      updates.skills = skillsStr
+      setSkillsList(result.skills_suggestions)
+      setSkillsInput(skillsStr)
+    }
+    if (result.enriched_about && !contact.about) {
+      updates.about = result.enriched_about
+    }
+    if (Object.keys(updates).length > 0) {
+      await onUpdate(contact.id, updates)
+    }
+    setEnrichToast(Object.keys(updates).length > 0 ? '✨ Enriched!' : '✨ Nothing new found')
+    setTimeout(() => setEnrichToast(''), 3000)
   }
 
   // ── sync to Attio ─────────────────────────────────────────────────────────
@@ -692,7 +727,20 @@ export default function ContactDetailDrawer({
             </div>
 
             {/* ── Actions footer ───────────────────────────────────────────── */}
-            <div className="p-4 border-t border-mercury mt-auto sticky bottom-0 bg-white flex items-center gap-3">
+            <div className="p-4 border-t border-mercury mt-auto sticky bottom-0 bg-white flex flex-col gap-2">
+              {(enrichToast || attioToast) && (
+                <p className="text-[11px] text-center text-pastel font-medium">{enrichToast || attioToast}</p>
+              )}
+              <div className="flex items-center gap-3">
+              {hasGeminiEnrichKey() && (
+                <button
+                  onClick={handleEnrich}
+                  disabled={enriching}
+                  className="flex-1 text-xs font-medium text-shuttle border border-shuttle/20 hover:border-shuttle/50 rounded-lg px-3 py-2 transition-colors disabled:opacity-40"
+                >
+                  {enriching ? 'Enriching…' : '✨ Enrich with AI'}
+                </button>
+              )}
               {attioEligible && (
                 <button
                   onClick={handleSyncToAttio}
@@ -727,14 +775,8 @@ export default function ContactDetailDrawer({
                   Delete person
                 </button>
               )}
-            </div>
-
-            {/* ── Attio toast ──────────────────────────────────────────────── */}
-            {attioToast && (
-              <div className="fixed bottom-20 right-4 z-[300] bg-burnham text-white text-xs px-3 py-2 rounded-lg shadow-lg transition-all">
-                {attioToast}
               </div>
-            )}
+            </div>
           </>
         )}
       </div>
