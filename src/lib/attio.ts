@@ -355,12 +355,14 @@ export async function pullFromAttio(recordId: string): Promise<{
     const emailArr = v['email_addresses'] as Array<{ email_address?: string }> | undefined
     const phoneArr = v['phone_numbers'] as Array<{ phone_number?: string }> | undefined
     const locArr = v['primary_location'] as Array<{ locality?: string }> | undefined
+    // job_title in Attio v2 is an array of objects [{value: "...", active_from: ..., ...}]
+    const jobTitleArr = v['job_title'] as Array<{ value?: string }> | undefined
 
     return {
       name: nameArr?.[0]?.full_name,
       email: emailArr?.[0]?.email_address,
       phone: phoneArr?.[0]?.phone_number,
-      job_title: v['job_title'] as string | undefined,
+      job_title: jobTitleArr?.[0]?.value,
       location: locArr?.[0]?.locality,
     }
   } catch { return null }
