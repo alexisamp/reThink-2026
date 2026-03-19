@@ -215,9 +215,10 @@ export async function syncFullContact(contact: {
   health_score?: number | null
   skills?: string | null
   notes?: string | null
-  followers_count?: string | null
-  connections_count?: string | null
+  followers_count?: number | string | null
+  connections_count?: number | string | null
   company_domain?: string | null
+  company_linkedin_url?: string | null
   attio_company_id?: string | null
 }, options?: { includeNotes?: boolean }): Promise<{ record_id: string }> {
   const apiKey = getApiKey()
