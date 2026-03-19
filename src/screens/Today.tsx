@@ -375,7 +375,16 @@ export default function Today() {
   const calToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Focus timer
-  const [timerDuration, setTimerDuration] = useState(25)
+  const [timerDuration, setTimerDuration] = useState(() => {
+    try {
+      const raw = localStorage.getItem('rethink_settings')
+      if (raw) {
+        const s = JSON.parse(raw) as { focusDefaultMinutes?: number }
+        if (s.focusDefaultMinutes) return s.focusDefaultMinutes
+      }
+    } catch {}
+    return 25
+  })
   const [timerElapsed, setTimerElapsed] = useState(0)
   const [timerRunning, setTimerRunning] = useState(false)
   const [timerGoalId, setTimerGoalId] = useState<string | null>(null)
@@ -526,7 +535,16 @@ export default function Today() {
   const [showIntentionInput, setShowIntentionInput] = useState(false)
   const [timerHabitId, setTimerHabitId] = useState<string | null>(null)
   const [timerTodoId, setTimerTodoId] = useState<string | null>(null)
-  const [ambientSound, setAmbientSound] = useState<'brown' | 'rain' | 'none'>('none')
+  const [ambientSound, setAmbientSound] = useState<'brown' | 'rain' | 'none'>(() => {
+    try {
+      const raw = localStorage.getItem('rethink_settings')
+      if (raw) {
+        const s = JSON.parse(raw) as { focusAmbientSound?: string }
+        if (s.focusAmbientSound === 'brown' || s.focusAmbientSound === 'rain') return s.focusAmbientSound
+      }
+    } catch {}
+    return 'none'
+  })
   const [timerStartedAt, setTimerStartedAt] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -732,7 +750,10 @@ export default function Today() {
     if (timerRunning && ambientSound !== 'none') {
       const audio = new Audio(`/sounds/${ambientSound}-noise.mp3`)
       audio.loop = true
-      audio.volume = 0.25
+      try {
+        const raw = localStorage.getItem('rethink_settings')
+        audio.volume = raw ? (JSON.parse(raw) as { focusAmbientVolume?: number }).focusAmbientVolume ?? 0.25 : 0.25
+      } catch { audio.volume = 0.25 }
       audioRef.current = audio
       audio.play().catch(() => {})
     } else {

@@ -1,4 +1,5 @@
 import type { Habit, Milestone, Review } from '@/types'
+import { getSettings } from '@/lib/userSettings'
 
 export type NotificationTrigger = {
   type: 'morning_brief' | 'habit_reminder' | 'streak_at_risk' | 'milestone_approaching' | 'weekly_review'
@@ -21,32 +22,42 @@ export function checkNotificationTriggers(opts: {
   const minute = now.getMinutes()
   const dayOfWeek = now.getDay() // 0=Sun, 6=Sat
   const triggers: NotificationTrigger[] = []
+  const s = getSettings()
 
-  // Morning brief: 8:00 AM
-  if (hour === 8 && minute === 0) {
-    const undoneCount = opts.habits.filter(h =>
-      !opts.todayLogs.some(l => l.habit_id === h.id && l.value === 1)
-    ).length
-    triggers.push({
-      type: 'morning_brief',
-      habitCount: undoneCount,
-      oneThing: opts.review?.one_thing ?? undefined,
-    })
+  // Morning brief
+  if (s.notifMorningEnabled) {
+    const [mH, mM] = s.notifMorningTime.split(':').map(Number)
+    if (hour === mH && minute === mM) {
+      const undoneCount = opts.habits.filter(h =>
+        !opts.todayLogs.some(l => l.habit_id === h.id && l.value === 1)
+      ).length
+      triggers.push({
+        type: 'morning_brief',
+        habitCount: undoneCount,
+        oneThing: opts.review?.one_thing ?? undefined,
+      })
+    }
   }
 
-  // Streak at risk: 8 PM, habits not logged
-  if (hour === 20 && minute === 0) {
-    for (const habit of opts.habits) {
-      const logged = opts.todayLogs.some(l => l.habit_id === habit.id && l.value === 1)
-      if (!logged) {
-        triggers.push({ type: 'streak_at_risk', habitName: habit.text })
+  // Streak at risk
+  if (s.notifEveningEnabled) {
+    const [eH, eM] = s.notifEveningTime.split(':').map(Number)
+    if (hour === eH && minute === eM) {
+      for (const habit of opts.habits) {
+        const logged = opts.todayLogs.some(l => l.habit_id === habit.id && l.value === 1)
+        if (!logged) {
+          triggers.push({ type: 'streak_at_risk', habitName: habit.text })
+        }
       }
     }
   }
 
-  // Weekly review: Sunday 5 PM
-  if (dayOfWeek === 0 && hour === 17 && minute === 0) {
-    triggers.push({ type: 'weekly_review' })
+  // Weekly review
+  if (s.notifWeeklyEnabled) {
+    const [wH, wM] = s.notifWeeklyTime.split(':').map(Number)
+    if (dayOfWeek === s.notifWeeklyDay && hour === wH && minute === wM) {
+      triggers.push({ type: 'weekly_review' })
+    }
   }
 
   // Milestone approaching: 3 days before target_date
