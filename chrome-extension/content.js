@@ -256,39 +256,53 @@ function extractProfilePageData() {
 
   var company_linkedin_url = extractCompanyLinkedInUrl()
 
-  // Profile photo: try multiple selectors in order
+  // Profile photo: try multiple selectors + data-delayed-url (LinkedIn lazy-loads photos)
   var profile_photo_url = null
+  function extractPhotoUrl(el) {
+    if (!el) return null
+    // Try src first, then data-delayed-url (lazy loading), then data-ghost-url
+    var url = el.src || el.getAttribute('data-delayed-url') || el.getAttribute('data-ghost-url') || ''
+    if (url && url.indexOf('media.licdn.com') !== -1) return url.split('?')[0]
+    return null
+  }
   var photoSelectors = [
     'img.pv-top-card-profile-picture__image--show',
+    'img.pv-top-card-profile-picture__image',
     'img.profile-photo-edit__preview',
+    'img.EntityPhoto-circle-5',
+    'img[data-ghost-classes]',
   ]
   for (var pi = 0; pi < photoSelectors.length; pi++) {
     try {
       var photoEl = document.querySelector(photoSelectors[pi])
-      if (photoEl && photoEl.src && photoEl.src.indexOf('media.licdn.com') !== -1) {
-        profile_photo_url = photoEl.src.split('?')[0]
-        break
-      }
+      var extracted = extractPhotoUrl(photoEl)
+      if (extracted) { profile_photo_url = extracted; break }
     } catch (_) {}
   }
-  // Fallback: img[data-ghost-classes] with media.licdn.com src
+  // Fallback: scan ALL imgs on page for media.licdn.com/dms/image profile photo pattern
   if (!profile_photo_url) {
     try {
-      var ghostImg = document.querySelector('img[data-ghost-classes]')
-      if (ghostImg && ghostImg.src && ghostImg.src.indexOf('media.licdn.com') !== -1) {
-        profile_photo_url = ghostImg.src.split('?')[0]
+      var allImgs = Array.from(document.querySelectorAll('img'))
+      for (var ii = 0; ii < allImgs.length; ii++) {
+        var candidate = extractPhotoUrl(allImgs[ii])
+        // Profile photos contain "profile-display" in the URL
+        if (candidate && candidate.indexOf('profile-display') !== -1) {
+          profile_photo_url = candidate
+          break
+        }
       }
     } catch (_) {}
   }
-  // Fallback: any img near top-card with media.licdn.com/dms/image
+  // Last resort: any img near top-card with media.licdn.com/dms/image
   if (!profile_photo_url) {
     try {
       var topCard = document.querySelector('.pv-top-card') || document.querySelector('.artdeco-card')
       if (topCard) {
         var imgs = Array.from(topCard.querySelectorAll('img'))
         for (var ii = 0; ii < imgs.length; ii++) {
-          if (imgs[ii].src && imgs[ii].src.indexOf('media.licdn.com/dms/image') !== -1) {
-            profile_photo_url = imgs[ii].src.split('?')[0]
+          var candidate2 = extractPhotoUrl(imgs[ii])
+          if (candidate2 && candidate2.indexOf('media.licdn.com/dms/image') !== -1) {
+            profile_photo_url = candidate2
             break
           }
         }
