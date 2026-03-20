@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { hasAttioKey, syncFullContact, syncCompanyToAttio, pullFromAttio, diffAttioFields } from '@/lib/attio'
+import { hasAttioKey, syncFullContact, syncCompanyToAttio, syncAll as syncAllAttio, pullFromAttio, diffAttioFields } from '@/lib/attio'
 import { computeHealthScore, daysSince } from '@/lib/funnelDefaults'
 import type { Contact, ContactStatus, ContactCategory, Interaction, Habit } from '@/types'
 
@@ -193,6 +193,27 @@ export function useContacts(
     }
   }, [userId, contacts, hasAttioKey])
 
+  const syncAll = useCallback(async (contactId: string): Promise<void> => {
+    const contact = contacts.find(c => c.id === contactId)
+    if (!contact || !hasAttioKey()) return
+    setSyncing(true)
+    setSyncError(null)
+    try {
+      const result = await syncAllAttio(contact)
+      const now = new Date().toISOString()
+      const patch: Record<string, unknown> = { attio_record_id: result.person_record_id, attio_synced_at: now }
+      if (result.company_record_id) patch.attio_company_id = result.company_record_id
+      await supabase.from('outreach_logs').update(patch).eq('id', contactId)
+      setContacts(prev => prev.map(c =>
+        c.id === contactId ? { ...c, attio_record_id: result.person_record_id, attio_synced_at: now, ...(result.company_record_id ? { attio_company_id: result.company_record_id } : {}) } : c
+      ))
+    } catch (err) {
+      setSyncError(`Attio sync failed: ${err instanceof Error ? err.message : 'unknown'}`)
+    } finally {
+      setSyncing(false)
+    }
+  }, [contacts])
+
   const updateHealthScore = useCallback(async (contactId: string, interactions: Array<{ type: string; interaction_date: string }>): Promise<void> => {
     const score = computeHealthScore(interactions)
     const lastDate = interactions.length > 0
@@ -243,6 +264,7 @@ export function useContacts(
     fetchContacts,
     syncContactToAttio,
     syncCompany: syncCompanyToAttioHook,
+    syncAll,
     updateHealthScore,
     autoFlagDormant,
     // Legacy aliases for callers still using old names

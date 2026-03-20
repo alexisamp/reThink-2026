@@ -593,6 +593,7 @@ export default function Today() {
     deleteContact,
     syncContactToAttio,
     syncCompany,
+    syncAll,
   } = useContacts(userId ?? undefined, habits, upsertHabitCountLocal)
 
   useKeyboardShortcuts({
@@ -2724,6 +2725,7 @@ export default function Today() {
         onDelete={async (id) => { await deleteContact(id); setDetailDrawerOpen(false) }}
         onSyncToAttio={syncContactToAttio}
         onSyncCompany={syncCompany}
+        onSyncAll={syncAll}
       />
 
       {/* ─── End of Day Drawer ───────────────────────────────────────── */}

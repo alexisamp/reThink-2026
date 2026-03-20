@@ -183,20 +183,25 @@ function extractProfilePageData() {
       }
     }
 
-    // Location: first p with comma, no pipe/bullet/parens, len < 80
+    // Location: first p with comma, no pipe/bullet/parens/connections, len < 80
     // Excludes taglines that have parentheses like "Keep moving.(by riding the bus)"
+    // Excludes mutual connections strings like "Valentina, Hugo Antonio and 182 other mutual connections"
     for (var j = 0; j < ps.length; j++) {
       var t = ps[j]
       if (t.indexOf(',') !== -1 && t.indexOf('|') === -1 && t.indexOf('•') === -1 &&
-          t.indexOf('(') === -1 && t.indexOf(')') === -1 && t.length < 80) {
+          t.indexOf('(') === -1 && t.indexOf(')') === -1 &&
+          t.toLowerCase().indexOf('connection') === -1 && t.length < 80) {
         location = t.substring(0, 120); break
       }
     }
 
     // Connections count: p matching "NNN+ connections" or "NNN connections"
+    // May be embedded in "Valentina, Hugo Antonio and 182 other mutual connections" — extract just the number
     for (var k = 0; k < ps.length; k++) {
-      if (/\d[\d,+]* connections/i.test(ps[k])) {
-        connections_count = ps[k].replace(/\s*connections.*/i, '').trim().substring(0, 20); break
+      if (/\d[\d,+]* (mutual )?connections?/i.test(ps[k])) {
+        var cMatch = ps[k].match(/(\d[\d,]*)[\d,+]*\s*(mutual\s+)?connections?/i)
+        var cNum = cMatch ? parseInt(cMatch[1].replace(/,/g, ''), 10) : 0
+        connections_count = cNum > 0 ? cNum : null; break
       }
     }
   }
@@ -220,7 +225,8 @@ function extractProfilePageData() {
           // Extract just the number, strip " followers" suffix and commas
           var fText = followerP.textContent.trim()
           var fMatch = fText.match(/([\d,]+)\s*followers?/i)
-          followers_count = fMatch ? fMatch[1].replace(/,/g, '') : fText.substring(0, 20)
+          var fNum = fMatch ? parseInt(fMatch[1].replace(/,/g, ''), 10) : 0
+          followers_count = fNum > 0 ? fNum : null
           break
         }
       }

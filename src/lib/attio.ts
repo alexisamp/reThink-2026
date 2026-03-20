@@ -256,9 +256,11 @@ export async function syncFullContact(contact: {
     const optionIds = (await Promise.all(skillTitles.map(s => resolveSkillOption(apiKey, s)))).filter(Boolean)
     if (optionIds.length > 0) customValues['skills'] = optionIds.map(id => ({ option: id }))
   }
-  // LinkedIn social stats — slugs: linkedin_followers, linkedin_contacts (custom attributes)
-  if (contact.followers_count) customValues['linkedin_followers'] = [{ value: contact.followers_count }]
-  if (contact.connections_count) customValues['linkedin_contacts'] = [{ value: contact.connections_count }]
+  // LinkedIn social stats — slugs: linkedin_followers, linkedin_contacts (custom attributes, must be numbers)
+  const followersNum = contact.followers_count != null ? (typeof contact.followers_count === 'number' ? contact.followers_count : parseInt(String(contact.followers_count).replace(/,/g, ''), 10)) : null
+  const connectionsNum = contact.connections_count != null ? (typeof contact.connections_count === 'number' ? contact.connections_count : parseInt(String(contact.connections_count).replace(/,/g, ''), 10)) : null
+  if (followersNum) customValues['linkedin_followers'] = [{ value: followersNum }]
+  if (connectionsNum) customValues['linkedin_contacts'] = [{ value: connectionsNum }]
 
   const patchCustom = async (recordId: string): Promise<string | null> => {
     if (Object.keys(customValues).length === 0) return null
@@ -423,6 +425,42 @@ export async function completeAttioTask(taskId: string): Promise<void> {
       body: JSON.stringify({ data: { is_completed: true } }),
     })
   } catch { /* fire and forget */ }
+}
+
+/** Syncs both person and company (if domain exists) to Attio in one call.
+ *  Returns both record IDs (company_record_id may be null if no domain). */
+export async function syncAll(contact: {
+  attio_record_id?: string | null
+  name: string
+  email?: string | null
+  phone?: string | null
+  job_title?: string | null
+  about?: string | null
+  linkedin_url?: string | null
+  location?: string | null
+  category?: string | null
+  status?: string | null
+  health_score?: number | null
+  skills?: string | null
+  notes?: string | null
+  followers_count?: number | string | null
+  connections_count?: number | string | null
+  company_domain?: string | null
+  company?: string | null
+  company_linkedin_url?: string | null
+  attio_company_id?: string | null
+}): Promise<{ person_record_id: string; company_record_id: string | null }> {
+  const personResult = await syncFullContact(contact, { includeNotes: true })
+  let company_record_id: string | null = null
+  if (contact.company_domain) {
+    const companyResult = await syncCompanyToAttio({
+      domain: contact.company_domain,
+      name: contact.company ?? undefined,
+      existingCompanyId: contact.attio_company_id,
+    })
+    company_record_id = companyResult.record_id
+  }
+  return { person_record_id: personResult.record_id, company_record_id }
 }
 
 /** Creates a Note in Attio for a logged interaction. Fire-and-forget. */

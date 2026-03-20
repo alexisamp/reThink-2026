@@ -5,14 +5,25 @@ const GEMINI_MODEL = 'gemini-2.0-flash'
 
 export interface EnrichResult {
   company_domain: string | null
-  skills_suggestions: string[]
-  enriched_about: string | null
+  skills: string | null
+  about: string | null
+  relationship_context: string | null
+  approach_angles: string | null
+  enrichment_notes: string | null
 }
 
 interface UseContactEnricherReturn {
   enriching: boolean
   enrichError: string | null
-  enrich: (opts: { name: string; company?: string | null; job_title?: string | null; about?: string | null }) => Promise<EnrichResult | null>
+  enrich: (opts: {
+    name: string
+    company?: string | null
+    company_domain?: string | null
+    job_title?: string | null
+    about?: string | null
+    personal_context?: string | null
+    linkedin_url?: string | null
+  }) => Promise<EnrichResult | null>
 }
 
 export function hasGeminiEnrichKey() {
@@ -26,33 +37,40 @@ export function useContactEnricher(): UseContactEnricherReturn {
   const enrich = useCallback(async (opts: {
     name: string
     company?: string | null
+    company_domain?: string | null
     job_title?: string | null
     about?: string | null
+    personal_context?: string | null
+    linkedin_url?: string | null
   }): Promise<EnrichResult | null> => {
     if (!GEMINI_API_KEY) return null
     setEnriching(true)
     setEnrichError(null)
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 3000)
+    const timeout = setTimeout(() => controller.abort(), 30000)
 
     try {
       const prompt = [
-        `You are a professional contact enrichment assistant. Use web search to find accurate data.`,
+        `You are a relationship intelligence assistant. Given information about a person, enrich their profile.`,
+        ``,
         `Person: ${opts.name}`,
-        opts.job_title ? `Role: ${opts.job_title}` : '',
-        opts.company ? `Company: ${opts.company}` : '',
-        opts.about ? `Bio excerpt: ${opts.about.substring(0, 300)}` : '',
+        opts.company ? `Company: ${opts.company}${opts.company_domain ? ` (${opts.company_domain})` : ''}` : '',
+        opts.job_title ? `Job Title: ${opts.job_title}` : '',
+        opts.about ? `About (LinkedIn): ${opts.about.substring(0, 500)}` : '',
+        opts.personal_context ? `Personal Context: ${opts.personal_context}` : '',
+        opts.linkedin_url ? `LinkedIn URL: ${opts.linkedin_url}` : '',
         ``,
-        `Tasks:`,
-        opts.company
-          ? `1. Find the official website domain for the company "${opts.company}" (e.g. "granola.so", "fintual.com"). Return just the clean domain, no protocol or paths.`
-          : `1. company_domain: null (no company provided)`,
-        `2. Suggest 3-5 relevant professional skills based on their role and company. Be specific (e.g. "growth marketing", "product strategy", "B2B sales").`,
-        `3. If their bio is truncated or missing, write a 1-sentence professional summary (max 100 chars). Otherwise return null.`,
-        ``,
-        `Respond ONLY with valid JSON (no markdown):`,
-        `{"company_domain": "string or null", "skills_suggestions": ["skill1", "skill2"], "enriched_about": "string or null"}`,
+        `Return a JSON object with these fields (omit fields you're not confident about):`,
+        `{`,
+        `  "company_domain": "string — the company's official website domain (e.g. granola.so), search the web",`,
+        `  "skills": "string — 3-5 comma-separated professional skills based on their background",`,
+        `  "about": "string — improved/expanded bio if the LinkedIn about is missing or too short",`,
+        `  "relationship_context": "string — 1-2 sentences on why this person could be valuable based on the personal context",`,
+        `  "approach_angles": "string — 2-3 specific ways to add value or start a conversation with this person",`,
+        `  "enrichment_notes": "string — any other relevant context (mutual connections, recent news about their company, etc.)"`,
+        `}`,
+        `Only return valid JSON. No markdown, no explanation.`,
       ].filter(Boolean).join('\n')
 
       const res = await fetch(
@@ -86,13 +104,16 @@ export function useContactEnricher(): UseContactEnricherReturn {
       if (!parsed) throw new Error('No JSON found in Gemini response')
 
       return {
-        company_domain: parsed.company_domain || null,
-        skills_suggestions: Array.isArray(parsed.skills_suggestions) ? parsed.skills_suggestions : [],
-        enriched_about: parsed.enriched_about || null,
+        company_domain: (parsed as any).company_domain || null,
+        skills: (parsed as any).skills || null,
+        about: (parsed as any).about || null,
+        relationship_context: (parsed as any).relationship_context || null,
+        approach_angles: (parsed as any).approach_angles || null,
+        enrichment_notes: (parsed as any).enrichment_notes || null,
       }
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') {
-        setEnrichError('Enrichment timed out after 3 seconds.')
+        setEnrichError('Enrichment timed out after 30 seconds.')
       } else {
         const msg = e instanceof Error ? e.message : String(e)
         setEnrichError(`Enrichment failed: ${msg}`)

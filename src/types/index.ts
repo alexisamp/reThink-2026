@@ -283,6 +283,7 @@ export interface Contact {
   company_domain?: string | null
   company_linkedin_url?: string | null
   attio_company_id?: string | null
+  ai_enriched_at?: string | null
   created_at: string
   updated_at: string
 }

@@ -175,8 +175,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (data.job_title) body.job_title = data.job_title
     if (data.company) body.company = data.company
     if (data.location) body.location = data.location
-    if (data.connections_count) body.connections_count = data.connections_count
-    if (data.followers_count) body.followers_count = data.followers_count
+    if (data.connections_count) body.connections_count = typeof data.connections_count === 'number' ? data.connections_count : (parseInt(String(data.connections_count).replace(/,/g, ''), 10) || null)
+    if (data.followers_count) body.followers_count = typeof data.followers_count === 'number' ? data.followers_count : (parseInt(String(data.followers_count).replace(/,/g, ''), 10) || null)
     if (data.about) body.about = data.about
     if (data.email) body.email = data.email
     if (data.phone) body.phone = data.phone

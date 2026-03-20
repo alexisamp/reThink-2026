@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   X, ArrowLeft, ArrowSquareOut, ChatCircle, Envelope, Phone,
   VideoCamera, Users, CaretDown, CaretUp, Trash, Plus, Check,
-  Globe,
+  Globe, Sparkle, SpinnerGap,
 } from '@phosphor-icons/react'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useContactEnricher, hasGeminiEnrichKey } from '@/hooks/useContactEnricher'
@@ -73,6 +73,7 @@ interface ContactDetailDrawerProps {
   onDelete: (id: string) => Promise<void>
   onSyncToAttio: (id: string) => Promise<void>
   onSyncCompany?: (id: string) => Promise<void>
+  onSyncAll?: (id: string) => void
   funnelConfig: ContactFunnelConfig | null
   userId: string
   habits: Habit[]
@@ -90,6 +91,7 @@ export default function ContactDetailDrawer({
   onDelete,
   onSyncToAttio,
   onSyncCompany,
+  onSyncAll,
   funnelConfig,
   userId,
   habits,
@@ -111,9 +113,11 @@ export default function ContactDetailDrawer({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [companyDomain, setCompanyDomain] = useState('')
-  const [syncingCompany, setSyncingCompany] = useState(false)
-  const [enrichToast, setEnrichToast] = useState('')
+  const [enrichStatus, setEnrichStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [enrichSuccessTimer, setEnrichSuccessTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
   const [syncErrorExpanded, setSyncErrorExpanded] = useState(false)
+  const [contextBannerDismissed, setContextBannerDismissed] = useState(false)
+  const [contextBannerText, setContextBannerText] = useState('')
 
   const { enriching, enrichError, enrich } = useContactEnricher()
 
@@ -149,6 +153,9 @@ export default function ContactDetailDrawer({
     setAboutExpanded(false)
     setCompanyDomain(contact.company_domain ?? '')
     setSyncErrorExpanded(false)
+    setContextBannerDismissed(false)
+    setContextBannerText('')
+    setEnrichStatus('idle')
 
     // Fetch interactions for this contact
     fetchInteractions(contact.id)
@@ -242,59 +249,88 @@ export default function ContactDetailDrawer({
   }
 
   // ── AI enrichment ─────────────────────────────────────────────────────────
-  async function handleEnrich() {
+  async function handleEnrich(overridePersonalContext?: string) {
     if (!contact) return
+    setEnrichStatus('idle')
     const result = await enrich({
       name: contact.name,
       company: contact.company,
+      company_domain: contact.company_domain,
       job_title: contact.job_title,
       about: contact.about,
+      personal_context: overridePersonalContext ?? contact.personal_context,
+      linkedin_url: contact.linkedin_url,
     })
-    if (!result) return
+    if (!result) {
+      setEnrichStatus('error')
+      return
+    }
     const updates: Partial<Contact> = {}
+
     if (result.company_domain && !contact.company_domain) {
       updates.company_domain = result.company_domain
       setCompanyDomain(result.company_domain)
     }
-    if (result.skills_suggestions?.length && !contact.skills) {
-      const skillsStr = result.skills_suggestions.join(', ')
-      updates.skills = skillsStr
-      setSkillsList(result.skills_suggestions)
-      setSkillsInput(skillsStr)
+
+    if (result.skills) {
+      const incoming = result.skills.split(',').map((s: string) => s.trim()).filter(Boolean)
+      const merged = [...new Set([...skillsList, ...incoming])]
+      updates.skills = merged.join(', ')
+      setSkillsList(merged)
     }
-    if (result.enriched_about && !contact.about) {
-      updates.about = result.enriched_about
+
+    // Only update about if existing about is missing or short (< 100 chars)
+    if (result.about && (!contact.about || contact.about.length < 100)) {
+      updates.about = result.about
     }
-    if (Object.keys(updates).length > 0) {
-      await onUpdate(contact.id, updates)
+
+    // relationship_context: append to personal_context or set it
+    if (result.relationship_context) {
+      const existingCtx = overridePersonalContext ?? contact.personal_context ?? ''
+      const newCtx = existingCtx
+        ? `${existingCtx}\n\n[AI] ${result.relationship_context}`
+        : `[AI] ${result.relationship_context}`
+      updates.personal_context = newCtx
+      setPersonalContext(newCtx)
     }
-    setEnrichToast(Object.keys(updates).length > 0 ? '✨ Enriched!' : '✨ Nothing new found')
-    setTimeout(() => setEnrichToast(''), 3000)
+
+    // approach_angles + enrichment_notes: append to notes
+    const noteAdditions: string[] = []
+    if (result.approach_angles) noteAdditions.push(`[Approach angles]\n${result.approach_angles}`)
+    if (result.enrichment_notes) noteAdditions.push(`[Enrichment notes]\n${result.enrichment_notes}`)
+    if (noteAdditions.length > 0) {
+      const existingNotes = notes ?? contact.notes ?? ''
+      const newNotes = existingNotes
+        ? `${existingNotes}\n\n${noteAdditions.join('\n\n')}`
+        : noteAdditions.join('\n\n')
+      updates.notes = newNotes
+      setNotes(newNotes)
+    }
+
+    updates.ai_enriched_at = new Date().toISOString()
+
+    await onUpdate(contact.id, updates)
+
+    setEnrichStatus('success')
+    if (enrichSuccessTimer) clearTimeout(enrichSuccessTimer)
+    const t = setTimeout(() => setEnrichStatus('idle'), 2000)
+    setEnrichSuccessTimer(t)
   }
 
-  // ── sync to Attio ─────────────────────────────────────────────────────────
-  async function handleSyncToAttio() {
+  // ── sync to Attio (person + company in one click) ────────────────────────
+  async function handleSyncAll() {
     if (!contact) return
     setSyncing(true)
     try {
-      await onSyncToAttio(contact.id)
-      setAttioToast('Synced to Attio')
+      if (onSyncAll) {
+        onSyncAll(contact.id)
+      } else {
+        await onSyncToAttio(contact.id)
+      }
+      setAttioToast('✓ Synced')
       setTimeout(() => setAttioToast(''), 3000)
     } finally {
       setSyncing(false)
-    }
-  }
-
-  // ── sync company to Attio ─────────────────────────────────────────────────
-  async function handleSyncCompany() {
-    if (!contact || !onSyncCompany) return
-    setSyncingCompany(true)
-    try {
-      await onSyncCompany(contact.id)
-      setAttioToast('Company synced to Attio')
-      setTimeout(() => setAttioToast(''), 3000)
-    } finally {
-      setSyncingCompany(false)
     }
   }
 
@@ -325,6 +361,25 @@ export default function ContactDetailDrawer({
   const syncErrShort = syncErrRaw && syncErrRaw.length > 100
     ? syncErrRaw.slice(0, 100) + '…'
     : syncErrRaw
+
+  // ── context banner visibility ────────────────────────────────────────────
+  const isNewContact = contact
+    ? (Date.now() - new Date(contact.created_at).getTime()) < 24 * 60 * 60 * 1000
+    : false
+  const showContextBanner =
+    !!contact &&
+    !contact.personal_context &&
+    isNewContact &&
+    !contextBannerDismissed
+
+  // ── enriched timestamp display ────────────────────────────────────────────
+  function formatEnrichedAt(isoStr: string): string {
+    const days = daysSince(isoStr)
+    if (days === null) return ''
+    if (days === 0) return 'Last enriched: today'
+    if (days === 1) return 'Last enriched: 1 day ago'
+    return `Last enriched: ${days} days ago`
+  }
 
   // ── section label style ───────────────────────────────────────────────────
   const sectionLabel = 'text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-2'
@@ -370,6 +425,57 @@ export default function ContactDetailDrawer({
                 <X size={16} />
               </button>
             </div>
+
+            {/* ── 1b. Personal context first-flow banner ───────────────────── */}
+            {showContextBanner && (
+              <div className="mx-4 mt-4 bg-gossip/20 border border-pastel/40 rounded-xl p-4 mb-4">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Sparkle size={14} weight="fill" className="text-pastel flex-shrink-0" />
+                  <p className="text-xs font-semibold text-burnham">Add context to power AI enrichment</p>
+                </div>
+                <p className="text-[11px] text-shuttle/70 mb-2">
+                  How do you know {contact.name.split(' ')[0]}? Where did you meet?
+                </p>
+                <textarea
+                  value={contextBannerText}
+                  onChange={e => setContextBannerText(e.target.value)}
+                  placeholder="Met at Latam Conf..."
+                  className="w-full min-h-[80px] text-xs text-burnham/80 bg-white/70 border border-pastel/30 rounded-lg p-2 placeholder-shuttle/30 resize-none focus:outline-none focus:border-burnham/30 mb-2"
+                />
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => setContextBannerDismissed(true)}
+                    className="text-[11px] text-shuttle/60 hover:text-shuttle transition-colors px-2 py-1"
+                  >
+                    Skip
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!contact) return
+                      const ctx = contextBannerText.trim()
+                      await onUpdate(contact.id, { personal_context: ctx || null })
+                      setPersonalContext(ctx)
+                      setContextBannerDismissed(true)
+                      await handleEnrich(ctx || undefined)
+                    }}
+                    disabled={enriching}
+                    className="flex items-center gap-1.5 text-[11px] font-semibold bg-burnham text-white rounded-lg px-3 py-1.5 hover:bg-burnham/90 disabled:opacity-50 transition-colors"
+                  >
+                    {enriching ? (
+                      <>
+                        <SpinnerGap size={12} className="animate-spin" />
+                        Enriching…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkle size={12} weight="fill" />
+                        Save &amp; Enrich →
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* ── 2. Profile section ───────────────────────────────────────── */}
             <div className="px-4 py-3 border-b border-mercury">
@@ -733,18 +839,7 @@ export default function ContactDetailDrawer({
                   <span className="text-[9px] text-shuttle/40 flex-shrink-0">Domain</span>
                 </div>
 
-                {/* Sync Company button */}
-                {companyDomain && hasAttioKey() && onSyncCompany && (
-                  <button
-                    onClick={handleSyncCompany}
-                    disabled={syncingCompany}
-                    className="mb-2 text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors disabled:opacity-40"
-                  >
-                    {syncingCompany ? 'Syncing…' : 'Sync Company →'}
-                  </button>
-                )}
-
-                {/* Attio sync status + button */}
+                {/* Single Sync to Attio button — syncs person + company */}
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-shuttle/40">
                     {contact.attio_record_id
@@ -752,11 +847,11 @@ export default function ContactDetailDrawer({
                       : 'Not yet synced'}
                   </span>
                   <button
-                    onClick={handleSyncToAttio}
+                    onClick={handleSyncAll}
                     disabled={syncing}
                     className="text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors disabled:opacity-40"
                   >
-                    {syncing ? 'Syncing…' : 'Sync to Attio'}
+                    {syncing ? 'Syncing…' : attioToast === '✓ Synced' ? '✓ Synced' : 'Sync to Attio'}
                   </button>
                 </div>
 
@@ -789,17 +884,38 @@ export default function ContactDetailDrawer({
               <div className="px-4 py-3 border-b border-mercury">
                 <div className={sectionLabel}>AI enrichment</div>
                 <button
-                  onClick={handleEnrich}
+                  onClick={() => handleEnrich()}
                   disabled={enriching}
-                  className="w-full text-xs font-medium text-shuttle border border-shuttle/20 hover:border-shuttle/50 rounded-lg px-3 py-2 transition-colors disabled:opacity-40"
+                  className={`w-full flex items-center justify-center gap-1.5 text-xs font-medium rounded-lg px-3 py-2 transition-colors disabled:opacity-40 ${
+                    enrichStatus === 'success'
+                      ? 'border border-pastel/40 text-pastel bg-gossip/10'
+                      : 'border border-shuttle/20 hover:border-shuttle/50 text-shuttle'
+                  }`}
                 >
-                  {enriching ? 'Enriching…' : '✨ Enrich with AI'}
+                  {enriching ? (
+                    <>
+                      <SpinnerGap size={13} className="animate-spin" />
+                      Enriching…
+                    </>
+                  ) : enrichStatus === 'success' ? (
+                    <>
+                      <Check size={13} weight="bold" className="text-pastel" />
+                      Enriched
+                    </>
+                  ) : (
+                    <>
+                      <Sparkle size={13} weight="fill" />
+                      Enrich with AI
+                    </>
+                  )}
                 </button>
+                {contact.ai_enriched_at && enrichStatus !== 'success' && (
+                  <p className="mt-1.5 text-[10px] text-shuttle/40 text-center">
+                    {formatEnrichedAt(contact.ai_enriched_at)}
+                  </p>
+                )}
                 {enrichError && (
                   <p className="mt-1.5 text-xs text-red-500">{enrichError}</p>
-                )}
-                {enrichToast && !enrichError && (
-                  <p className="mt-1.5 text-[11px] text-pastel font-medium text-center">{enrichToast}</p>
                 )}
               </div>
             )}
