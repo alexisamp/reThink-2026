@@ -220,6 +220,7 @@ export async function syncFullContact(contact: {
   company_domain?: string | null
   company_linkedin_url?: string | null
   attio_company_id?: string | null
+  profile_photo_url?: string | null
 }, options?: { includeNotes?: boolean }): Promise<{ record_id: string }> {
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('No Attio API key configured')
@@ -237,6 +238,7 @@ export async function syncFullContact(contact: {
   if (contact.phone)     coreValues['phone_numbers']   = [{ original_phone_number: contact.phone }]
   if (contact.job_title) coreValues['job_title']   = contact.job_title   // plain string
   if (contact.about)     coreValues['description'] = contact.about       // plain string
+  if (contact.profile_photo_url) coreValues['avatar_url'] = [{ value: contact.profile_photo_url }]
   // primary_location requires full structured address (line_1, country_code, lat/long) — skip
 
   // ── Custom fields (our 4 custom attributes + skills) — sent separately ───
@@ -449,6 +451,7 @@ export async function syncAll(contact: {
   company?: string | null
   company_linkedin_url?: string | null
   attio_company_id?: string | null
+  profile_photo_url?: string | null
 }): Promise<{ person_record_id: string; company_record_id: string | null }> {
   const personResult = await syncFullContact(contact, { includeNotes: true })
   let company_record_id: string | null = null

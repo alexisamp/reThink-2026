@@ -256,10 +256,50 @@ function extractProfilePageData() {
 
   var company_linkedin_url = extractCompanyLinkedInUrl()
 
+  // Profile photo: try multiple selectors in order
+  var profile_photo_url = null
+  var photoSelectors = [
+    'img.pv-top-card-profile-picture__image--show',
+    'img.profile-photo-edit__preview',
+  ]
+  for (var pi = 0; pi < photoSelectors.length; pi++) {
+    try {
+      var photoEl = document.querySelector(photoSelectors[pi])
+      if (photoEl && photoEl.src && photoEl.src.indexOf('media.licdn.com') !== -1) {
+        profile_photo_url = photoEl.src.split('?')[0]
+        break
+      }
+    } catch (_) {}
+  }
+  // Fallback: img[data-ghost-classes] with media.licdn.com src
+  if (!profile_photo_url) {
+    try {
+      var ghostImg = document.querySelector('img[data-ghost-classes]')
+      if (ghostImg && ghostImg.src && ghostImg.src.indexOf('media.licdn.com') !== -1) {
+        profile_photo_url = ghostImg.src.split('?')[0]
+      }
+    } catch (_) {}
+  }
+  // Fallback: any img near top-card with media.licdn.com/dms/image
+  if (!profile_photo_url) {
+    try {
+      var topCard = document.querySelector('.pv-top-card') || document.querySelector('.artdeco-card')
+      if (topCard) {
+        var imgs = Array.from(topCard.querySelectorAll('img'))
+        for (var ii = 0; ii < imgs.length; ii++) {
+          if (imgs[ii].src && imgs[ii].src.indexOf('media.licdn.com/dms/image') !== -1) {
+            profile_photo_url = imgs[ii].src.split('?')[0]
+            break
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
   var parsed = parseHeadline(headline)
   // Prefer explicit company over headline-parsed company
   var finalCompany = company || parsed.company
-  return { name: name, url: url, job_title: parsed.job_title, company: finalCompany, location: location, connections_count: connections_count, followers_count: followers_count, about: about, company_linkedin_url: company_linkedin_url }
+  return { name: name, url: url, job_title: parsed.job_title, company: finalCompany, location: location, connections_count: connections_count, followers_count: followers_count, about: about, company_linkedin_url: company_linkedin_url, profile_photo_url: profile_photo_url }
 }
 
 // ── Contact info overlay extraction ─────────────────────────────────────────

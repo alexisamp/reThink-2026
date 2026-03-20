@@ -284,6 +284,7 @@ export interface Contact {
   company_linkedin_url?: string | null
   attio_company_id?: string | null
   ai_enriched_at?: string | null
+  profile_photo_url?: string | null
   created_at: string
   updated_at: string
 }
