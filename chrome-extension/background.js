@@ -135,6 +135,30 @@ chrome.runtime.onInstalled.addListener(() => {
 
 // ── Message handler (from floating button in content script) ─────────────────
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  // ── CHECK_CONTACT ───────────────────────────────────────────────────────────
+  if (message.type === 'CHECK_CONTACT') {
+    ;(async () => {
+      const token = await getValidToken()
+      if (!token) { sendResponse({ exists: false }); return }
+      const result = await chrome.storage.local.get('authData')
+      const userId = result.authData?.user_id
+      const cleanUrl = cleanLinkedInUrl(message.url || '')
+      const slug = cleanUrl?.match(/\/in\/([^/?#]+)/)?.[1] || ''
+      if (!slug) { sendResponse({ exists: false }); return }
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/outreach_logs?select=id&user_id=eq.${userId}&linkedin_url=like.*${slug}*&limit=1`,
+        { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` } }
+      ).catch(() => null)
+      if (res?.ok) {
+        const arr = await res.json().catch(() => [])
+        sendResponse({ exists: arr && arr.length > 0 })
+      } else {
+        sendResponse({ exists: false })
+      }
+    })()
+    return true
+  }
+
   if (message.type !== 'SAVE_CONTACT') return false
 
   const { data } = message
@@ -185,64 +209,47 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (data.phone) body.phone = data.phone
     if (data.website) body.website = data.website
     body.company_linkedin_url = data.company_linkedin_url || null
-    body.company_domain = companyDomain
+    // Prefer domain extracted directly from the profile page over async company page fetch
+    body.company_domain = data.company_domain || companyDomain || null
     body.profile_photo_url = data.profile_photo_url || null
 
-    try {
-      // Check for existing record with the same LinkedIn URL to avoid duplicates
-      // Use ilike with slug only to avoid URL-encoding issues with PostgREST
-      if (data.url) {
-        const slugMatch = cleanUrl.match(/\/in\/([^/?#]+)/)
-        const slug = slugMatch ? slugMatch[1] : null
-        if (slug) {
-          const existingRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/outreach_logs?select=id,profile_photo_url,followers_count,connections_count,about,location,company,company_linkedin_url,company_domain,job_title&user_id=eq.${userId}&linkedin_url=ilike.*${slug}*&limit=1`,
+    // Upload profile photo to Supabase Storage to avoid LinkedIn CDN auth issues
+    if (body.profile_photo_url) {
+      try {
+        const photoController = new AbortController()
+        setTimeout(() => photoController.abort(), 5000)
+        const photoRes = await fetch(body.profile_photo_url, {
+          credentials: 'include',
+          signal: photoController.signal,
+        })
+        if (photoRes.ok) {
+          const blob = await photoRes.blob()
+          const slug2 = cleanUrl.match(/\/in\/([^/?#]+)/)?.[1] || 'photo'
+          const storagePath = `${userId}/${slug2}.jpg`
+          const uploadRes = await fetch(
+            `${SUPABASE_URL}/storage/v1/object/contact-photos/${storagePath}`,
             {
+              method: 'POST',
               headers: {
                 apikey: SUPABASE_ANON_KEY,
                 Authorization: `Bearer ${token}`,
-                Accept: 'application/json',
+                'Content-Type': 'image/jpeg',
+                'x-upsert': 'true',
               },
+              body: blob,
             }
           )
-          if (existingRes.ok) {
-            const existingArr = await existingRes.json().catch(() => [])
-            const existing = existingArr && existingArr.length > 0 ? existingArr[0] : null
-            if (existing) {
-              // PATCH: update nulls + always refresh photo + fix bad location
-              const patch = {}
-              if (!existing.followers_count && body.followers_count) patch.followers_count = body.followers_count
-              if (!existing.connections_count && body.connections_count) patch.connections_count = body.connections_count
-              if (!existing.about && body.about) patch.about = body.about
-              if (!existing.company && body.company) patch.company = body.company
-              if (!existing.company_linkedin_url && body.company_linkedin_url) patch.company_linkedin_url = body.company_linkedin_url
-              if (!existing.company_domain && body.company_domain) patch.company_domain = body.company_domain
-              if (!existing.job_title && body.job_title) patch.job_title = body.job_title
-              // Always update photo and location (they may have been wrong before)
-              if (body.profile_photo_url) patch.profile_photo_url = body.profile_photo_url
-              if (body.location && body.location.toLowerCase().indexOf('connection') === -1) {
-                patch.location = body.location
-              }
-
-              if (Object.keys(patch).length > 0) {
-                await fetch(`${SUPABASE_URL}/rest/v1/outreach_logs?id=eq.${existing.id}`, {
-                  method: 'PATCH',
-                  headers: {
-                    apikey: SUPABASE_ANON_KEY,
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                    Prefer: 'return=minimal',
-                  },
-                  body: JSON.stringify(patch),
-                })
-              }
-              sendResponse({ ok: true, updated: true })
-              return
-            }
+          if (uploadRes.ok) {
+            body.profile_photo_url = `${SUPABASE_URL}/storage/v1/object/public/contact-photos/${storagePath}`
           }
         }
+      } catch (_) {
+        // Keep original LinkedIn URL if upload fails
       }
+    }
 
+    try {
+      // Try INSERT first
       const res = await fetch(`${SUPABASE_URL}/rest/v1/outreach_logs`, {
         method: 'POST',
         headers: {
@@ -256,10 +263,68 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
       if (res.ok) {
         sendResponse({ ok: true })
-      } else {
-        const errText = await res.text().catch(() => '')
-        sendResponse({ ok: false, error: `${res.status}: ${errText.substring(0, 60)}` })
+        return
       }
+
+      // Check for duplicate (23505 = unique_violation)
+      const errText = await res.text().catch(() => '')
+      const isDuplicate = res.status === 409 || errText.indexOf('23505') !== -1
+
+      if (!isDuplicate) {
+        sendResponse({ ok: false, error: `${res.status}: ${errText.substring(0, 60)}` })
+        return
+      }
+
+      // Conflict: fetch existing record and PATCH non-user-edited fields
+      const slug = cleanUrl.match(/\/in\/([^/?#]+)/)?.[1] || ''
+      const existingRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/outreach_logs?select=id,profile_photo_url,about,location,followers_count,connections_count,company_domain,company_linkedin_url,job_title&user_id=eq.${userId}&linkedin_url=like.*${slug}*&limit=1`,
+        {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
+        }
+      )
+
+      if (!existingRes.ok) {
+        sendResponse({ ok: true, updated: true })
+        return
+      }
+
+      const existingArr = await existingRes.json().catch(() => [])
+      const existing = existingArr && existingArr.length > 0 ? existingArr[0] : null
+      if (!existing) {
+        sendResponse({ ok: true, updated: true })
+        return
+      }
+
+      // PATCH: update only non-user-edited fields (NOT status, category, notes, personal_context)
+      const patch = {}
+      if (body.profile_photo_url) patch.profile_photo_url = body.profile_photo_url
+      if (body.location && body.location.toLowerCase().indexOf('connection') === -1) patch.location = body.location
+      if (!existing.followers_count && body.followers_count) patch.followers_count = body.followers_count
+      if (!existing.connections_count && body.connections_count) patch.connections_count = body.connections_count
+      if (!existing.about && body.about) patch.about = body.about
+      if (!existing.company_domain && body.company_domain) patch.company_domain = body.company_domain
+      if (!existing.company_linkedin_url && body.company_linkedin_url) patch.company_linkedin_url = body.company_linkedin_url
+      if (!existing.job_title && body.job_title) patch.job_title = body.job_title
+
+      if (Object.keys(patch).length > 0) {
+        await fetch(`${SUPABASE_URL}/rest/v1/outreach_logs?id=eq.${existing.id}`, {
+          method: 'PATCH',
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal',
+          },
+          body: JSON.stringify(patch),
+        })
+      }
+
+      sendResponse({ ok: true, updated: true })
     } catch (err) {
       sendResponse({ ok: false, error: err.message || 'Network error' })
     }

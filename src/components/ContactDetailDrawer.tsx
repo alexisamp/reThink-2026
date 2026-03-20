@@ -279,8 +279,9 @@ export default function ContactDetailDrawer({
       setSkillsList(merged)
     }
 
-    // Only update about if existing about is missing or short (< 100 chars)
-    if (result.about && (!contact.about || contact.about.length < 100)) {
+    // Only update about if missing, short (< 100 chars), or contains accessibility error text
+    const aboutIsError = contact.about?.toLowerCase().includes('modal window') || contact.about?.toLowerCase().includes('beginning of dialog')
+    if (result.about && (!contact.about || contact.about.length < 100 || aboutIsError)) {
       updates.about = result.about
     }
 

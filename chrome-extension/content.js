@@ -322,10 +322,28 @@ function extractProfilePageData() {
     } catch (_) {}
   }
 
+  // Try to find company website directly on the profile (some profiles show it as a link in the top card)
+  var company_domain = null
+  try {
+    var allLinks = Array.from(document.querySelectorAll('a[href]'))
+    for (var li = 0; li < allLinks.length; li++) {
+      var href = allLinks[li].href || ''
+      if (!href.startsWith('http')) continue
+      if (href.indexOf('linkedin.com') !== -1) continue
+      if (href.indexOf('google.com') !== -1) continue
+      if (href.indexOf('javascript') !== -1) continue
+      // Only links near the top of the page (in top card section)
+      var rect = allLinks[li].getBoundingClientRect()
+      if (rect.top > 400) continue
+      company_domain = cleanDomain(href)
+      if (company_domain) break
+    }
+  } catch (_) {}
+
   var parsed = parseHeadline(headline)
   // Prefer explicit company over headline-parsed company
   var finalCompany = company || parsed.company
-  return { name: name, url: url, job_title: parsed.job_title, company: finalCompany, location: location, connections_count: connections_count, followers_count: followers_count, about: about, company_linkedin_url: company_linkedin_url, profile_photo_url: profile_photo_url }
+  return { name: name, url: url, job_title: parsed.job_title, company: finalCompany, location: location, connections_count: connections_count, followers_count: followers_count, about: about, company_linkedin_url: company_linkedin_url, profile_photo_url: profile_photo_url, company_domain: company_domain }
 }
 
 // ── Contact info overlay extraction ─────────────────────────────────────────
@@ -399,6 +417,12 @@ function getContactInfo(callback) {
 
 var BUTTON_ID = 'rethink-outreach-btn'
 
+function checkIfAlreadyInReThink(linkedinUrl, callback) {
+  chrome.runtime.sendMessage({ type: 'CHECK_CONTACT', url: linkedinUrl }, function(resp) {
+    callback(resp && resp.exists)
+  })
+}
+
 function injectButton() {
   if (document.getElementById(BUTTON_ID)) return
   if (!isProfilePage()) return
@@ -468,6 +492,17 @@ function injectButton() {
   })
 
   document.body.appendChild(btn)
+
+  // Async check: if contact already exists, update button appearance
+  var currentUrl = cleanLinkedInUrl(window.location.href)
+  if (currentUrl) {
+    checkIfAlreadyInReThink(currentUrl, function(exists) {
+      if (!exists) return
+      var span = btn.querySelector('span')
+      if (span) span.textContent = '✓ In reThink'
+      btn.style.background = '#536471'
+    })
+  }
 }
 
 function setButtonState(btn, state, label) {
