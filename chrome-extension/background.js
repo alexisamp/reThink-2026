@@ -186,6 +186,53 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     body.profile_photo_url = data.profile_photo_url || null
 
     try {
+      // Check for existing record with the same LinkedIn URL to avoid duplicates
+      if (data.url) {
+        const existingRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/outreach_logs?select=id,profile_photo_url,followers_count,connections_count,about,company,company_linkedin_url,company_domain,job_title&user_id=eq.${encodeURIComponent(userId)}&linkedin_url=eq.${encodeURIComponent(cleanUrl)}&limit=1`,
+          {
+            headers: {
+              apikey: SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/json',
+              'Accept-Profile': 'public',
+            },
+          }
+        )
+        if (existingRes.ok) {
+          const existingArr = await existingRes.json().catch(() => [])
+          const existing = existingArr && existingArr.length > 0 ? existingArr[0] : null
+          if (existing) {
+            // PATCH only null/empty fields (always update photo if we have one)
+            const patch = {}
+            if (!existing.followers_count && body.followers_count) patch.followers_count = body.followers_count
+            if (!existing.connections_count && body.connections_count) patch.connections_count = body.connections_count
+            if (!existing.about && body.about) patch.about = body.about
+            if (!existing.company && body.company) patch.company = body.company
+            if (!existing.company_linkedin_url && body.company_linkedin_url) patch.company_linkedin_url = body.company_linkedin_url
+            if (!existing.company_domain && body.company_domain) patch.company_domain = body.company_domain
+            if (!existing.job_title && body.job_title) patch.job_title = body.job_title
+            // Always update photo if we captured one (it might be stale)
+            if (body.profile_photo_url) patch.profile_photo_url = body.profile_photo_url
+
+            if (Object.keys(patch).length > 0) {
+              await fetch(`${SUPABASE_URL}/rest/v1/outreach_logs?id=eq.${existing.id}`, {
+                method: 'PATCH',
+                headers: {
+                  apikey: SUPABASE_ANON_KEY,
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                  Prefer: 'return=minimal',
+                },
+                body: JSON.stringify(patch),
+              })
+            }
+            sendResponse({ ok: true, updated: true })
+            return
+          }
+        }
+      }
+
       const res = await fetch(`${SUPABASE_URL}/rest/v1/outreach_logs`, {
         method: 'POST',
         headers: {

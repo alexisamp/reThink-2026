@@ -115,7 +115,7 @@ saveContactBtn.addEventListener('click', () => {
           return
         }
         if (response && response.ok) {
-          setStatus('Saved successfully!', 'success')
+          setStatus(response.updated ? 'Contact updated!' : 'Saved successfully!', 'success')
         } else {
           setStatus((response && response.error ? response.error.substring(0, 50) : 'Error saving contact.'), 'error')
         }

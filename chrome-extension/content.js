@@ -258,6 +258,16 @@ function extractProfilePageData() {
 
   // Profile photo: try multiple selectors + data-delayed-url (LinkedIn lazy-loads photos)
   var profile_photo_url = null
+
+  // Best source: og:image meta tag (LinkedIn always sets this)
+  var ogImage = document.querySelector('meta[property="og:image"]')
+  if (ogImage) {
+    var ogUrl = ogImage.getAttribute('content') || ''
+    if (ogUrl && ogUrl.indexOf('media.licdn.com') !== -1) {
+      profile_photo_url = ogUrl.split('?')[0]
+    }
+  }
+
   function extractPhotoUrl(el) {
     if (!el) return null
     // Try src first, then data-delayed-url (lazy loading), then data-ghost-url
@@ -272,12 +282,14 @@ function extractProfilePageData() {
     'img.EntityPhoto-circle-5',
     'img[data-ghost-classes]',
   ]
-  for (var pi = 0; pi < photoSelectors.length; pi++) {
-    try {
-      var photoEl = document.querySelector(photoSelectors[pi])
-      var extracted = extractPhotoUrl(photoEl)
-      if (extracted) { profile_photo_url = extracted; break }
-    } catch (_) {}
+  if (!profile_photo_url) {
+    for (var pi = 0; pi < photoSelectors.length; pi++) {
+      try {
+        var photoEl = document.querySelector(photoSelectors[pi])
+        var extracted = extractPhotoUrl(photoEl)
+        if (extracted) { profile_photo_url = extracted; break }
+      } catch (_) {}
+    }
   }
   // Fallback: scan ALL imgs on page for media.licdn.com/dms/image profile photo pattern
   if (!profile_photo_url) {
