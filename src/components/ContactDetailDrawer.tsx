@@ -482,11 +482,19 @@ export default function ContactDetailDrawer({
               {/* Avatar initial + name + category + status */}
               <div className="flex items-start gap-3 mb-3">
                 {/* Avatar */}
-                <div className="w-10 h-10 rounded-full bg-burnham/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-base font-semibold text-burnham">
-                    {contact.name.charAt(0).toUpperCase()}
-                  </span>
-                </div>
+                {contact.profile_photo_url ? (
+                  <img
+                    src={contact.profile_photo_url}
+                    alt={contact.name}
+                    className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-burnham/10 flex items-center justify-center flex-shrink-0">
+                    <span className="text-base font-semibold text-burnham">
+                      {contact.name.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold text-burnham truncate">{contact.name}</p>
