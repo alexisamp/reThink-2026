@@ -308,6 +308,11 @@ export default function ContactDetailDrawer({
       setNotes(newNotes)
     }
 
+    // Profile photo: only set if contact has no photo yet
+    if (result.profile_photo_url && !contact.profile_photo_url) {
+      updates.profile_photo_url = result.profile_photo_url
+    }
+
     updates.ai_enriched_at = new Date().toISOString()
 
     await onUpdate(contact.id, updates)

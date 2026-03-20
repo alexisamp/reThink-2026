@@ -10,6 +10,7 @@ export interface EnrichResult {
   relationship_context: string | null
   approach_angles: string | null
   enrichment_notes: string | null
+  profile_photo_url: string | null
 }
 
 interface UseContactEnricherReturn {
@@ -68,7 +69,8 @@ export function useContactEnricher(): UseContactEnricherReturn {
         `  "about": "string — improved/expanded bio if the LinkedIn about is missing or too short",`,
         `  "relationship_context": "string — 1-2 sentences on why this person could be valuable based on the personal context",`,
         `  "approach_angles": "string — 2-3 specific ways to add value or start a conversation with this person",`,
-        `  "enrichment_notes": "string — any other relevant context (mutual connections, recent news about their company, etc.)"`,
+        `  "enrichment_notes": "string — any other relevant context (mutual connections, recent news about their company, etc.)",`,
+        `  "profile_photo_url": "string — a publicly accessible URL to a professional photo of this person (from their company website, personal site, Twitter/X, or similar). Only include if you find a real, direct image URL ending in .jpg/.png/.webp. Leave out if uncertain."`,
         `}`,
         `Only return valid JSON. No markdown, no explanation.`,
       ].filter(Boolean).join('\n')
@@ -103,6 +105,12 @@ export function useContactEnricher(): UseContactEnricherReturn {
 
       if (!parsed) throw new Error('No JSON found in Gemini response')
 
+      // Validate photo URL — only keep if it looks like a real image URL
+      const rawPhotoUrl: string | null = (parsed as any).profile_photo_url || null
+      const validPhotoUrl = rawPhotoUrl && /\.(jpg|jpeg|png|webp)(\?.*)?$/i.test(rawPhotoUrl)
+        ? rawPhotoUrl
+        : null
+
       return {
         company_domain: (parsed as any).company_domain || null,
         skills: (parsed as any).skills || null,
@@ -110,6 +118,7 @@ export function useContactEnricher(): UseContactEnricherReturn {
         relationship_context: (parsed as any).relationship_context || null,
         approach_angles: (parsed as any).approach_angles || null,
         enrichment_notes: (parsed as any).enrichment_notes || null,
+        profile_photo_url: validPhotoUrl,
       }
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') {
