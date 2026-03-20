@@ -23,7 +23,10 @@ function cleanLinkedInUrl(url) {
  */
 async function extractCompanyDomain(companyLinkedInUrl) {
   try {
-    const res = await fetch(companyLinkedInUrl, { credentials: 'include' })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 4000) // 4s max
+    const res = await fetch(companyLinkedInUrl, { credentials: 'include', signal: controller.signal })
+    clearTimeout(timeout)
     if (!res.ok) return null
     const html = await res.text()
 

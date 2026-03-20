@@ -238,7 +238,7 @@ export async function syncFullContact(contact: {
   if (contact.phone)     coreValues['phone_numbers']   = [{ original_phone_number: contact.phone }]
   if (contact.job_title) coreValues['job_title']   = contact.job_title   // plain string
   if (contact.about)     coreValues['description'] = contact.about       // plain string
-  if (contact.profile_photo_url) coreValues['avatar_url'] = [{ value: contact.profile_photo_url }]
+  // avatar_url is a protected system attribute in Attio — skip (Attio manages it automatically)
   // primary_location requires full structured address (line_1, country_code, lat/long) — skip
 
   // ── Custom fields (our 4 custom attributes + skills) — sent separately ───
