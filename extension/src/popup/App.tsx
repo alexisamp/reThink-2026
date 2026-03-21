@@ -40,7 +40,7 @@ export default function App() {
       const redirectURL = chrome.identity.getRedirectURL()
       const clientId = '652244567794-rjti1jj53ljnubdq0m6v0rmuji7521nq.apps.googleusercontent.com'
       const scopes = ['openid', 'email', 'profile']
-      const authUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectURL)}&scope=${encodeURIComponent(scopes.join(' '))}`
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&response_type=id_token&redirect_uri=${encodeURIComponent(redirectURL)}&scope=${encodeURIComponent(scopes.join(' '))}&nonce=${Date.now()}`
 
       const responseUrl = await chrome.identity.launchWebAuthFlow({
         url: authUrl,
@@ -49,12 +49,12 @@ export default function App() {
 
       if (responseUrl) {
         const params = new URLSearchParams(responseUrl.split('#')[1])
-        const accessToken = params.get('access_token')
+        const idToken = params.get('id_token')
 
-        if (accessToken) {
+        if (idToken) {
           const { data, error } = await supabase.auth.signInWithIdToken({
             provider: 'google',
-            token: accessToken,
+            token: idToken,
           })
 
           if (error) throw error
