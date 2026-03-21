@@ -244,7 +244,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           }
         }
       } catch (_) {
-        // Keep original LinkedIn URL if upload fails
+        // Upload failed — don't store the LinkedIn CDN URL (it 403s from app context)
+        body.profile_photo_url = null
       }
     }
 

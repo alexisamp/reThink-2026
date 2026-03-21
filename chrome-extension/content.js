@@ -264,7 +264,7 @@ function extractProfilePageData() {
   if (ogImage) {
     var ogUrl = ogImage.getAttribute('content') || ''
     if (ogUrl && ogUrl.indexOf('media.licdn.com') !== -1) {
-      profile_photo_url = ogUrl.split('?')[0]
+      profile_photo_url = ogUrl
     }
   }
 
