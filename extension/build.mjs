@@ -64,7 +64,12 @@ async function buildExtension() {
   console.log('  📋 Copying manifest and assets...')
   await cp('manifest.json', 'dist/manifest.json')
   await cp('icons', 'dist/icons', { recursive: true })
-  await cp('src/popup/index.html', 'dist/src/popup/index.html')
+
+  // Copy and fix index.html (replace .tsx with .js)
+  const { readFile, writeFile } = await import('fs/promises')
+  let indexHtml = await readFile('src/popup/index.html', 'utf-8')
+  indexHtml = indexHtml.replace('/src/popup/main.tsx', './main.js')
+  await writeFile('dist/src/popup/index.html', indexHtml)
 
   console.log('✅ Build complete! Extension ready in dist/')
 }
