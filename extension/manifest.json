@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "reThink Auto-Capture",
+  "version": "0.1.0",
+  "description": "Automatically capture interactions from WhatsApp Web and LinkedIn",
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "notifications",
+    "alarms",
+    "identity"
+  ],
+  "host_permissions": [
+    "https://web.whatsapp.com/*",
+    "https://www.linkedin.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["src/content-scripts/whatsapp.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.linkedin.com/messaging/*"],
+      "js": ["src/content-scripts/linkedin.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "oauth2": {
+    "client_id": "652244567794-rjti1jj53ljnubdq0m6v0rmuji7521nq.apps.googleusercontent.com",
+    "scopes": ["openid", "email", "profile"]
+  }
+}
