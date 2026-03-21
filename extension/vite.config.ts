@@ -1,17 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import webExtension from 'vite-plugin-web-extension'
 import path from 'path'
 
 export default defineConfig({
-  plugins: [
-    react(),
-    webExtension({
-      manifest: './manifest.json',
-      watchFilePaths: ['src/**/*'],
-      browser: 'chrome',
-    }),
-  ],
+  plugins: [react()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -22,8 +14,27 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        popup: 'src/popup/index.html',
+        popup: path.resolve(__dirname, 'src/popup/index.html'),
+        'service-worker': path.resolve(__dirname, 'src/background/service-worker.ts'),
+        whatsapp: path.resolve(__dirname, 'src/content-scripts/whatsapp.ts'),
+        linkedin: path.resolve(__dirname, 'src/content-scripts/linkedin.ts'),
       },
+      output: {
+        entryFileNames: (chunkInfo) => {
+          if (chunkInfo.name === 'service-worker') {
+            return 'src/background/service-worker.js'
+          }
+          if (chunkInfo.name === 'whatsapp') {
+            return 'src/content-scripts/whatsapp.js'
+          }
+          if (chunkInfo.name === 'linkedin') {
+            return 'src/content-scripts/linkedin.js'
+          }
+          return 'assets/[name]-[hash].js'
+        },
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]'
+      }
     },
   },
 })

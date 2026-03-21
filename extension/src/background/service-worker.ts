@@ -2,7 +2,6 @@
 // Handles message events from content scripts and manages interaction logging
 
 import { supabase } from '../lib/supabase'
-import { normalizePhoneNumber } from '../lib/phoneNormalizer'
 
 console.log('reThink Auto-Capture: Background service worker loaded')
 
@@ -12,7 +11,7 @@ chrome.runtime.onInstalled.addListener(() => {
 })
 
 // Message handlers
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   console.log('Received message:', message)
 
   // Handle async message processing
@@ -86,7 +85,7 @@ async function processPendingEvents() {
 
     // Remove successful events from queue
     if (successfulEvents.length > 0) {
-      const remainingEvents = pendingEvents.filter((_, i) => !successfulEvents.includes(i))
+      const remainingEvents = pendingEvents.filter((_: any, i: number) => !successfulEvents.includes(i))
       await chrome.storage.local.set({ pendingEvents: remainingEvents })
       console.log('Retried', successfulEvents.length, 'events,', remainingEvents.length, 'remaining')
     }
