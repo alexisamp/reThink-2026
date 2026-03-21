@@ -6,6 +6,7 @@
   "permissions": ["contextMenus", "storage", "notifications", "tabs"],
   "host_permissions": [
     "https://www.linkedin.com/*",
+    "https://media.licdn.com/*",
     "https://amvezbymrnvrwcypivkf.supabase.co/*"
   ],
   "background": { "service_worker": "background.js" },
