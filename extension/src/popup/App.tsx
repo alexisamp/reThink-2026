@@ -40,8 +40,21 @@ export default function App() {
       const redirectURL = chrome.identity.getRedirectURL()
       const clientId = '652244567794-rjti1jj53ljnubdq0m6v0rmuji7521nq.apps.googleusercontent.com'
       const scopes = ['openid', 'email', 'profile']
-      const nonce = Date.now().toString() + Math.random().toString(36)
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&response_type=id_token&redirect_uri=${encodeURIComponent(redirectURL)}&scope=${encodeURIComponent(scopes.join(' '))}&nonce=${nonce}`
+
+      // 1. Generate plain nonce
+      const nonce = crypto.randomUUID()
+      console.log('🔑 Plain nonce:', nonce)
+
+      // 2. Hash the nonce with SHA-256 for Google
+      const encoder = new TextEncoder()
+      const data = encoder.encode(nonce)
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      const hashedNonce = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+      console.log('🔐 Hashed nonce for Google:', hashedNonce)
+
+      // 3. Send HASHED nonce to Google
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&response_type=id_token&redirect_uri=${encodeURIComponent(redirectURL)}&scope=${encodeURIComponent(scopes.join(' '))}&nonce=${hashedNonce}`
 
       const responseUrl = await chrome.identity.launchWebAuthFlow({
         url: authUrl,
@@ -53,14 +66,25 @@ export default function App() {
         const idToken = params.get('id_token')
 
         if (idToken) {
-          const { data, error } = await supabase.auth.signInWithIdToken({
+          // Decode token to verify
+          const parts = idToken.split('.')
+          const payload = JSON.parse(atob(parts[1]))
+          console.log('🔍 Nonce in token:', payload.nonce)
+          console.log('🔍 Matches hashed?', payload.nonce === hashedNonce)
+
+          // 4. Pass PLAIN nonce to Supabase (not hashed)
+          const { data: authData, error } = await supabase.auth.signInWithIdToken({
             provider: 'google',
             token: idToken,
-            nonce: nonce,
+            nonce: nonce,  // Original unhashed nonce
           })
 
-          if (error) throw error
-          setUser(data.user)
+          if (error) {
+            console.error('❌ Supabase error:', error)
+            throw error
+          }
+          console.log('✅ Sign in successful!')
+          setUser(authData.user)
         }
       }
     } catch (error) {

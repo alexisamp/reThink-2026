@@ -217,15 +217,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (body.profile_photo_url) {
       try {
         const photoController = new AbortController()
-        setTimeout(() => photoController.abort(), 5000)
+        setTimeout(() => photoController.abort(), 8000)
+        console.log('[reThink] Fetching photo:', body.profile_photo_url.substring(0, 80))
         const photoRes = await fetch(body.profile_photo_url, {
           credentials: 'include',
           signal: photoController.signal,
         })
+        console.log('[reThink] Photo fetch status:', photoRes.status, photoRes.ok)
         if (photoRes.ok) {
           const blob = await photoRes.blob()
+          console.log('[reThink] Blob size:', blob.size, 'type:', blob.type)
           const slug2 = cleanUrl.match(/\/in\/([^/?#]+)/)?.[1] || 'photo'
-          const storagePath = `${userId}/${slug2}.jpg`
+          const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/png' ? 'png' : 'jpg'
+          const storagePath = `${userId}/${slug2}.${ext}`
           const uploadRes = await fetch(
             `${SUPABASE_URL}/storage/v1/object/contact-photos/${storagePath}`,
             {
@@ -233,18 +237,29 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
               headers: {
                 apikey: SUPABASE_ANON_KEY,
                 Authorization: `Bearer ${token}`,
-                'Content-Type': 'image/jpeg',
+                'Content-Type': blob.type || 'image/jpeg',
                 'x-upsert': 'true',
               },
               body: blob,
             }
           )
+          console.log('[reThink] Upload status:', uploadRes.status, uploadRes.ok)
+          if (!uploadRes.ok) {
+            const errText = await uploadRes.text().catch(() => '')
+            console.error('[reThink] Upload error:', errText.substring(0, 200))
+          }
           if (uploadRes.ok) {
             body.profile_photo_url = `${SUPABASE_URL}/storage/v1/object/public/contact-photos/${storagePath}`
+            console.log('[reThink] Photo stored at:', body.profile_photo_url)
+          } else {
+            body.profile_photo_url = null
           }
+        } else {
+          console.error('[reThink] Photo fetch failed:', photoRes.status)
+          body.profile_photo_url = null
         }
-      } catch (_) {
-        // Upload failed — don't store the LinkedIn CDN URL (it 403s from app context)
+      } catch (photoErr) {
+        console.error('[reThink] Photo upload exception:', photoErr.message)
         body.profile_photo_url = null
       }
     }
