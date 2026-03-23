@@ -3,121 +3,87 @@
 
 import { normalizePhoneNumber } from '../lib/phoneNormalizer'
 
-console.log('reThink Auto-Capture: WhatsApp content script loaded')
+console.log('reThink People: WhatsApp content script loaded')
 
-// Track processed messages to avoid duplicates
 const processedMessages = new Set<string>()
 
-// Main observer
 function initWhatsAppObserver() {
-  // Wait for WhatsApp Web to load
   const checkReady = setInterval(() => {
-    const conversationPanel = document.querySelector('div[data-testid="conversation-panel-messages"]')
-    if (conversationPanel) {
+    const panel = document.querySelector('[data-testid="conversation-panel-messages"]')
+      ?? document.querySelector('div.copyable-area')
+    if (panel) {
       clearInterval(checkReady)
-      startObserving(conversationPanel)
+      startObserving(panel)
       console.log('reThink: WhatsApp observer attached')
     }
   }, 1000)
-
-  // Timeout after 30 seconds
   setTimeout(() => clearInterval(checkReady), 30000)
 }
 
-function startObserving(conversationPanel: Element) {
+function startObserving(panel: Element) {
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      if (mutation.addedNodes.length > 0) {
-        mutation.addedNodes.forEach((node) => {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            const element = node as HTMLElement
-            // Check if this is a message
-            if (element.classList.contains('message-in') || element.classList.contains('message-out')) {
-              handleNewMessage(element)
-            }
-            // Also check children in case message is nested
-            element.querySelectorAll('.message-in, .message-out').forEach((msg) => {
-              handleNewMessage(msg as HTMLElement)
-            })
-          }
+      mutation.addedNodes.forEach((node) => {
+        if (node.nodeType !== Node.ELEMENT_NODE) return
+        const el = node as HTMLElement
+
+        // Direct match: element has data-id with @c.us
+        if (el.hasAttribute('data-id') && el.getAttribute('data-id')?.includes('@c.us')) {
+          handleNewMessage(el)
+        }
+
+        // Nested match: container holds message elements
+        el.querySelectorAll('[data-id*="@c.us"]').forEach(msg => {
+          handleNewMessage(msg as HTMLElement)
         })
-      }
+      })
     }
   })
-
-  observer.observe(conversationPanel, {
-    childList: true,
-    subtree: true,
-  })
+  observer.observe(panel, { childList: true, subtree: true })
 }
 
 function handleNewMessage(messageElement: HTMLElement) {
   try {
-    // Generate a unique ID for this message to avoid duplicates
-    const messageId = messageElement.getAttribute('data-id') ?? messageElement.innerText.slice(0, 50)
+    const dataId = messageElement.getAttribute('data-id')
+    if (!dataId || !dataId.includes('@c.us')) return
 
-    if (processedMessages.has(messageId)) {
-      return // Already processed
-    }
-    processedMessages.add(messageId)
+    // Deduplicate by data-id
+    if (processedMessages.has(dataId)) return
+    processedMessages.add(dataId)
 
-    // Detect direction
-    const isOutbound = messageElement.classList.contains('message-out')
-    const direction = isOutbound ? 'outbound' : 'inbound'
+    // Extract phone from data-id (format: "true_PHONE@c.us_MSGID" or "false_PHONE@c.us_MSGID")
+    const phoneMatch = dataId.match(/(?:true|false)_(.+?)@c\.us/)
+    if (!phoneMatch?.[1]) return
+    const rawPhone = phoneMatch[1]
 
-    // Extract phone number from conversation header
-    const headerElement = document.querySelector('header span[data-testid="conversation-info-header-chat-title"]')
-    if (!headerElement) {
-      console.warn('reThink: Could not find conversation header')
-      return
-    }
+    // Skip group chats — check for multiple participant indicator in header
+    const participantEl = document.querySelector('header [data-testid="conversation-info-header"] span[title]')
+    if (participantEl?.textContent?.includes(',')) return
 
-    const rawPhone = headerElement.textContent?.trim()
-    if (!rawPhone) {
-      console.warn('reThink: Could not extract phone from header')
-      return
-    }
-
-    // Skip group chats (check for "group" in header or if there's a participant count indicator)
-    const headerText = rawPhone.toLowerCase()
-    if (headerText.includes('group') || headerText.includes('grupo')) {
-      console.log('reThink: Skipping group chat')
-      return
-    }
-
-    // Check for group indicators in DOM
-    const participantInfo = document.querySelector('header [data-testid="conversation-info-header"] span[title]')
-    if (participantInfo && participantInfo.textContent?.includes(',')) {
-      console.log('reThink: Skipping group chat (multiple participants)')
-      return
-    }
-
-    // Normalize phone number
+    // Normalize phone
     const normalizedPhone = normalizePhoneNumber(rawPhone)
     if (!normalizedPhone) {
-      console.warn('reThink: Could not normalize phone number:', rawPhone)
+      console.warn('reThink: Could not normalize phone:', rawPhone)
       return
     }
 
-    // Send event to background service worker
-    const event = {
+    // Detect direction from class (message-out = sent by user, else received)
+    const isOutbound = messageElement.classList.contains('message-out')
+    const direction: 'outbound' | 'inbound' = isOutbound ? 'outbound' : 'inbound'
+
+    console.log('reThink: Sending WhatsApp message event:', { phone: normalizedPhone, direction })
+
+    chrome.runtime.sendMessage({
       type: 'whatsapp_message',
       phone: normalizedPhone,
       direction,
       timestamp: Date.now(),
-    }
-
-    console.log('reThink: Sending WhatsApp message event:', event)
-
-    chrome.runtime.sendMessage(event).catch((err) => {
-      console.error('reThink: Failed to send message to background:', err)
-    })
+    }).catch(err => console.error('reThink: Failed to send message:', err))
   } catch (error) {
     console.error('reThink: Error handling WhatsApp message:', error)
   }
 }
 
-// Initialize when DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initWhatsAppObserver)
 } else {

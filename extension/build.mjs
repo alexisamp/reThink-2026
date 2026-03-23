@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 import { build } from 'esbuild'
 import { cp, mkdir } from 'fs/promises'
-import { dirname, join } from 'path'
+import { dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 async function buildExtension() {
-  console.log('🔨 Building reThink Auto-Capture extension...')
+  console.log('🔨 Building reThink People extension...')
 
   // Clean dist
   await mkdir('dist', { recursive: true })
   await mkdir('dist/src/background', { recursive: true })
   await mkdir('dist/src/content-scripts', { recursive: true })
-  await mkdir('dist/src/popup', { recursive: true })
+  await mkdir('dist/src/sidebar', { recursive: true })
 
   // Build service worker
   console.log('  📦 Building service worker...')
@@ -37,23 +37,45 @@ async function buildExtension() {
     format: 'esm',
   })
 
-  // Build LinkedIn content script
-  console.log('  📦 Building LinkedIn content script...')
+  // Build floating trigger content script
+  console.log('  📦 Building floating trigger content script...')
   await build({
-    entryPoints: ['src/content-scripts/linkedin.ts'],
+    entryPoints: ['src/content-scripts/floating-trigger.ts'],
     bundle: true,
-    outfile: 'dist/src/content-scripts/linkedin.js',
+    outfile: 'dist/src/content-scripts/floating-trigger.js',
     platform: 'browser',
     target: 'es2020',
     format: 'esm',
   })
 
-  // Build popup
-  console.log('  📦 Building popup...')
+  // Build LinkedIn profile content script
+  console.log('  📦 Building LinkedIn profile content script...')
   await build({
-    entryPoints: ['src/popup/main.tsx'],
+    entryPoints: ['src/content-scripts/linkedin-profile.ts'],
     bundle: true,
-    outfile: 'dist/src/popup/main.js',
+    outfile: 'dist/src/content-scripts/linkedin-profile.js',
+    platform: 'browser',
+    target: 'es2020',
+    format: 'esm',
+  })
+
+  // Build LinkedIn DM content script
+  console.log('  📦 Building LinkedIn DM content script...')
+  await build({
+    entryPoints: ['src/content-scripts/linkedin-dm.ts'],
+    bundle: true,
+    outfile: 'dist/src/content-scripts/linkedin-dm.js',
+    platform: 'browser',
+    target: 'es2020',
+    format: 'esm',
+  })
+
+  // Build sidebar
+  console.log('  📦 Building sidebar...')
+  await build({
+    entryPoints: ['src/sidebar/main.tsx'],
+    bundle: true,
+    outfile: 'dist/src/sidebar/main.js',
     platform: 'browser',
     target: 'es2020',
     format: 'esm',
@@ -65,11 +87,11 @@ async function buildExtension() {
   await cp('manifest.json', 'dist/manifest.json')
   await cp('icons', 'dist/icons', { recursive: true })
 
-  // Copy and fix index.html (replace .tsx with .js)
+  // Copy and fix sidebar index.html (replace .tsx with .js)
   const { readFile, writeFile } = await import('fs/promises')
-  let indexHtml = await readFile('src/popup/index.html', 'utf-8')
-  indexHtml = indexHtml.replace('/src/popup/main.tsx', './main.js')
-  await writeFile('dist/src/popup/index.html', indexHtml)
+  let indexHtml = await readFile('src/sidebar/index.html', 'utf-8')
+  indexHtml = indexHtml.replace('/src/sidebar/main.tsx', './main.js')
+  await writeFile('dist/src/sidebar/index.html', indexHtml)
 
   console.log('✅ Build complete! Extension ready in dist/')
 }

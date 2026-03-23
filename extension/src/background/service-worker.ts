@@ -1,47 +1,87 @@
-// Background service worker for reThink Auto-Capture extension
+// Background service worker for reThink People extension
 // Handles message events from content scripts and manages interaction logging
 
 import { supabase } from '../lib/supabase'
 
-console.log('reThink Auto-Capture: Background service worker loaded')
+const SUPABASE_URL = 'https://amvezbymrnvrwcypivkf.supabase.co'
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtdmV6Ynltcm52cndjeXBpdmtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwMTIxNTgsImV4cCI6MjA4NDU4ODE1OH0.6qgaygMynKaKYB9TlcJAlyLMt87wc7D8PbA5ZeDGDUg'
 
-// Listen for installation
+console.log('reThink People: Background service worker loaded')
+
+// ===== INSTALL =====
+
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('reThink Auto-Capture extension installed')
+  console.log('reThink People extension installed')
+  // Allow sidebar to open on action click
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
 })
 
-// Handle extension icon click - open side panel
+// ===== ACTION CLICK — Open side panel =====
+
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id) return
-
-  // Open side panel
   await chrome.sidePanel.open({ tabId: tab.id })
-
-  // If on WhatsApp Web, get current contact info
   if (tab.url?.includes('web.whatsapp.com')) {
     await updateWhatsAppContactInfo(tab.id)
   }
 })
 
-// Listen for tab URL changes to auto-update contact info when conversation changes
-let lastWhatsAppUrl: string | null = null
+// ===== TAB EVENTS — Enable/disable sidebar + update context =====
 
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  // Only process if URL changed and it's WhatsApp Web
-  if (changeInfo.url && tab.url?.includes('web.whatsapp.com')) {
-    // Avoid processing the same URL multiple times
-    if (tab.url !== lastWhatsAppUrl) {
-      lastWhatsAppUrl = tab.url
-
-      // Wait a bit for WhatsApp to load the new conversation
-      setTimeout(async () => {
-        await updateWhatsAppContactInfo(tabId)
-      }, 1000)
-    }
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  try {
+    const tab = await chrome.tabs.get(tabId)
+    const isReThinkSite = !!(tab.url?.includes('web.whatsapp.com') || tab.url?.includes('linkedin.com'))
+    await chrome.sidePanel.setOptions({ tabId, enabled: isReThinkSite })
+  } catch {
+    // Tab may not exist
   }
 })
 
-// Helper function to extract and update WhatsApp contact info
+let lastWhatsAppUrl: string | null = null
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (!changeInfo.url) return
+
+  const isWhatsApp = changeInfo.url.includes('web.whatsapp.com')
+  const isLinkedIn = changeInfo.url.includes('linkedin.com')
+  await chrome.sidePanel.setOptions({ tabId, enabled: isWhatsApp || isLinkedIn })
+
+  // WhatsApp conversation change
+  if (isWhatsApp && tab.url !== lastWhatsAppUrl) {
+    lastWhatsAppUrl = tab.url ?? null
+    setTimeout(async () => {
+      await updateWhatsAppContactInfo(tabId)
+    }, 1000)
+  }
+
+  // LinkedIn profile navigation
+  if (changeInfo.url.includes('linkedin.com/in/')) {
+    setTimeout(async () => {
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: extractLinkedInProfileBasicInfo,
+        })
+        if (results?.[0]?.result) {
+          const existing = (await chrome.storage.local.get('currentLinkedInProfile')).currentLinkedInProfile
+          const newData = results[0].result
+          if (!existing || existing.linkedinUrl !== newData.linkedinUrl) {
+            await chrome.storage.local.set({
+              currentLinkedInProfile: newData,
+              currentWhatsAppContact: null,
+            })
+          }
+        }
+      } catch {
+        // Tab not injectable
+      }
+    }, 1200)
+  }
+})
+
+// ===== WHATSAPP CONTACT INFO EXTRACTION =====
+
 async function updateWhatsAppContactInfo(tabId: number) {
   try {
     const results = await chrome.scripting.executeScript({
@@ -51,11 +91,12 @@ async function updateWhatsAppContactInfo(tabId: number) {
 
     if (results && results[0]?.result) {
       const contactInfo = results[0].result
-
-      // Only update storage if data actually changed (prevents UI flashing)
-      const { currentWhatsAppContact: existing } = await chrome.storage.local.get('currentWhatsAppContact')
+      const existing = (await chrome.storage.local.get('currentWhatsAppContact')).currentWhatsAppContact
       if (!existing || existing.phone !== contactInfo.phone || existing.name !== contactInfo.name) {
-        await chrome.storage.local.set({ currentWhatsAppContact: contactInfo })
+        await chrome.storage.local.set({
+          currentWhatsAppContact: contactInfo,
+          currentLinkedInProfile: null,
+        })
       }
     }
   } catch (error) {
@@ -63,91 +104,159 @@ async function updateWhatsAppContactInfo(tabId: number) {
   }
 }
 
-// Function to extract contact info from WhatsApp Web page (injected into page context)
+// Injected into WhatsApp Web page — must be self-contained
 function extractWhatsAppContactInfo() {
   try {
     let contactName = null
-
-    // Use innerText — it ONLY returns visible text on screen.
-    // Icon names, aria-labels, data-testids, SVG titles are all invisible → excluded.
-    const conversationHeader = document.querySelector('header [data-testid="conversation-info-header"]') as HTMLElement | null
-
-    if (conversationHeader) {
-      const visibleText = conversationHeader.innerText?.trim()
-      if (visibleText) {
-        // First line of visible text in the header = the contact name
-        const firstLine = visibleText.split('\n')[0]?.trim()
+    const header = document.querySelector('header [data-testid="conversation-info-header"]') as HTMLElement | null
+    if (header) {
+      const text = header.innerText?.trim()
+      if (text) {
+        const firstLine = text.split('\n')[0]?.trim()
         if (firstLine && firstLine.length >= 2 && firstLine.length < 100) {
           contactName = firstLine
         }
       }
     }
 
-    // Try to get phone from the most recent message data-id
-    const messages = document.querySelectorAll('[data-id]')
     let phone = null
-
+    const messages = document.querySelectorAll('[data-id]')
     for (const msg of Array.from(messages).reverse()) {
       const dataId = msg.getAttribute('data-id')
       if (dataId?.includes('@c.us')) {
-        const phoneMatch = dataId.match(/(?:true|false)_(.+?)@c\.us/)
-        if (phoneMatch && phoneMatch[1]) {
-          phone = phoneMatch[1]
-          break
-        }
+        const match = dataId.match(/(?:true|false)_(.+?)@c\.us/)
+        if (match?.[1]) { phone = match[1]; break }
       }
     }
 
-    return {
-      name: contactName,
-      phone: phone,
-      url: window.location.href,
-    }
-  } catch (error) {
-    console.error('Error extracting contact info:', error)
+    return { name: contactName, phone, url: window.location.href }
+  } catch {
     return null
   }
 }
 
-// Message handlers
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  console.log('Received message:', message)
+// Injected into LinkedIn profile pages — must be self-contained
+function extractLinkedInProfileBasicInfo() {
+  try {
+    let name = null
+    const h1 = document.querySelector('h1.text-heading-xlarge') as HTMLElement | null
+    if (h1) name = h1.innerText?.trim() ?? null
 
-  // Handle async message processing
+    let jobTitle = null
+    const titleEl = document.querySelector('.text-body-medium.break-words') as HTMLElement | null
+    if (titleEl) jobTitle = titleEl.innerText?.trim() ?? null
+
+    const rawUrl = window.location.href
+    const match = rawUrl.match(/linkedin\.com\/in\/([^/?#&]+)/)
+    const linkedinUrl = match ? `https://www.linkedin.com/in/${match[1]}` : null
+
+    return { name, jobTitle, linkedinUrl, url: rawUrl }
+  } catch {
+    return null
+  }
+}
+
+// ===== MESSAGE HANDLERS =====
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   ;(async () => {
     try {
-      if (message.type === 'whatsapp_message') {
-        await handleWhatsAppMessage(message)
-        sendResponse({ success: true })
-      } else if (message.type === 'linkedin_message') {
-        await handleLinkedInMessage(message)
-        sendResponse({ success: true })
-      } else if (message.type === 'get_whatsapp_contact') {
-        // Refresh WhatsApp contact info
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-        if (tab?.id && tab.url?.includes('web.whatsapp.com')) {
-          try {
+      switch (message.type) {
+        case 'whatsapp_message':
+          await handleWhatsAppMessage(message)
+          sendResponse({ success: true })
+          break
+
+        case 'linkedin_message':
+          await handleLinkedInMessage(message)
+          sendResponse({ success: true })
+          break
+
+        case 'get_whatsapp_contact': {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+          if (tab?.id && tab.url?.includes('web.whatsapp.com')) {
             const results = await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               func: extractWhatsAppContactInfo,
             })
-
-            if (results && results[0]?.result) {
-              const contactInfo = results[0].result
-              await chrome.storage.local.set({ currentWhatsAppContact: contactInfo })
-              sendResponse({ success: true, contactInfo })
+            if (results?.[0]?.result) {
+              await chrome.storage.local.set({ currentWhatsAppContact: results[0].result })
+              sendResponse({ success: true, contactInfo: results[0].result })
             } else {
               sendResponse({ success: false, error: 'No contact info found' })
             }
-          } catch (error) {
-            console.error('Error extracting contact info:', error)
-            sendResponse({ success: false, error: String(error) })
+          } else {
+            sendResponse({ success: false, error: 'Not on WhatsApp Web' })
           }
-        } else {
-          sendResponse({ success: false, error: 'Not on WhatsApp Web' })
+          break
         }
-      } else {
-        sendResponse({ success: false, error: 'Unknown message type' })
+
+        case 'OPEN_SIDEBAR': {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+          if (tab?.id) await chrome.sidePanel.open({ tabId: tab.id })
+          sendResponse({ success: true })
+          break
+        }
+
+        case 'CHECK_CONTACT_LINKEDIN': {
+          const userId = await getCurrentUserId()
+          if (!userId) { sendResponse({ exists: false }); break }
+          const { data } = await supabase
+            .from('outreach_logs')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('linkedin_url', message.linkedinUrl)
+            .maybeSingle()
+          sendResponse({ exists: !!data })
+          break
+        }
+
+        case 'GET_WHATSAPP_CONTACT_STATUS': {
+          const stored = await chrome.storage.local.get('currentWhatsAppContact')
+          if (!stored.currentWhatsAppContact?.phone) { sendResponse({ isMapped: false }); break }
+          const userId = await getCurrentUserId()
+          if (!userId) { sendResponse({ isMapped: false }); break }
+          const contact = await findContactByPhone(userId, stored.currentWhatsAppContact.phone)
+          sendResponse({ isMapped: !!contact })
+          break
+        }
+
+        case 'LINKEDIN_PROFILE_DATA': {
+          // Store basic info immediately for sidebar routing
+          const existing = (await chrome.storage.local.get('currentLinkedInProfile')).currentLinkedInProfile
+          if (!existing || existing.linkedinUrl !== message.linkedinUrl) {
+            await chrome.storage.local.set({
+              currentLinkedInProfile: {
+                name: message.name,
+                linkedinUrl: message.linkedinUrl,
+                jobTitle: message.jobTitle,
+                company: message.company,
+                profilePhotoUrl: message.profilePhotoUrl,
+              },
+              currentWhatsAppContact: null,
+            })
+          }
+
+          // Upload photo in background (non-blocking)
+          if (message.profilePhotoUrl && message.linkedinUrl) {
+            uploadLinkedInPhoto(message.profilePhotoUrl, message.linkedinUrl).then(async (permanentUrl) => {
+              if (permanentUrl && permanentUrl !== message.profilePhotoUrl) {
+                const current = (await chrome.storage.local.get('currentLinkedInProfile')).currentLinkedInProfile
+                if (current?.linkedinUrl === message.linkedinUrl) {
+                  await chrome.storage.local.set({
+                    currentLinkedInProfile: { ...current, profilePhotoUrl: permanentUrl }
+                  })
+                }
+              }
+            }).catch(() => {})
+          }
+
+          sendResponse({ success: true })
+          break
+        }
+
+        default:
+          sendResponse({ success: false, error: 'Unknown message type' })
       }
     } catch (error) {
       console.error('Error handling message:', error)
@@ -155,65 +264,139 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
   })()
 
-  return true // Keep channel open for async response
+  return true
 })
 
-// Helper: Get current user ID from stored session
+// ===== PHOTO UPLOAD =====
+
+async function uploadLinkedInPhoto(photoUrl: string, linkedinUrl: string): Promise<string | null> {
+  try {
+    const userId = await getCurrentUserId()
+    if (!userId) return null
+
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) return null
+
+    const res = await fetch(photoUrl)
+    if (!res.ok) return null
+
+    const blob = await res.blob()
+    const slug = linkedinUrl.match(/\/in\/([^/?#]+)/)?.[1] ?? 'photo'
+    const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/png' ? 'png' : 'jpg'
+    const storagePath = `${userId}/${slug}.${ext}`
+
+    const uploadRes = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/contact-photos/${storagePath}`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${token}`,
+          'Content-Type': blob.type || 'image/jpeg',
+          'x-upsert': 'true',
+        },
+        body: blob,
+      }
+    )
+
+    if (uploadRes.ok) {
+      return `${SUPABASE_URL}/storage/v1/object/public/contact-photos/${storagePath}`
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// ===== HELPERS =====
+
 async function getCurrentUserId(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession()
   return session?.user?.id ?? null
 }
 
-// Periodic check for pending events (Phase 7 - error handling)
-chrome.alarms.create('processPendingEvents', { periodInMinutes: 5 })
+interface Contact {
+  id: string
+  name: string
+}
 
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'processPendingEvents') {
-    processPendingEvents()
-  }
-})
+async function findContactByPhone(userId: string, phone: string): Promise<Contact | null> {
+  const { data, error } = await supabase
+    .from('contact_phone_mappings')
+    .select(`
+      contact_id,
+      outreach_logs!inner (
+        id,
+        name
+      )
+    `)
+    .eq('user_id', userId)
+    .eq('phone_number', phone)
+    .maybeSingle()
 
-async function processPendingEvents() {
-  console.log('Processing pending events...')
+  if (error || !data) return null
 
+  const contactData = data.outreach_logs as any
+  return { id: contactData.id, name: contactData.name }
+}
+
+async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Promise<Contact | null> {
+  const { data, error } = await supabase
+    .from('outreach_logs')
+    .select('id, name')
+    .eq('user_id', userId)
+    .eq('linkedin_url', linkedinUrl)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return { id: data.id, name: data.name }
+}
+
+interface ActiveWindow {
+  id: string
+  message_count: number
+  window_end: string
+}
+
+async function findActiveWindow(userId: string, contactId: string, channel: string): Promise<ActiveWindow | null> {
+  const { data, error } = await supabase
+    .from('extension_interaction_windows')
+    .select('id, message_count, window_end')
+    .eq('user_id', userId)
+    .eq('contact_id', contactId)
+    .eq('channel', channel)
+    .gt('window_end', new Date().toISOString())
+    .order('window_end', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) return null
+  return data
+}
+
+async function queueFailedEvent(event: WhatsAppMessageEvent | LinkedInMessageEvent) {
   try {
     const { pendingEvents = [] } = await chrome.storage.local.get('pendingEvents')
+    pendingEvents.push(event)
+    await chrome.storage.local.set({ pendingEvents })
+  } catch {
+    // Best effort
+  }
+}
 
-    if (pendingEvents.length === 0) {
-      return
-    }
-
-    console.log('Found', pendingEvents.length, 'pending events to retry')
-
-    const successfulEvents: number[] = []
-
-    for (let i = 0; i < pendingEvents.length; i++) {
-      const event = pendingEvents[i]
-
-      try {
-        if (event.type === 'whatsapp_message') {
-          await handleWhatsAppMessage(event)
-          successfulEvents.push(i)
-          console.log('Successfully retried WhatsApp event')
-        } else if (event.type === 'linkedin_message') {
-          await handleLinkedInMessage(event)
-          successfulEvents.push(i)
-          console.log('Successfully retried LinkedIn event')
-        }
-      } catch (error) {
-        console.error('Failed to retry event:', error)
-        // Event stays in queue for next retry
-      }
-    }
-
-    // Remove successful events from queue
-    if (successfulEvents.length > 0) {
-      const remainingEvents = pendingEvents.filter((_: any, i: number) => !successfulEvents.includes(i))
-      await chrome.storage.local.set({ pendingEvents: remainingEvents })
-      console.log('Retried', successfulEvents.length, 'events,', remainingEvents.length, 'remaining')
-    }
-  } catch (error) {
-    console.error('Error in processPendingEvents:', error)
+async function updateLastProcessedMessage(userId: string, phone: string, timestamp: number) {
+  try {
+    await supabase
+      .from('contact_phone_mappings')
+      .update({
+        last_processed_at: new Date(timestamp).toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('phone_number', phone)
+  } catch {
+    // Non-critical
   }
 }
 
@@ -227,51 +410,27 @@ interface WhatsAppMessageEvent {
 }
 
 async function handleWhatsAppMessage(event: WhatsAppMessageEvent) {
-  console.log('Handling WhatsApp message event:', event)
-
   try {
     const userId = await getCurrentUserId()
-    if (!userId) {
-      console.warn('User not logged in, skipping message')
-      return
-    }
+    if (!userId) return
 
-    // 1. Find contact by phone
     const contact = await findContactByPhone(userId, event.phone)
     if (!contact) {
-      console.log('Unknown phone number, opening contact mapping popup')
-      await openContactMappingPopup(event.phone)
+      // Store pending phone so sidebar can prompt for mapping
+      await chrome.storage.local.set({ pendingPhone: event.phone })
       return
     }
 
-    console.log('Found contact:', contact.name)
-
-    // 2. Check for active window (window_end > now)
     const activeWindow = await findActiveWindow(userId, contact.id, 'whatsapp')
 
     if (activeWindow) {
-      // Extend existing window: increment message_count
-      console.log('Extending existing window:', activeWindow.id)
-      const { error } = await supabase
+      await supabase
         .from('extension_interaction_windows')
-        .update({
-          message_count: activeWindow.message_count + 1,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ message_count: activeWindow.message_count + 1, updated_at: new Date().toISOString() })
         .eq('id', activeWindow.id)
-
-      if (error) {
-        console.error('Failed to update window:', error)
-        await queueFailedEvent(event)
-        throw error
-      }
-
-      console.log('Window updated, message count:', activeWindow.message_count + 1)
     } else {
-      // No active window - check if interaction already exists for today
       const interactionDate = new Date(event.timestamp).toISOString().split('T')[0]
 
-      // Check for existing interaction for this contact + date
       const { data: existingInteraction } = await supabase
         .from('interactions')
         .select('id')
@@ -281,15 +440,9 @@ async function handleWhatsAppMessage(event: WhatsAppMessageEvent) {
         .eq('type', 'whatsapp')
         .maybeSingle()
 
-      let interaction
+      let interaction = existingInteraction
 
-      if (existingInteraction) {
-        // Interaction already exists (from previous message today) - reuse it
-        console.log('Reusing existing interaction for today:', existingInteraction.id)
-        interaction = existingInteraction
-      } else {
-        // Create new interaction
-        console.log('Creating new interaction and window')
+      if (!interaction) {
         const { data: newInteraction, error: interactionError } = await supabase
           .from('interactions')
           .insert({
@@ -304,16 +457,12 @@ async function handleWhatsAppMessage(event: WhatsAppMessageEvent) {
           .single()
 
         if (interactionError || !newInteraction) {
-          console.error('Failed to create interaction:', interactionError)
           await queueFailedEvent(event)
           throw interactionError
         }
-
-        console.log('Interaction created:', newInteraction.id)
         interaction = newInteraction
       }
 
-      // Create window (6 hours from now)
       const windowStart = new Date(event.timestamp)
       const windowEnd = new Date(event.timestamp)
       windowEnd.setHours(windowEnd.getHours() + 6)
@@ -332,32 +481,26 @@ async function handleWhatsAppMessage(event: WhatsAppMessageEvent) {
         })
 
       if (windowError) {
-        console.error('Failed to create window:', windowError)
+        await queueFailedEvent(event)
         throw windowError
       }
 
-      console.log('Window created, expires at:', windowEnd.toISOString())
-
-      // Update networking habit count
       await updateNetworkingHabit(userId, interactionDate)
-
-      // Update last processed message timestamp for this contact
       await updateLastProcessedMessage(userId, event.phone, event.timestamp)
     }
   } catch (error) {
     console.error('Error in handleWhatsAppMessage:', error)
-    // Show notification to user
     chrome.notifications.create({
       type: 'basic',
       iconUrl: '/icons/icon-48.png',
-      title: 'reThink Auto-Capture',
+      title: 'reThink People',
       message: 'Failed to log WhatsApp interaction. Check your connection.',
     })
     throw error
   }
 }
 
-// ===== LINKEDIN MESSAGE HANDLER (STUB FOR NOW) =====
+// ===== LINKEDIN MESSAGE HANDLER =====
 
 interface LinkedInMessageEvent {
   type: 'linkedin_message'
@@ -367,49 +510,21 @@ interface LinkedInMessageEvent {
 }
 
 async function handleLinkedInMessage(event: LinkedInMessageEvent) {
-  console.log('Handling LinkedIn message event:', event)
-
   try {
     const userId = await getCurrentUserId()
-    if (!userId) {
-      console.warn('User not logged in, skipping message')
-      return
-    }
+    if (!userId) return
 
-    // 1. Find contact by LinkedIn URL
     const contact = await findContactByLinkedInUrl(userId, event.linkedinUrl)
-    if (!contact) {
-      console.log('Unknown LinkedIn profile, opening contact mapping popup')
-      await openContactMappingPopup(undefined, event.linkedinUrl)
-      return
-    }
+    if (!contact) return // Unknown LinkedIn contact — no popup for DMs
 
-    console.log('Found contact:', contact.name)
-
-    // 2. Check for active window (window_end > now)
     const activeWindow = await findActiveWindow(userId, contact.id, 'linkedin_msg')
 
     if (activeWindow) {
-      // Extend existing window: increment message_count
-      console.log('Extending existing window:', activeWindow.id)
-      const { error } = await supabase
+      await supabase
         .from('extension_interaction_windows')
-        .update({
-          message_count: activeWindow.message_count + 1,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ message_count: activeWindow.message_count + 1, updated_at: new Date().toISOString() })
         .eq('id', activeWindow.id)
-
-      if (error) {
-        console.error('Failed to update window:', error)
-        await queueFailedEvent(event)
-        throw error
-      }
-
-      console.log('Window updated, message count:', activeWindow.message_count + 1)
     } else {
-      // Create new interaction + window
-      console.log('Creating new interaction and window')
       const interactionDate = new Date(event.timestamp).toISOString().split('T')[0]
 
       const { data: interaction, error: interactionError } = await supabase
@@ -426,14 +541,10 @@ async function handleLinkedInMessage(event: LinkedInMessageEvent) {
         .single()
 
       if (interactionError || !interaction) {
-        console.error('Failed to create interaction:', interactionError)
         await queueFailedEvent(event)
         throw interactionError
       }
 
-      console.log('Interaction created:', interaction.id)
-
-      // Create window (6 hours from now)
       const windowStart = new Date(event.timestamp)
       const windowEnd = new Date(event.timestamp)
       windowEnd.setHours(windowEnd.getHours() + 6)
@@ -451,241 +562,123 @@ async function handleLinkedInMessage(event: LinkedInMessageEvent) {
           message_count: 1,
         })
 
-      if (windowError) {
-        console.error('Failed to create window:', windowError)
-        throw windowError
-      }
+      if (windowError) throw windowError
 
-      console.log('Window created, expires at:', windowEnd.toISOString())
-
-      // Update networking habit count
       await updateNetworkingHabit(userId, interactionDate)
     }
   } catch (error) {
     console.error('Error in handleLinkedInMessage:', error)
-    // Show notification to user
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: '/icons/icon-48.png',
-      title: 're Think Auto-Capture',
-      message: 'Failed to log LinkedIn interaction. Check your connection.',
-    })
     throw error
   }
 }
 
-// ===== HELPER FUNCTIONS =====
-
-interface Contact {
-  id: string
-  name: string
-}
-
-async function findContactByPhone(userId: string, phone: string): Promise<Contact | null> {
-  console.log('Finding contact by phone:', phone)
-
-  const { data, error } = await supabase
-    .from('contact_phone_mappings')
-    .select(`
-      contact_id,
-      outreach_logs!inner (
-        id,
-        name
-      )
-    `)
-    .eq('user_id', userId)
-    .eq('phone_number', phone)
-    .maybeSingle()
-
-  if (error) {
-    console.error('Error finding contact by phone:', error)
-    return null
-  }
-
-  if (!data) {
-    console.log('No contact found for phone:', phone)
-    return null
-  }
-
-  // Extract contact info from the JOIN
-  const contactData = data.outreach_logs as any
-  return {
-    id: contactData.id,
-    name: contactData.name,
-  }
-}
-
-async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Promise<Contact | null> {
-  console.log('Finding contact by LinkedIn URL:', linkedinUrl)
-
-  const { data, error } = await supabase
-    .from('outreach_logs')
-    .select('id, name')
-    .eq('user_id', userId)
-    .eq('linkedin_url', linkedinUrl)
-    .maybeSingle()
-
-  if (error) {
-    console.error('Error finding contact by LinkedIn URL:', error)
-    return null
-  }
-
-  if (!data) {
-    console.log('No contact found for LinkedIn URL:', linkedinUrl)
-    return null
-  }
-
-  return {
-    id: data.id,
-    name: data.name,
-  }
-}
-
-interface ActiveWindow {
-  id: string
-  message_count: number
-  window_end: string
-}
-
-async function findActiveWindow(
-  userId: string,
-  contactId: string,
-  channel: string
-): Promise<ActiveWindow | null> {
-  console.log('Finding active window for contact:', contactId, 'channel:', channel)
-
-  const { data, error } = await supabase
-    .from('extension_interaction_windows')
-    .select('id, message_count, window_end')
-    .eq('user_id', userId)
-    .eq('contact_id', contactId)
-    .eq('channel', channel)
-    .gt('window_end', new Date().toISOString())
-    .order('window_end', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) {
-    console.error('Error finding active window:', error)
-    return null
-  }
-
-  if (data) {
-    console.log('Found active window:', data.id, 'expires:', data.window_end)
-  }
-
-  return data
-}
-
-async function openContactMappingPopup(phone?: string, linkedinUrl?: string) {
-  console.log('Opening contact mapping popup for:', phone ?? linkedinUrl)
-
-  // Store pending data in chrome.storage (temp)
-  await chrome.storage.local.set({
-    pendingPhone: phone ?? null,
-    pendingLinkedInUrl: linkedinUrl ?? null,
-  })
-
-  // Open popup in new tab for contact mapping
-  const popupUrl = chrome.runtime.getURL('src/popup/index.html#map-contact')
-  await chrome.tabs.create({ url: popupUrl })
-}
-
-async function queueFailedEvent(event: WhatsAppMessageEvent | LinkedInMessageEvent) {
-  console.log('Queueing failed event:', event)
-
-  try {
-    const { pendingEvents = [] } = await chrome.storage.local.get('pendingEvents')
-    pendingEvents.push(event)
-    await chrome.storage.local.set({ pendingEvents })
-    console.log('Event queued, total pending:', pendingEvents.length)
-  } catch (error) {
-    console.error('Failed to queue event:', error)
-  }
-}
-
-// ===== NETWORKING HABIT AUTO-UPDATE (Phase 6) =====
+// ===== NETWORKING HABIT AUTO-UPDATE =====
 
 async function updateNetworkingHabit(userId: string, interactionDate: string) {
-  console.log('Updating networking habit for date:', interactionDate)
-
   try {
-    // 1. Get the user's networking habit
-    const { data: habit, error: habitError } = await supabase
+    const { data: habit } = await supabase
       .from('habits')
       .select('id')
       .eq('user_id', userId)
       .eq('tracks_outreach', 'networking')
-      .eq('is_active', true)
+      .eq('active', true)
       .maybeSingle()
 
-    if (habitError) throw habitError
+    if (!habit) return
 
-    if (!habit) {
-      console.log('User does not have a networking habit configured')
-      return
-    }
-
-    console.log('Found networking habit:', habit.id)
-
-    // 2. Count distinct contacts talked to today
-    const { data: todayInteractions, error: interactionsError } = await supabase
+    const { data: todayInteractions } = await supabase
       .from('interactions')
       .select('contact_id')
       .eq('user_id', userId)
       .eq('interaction_date', interactionDate)
 
-    if (interactionsError) throw interactionsError
-
     const distinctContacts = new Set(
       (todayInteractions ?? []).map((i: any) => i.contact_id)
     ).size
 
-    console.log('Distinct contacts for', interactionDate, ':', distinctContacts)
-
-    // 3. Upsert habit_log
-    const { error: upsertError } = await supabase
+    await supabase
       .from('habit_logs')
       .upsert(
-        {
-          user_id: userId,
-          habit_id: habit.id,
-          log_date: interactionDate,
-          value: distinctContacts,
-        },
-        {
-          onConflict: 'user_id,habit_id,log_date',
-        }
+        { user_id: userId, habit_id: habit.id, log_date: interactionDate, value: distinctContacts },
+        { onConflict: 'user_id,habit_id,log_date' }
       )
-
-    if (upsertError) throw upsertError
-
-    console.log('Networking habit updated, value:', distinctContacts)
-  } catch (error) {
-    console.error('Error updating networking habit:', error)
-    // Don't throw - habit update is nice-to-have, not critical
+  } catch {
+    // Non-critical
   }
 }
 
-/**
- * Update the last processed message timestamp for a phone number mapping
- */
-async function updateLastProcessedMessage(userId: string, phone: string, timestamp: number) {
+// ===== PROSPECTING HABIT AUTO-UPDATE =====
+
+async function updateProspectingHabit(userId: string, date: string) {
   try {
-    const { error } = await supabase
-      .from('contact_phone_mappings')
-      .update({
-        last_processed_at: new Date(timestamp).toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+    const { data: habit } = await supabase
+      .from('habits')
+      .select('id')
       .eq('user_id', userId)
-      .eq('phone_number', phone)
+      .eq('tracks_outreach', 'prospecting')
+      .eq('active', true)
+      .maybeSingle()
 
-    if (error) {
-      console.error('Failed to update last processed message:', error)
-    }
-  } catch (error) {
-    console.error('Error updating last processed message:', error)
-    // Don't throw - this is tracking only, not critical
+    if (!habit) return
+
+    const { count } = await supabase
+      .from('outreach_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('log_date', date)
+
+    await supabase
+      .from('habit_logs')
+      .upsert(
+        { user_id: userId, habit_id: habit.id, log_date: date, value: count ?? 0 },
+        { onConflict: 'user_id,habit_id,log_date' }
+      )
+  } catch {
+    // Non-critical
   }
 }
+
+// ===== PENDING EVENTS RETRY =====
+
+chrome.alarms.create('processPendingEvents', { periodInMinutes: 5 })
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'processPendingEvents') {
+    processPendingEvents()
+  }
+})
+
+async function processPendingEvents() {
+  try {
+    const { pendingEvents = [] } = await chrome.storage.local.get('pendingEvents')
+    if (pendingEvents.length === 0) return
+
+    const successfulIndexes: number[] = []
+
+    for (let i = 0; i < pendingEvents.length; i++) {
+      const event = pendingEvents[i]
+      try {
+        if (event.type === 'whatsapp_message') {
+          await handleWhatsAppMessage(event)
+          successfulIndexes.push(i)
+        } else if (event.type === 'linkedin_message') {
+          await handleLinkedInMessage(event)
+          successfulIndexes.push(i)
+        }
+      } catch {
+        // Stays in queue
+      }
+    }
+
+    if (successfulIndexes.length > 0) {
+      const remaining = pendingEvents.filter((_: any, i: number) => !successfulIndexes.includes(i))
+      await chrome.storage.local.set({ pendingEvents: remaining })
+    }
+  } catch {
+    // Best effort
+  }
+}
+
+// Export for use in sidebar (via chrome.storage workaround)
+// updateProspectingHabit is called from service worker context only
+export { updateProspectingHabit }

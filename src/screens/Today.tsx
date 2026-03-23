@@ -713,6 +713,37 @@ export default function Today() {
     load()
   }, [today])
 
+  // Realtime subscription: re-fetch habit logs when changed externally (e.g. from Chrome extension)
+  useEffect(() => {
+    if (!userId) return
+
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const thirtyAgoStr = localDate(thirtyDaysAgo)
+
+    const subscription = supabase
+      .channel('habit-logs-realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'habit_logs',
+        filter: `user_id=eq.${userId}`,
+      }, async () => {
+        const [logsRes, recentLogsRes] = await Promise.all([
+          supabase.from('habit_logs').select('*').eq('user_id', userId).eq('log_date', today),
+          supabase.from('habit_logs').select('*').eq('user_id', userId)
+            .gte('log_date', thirtyAgoStr).order('log_date', { ascending: false }),
+        ])
+        if (logsRes.data) setLogs(logsRes.data)
+        if (recentLogsRes.data) setRecentLogs(recentLogsRes.data)
+      })
+      .subscribe()
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [userId, today])
+
   // Only initialize from DB once — prevents stale upsertReview responses from clobbering local pill markers
   useEffect(() => {
     if (journalInitialized.current) return
