@@ -581,7 +581,7 @@ async function updateNetworkingHabit(userId: string, interactionDate: string) {
       .select('id')
       .eq('user_id', userId)
       .eq('tracks_outreach', 'networking')
-      .eq('active', true)
+      .eq('is_active', true)
       .maybeSingle()
 
     if (!habit) return
@@ -616,7 +616,7 @@ async function updateProspectingHabit(userId: string, date: string) {
       .select('id')
       .eq('user_id', userId)
       .eq('tracks_outreach', 'prospecting')
-      .eq('active', true)
+      .eq('is_active', true)
       .maybeSingle()
 
     if (!habit) return
