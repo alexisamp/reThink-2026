@@ -10,6 +10,105 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log('reThink Auto-Capture extension installed')
 })
 
+// Handle extension icon click - open side panel
+chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab.id) return
+
+  // Open side panel
+  await chrome.sidePanel.open({ tabId: tab.id })
+
+  // If on WhatsApp Web, get current contact info
+  if (tab.url?.includes('web.whatsapp.com')) {
+    await updateWhatsAppContactInfo(tab.id)
+  }
+})
+
+// Listen for tab URL changes to auto-update contact info when conversation changes
+let lastWhatsAppUrl: string | null = null
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  // Only process if URL changed and it's WhatsApp Web
+  if (changeInfo.url && tab.url?.includes('web.whatsapp.com')) {
+    // Avoid processing the same URL multiple times
+    if (tab.url !== lastWhatsAppUrl) {
+      lastWhatsAppUrl = tab.url
+
+      // Wait a bit for WhatsApp to load the new conversation
+      setTimeout(async () => {
+        await updateWhatsAppContactInfo(tabId)
+      }, 1000)
+    }
+  }
+})
+
+// Helper function to extract and update WhatsApp contact info
+async function updateWhatsAppContactInfo(tabId: number) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: extractWhatsAppContactInfo,
+    })
+
+    if (results && results[0]?.result) {
+      const contactInfo = results[0].result
+
+      // Only update storage if data actually changed (prevents UI flashing)
+      const { currentWhatsAppContact: existing } = await chrome.storage.local.get('currentWhatsAppContact')
+      if (!existing || existing.phone !== contactInfo.phone || existing.name !== contactInfo.name) {
+        await chrome.storage.local.set({ currentWhatsAppContact: contactInfo })
+      }
+    }
+  } catch (error) {
+    console.error('Failed to extract WhatsApp contact info:', error)
+  }
+}
+
+// Function to extract contact info from WhatsApp Web page (injected into page context)
+function extractWhatsAppContactInfo() {
+  try {
+    let contactName = null
+
+    // Use innerText — it ONLY returns visible text on screen.
+    // Icon names, aria-labels, data-testids, SVG titles are all invisible → excluded.
+    const conversationHeader = document.querySelector('header [data-testid="conversation-info-header"]') as HTMLElement | null
+
+    if (conversationHeader) {
+      const visibleText = conversationHeader.innerText?.trim()
+      if (visibleText) {
+        // First line of visible text in the header = the contact name
+        const firstLine = visibleText.split('\n')[0]?.trim()
+        if (firstLine && firstLine.length >= 2 && firstLine.length < 100) {
+          contactName = firstLine
+        }
+      }
+    }
+
+    // Try to get phone from the most recent message data-id
+    const messages = document.querySelectorAll('[data-id]')
+    let phone = null
+
+    for (const msg of Array.from(messages).reverse()) {
+      const dataId = msg.getAttribute('data-id')
+      if (dataId?.includes('@c.us')) {
+        const phoneMatch = dataId.match(/(?:true|false)_(.+?)@c\.us/)
+        if (phoneMatch && phoneMatch[1]) {
+          phone = phoneMatch[1]
+          break
+        }
+      }
+    }
+
+    return {
+      name: contactName,
+      phone: phone,
+      url: window.location.href,
+    }
+  } catch (error) {
+    console.error('Error extracting contact info:', error)
+    return null
+  }
+}
+
 // Message handlers
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   console.log('Received message:', message)
@@ -23,6 +122,30 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       } else if (message.type === 'linkedin_message') {
         await handleLinkedInMessage(message)
         sendResponse({ success: true })
+      } else if (message.type === 'get_whatsapp_contact') {
+        // Refresh WhatsApp contact info
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        if (tab?.id && tab.url?.includes('web.whatsapp.com')) {
+          try {
+            const results = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: extractWhatsAppContactInfo,
+            })
+
+            if (results && results[0]?.result) {
+              const contactInfo = results[0].result
+              await chrome.storage.local.set({ currentWhatsAppContact: contactInfo })
+              sendResponse({ success: true, contactInfo })
+            } else {
+              sendResponse({ success: false, error: 'No contact info found' })
+            }
+          } catch (error) {
+            console.error('Error extracting contact info:', error)
+            sendResponse({ success: false, error: String(error) })
+          }
+        } else {
+          sendResponse({ success: false, error: 'Not on WhatsApp Web' })
+        }
       } else {
         sendResponse({ success: false, error: 'Unknown message type' })
       }
@@ -145,30 +268,50 @@ async function handleWhatsAppMessage(event: WhatsAppMessageEvent) {
 
       console.log('Window updated, message count:', activeWindow.message_count + 1)
     } else {
-      // Create new interaction + window
-      console.log('Creating new interaction and window')
+      // No active window - check if interaction already exists for today
       const interactionDate = new Date(event.timestamp).toISOString().split('T')[0]
 
-      const { data: interaction, error: interactionError } = await supabase
+      // Check for existing interaction for this contact + date
+      const { data: existingInteraction } = await supabase
         .from('interactions')
-        .insert({
-          user_id: userId,
-          contact_id: contact.id,
-          type: 'whatsapp',
-          direction: event.direction,
-          notes: null,
-          interaction_date: interactionDate,
-        })
-        .select()
-        .single()
+        .select('id')
+        .eq('user_id', userId)
+        .eq('contact_id', contact.id)
+        .eq('interaction_date', interactionDate)
+        .eq('type', 'whatsapp')
+        .maybeSingle()
 
-      if (interactionError || !interaction) {
-        console.error('Failed to create interaction:', interactionError)
-        await queueFailedEvent(event)
-        throw interactionError
+      let interaction
+
+      if (existingInteraction) {
+        // Interaction already exists (from previous message today) - reuse it
+        console.log('Reusing existing interaction for today:', existingInteraction.id)
+        interaction = existingInteraction
+      } else {
+        // Create new interaction
+        console.log('Creating new interaction and window')
+        const { data: newInteraction, error: interactionError } = await supabase
+          .from('interactions')
+          .insert({
+            user_id: userId,
+            contact_id: contact.id,
+            type: 'whatsapp',
+            direction: event.direction,
+            notes: null,
+            interaction_date: interactionDate,
+          })
+          .select()
+          .single()
+
+        if (interactionError || !newInteraction) {
+          console.error('Failed to create interaction:', interactionError)
+          await queueFailedEvent(event)
+          throw interactionError
+        }
+
+        console.log('Interaction created:', newInteraction.id)
+        interaction = newInteraction
       }
-
-      console.log('Interaction created:', interaction.id)
 
       // Create window (6 hours from now)
       const windowStart = new Date(event.timestamp)
@@ -197,6 +340,9 @@ async function handleWhatsAppMessage(event: WhatsAppMessageEvent) {
 
       // Update networking habit count
       await updateNetworkingHabit(userId, interactionDate)
+
+      // Update last processed message timestamp for this contact
+      await updateLastProcessedMessage(userId, event.phone, event.timestamp)
     }
   } catch (error) {
     console.error('Error in handleWhatsAppMessage:', error)
@@ -518,5 +664,28 @@ async function updateNetworkingHabit(userId: string, interactionDate: string) {
   } catch (error) {
     console.error('Error updating networking habit:', error)
     // Don't throw - habit update is nice-to-have, not critical
+  }
+}
+
+/**
+ * Update the last processed message timestamp for a phone number mapping
+ */
+async function updateLastProcessedMessage(userId: string, phone: string, timestamp: number) {
+  try {
+    const { error } = await supabase
+      .from('contact_phone_mappings')
+      .update({
+        last_processed_at: new Date(timestamp).toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('phone_number', phone)
+
+    if (error) {
+      console.error('Failed to update last processed message:', error)
+    }
+  } catch (error) {
+    console.error('Error updating last processed message:', error)
+    // Don't throw - this is tracking only, not critical
   }
 }

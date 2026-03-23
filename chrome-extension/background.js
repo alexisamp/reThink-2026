@@ -220,7 +220,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         setTimeout(() => photoController.abort(), 8000)
         console.log('[reThink] Fetching photo:', body.profile_photo_url.substring(0, 80))
         const photoRes = await fetch(body.profile_photo_url, {
-          credentials: 'include',
           signal: photoController.signal,
         })
         console.log('[reThink] Photo fetch status:', photoRes.status, photoRes.ok)

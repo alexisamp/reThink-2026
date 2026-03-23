@@ -490,9 +490,12 @@ export default function ContactDetailDrawer({
                 {/* Avatar */}
                 {contact.profile_photo_url ? (
                   <img
-                    src={contact.profile_photo_url}
+                    src={
+                      contact.profile_photo_url.includes('media.licdn.com')
+                        ? `https://amvezbymrnvrwcypivkf.supabase.co/functions/v1/proxy-image?url=${encodeURIComponent(contact.profile_photo_url)}`
+                        : contact.profile_photo_url
+                    }
                     alt={contact.name}
-                    referrerPolicy="no-referrer"
                     className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
