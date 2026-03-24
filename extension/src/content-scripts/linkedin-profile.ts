@@ -85,40 +85,45 @@ function extractCompany(): string | null {
   return null
 }
 
+function isProfileDisplayPhoto(url: string): boolean {
+  // LinkedIn profile photos contain 'profile-displayphoto' in the path.
+  // Nav avatars, company logos, and post images do NOT.
+  return url.indexOf('profile-displayphoto') !== -1
+}
+
 function findProfilePhotoUrl(): string | null {
-  // Step 1: known class selectors
+  // Exclude images inside the global nav (that's the logged-in user's own avatar)
+  const nav = document.querySelector('#global-nav, nav[aria-label]')
+
+  // Step 1: specific class selectors scoped outside nav
   const selectors = [
     'img.pv-top-card-profile-picture__image--show',
     'img.pv-top-card-profile-picture__image',
     'img.profile-photo-edit__preview',
     'img.EntityPhoto-circle-5',
-    'img[data-ghost-classes]',
   ]
   for (const sel of selectors) {
     const el = document.querySelector(sel) as HTMLImageElement | null
+    if (!el) continue
+    if (nav?.contains(el)) continue  // skip if inside nav
     const url = extractPhotoUrl(el)
     if (url) return url
   }
 
-  // Step 2: scan imgs for 'profile-display'
+  // Step 2: any img with 'profile-displayphoto' in the URL — most reliable signal
   for (const img of Array.from(document.querySelectorAll('img')) as HTMLImageElement[]) {
+    if (nav?.contains(img)) continue
     const url = extractPhotoUrl(img)
-    if (url && url.indexOf('profile-display') !== -1) return url
+    if (url && isProfileDisplayPhoto(url)) return url
   }
 
-  // Step 3: any media.licdn.com/dms/image in the top card area
-  const topCard = document.querySelector('.pv-top-card, .artdeco-card, main section')
+  // Step 3: profile photo inside the main content top card area
+  const topCard = document.querySelector('main .pv-top-card, main section:first-of-type, .scaffold-layout__main section')
   if (topCard) {
     for (const img of Array.from(topCard.querySelectorAll('img')) as HTMLImageElement[]) {
       const url = extractPhotoUrl(img)
       if (url && url.indexOf('media.licdn.com/dms/image') !== -1) return url
     }
-  }
-
-  // Step 4: any media.licdn.com image on page (last resort)
-  for (const img of Array.from(document.querySelectorAll('img')) as HTMLImageElement[]) {
-    const url = extractPhotoUrl(img)
-    if (url && url.indexOf('media.licdn.com/dms/image') !== -1) return url
   }
 
   return null
