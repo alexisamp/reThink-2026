@@ -11,8 +11,9 @@ function cleanLinkedInUrl(url: string): string | null {
 
 function extractPhotoUrl(el: HTMLImageElement | null): string | null {
   if (!el) return null
+  // Keep full URL including query params — LinkedIn CDN requires ?e=&v=&t= tokens
   const url = el.src || el.getAttribute('data-delayed-url') || el.getAttribute('data-ghost-url') || ''
-  if (url && url.indexOf('media.licdn.com') !== -1) return url.split('?')[0]
+  if (url && url.indexOf('media.licdn.com') !== -1) return url
   return null
 }
 
