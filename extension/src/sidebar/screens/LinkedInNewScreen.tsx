@@ -71,9 +71,10 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
         .eq('id', contact.id)
         .eq('user_id', user.id)
       onSaved()
-    } catch (err) {
+    } catch (err: any) {
       console.error('Link error:', err)
-      alert('Failed to link contact. Please try again.')
+      const msg = err?.message ?? err?.details ?? String(err)
+      alert(`Failed to link contact: ${msg}`)
     } finally {
       setLinking(false)
     }
@@ -88,13 +89,12 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
         photoUrl = await uploadPhoto(photoUrl, user.id, profile?.linkedinUrl ?? null)
       }
 
-      // Upsert by linkedin_url to handle duplicates gracefully
       const { error } = await supabase
         .from('outreach_logs')
-        .upsert({
+        .insert({
           user_id: user.id,
           name: name.trim(),
-          status: 'PROSPECT',
+          status: 'RECONNECT',
           contact_type: 'networking',
           category,
           linkedin_url: profile?.linkedinUrl ?? null,
@@ -104,16 +104,14 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
           job_title: profile?.jobTitle ?? null,
           company: profile?.company ?? null,
           personal_context: context.trim() || null,
-        }, {
-          onConflict: 'user_id,linkedin_url',
-          ignoreDuplicates: false,
         })
 
       if (error) throw error
       onSaved()
-    } catch (err) {
+    } catch (err: any) {
       console.error('Save error:', err)
-      alert('Failed to save contact. Please try again.')
+      const msg = err?.message ?? err?.details ?? String(err)
+      alert(`Failed to save contact: ${msg}`)
     } finally {
       setSaving(false)
     }

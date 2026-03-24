@@ -61,7 +61,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (!changeInfo.url) return
 
   const isWhatsApp = changeInfo.url.includes('web.whatsapp.com')
-  // Removed: setOptions enable/disable — was causing panel to be disabled when tab.url was briefly undefined
 
   // WhatsApp conversation change
   if (isWhatsApp && tab.url !== lastWhatsAppUrl) {
@@ -71,7 +70,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     }, 1000)
   }
 
-  // LinkedIn profile navigation
+  // LinkedIn profile navigation (URL changed within LinkedIn)
   if (changeInfo.url.includes('linkedin.com/in/')) {
     setTimeout(async () => {
       try {
@@ -79,20 +78,58 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
           target: { tabId },
           func: extractLinkedInProfileBasicInfo,
         })
-        if (results?.[0]?.result) {
-          const existing = (await chrome.storage.local.get('currentLinkedInProfile')).currentLinkedInProfile
-          const newData = results[0].result
-          if (!existing || existing.linkedinUrl !== newData.linkedinUrl) {
-            await chrome.storage.local.set({
-              currentLinkedInProfile: newData,
-              currentWhatsAppContact: null,
-            })
-          }
+        if (results?.[0]?.result?.linkedinUrl) {
+          await chrome.storage.local.set({
+            currentLinkedInProfile: results[0].result,
+            currentWhatsAppContact: null,
+          })
         }
       } catch {
         // Tab not injectable
       }
     }, 1200)
+  } else if (changeInfo.url.includes('linkedin.com') && !changeInfo.url.includes('linkedin.com/in/')) {
+    // Navigated to LinkedIn but not a profile page — clear profile
+    await chrome.storage.local.set({ currentLinkedInProfile: null })
+  }
+})
+
+// ===== TAB SWITCH — Clear stale context when user switches tabs =====
+
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  try {
+    const tab = await chrome.tabs.get(tabId)
+    if (!tab.url) return
+
+    if (tab.url.includes('linkedin.com/in/')) {
+      // Switched to a LinkedIn profile tab — clear WhatsApp, extract LinkedIn
+      await chrome.storage.local.set({ currentWhatsAppContact: null })
+      setTimeout(async () => {
+        try {
+          const results = await chrome.scripting.executeScript({
+            target: { tabId },
+            func: extractLinkedInProfileBasicInfo,
+          })
+          if (results?.[0]?.result?.linkedinUrl) {
+            await chrome.storage.local.set({
+              currentLinkedInProfile: results[0].result,
+              currentWhatsAppContact: null,
+            })
+          }
+        } catch {}
+      }, 600)
+    } else if (tab.url.includes('web.whatsapp.com')) {
+      // Switched to WhatsApp — clear LinkedIn, extract WhatsApp contact
+      await chrome.storage.local.set({ currentLinkedInProfile: null })
+      setTimeout(async () => {
+        await updateWhatsAppContactInfo(tabId)
+      }, 600)
+    } else if (!tab.url.includes('linkedin.com')) {
+      // Switched to an unrelated tab — clear both
+      await chrome.storage.local.set({ currentWhatsAppContact: null, currentLinkedInProfile: null })
+    }
+  } catch {
+    // Tab may not be accessible
   }
 })
 
