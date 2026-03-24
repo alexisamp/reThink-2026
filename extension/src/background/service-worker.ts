@@ -156,12 +156,33 @@ function extractWhatsAppContactInfo() {
   }
 }
 
-// Injected into LinkedIn profile pages — must be self-contained
+// Injected into LinkedIn profile pages — must be self-contained (no imports)
 function extractLinkedInProfileBasicInfo() {
   try {
+    // Name — multiple fallbacks since LinkedIn changes class names frequently
     let name = null
-    const h1 = document.querySelector('h1.text-heading-xlarge') as HTMLElement | null
-    if (h1) name = h1.innerText?.trim() ?? null
+    const nameSelectors = [
+      'h1.text-heading-xlarge', 'h1[class*="text-heading"]',
+      'h1.t-24', 'h1.t-bold', '.pv-top-card h1', '.ph5 h1', 'main h1', 'h1'
+    ]
+    for (const sel of nameSelectors) {
+      const el = document.querySelector(sel) as HTMLElement | null
+      if (el) {
+        const text = el.innerText?.trim()
+        if (text && text.length >= 2 && text.length < 60 && !text.includes('|') && !text.includes('·')) {
+          name = text; break
+        }
+      }
+    }
+
+    // Fallback: extract from URL slug
+    if (!name) {
+      const slugMatch = window.location.href.match(/linkedin\.com\/in\/([^/?#&]+)/)
+      if (slugMatch?.[1]) {
+        name = slugMatch[1].split('-').filter((w: string) => w.length > 1)
+          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+      }
+    }
 
     let jobTitle = null
     const titleEl = document.querySelector('.text-body-medium.break-words') as HTMLElement | null
@@ -259,20 +280,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         case 'LINKEDIN_PROFILE_DATA': {
-          // Store basic info immediately for sidebar routing
+          // Always update — overwrite with fresh data (2nd attempt at 3s may have better data)
           const existing = (await chrome.storage.local.get('currentLinkedInProfile')).currentLinkedInProfile
-          if (!existing || existing.linkedinUrl !== message.linkedinUrl) {
-            await chrome.storage.local.set({
-              currentLinkedInProfile: {
-                name: message.name,
-                linkedinUrl: message.linkedinUrl,
-                jobTitle: message.jobTitle,
-                company: message.company,
-                profilePhotoUrl: message.profilePhotoUrl,
-              },
-              currentWhatsAppContact: null,
-            })
+          const updated = {
+            name: message.name ?? existing?.name ?? null,  // keep old name if new is null
+            linkedinUrl: message.linkedinUrl,
+            jobTitle: message.jobTitle ?? existing?.jobTitle ?? null,
+            company: message.company ?? existing?.company ?? null,
+            profilePhotoUrl: message.profilePhotoUrl ?? existing?.profilePhotoUrl ?? null,
           }
+          await chrome.storage.local.set({
+            currentLinkedInProfile: updated,
+            currentWhatsAppContact: null,
+          })
 
           // Upload photo in background (non-blocking)
           if (message.profilePhotoUrl && message.linkedinUrl) {

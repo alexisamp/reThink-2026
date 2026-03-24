@@ -37,6 +37,7 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
   const [category, setCategory] = useState('Peer')
   const [context, setContext] = useState('')
   const [saving, setSaving] = useState(false)
+  const hasName = !!(profile?.name)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const firstName = (profile?.name ?? 'this person').split(' ')[0]
@@ -255,18 +256,22 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <div>
-          <label style={labelStyle}>Nombre</label>
-          <input
-            type="text"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="Nombre completo"
-            style={inputStyle}
-            onFocus={e => (e.target.style.borderColor = '#003720')}
-            onBlur={e => (e.target.style.borderColor = '#E3E3E3')}
-          />
-        </div>
+        {/* Only show name field if LinkedIn didn't capture it */}
+        {!hasName && (
+          <div>
+            <label style={labelStyle}>Nombre</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Nombre completo"
+              style={inputStyle}
+              autoFocus
+              onFocus={e => (e.target.style.borderColor = '#003720')}
+              onBlur={e => (e.target.style.borderColor = '#E3E3E3')}
+            />
+          </div>
+        )}
 
         <div>
           <label style={labelStyle}>Categoría</label>
@@ -274,11 +279,11 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
         </div>
 
         <div>
-          <label style={labelStyle}>¿Cuál es tu contexto con {firstName}?</label>
+          <label style={labelStyle}>¿Cuál es tu contexto con {hasName ? firstName : 'esta persona'}?</label>
           <textarea
             value={context}
             onChange={e => setContext(e.target.value)}
-            placeholder={`¿Cómo lo/la conociste? ¿Qué oportunidad ves? ¿Cuál es el objetivo de esta relación?`}
+            placeholder="¿Cómo lo/la conociste? ¿Qué oportunidad ves? ¿Cuál es el objetivo de esta relación?"
             rows={4}
             style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
             onFocus={e => (e.target.style.borderColor = '#003720')}
@@ -303,7 +308,7 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
           cursor: name.trim() && !saving ? 'pointer' : 'not-allowed',
         }}
       >
-        {saving ? 'Guardando...' : `Agregar ${firstName} a reThink →`}
+        {saving ? 'Guardando...' : `Agregar ${hasName ? firstName : name.trim() || 'contacto'} a reThink →`}
       </button>
     </div>
   )

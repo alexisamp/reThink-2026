@@ -16,23 +16,79 @@ function extractPhotoUrl(el: HTMLImageElement | null): string | null {
   return null
 }
 
+function extractName(): string | null {
+  // Multiple fallbacks — LinkedIn changes class names frequently
+  const selectors = [
+    'h1.text-heading-xlarge',
+    'h1[class*="text-heading"]',
+    'h1.t-24',
+    'h1.t-bold',
+    '.pv-top-card--list h1',
+    '.pv-top-card h1',
+    '.ph5 h1',
+    'section.artdeco-card h1',
+    'main h1',
+    'h1',  // last resort
+  ]
+  for (const sel of selectors) {
+    const el = document.querySelector(sel) as HTMLElement | null
+    if (el) {
+      const text = el.innerText?.trim()
+      // Sanity check: a name is 2-60 chars and doesn't look like a job title
+      if (text && text.length >= 2 && text.length < 60 && !text.includes('|') && !text.includes('·')) {
+        return text
+      }
+    }
+  }
+  // Fallback: extract from URL slug
+  const match = window.location.href.match(/linkedin\.com\/in\/([^/?#&]+)/)
+  if (match?.[1]) {
+    return match[1]
+      .split('-')
+      .filter(w => w.length > 1)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ')
+  }
+  return null
+}
+
+function extractJobTitle(): string | null {
+  const selectors = [
+    '.text-body-medium.break-words',
+    '[data-field="headline"]',
+    '.pv-text-details__left-panel .mt2 span[aria-hidden="true"]',
+    '.ph5 .mt2 span[aria-hidden="true"]',
+  ]
+  for (const sel of selectors) {
+    const el = document.querySelector(sel) as HTMLElement | null
+    if (el) {
+      const text = el.innerText?.trim()
+      if (text && text.length > 2) return text
+    }
+  }
+  return null
+}
+
+function extractCompany(): string | null {
+  const selectors = [
+    '[data-field="experience_company_logo"] ~ div span[aria-hidden="true"]',
+    '.pv-entity__secondary-title',
+    '.experience-item__subtitle',
+  ]
+  for (const sel of selectors) {
+    const el = document.querySelector(sel) as HTMLElement | null
+    if (el) {
+      const text = el.innerText?.trim()
+      if (text && text.length > 1) return text
+    }
+  }
+  return null
+}
+
 function extractProfileData() {
-  // Name
-  let name: string | null = null
-  const h1 = document.querySelector('h1.text-heading-xlarge') as HTMLElement | null
-  if (h1) name = h1.innerText?.trim() ?? null
-
-  // Job title
-  let jobTitle: string | null = null
-  const titleEl = document.querySelector('.text-body-medium.break-words') as HTMLElement | null
-  if (titleEl) jobTitle = titleEl.innerText?.trim() ?? null
-
-  // Company (from experience section or headline fallback)
-  let company: string | null = null
-  const companyEl = document.querySelector('[data-field="experience_company_logo"] ~ div span[aria-hidden="true"]') as HTMLElement | null
-  if (companyEl) company = companyEl.innerText?.trim() ?? null
-
-  // LinkedIn URL (normalized)
+  const name = extractName()
+  const jobTitle = extractJobTitle()
+  const company = extractCompany()
   const linkedinUrl = cleanLinkedInUrl(window.location.href)
 
   // Photo — 5-step chain
@@ -42,12 +98,10 @@ function extractProfileData() {
   const ogImage = document.querySelector('meta[property="og:image"]')
   if (ogImage) {
     const ogUrl = ogImage.getAttribute('content') ?? ''
-    if (ogUrl && ogUrl.indexOf('media.licdn.com') !== -1) {
-      profilePhotoUrl = ogUrl
-    }
+    if (ogUrl && ogUrl.indexOf('media.licdn.com') !== -1) profilePhotoUrl = ogUrl
   }
 
-  // Step 2: Specific class selectors
+  // Step 2: known class selectors
   if (!profilePhotoUrl) {
     const selectors = [
       'img.pv-top-card-profile-picture__image--show',
@@ -63,29 +117,21 @@ function extractProfileData() {
     }
   }
 
-  // Step 3: Scan all imgs for 'profile-display'
+  // Step 3: scan imgs for 'profile-display'
   if (!profilePhotoUrl) {
-    const imgs = Array.from(document.querySelectorAll('img')) as HTMLImageElement[]
-    for (const img of imgs) {
+    for (const img of Array.from(document.querySelectorAll('img')) as HTMLImageElement[]) {
       const url = extractPhotoUrl(img)
-      if (url && url.indexOf('profile-display') !== -1) {
-        profilePhotoUrl = url
-        break
-      }
+      if (url && url.indexOf('profile-display') !== -1) { profilePhotoUrl = url; break }
     }
   }
 
-  // Step 4: Top card fallback
+  // Step 4: top card fallback
   if (!profilePhotoUrl) {
     const topCard = document.querySelector('.pv-top-card') ?? document.querySelector('.artdeco-card')
     if (topCard) {
-      const imgs = Array.from(topCard.querySelectorAll('img')) as HTMLImageElement[]
-      for (const img of imgs) {
+      for (const img of Array.from(topCard.querySelectorAll('img')) as HTMLImageElement[]) {
         const url = extractPhotoUrl(img)
-        if (url && url.indexOf('media.licdn.com/dms/image') !== -1) {
-          profilePhotoUrl = url
-          break
-        }
+        if (url && url.indexOf('media.licdn.com/dms/image') !== -1) { profilePhotoUrl = url; break }
       }
     }
   }
@@ -93,20 +139,21 @@ function extractProfileData() {
   return { name, jobTitle, company, linkedinUrl, profilePhotoUrl }
 }
 
-// Wait for page to load then extract and send
 function init() {
   const data = extractProfileData()
-  if (data.linkedinUrl) {
-    chrome.runtime.sendMessage({
-      type: 'LINKEDIN_PROFILE_DATA',
-      ...data,
-    })
-  }
+  if (!data.linkedinUrl) return
+
+  console.log('reThink: LinkedIn profile extracted:', data.name, data.linkedinUrl)
+  chrome.runtime.sendMessage({ type: 'LINKEDIN_PROFILE_DATA', ...data })
 }
 
-// Run after LinkedIn SPA settles
+// Run after LinkedIn SPA settles — try at 1.5s and again at 3s in case page was slow
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => setTimeout(init, 1500))
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(init, 1500)
+    setTimeout(init, 3000)
+  })
 } else {
   setTimeout(init, 1500)
+  setTimeout(init, 3000)
 }
