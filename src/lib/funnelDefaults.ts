@@ -55,17 +55,53 @@ export const INTERACTION_POINTS: Record<string, number> = {
   in_person: 5,
   virtual_coffee: 4,
   call: 3,
+  whatsapp: 3,       // personal number = high intimacy signal
   email: 2,
   linkedin_msg: 1,
-  whatsapp: 1,
 }
 
-export function decayFactor(daysAgo: number): number {
+// strict  → friends & family (expect frequent contact, 2-week cadence)
+// lenient → mentors & investors (quarterly check-ins are healthy)
+// moderate → everyone else (monthly cadence)
+type DecayProfile = 'strict' | 'moderate' | 'lenient'
+
+const CATEGORY_DECAY_PROFILE: Record<string, DecayProfile> = {
+  friend:       'strict',
+  family:       'strict',
+  peer:         'moderate',
+  business_dev: 'moderate',
+  partner:      'moderate',
+  client:       'moderate',
+  job_us:       'moderate',
+  mentor:       'lenient',
+}
+
+function decayForProfile(daysAgo: number, profile: DecayProfile): number {
+  if (profile === 'strict') {
+    if (daysAgo <= 3)  return 1.0
+    if (daysAgo <= 14) return 0.7
+    if (daysAgo <= 30) return 0.3
+    if (daysAgo <= 60) return 0.05
+    return 0
+  }
+  if (profile === 'lenient') {
+    if (daysAgo <= 14)  return 1.0
+    if (daysAgo <= 60)  return 0.8
+    if (daysAgo <= 180) return 0.4
+    if (daysAgo <= 365) return 0.1
+    return 0
+  }
+  // moderate
   if (daysAgo <= 7)   return 1.0
   if (daysAgo <= 30)  return 0.7
-  if (daysAgo <= 90)  return 0.4
-  if (daysAgo <= 365) return 0.1
+  if (daysAgo <= 90)  return 0.3
+  if (daysAgo <= 180) return 0.1
   return 0
+}
+
+// Keep the named export for any code that imports it directly
+export function decayFactor(daysAgo: number): number {
+  return decayForProfile(daysAgo, 'moderate')
 }
 
 export function daysSince(dateStr: string): number {
@@ -74,13 +110,17 @@ export function daysSince(dateStr: string): number {
   return Math.floor((now.getTime() - then.getTime()) / (1000 * 60 * 60 * 24))
 }
 
-export function computeHealthScore(interactions: Array<{ type: string; interaction_date: string }>): number {
+export function computeHealthScore(
+  interactions: Array<{ type: string; interaction_date: string }>,
+  category?: string | null
+): number {
+  const profile: DecayProfile = CATEGORY_DECAY_PROFILE[category ?? ''] ?? 'moderate'
   const raw = interactions.reduce((sum, i) => {
     const pts = INTERACTION_POINTS[i.type] ?? 1
-    const decay = decayFactor(daysSince(i.interaction_date))
+    const decay = decayForProfile(daysSince(i.interaction_date), profile)
     return sum + pts * decay
   }, 0)
-  return Math.min(10, Math.max(1, Math.round(raw)))
+  return Math.min(10, Math.max(1, Math.ceil(raw)))
 }
 
 export const CATEGORY_LABELS: Record<string, string> = {

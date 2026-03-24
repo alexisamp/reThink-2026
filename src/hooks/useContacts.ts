@@ -216,7 +216,8 @@ export function useContacts(
   }, [contacts])
 
   const updateHealthScore = useCallback(async (contactId: string, interactions: Array<{ type: string; interaction_date: string }>): Promise<void> => {
-    const score = computeHealthScore(interactions)
+    const category = contacts.find(c => c.id === contactId)?.category
+    const score = computeHealthScore(interactions, category)
     const lastDate = interactions.length > 0
       ? interactions.reduce((latest, i) => i.interaction_date > latest ? i.interaction_date : latest, interactions[0].interaction_date)
       : null
@@ -224,7 +225,7 @@ export function useContacts(
       .update({ health_score: score, last_interaction_at: lastDate ? new Date(lastDate).toISOString() : null })
       .eq('id', contactId)
     setContacts(prev => prev.map(c => c.id === contactId ? { ...c, health_score: score } : c))
-  }, [])
+  }, [contacts])
 
   // Auto-flag DORMANT: contacts with last_interaction_at null or > 90 days and status is NURTURING/ENGAGED
   const autoFlagDormant = useCallback(async (): Promise<number> => {

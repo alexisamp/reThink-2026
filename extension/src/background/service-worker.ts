@@ -263,15 +263,6 @@ function extractLinkedInProfileBasicInfo() {
       }
     }
 
-    // Fallback: extract from URL slug
-    if (!name) {
-      const slugMatch = window.location.href.match(/linkedin\.com\/in\/([^/?#&]+)/)
-      if (slugMatch?.[1]) {
-        name = slugMatch[1].split('-').filter((w: string) => w.length > 1)
-          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
-      }
-    }
-
     let jobTitle = null
     const titleEl = document.querySelector('.text-body-medium.break-words') as HTMLElement | null
     if (titleEl) jobTitle = titleEl.innerText?.trim() ?? null
@@ -319,15 +310,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const tabId = sender.tab?.id
           if (tabId) {
             if (message.phone) {
-              // Phone provided directly — write immediately (no race condition)
               await chrome.storage.local.set({
                 currentWhatsAppContact: { phone: message.phone, name: null },
                 currentLinkedInProfile: null,
               })
+              // Auto-backfill after 2s so messages have time to render in DOM
+              setTimeout(() => autoBackfillWhatsApp(tabId, message.phone), 2000)
             } else {
               await chrome.storage.local.remove('currentWhatsAppContact')
             }
-            // Extract name asynchronously (messages are already loaded when phone changed)
             updateWhatsAppContactInfo(tabId)
           }
           sendResponse({ success: true })
@@ -451,6 +442,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break
         }
 
+        case 'BACKFILL_WHATSAPP_HISTORY': {
+          const userId = await getCurrentUserId()
+          if (!userId) { sendResponse({ success: false, error: 'not_auth' }); break }
+
+          const contact = await findContactByPhone(userId, message.phone)
+          if (!contact) { sendResponse({ success: false, error: 'no_contact' }); break }
+
+          const waTabs = await chrome.tabs.query({ url: 'https://web.whatsapp.com/*' })
+          const waTab = waTabs[0]
+          if (!waTab?.id) { sendResponse({ success: false, error: 'no_tab' }); break }
+
+          const injected = await chrome.scripting.executeScript({
+            target: { tabId: waTab.id },
+            func: scanWhatsAppMessageHistory,
+          })
+          const rawEntries: Array<{ timestamp: number; direction: 'inbound' | 'outbound' }> = injected?.[0]?.result ?? []
+
+          const result = await backfillWindowsForContact(userId, contact, rawEntries)
+          sendResponse({ success: true, ...result })
+          break
+        }
+
         default:
           sendResponse({ success: false, error: 'Unknown message type' })
       }
@@ -462,6 +475,190 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return true
 })
+
+// ===== WHATSAPP AUTO BACKFILL =====
+// Called silently every time the user switches to a mapped WhatsApp contact.
+// Scans visible messages and fills in any 6-hour windows not yet in the DB.
+// Safe to call repeatedly — deduplicates by interaction_date.
+
+async function autoBackfillWhatsApp(tabId: number, phone: string) {
+  try {
+    const userId = await getCurrentUserId()
+    if (!userId) return
+    const contact = await findContactByPhone(userId, phone)
+    if (!contact) return  // Not mapped — nothing to do
+
+    const injected = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: scanWhatsAppMessageHistory,
+    })
+    const rawEntries: Array<{ timestamp: number; direction: 'inbound' | 'outbound' }> = injected?.[0]?.result ?? []
+    if (rawEntries.length === 0) return
+
+    await backfillWindowsForContact(userId, contact, rawEntries)
+  } catch {
+    // Non-critical — fail silently
+  }
+}
+
+// Shared logic used by both auto-backfill and the manual BACKFILL_WHATSAPP_HISTORY message
+async function backfillWindowsForContact(
+  userId: string,
+  contact: Contact,
+  rawEntries: Array<{ timestamp: number; direction: 'inbound' | 'outbound' }>
+): Promise<{ found: number; created: number }> {
+  const windows = groupInto6HourWindows(rawEntries)
+  let created = 0
+
+  for (const win of windows) {
+    const interactionDate = new Date(win.timestamp).toISOString().split('T')[0]
+
+    const { data: existing } = await supabase
+      .from('interactions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('contact_id', contact.id)
+      .eq('interaction_date', interactionDate)
+      .eq('type', 'whatsapp')
+      .maybeSingle()
+
+    if (existing) continue
+
+    const { data: interaction, error: iErr } = await supabase
+      .from('interactions')
+      .insert({
+        user_id: userId,
+        contact_id: contact.id,
+        type: 'whatsapp',
+        direction: win.direction,
+        notes: `[backfill] ${win.messageCount} messages`,
+        interaction_date: interactionDate,
+      })
+      .select()
+      .single()
+
+    if (iErr || !interaction) continue
+
+    const windowStart = new Date(win.timestamp)
+    const windowEnd = new Date(win.timestamp)
+    windowEnd.setHours(windowEnd.getHours() + 6)
+
+    await supabase.from('extension_interaction_windows').insert({
+      user_id: userId,
+      contact_id: contact.id,
+      interaction_id: interaction.id,
+      channel: 'whatsapp',
+      window_start: windowStart.toISOString(),
+      window_end: windowEnd.toISOString(),
+      direction: win.direction,
+      message_count: win.messageCount,
+    })
+
+    created++
+  }
+
+  if (created > 0) {
+    const affectedDates = [...new Set(windows.map(w => new Date(w.timestamp).toISOString().split('T')[0]))]
+    for (const date of affectedDates) {
+      await updateNetworkingHabit(userId, date)
+    }
+  }
+
+  return { found: rawEntries.length, created }
+}
+
+// ===== WHATSAPP HISTORY BACKFILL =====
+
+// Injected into WhatsApp tab — MUST be self-contained (no imports, no closure references)
+function scanWhatsAppMessageHistory(): Array<{ timestamp: number; direction: 'inbound' | 'outbound' }> {
+  function parseWATimestamp(s: string): number | null {
+    // s examples: "3:45 PM, 3/21/2026" | "15:45, 21/3/2026" | "3:45 p.\u00a0m., 21/3/2026"
+    const commaIdx = s.lastIndexOf(',')
+    if (commaIdx === -1) return null
+    const timeStr = s.slice(0, commaIdx).trim()
+    const dateStr = s.slice(commaIdx + 1).trim()
+
+    const parts = dateStr.trim().split('/')
+    if (parts.length !== 3) return null
+
+    const p0 = parseInt(parts[0]), p1 = parseInt(parts[1])
+    let year = parseInt(parts[2].trim()), month: number, day: number
+    if (isNaN(year) || parts[2].trim().length !== 4) return null
+    // DD/MM vs MM/DD: if first part > 12 it must be day
+    if (p0 > 12) { day = p0; month = p1 } else { month = p0; day = p1 }
+
+    const timeMatch = timeStr.match(/(\d+):(\d+)/)
+    if (!timeMatch) return null
+    let h = parseInt(timeMatch[1]), m = parseInt(timeMatch[2])
+    if (/p[.\s]*m/i.test(timeStr) && h !== 12) h += 12
+    else if (/a[.\s]*m/i.test(timeStr) && h === 12) h = 0
+
+    const d = new Date(year, month - 1, day, h, m)
+    return isNaN(d.getTime()) ? null : d.getTime()
+  }
+
+  try {
+    const entries: Array<{ timestamp: number; direction: 'inbound' | 'outbound' }> = []
+    const seen = new Set<string>()
+
+    const copyables = document.querySelectorAll('[data-pre-plain-text]')
+    for (const el of Array.from(copyables)) {
+      const prePlain = el.getAttribute('data-pre-plain-text') ?? ''
+      const bracketMatch = prePlain.match(/\[([^\]]+)\]/)
+      if (!bracketMatch) continue
+
+      const timestamp = parseWATimestamp(bracketMatch[1])
+      if (!timestamp) continue
+
+      const bubble = el.closest('[data-id]') as HTMLElement | null
+      const dataId = bubble?.getAttribute('data-id') ?? ''
+      if (dataId && seen.has(dataId)) continue
+      if (dataId) seen.add(dataId)
+
+      const isInbound = !!(el.closest('.message-in') || bubble?.closest('.message-in'))
+      entries.push({ timestamp, direction: isInbound ? 'inbound' : 'outbound' })
+    }
+
+    return entries
+  } catch {
+    return []
+  }
+}
+
+interface BackfillWindow {
+  timestamp: number
+  direction: 'inbound' | 'outbound'
+  messageCount: number
+}
+
+function groupInto6HourWindows(entries: Array<{ timestamp: number; direction: 'inbound' | 'outbound' }>): BackfillWindow[] {
+  if (entries.length === 0) return []
+  entries.sort((a, b) => a.timestamp - b.timestamp)
+
+  const SIX_HOURS = 6 * 60 * 60 * 1000
+  const windows: BackfillWindow[] = []
+  let group: typeof entries = []
+  let windowStart = entries[0].timestamp
+
+  for (const entry of entries) {
+    if (entry.timestamp - windowStart > SIX_HOURS) {
+      if (group.length > 0) {
+        const out = group.filter(m => m.direction === 'outbound').length
+        windows.push({ timestamp: windowStart, direction: out >= group.length - out ? 'outbound' : 'inbound', messageCount: group.length })
+      }
+      windowStart = entry.timestamp
+      group = [entry]
+    } else {
+      group.push(entry)
+    }
+  }
+  if (group.length > 0) {
+    const out = group.filter(m => m.direction === 'outbound').length
+    windows.push({ timestamp: windowStart, direction: out >= group.length - out ? 'outbound' : 'inbound', messageCount: group.length })
+  }
+
+  return windows
+}
 
 // ===== PHOTO UPLOAD =====
 

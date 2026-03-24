@@ -15,12 +15,35 @@ interface Props {
 
 export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
   const [interactionCount, setInteractionCount] = useState<number>(0)
+  const [backfilling, setBackfilling] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<{ found: number; created: number } | null>(null)
 
   useEffect(() => {
+    if (!contact.reThinkId) return
     supabase.from('interactions').select('id', { count: 'exact', head: true })
       .eq('contact_id', contact.reThinkId!)
       .then(({ count }) => setInteractionCount(count ?? 0))
   }, [contact.reThinkId])
+
+  async function handleBackfill() {
+    if (!contact.phone || backfilling) return
+    setBackfilling(true)
+    setBackfillResult(null)
+    try {
+      const result: any = await chrome.runtime.sendMessage({
+        type: 'BACKFILL_WHATSAPP_HISTORY',
+        phone: contact.phone,
+      })
+      if (result?.success) {
+        setBackfillResult({ found: result.found, created: result.created })
+        if (result.created > 0) setInteractionCount(prev => prev + result.created)
+      }
+    } catch {
+      // ignore
+    } finally {
+      setBackfilling(false)
+    }
+  }
 
   const score = contact.healthScore ?? 1
   const scoreColor = score >= 7 ? '#79D65E' : score >= 4 ? '#F59E0B' : '#EF4444'
@@ -84,6 +107,35 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
           <p style={{ fontSize: '11px', color: '#536471', margin: 0 }}>last contact</p>
         </div>
       </div>
+
+      {/* Manual rescan — for after scrolling up to load older messages */}
+      <button
+        onClick={handleBackfill}
+        disabled={backfilling}
+        style={{
+          width: '100%',
+          padding: '9px 12px',
+          marginBottom: '12px',
+          background: backfilling ? '#F0F0F0' : '#F8FAF8',
+          color: backfilling ? '#536471' : '#536471',
+          border: '1px dashed #D0D8D0',
+          borderRadius: '8px',
+          fontSize: '11px',
+          fontWeight: 500,
+          cursor: backfilling ? 'wait' : 'pointer',
+          textAlign: 'center',
+        }}
+      >
+        {backfilling ? 'Scanning…' : '⏪ Rescan chat history'}
+      </button>
+
+      {backfillResult && (
+        <div style={{ padding: '8px 12px', background: '#F0FAF0', borderRadius: '8px', marginBottom: '12px', fontSize: '12px', color: '#003720' }}>
+          {backfillResult.found === 0
+            ? 'No messages found — scroll up in the chat and try again'
+            : `Found ${backfillResult.found} messages → added ${backfillResult.created} session${backfillResult.created !== 1 ? 's' : ''} to history`}
+        </div>
+      )}
 
       <DailyProgress userId={user.id} />
 

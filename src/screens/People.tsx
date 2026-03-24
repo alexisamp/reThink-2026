@@ -284,7 +284,7 @@ export default function People() {
                 className="flex items-center gap-3 py-3 cursor-pointer hover:bg-mercury/10 -mx-2 px-2 rounded-lg transition-colors"
               >
                 {/* Avatar */}
-                <ContactAvatar name={contact.name} photoUrl={contact.profile_photo_url} healthScore={contact.health_score} />
+                <ContactAvatar name={contact.name} photoUrl={contact.profile_photo_url ?? null} healthScore={contact.health_score} />
 
                 {/* Name + meta */}
                 <div className="flex-1 min-w-0">

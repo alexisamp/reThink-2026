@@ -48,7 +48,8 @@ export function useInteractions(
     direction: Interaction['direction'] = 'outbound',
     notes: string | null = null,
     interaction_date: string = today,
-    attioRecordId?: string | null
+    attioRecordId?: string | null,
+    category?: string | null
   ): Promise<Interaction | null> => {
     if (!userId) return null
     const { data, error } = await supabase
@@ -78,7 +79,7 @@ export function useInteractions(
     await updateNetworkingHabit(allTodayFlat)
 
     // Recompute and save health score for this contact
-    const newScore = Math.min(10, Math.max(1, computeHealthScore(allForContact)))
+    const newScore = Math.min(10, Math.max(1, computeHealthScore(allForContact, category)))
     const now = new Date().toISOString()
     supabase.from('outreach_logs')
       .update({ health_score: newScore, last_interaction_at: now, updated_at: now })
@@ -88,7 +89,7 @@ export function useInteractions(
     return newItem
   }, [userId, today, interactionsByContact, updateNetworkingHabit])
 
-  const deleteInteraction = useCallback(async (interaction: Interaction): Promise<void> => {
+  const deleteInteraction = useCallback(async (interaction: Interaction, category?: string | null): Promise<void> => {
     if (!userId) return
     await supabase.from('interactions').delete().eq('id', interaction.id)
     const updated = (interactionsByContact[interaction.contact_id] ?? []).filter(i => i.id !== interaction.id)
@@ -102,7 +103,7 @@ export function useInteractions(
     await updateNetworkingHabit(allTodayFlat)
 
     // Recompute and save health score for this contact
-    const newScore = Math.min(10, Math.max(1, computeHealthScore(updated)))
+    const newScore = Math.min(10, Math.max(1, computeHealthScore(updated, category)))
     supabase.from('outreach_logs')
       .update({ health_score: newScore, updated_at: new Date().toISOString() })
       .eq('id', interaction.contact_id)

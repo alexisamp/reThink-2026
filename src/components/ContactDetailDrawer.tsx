@@ -240,7 +240,7 @@ export default function ContactDetailDrawer({
   async function handleLogSave() {
     if (!contact) return
     setLogSaving(true)
-    await logInteraction(contact.id, logType, logDirection, logNotes || null, logDate, contact.attio_record_id)
+    await logInteraction(contact.id, logType, logDirection, logNotes || null, logDate, contact.attio_record_id, contact.category)
     setLogSaving(false)
     setLogFormOpen(false)
     setLogNotes('')
@@ -748,7 +748,7 @@ export default function ContactDetailDrawer({
                           )}
                         </div>
                         <button
-                          onClick={() => deleteInteraction(interaction)}
+                          onClick={() => deleteInteraction(interaction, contact?.category)}
                           className="opacity-0 group-hover:opacity-100 text-shuttle/30 hover:text-red-400 transition-all flex-shrink-0 mt-0.5"
                           aria-label="Delete interaction"
                         >
