@@ -28,8 +28,7 @@ chrome.runtime.onInstalled.addListener(async () => {
       // Inject content scripts manually
       const scripts: string[] = []
       if (isWA) scripts.push('src/content-scripts/whatsapp.js', 'src/content-scripts/floating-trigger.js')
-      if (isLI && tab.url.includes('/in/')) scripts.push('src/content-scripts/linkedin-profile.js', 'src/content-scripts/floating-trigger.js')
-      if (isLI && tab.url.includes('/messaging/')) scripts.push('src/content-scripts/linkedin-dm.js')
+      if (isLI) scripts.push('src/content-scripts/linkedin-profile.js', 'src/content-scripts/floating-trigger.js', 'src/content-scripts/linkedin-dm.js')
 
       for (const file of scripts) {
         try {
