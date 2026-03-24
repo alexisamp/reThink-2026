@@ -10,10 +10,41 @@ console.log('reThink People: Background service worker loaded')
 
 // ===== INSTALL =====
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   console.log('reThink People extension installed')
   // Allow sidebar to open on action click
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+  await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+
+  // Enable sidebar + inject content scripts into already-open matching tabs
+  // (content scripts only auto-inject on new page loads, not existing tabs)
+  try {
+    const tabs = await chrome.tabs.query({})
+    for (const tab of tabs) {
+      if (!tab.id || !tab.url) continue
+      const isWA = tab.url.includes('web.whatsapp.com')
+      const isLI = tab.url.includes('linkedin.com')
+      if (!isWA && !isLI) continue
+
+      // Enable sidebar for this tab
+      await chrome.sidePanel.setOptions({ tabId: tab.id, enabled: true })
+
+      // Inject content scripts manually
+      const scripts: string[] = []
+      if (isWA) scripts.push('src/content-scripts/whatsapp.js', 'src/content-scripts/floating-trigger.js')
+      if (isLI && tab.url.includes('/in/')) scripts.push('src/content-scripts/linkedin-profile.js', 'src/content-scripts/floating-trigger.js')
+      if (isLI && tab.url.includes('/messaging/')) scripts.push('src/content-scripts/linkedin-dm.js')
+
+      for (const file of scripts) {
+        try {
+          await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: [file] })
+        } catch {
+          // Tab may not be injectable (e.g. chrome:// pages)
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('onInstalled tab injection error:', e)
+  }
 })
 
 // ===== ACTION CLICK — Open side panel =====

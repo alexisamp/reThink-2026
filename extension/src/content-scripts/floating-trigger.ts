@@ -24,8 +24,8 @@ function injectTrigger(isKnown: boolean) {
 
   btn.style.cssText = [
     'position: fixed',
-    'bottom: 24px',
-    'right: 24px',
+    'top: 30%',
+    'right: 16px',
     'z-index: 2147483647',
     'width: 44px',
     'height: 44px',
