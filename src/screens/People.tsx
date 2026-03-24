@@ -12,6 +12,7 @@ import {
 } from '@/lib/funnelDefaults'
 import OutreachPanel from '@/components/OutreachPanel'
 import ContactDetailDrawer from '@/components/ContactDetailDrawer'
+import { openLink } from '@/lib/openLink'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -282,10 +283,8 @@ export default function People() {
                 onClick={() => openDetail(contact)}
                 className="flex items-center gap-3 py-3 cursor-pointer hover:bg-mercury/10 -mx-2 px-2 rounded-lg transition-colors"
               >
-                {/* Health dot */}
-                <span className={`text-lg leading-none flex-shrink-0 ${healthColor(contact.health_score)}`}>
-                  ●
-                </span>
+                {/* Avatar */}
+                <ContactAvatar name={contact.name} photoUrl={contact.profile_photo_url} healthScore={contact.health_score} />
 
                 {/* Name + meta */}
                 <div className="flex-1 min-w-0">
@@ -309,16 +308,13 @@ export default function People() {
 
                 {/* LinkedIn */}
                 {contact.linkedin_url && (
-                  <a
-                    href={contact.linkedin_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={e => e.stopPropagation()}
+                  <button
+                    onClick={e => { e.stopPropagation(); openLink(contact.linkedin_url!) }}
                     className="text-shuttle/40 hover:text-shuttle flex-shrink-0"
                     title="Open LinkedIn"
                   >
                     <ArrowSquareOut size={14} />
-                  </a>
+                  </button>
                 )}
               </li>
             )
@@ -352,6 +348,36 @@ export default function People() {
         habits={habits}
         upsertHabitCount={upsertHabitCount}
         saveError={syncError}
+      />
+    </div>
+  )
+}
+
+// ── Avatar component ───────────────────────────────────────────────────────────
+
+function ContactAvatar({ name, photoUrl, healthScore }: { name: string; photoUrl: string | null; healthScore: number }) {
+  const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
+  const dotColor = healthScore <= 3 ? '#f87171' : healthScore <= 6 ? '#fbbf24' : '#79D65E'
+
+  return (
+    <div className="relative flex-shrink-0">
+      {photoUrl ? (
+        <img
+          src={photoUrl}
+          alt={name}
+          className="w-9 h-9 rounded-full object-cover"
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex' }}
+        />
+      ) : null}
+      <div
+        className="w-9 h-9 rounded-full bg-mercury/60 flex items-center justify-center text-[13px] font-semibold text-shuttle"
+        style={{ display: photoUrl ? 'none' : 'flex' }}
+      >
+        {initials}
+      </div>
+      <span
+        className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white"
+        style={{ background: dotColor }}
       />
     </div>
   )

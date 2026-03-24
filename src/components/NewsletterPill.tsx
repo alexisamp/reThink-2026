@@ -1,21 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Tray, ArrowSquareOut, ArrowCounterClockwise, ArrowClockwise } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
-
-function openLink(url: string): void {
-  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-    import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(url))
-  } else {
-    const a = Object.assign(document.createElement('a'), {
-      href: url,
-      target: '_blank',
-      rel: 'noopener noreferrer'
-    })
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  }
-}
+import { openLink } from '@/lib/openLink'
 
 interface NewsletterItem {
   id: string

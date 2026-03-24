@@ -265,11 +265,13 @@ async function findContactByPhone(userId: string, phone: string): Promise<Partia
 }
 
 async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Promise<Partial<CurrentContact> | null> {
+  const normalized = linkedinUrl.replace(/\/$/, '')
+  const withSlash = normalized + '/'
   const { data, error } = await supabase
     .from('outreach_logs')
     .select('id, name, company, job_title, health_score, status, profile_photo_url, personal_context, category, last_interaction_at')
     .eq('user_id', userId)
-    .eq('linkedin_url', linkedinUrl)
+    .in('linkedin_url', [normalized, withSlash])
     .maybeSingle()
 
   if (error || !data) return null

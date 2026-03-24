@@ -17,6 +17,7 @@ import type {
   Contact, ContactStatus, ContactCategory,
   ContactFunnelConfig, Interaction, Habit,
 } from '@/types'
+import { openLink } from '@/lib/openLink'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -267,7 +268,20 @@ export default function ContactDetailDrawer({
     }
     const updates: Partial<Contact> = {}
 
-    if (result.company_domain && !contact.company_domain) {
+    // Correct name if enricher detected it was malformed (slug, concatenated, etc.)
+    if (result.name && result.name !== contact.name) {
+      updates.name = result.name
+    }
+
+    // Correct job_title / company if missing or enricher has a better value
+    if (result.job_title && (!contact.job_title || contact.job_title.length < 3)) {
+      updates.job_title = result.job_title
+    }
+    if (result.company && (!contact.company || contact.company.length < 2)) {
+      updates.company = result.company
+    }
+
+    if (result.company_domain) {
       updates.company_domain = result.company_domain
       setCompanyDomain(result.company_domain)
     }
@@ -526,15 +540,13 @@ export default function ContactDetailDrawer({
                         {[contact.job_title, contact.company].filter(Boolean).join(' · ')}
                       </p>
                       {contact.company_linkedin_url && (
-                        <a
-                          href={contact.company_linkedin_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          onClick={() => openLink(contact.company_linkedin_url!)}
                           className="text-shuttle/50 hover:text-burnham transition-colors flex-shrink-0"
                           title="Company LinkedIn"
                         >
                           <ArrowSquareOut size={11} />
-                        </a>
+                        </button>
                       )}
                     </div>
                   )}
@@ -570,13 +582,13 @@ export default function ContactDetailDrawer({
               <div className={sectionLabel}>Contact info</div>
               <div className="space-y-1.5">
                 {contact.email && (
-                  <a
-                    href={`mailto:${contact.email}`}
-                    className="flex items-center gap-2 text-xs text-burnham/70 hover:text-burnham transition-colors"
+                  <button
+                    onClick={() => openLink(`mailto:${contact.email}`)}
+                    className="flex items-center gap-2 text-xs text-burnham/70 hover:text-burnham transition-colors w-full text-left"
                   >
                     <Envelope size={13} className="text-shuttle/50 flex-shrink-0" />
                     <span className="truncate">{contact.email}</span>
-                  </a>
+                  </button>
                 )}
                 {contact.phone && (
                   <div className="flex items-center gap-2">
@@ -585,15 +597,13 @@ export default function ContactDetailDrawer({
                   </div>
                 )}
                 {contact.linkedin_url && (
-                  <a
-                    href={contact.linkedin_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => openLink(contact.linkedin_url!)}
                     className="flex items-center gap-2 text-xs text-shuttle/60 hover:text-burnham transition-colors"
                   >
                     <ArrowSquareOut size={13} className="text-shuttle/50 flex-shrink-0" />
                     <span>LinkedIn</span>
-                  </a>
+                  </button>
                 )}
                 {(contact.connections_count !== null || contact.followers_count !== null) && (
                   <p className="text-[10px] text-shuttle/40 pl-5">

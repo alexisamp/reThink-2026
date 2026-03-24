@@ -583,11 +583,15 @@ async function findContactByPhone(userId: string, phone: string): Promise<Contac
 }
 
 async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Promise<Contact | null> {
+  // Normalize: strip trailing slash for consistent matching
+  const normalized = linkedinUrl.replace(/\/$/, '')
+  const withSlash = normalized + '/'
+
   const { data, error } = await supabase
     .from('outreach_logs')
     .select('id, name')
     .eq('user_id', userId)
-    .eq('linkedin_url', linkedinUrl)
+    .in('linkedin_url', [normalized, withSlash])
     .maybeSingle()
 
   if (error || !data) return null
@@ -857,7 +861,7 @@ async function updateNetworkingHabit(userId: string, interactionDate: string) {
       .from('habit_logs')
       .upsert(
         { user_id: userId, habit_id: habit.id, log_date: interactionDate, value: distinctContacts },
-        { onConflict: 'user_id,habit_id,log_date' }
+        { onConflict: 'habit_id,log_date' }
       )
   } catch {
     // Non-critical
@@ -888,7 +892,7 @@ async function updateProspectingHabit(userId: string, date: string) {
       .from('habit_logs')
       .upsert(
         { user_id: userId, habit_id: habit.id, log_date: date, value: count ?? 0 },
-        { onConflict: 'user_id,habit_id,log_date' }
+        { onConflict: 'habit_id,log_date' }
       )
   } catch {
     // Non-critical

@@ -117,7 +117,8 @@ export function useContacts(
     const patch: Record<string, unknown> = {}
     const fields = ['name','linkedin_url','category','status','notes','goal_id','job_title',
                     'company','location','connections_count','followers_count','email','phone',
-                    'website','about','skills','personal_context'] as const
+                    'website','about','skills','personal_context',
+                    'company_domain','ai_enriched_at','profile_photo_url'] as const
     for (const f of fields) {
       if (f in updates) patch[f] = (updates as Record<string, unknown>)[f] ?? null
     }

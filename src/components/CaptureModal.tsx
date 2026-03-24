@@ -6,6 +6,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import type { Capture, CaptureType } from '@/types'
 import { useGeminiScorer, hasGeminiKey } from '@/hooks/useGeminiScorer'
+import { openLink } from '@/lib/openLink'
 
 type GoalOption = { id: string; text: string; alias?: string | null }
 type MilestoneOption = { id: string; text: string; goal_id?: string | null }
@@ -342,9 +343,9 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                 className="flex-1 text-[12px] text-burnham bg-transparent border-none outline-none placeholder-shuttle/20"
               />
               {url && (
-                <a href={url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                <button onClick={e => { e.stopPropagation(); openLink(url) }}>
                   <ArrowSquareOut size={12} className="text-shuttle/30 hover:text-shuttle transition-colors" />
-                </a>
+                </button>
               )}
             </div>
 

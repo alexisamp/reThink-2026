@@ -17,6 +17,10 @@ export function DailyProgress({ userId }: Props) {
 
   useEffect(() => {
     loadProgress()
+
+    // Refresh every 30s so counts stay current after contacts/interactions are added
+    const interval = setInterval(loadProgress, 30_000)
+    return () => clearInterval(interval)
   }, [userId])
 
   async function loadProgress() {

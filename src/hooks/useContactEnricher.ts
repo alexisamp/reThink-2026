@@ -4,6 +4,9 @@ const GEMINI_API_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY as string |
 const GEMINI_MODEL = 'gemini-2.0-flash'
 
 export interface EnrichResult {
+  name: string | null
+  job_title: string | null
+  company: string | null
   company_domain: string | null
   skills: string | null
   about: string | null
@@ -64,6 +67,9 @@ export function useContactEnricher(): UseContactEnricherReturn {
         ``,
         `Return a JSON object with these fields (omit fields you're not confident about):`,
         `{`,
+        `  "name": "string — ONLY include if the provided name looks like a URL slug, concatenated words, or is clearly wrong (e.g. 'JavierCopleJ' should be 'Javier Cople'). Omit if the name looks correct.",`,
+        `  "job_title": "string — corrected job title if the provided one is missing or looks truncated/wrong",`,
+        `  "company": "string — corrected company name if the provided one is missing or looks wrong",`,
         `  "company_domain": "string — the company's official website domain (e.g. granola.so), search the web",`,
         `  "skills": "string — 3-5 comma-separated professional skills based on their background",`,
         `  "about": "string — improved/expanded bio if the LinkedIn about is missing or too short",`,
@@ -112,6 +118,9 @@ export function useContactEnricher(): UseContactEnricherReturn {
         : null
 
       return {
+        name: (parsed as any).name || null,
+        job_title: (parsed as any).job_title || null,
+        company: (parsed as any).company || null,
         company_domain: (parsed as any).company_domain || null,
         skills: (parsed as any).skills || null,
         about: (parsed as any).about || null,

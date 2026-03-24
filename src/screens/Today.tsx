@@ -30,6 +30,7 @@ import EndOfDayDrawer from '@/components/EndOfDayDrawer'
 import NewsletterPill from '@/components/NewsletterPill'
 import MilestoneDetailModal from '@/components/MilestoneDetailModal'
 import HabitEditModal from '@/components/HabitEditModal'
+import { openLink } from '@/lib/openLink'
 import OutreachPanel from '@/components/OutreachPanel'
 import { useGeminiScorer, hasGeminiKey } from '@/hooks/useGeminiScorer'
 import { getSettings } from '@/lib/userSettings'
@@ -164,17 +165,14 @@ function SortableTodoRow({ todo, goal, milestone, isEditing, editingText, onEdit
         {todo.url && (() => {
           const chip = getUrlChip(todo.url)
           return (
-            <a
-              href={todo.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
+            <button
+              onClick={e => { e.stopPropagation(); openLink(todo.url!) }}
               className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full border shrink-0 hover:opacity-80 transition-opacity leading-none"
               style={{ color: chip.color, borderColor: `${chip.color}40`, backgroundColor: `${chip.color}10` }}
             >
               <span>{chip.icon}</span>
               <span className="font-medium ml-0.5">{chip.label}</span>
-            </a>
+            </button>
           )
         })()}
       </div>
@@ -250,16 +248,13 @@ function OutreachRow({ log, onEdit, onDelete, onOpenDetail }: OutreachRowProps) 
       </div>
       <StatusBadge status={log.status} />
       {log.linkedin_url && (
-        <a
-          href={log.linkedin_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={e => e.stopPropagation()}
+        <button
+          onClick={e => { e.stopPropagation(); openLink(log.linkedin_url!) }}
           className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity text-shuttle"
           title="Open LinkedIn profile"
         >
           <ArrowSquareOut size={12} />
-        </a>
+        </button>
       )}
       {log.attio_record_id && (
         <span className="opacity-0 group-hover:opacity-40 text-[8px] font-mono text-pastel shrink-0">attio</span>
@@ -1818,17 +1813,14 @@ export default function Today() {
                             {todo.url && (() => {
                               const chip = getUrlChip(todo.url)
                               return (
-                                <a
-                                  href={todo.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={e => e.stopPropagation()}
+                                <button
+                                  onClick={e => { e.stopPropagation(); openLink(todo.url!) }}
                                   className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full border shrink-0 hover:opacity-80 transition-opacity leading-none"
                                   style={{ color: chip.color, borderColor: `${chip.color}40`, backgroundColor: `${chip.color}10` }}
                                 >
                                   <span>{chip.icon}</span>
                                   <span className="font-medium ml-0.5">{chip.label}</span>
-                                </a>
+                                </button>
                               )
                             })()}
                             <button
