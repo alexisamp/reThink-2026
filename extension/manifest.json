@@ -54,6 +54,12 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["https://web.whatsapp.com/*", "https://www.linkedin.com/*"]
+    }
+  ],
   "oauth2": {
     "client_id": "652244567794-rjti1jj53ljnubdq0m6v0rmuji7521nq.apps.googleusercontent.com",
     "scopes": ["openid", "email", "profile"]

@@ -189,7 +189,17 @@ function extractLinkedInProfileBasicInfo() {
 
 // ===== MESSAGE HANDLERS =====
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // OPEN_SIDEBAR must be called synchronously (no await) to preserve user gesture context
+  if (message.type === 'OPEN_SIDEBAR') {
+    const tabId = sender.tab?.id
+    if (tabId) {
+      chrome.sidePanel.open({ tabId }).catch(err => console.warn('sidePanel.open error:', err))
+    }
+    sendResponse({ success: true })
+    return false
+  }
+
   ;(async () => {
     try {
       switch (message.type) {
@@ -204,28 +214,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           break
 
         case 'get_whatsapp_contact': {
-          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-          if (tab?.id && tab.url?.includes('web.whatsapp.com')) {
-            const results = await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              func: extractWhatsAppContactInfo,
-            })
-            if (results?.[0]?.result) {
-              await chrome.storage.local.set({ currentWhatsAppContact: results[0].result })
-              sendResponse({ success: true, contactInfo: results[0].result })
+          const tabId = sender.tab?.id ?? (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id
+          if (tabId) {
+            const tab = await chrome.tabs.get(tabId)
+            if (tab.url?.includes('web.whatsapp.com')) {
+              const results = await chrome.scripting.executeScript({
+                target: { tabId },
+                func: extractWhatsAppContactInfo,
+              })
+              if (results?.[0]?.result) {
+                await chrome.storage.local.set({ currentWhatsAppContact: results[0].result })
+                sendResponse({ success: true, contactInfo: results[0].result })
+              } else {
+                sendResponse({ success: false, error: 'No contact info found' })
+              }
             } else {
-              sendResponse({ success: false, error: 'No contact info found' })
+              sendResponse({ success: false, error: 'Not on WhatsApp Web' })
             }
           } else {
             sendResponse({ success: false, error: 'Not on WhatsApp Web' })
           }
-          break
-        }
-
-        case 'OPEN_SIDEBAR': {
-          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-          if (tab?.id) await chrome.sidePanel.open({ tabId: tab.id })
-          sendResponse({ success: true })
           break
         }
 
