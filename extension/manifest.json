@@ -15,7 +15,8 @@
   ],
   "host_permissions": [
     "https://web.whatsapp.com/*",
-    "https://www.linkedin.com/*"
+    "https://www.linkedin.com/*",
+    "https://media.licdn.com/*"
   ],
   "background": {
     "service_worker": "src/background/service-worker.js",

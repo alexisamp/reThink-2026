@@ -30,7 +30,7 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
 
   // Form state
   const [newName, setNewName] = useState(suggestedName ?? '')
-  const [category, setCategory] = useState('Peer')
+  const [category, setCategory] = useState('peer')
   const [context, setContext] = useState('')
   const [linkedinInput, setLinkedinInput] = useState('')
   const [saving, setSaving] = useState(false)
@@ -82,7 +82,7 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
       if (error && error.code !== '23505') throw error
       onMapped()
     } catch {
-      alert('Error al vincular. Intentá de nuevo.')
+      alert('Failed to link contact. Please try again.')
     } finally {
       setLinking(false)
     }
@@ -99,6 +99,7 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
           user_id: user.id,
           name: newName.trim(),
           status: 'RECONNECT',
+          contact_type: 'networking',
           category,
           linkedin_url: linkedinInput.trim() || null,
           phone,
@@ -120,7 +121,7 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
 
       onMapped()
     } catch {
-      alert('Error al crear el contacto. Intentá de nuevo.')
+      alert('Failed to create contact. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -152,7 +153,7 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
 
         {/* Question */}
         <p style={{ fontSize: '14px', fontWeight: 600, color: '#003720', margin: '0 0 12px 0' }}>
-          ¿Ya tenés a {displayName} en reThink People?
+          Is {displayName} already in reThink People?
         </p>
 
         {/* Search */}
@@ -161,7 +162,7 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por nombre..."
+            placeholder="Search by name..."
             style={inputStyle}
             autoFocus
           />
@@ -185,7 +186,7 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
                   {c.company && <p style={{ fontSize: '11px', color: '#536471', margin: 0 }}>{c.company}</p>}
                 </div>
                 <span style={{ fontSize: '12px', fontWeight: 600, color: '#79D65E', whiteSpace: 'nowrap' }}>
-                  {linking ? '...' : 'Sí, este →'}
+                  {linking ? '...' : 'Yes, link →'}
                 </span>
               </div>
             ))}
@@ -194,14 +195,14 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
 
         {search.trim() && results.length === 0 && !searching && (
           <p style={{ fontSize: '12px', color: '#536471', textAlign: 'center', margin: '0 0 16px 0' }}>
-            No se encontraron contactos con ese nombre
+            No contacts found
           </p>
         )}
 
         {/* Divider */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0' }}>
           <div style={{ flex: 1, height: '1px', background: '#E3E3E3' }} />
-          <span style={{ fontSize: '11px', color: '#536471' }}>o</span>
+          <span style={{ fontSize: '11px', color: '#536471' }}>or</span>
           <div style={{ flex: 1, height: '1px', background: '#E3E3E3' }} />
         </div>
 
@@ -219,14 +220,14 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
             cursor: 'pointer',
           }}
         >
-          No, agregar como nuevo contacto →
+          No, add as new contact →
         </button>
 
         <button
           onClick={onMapped}
           style={{ width: '100%', marginTop: '8px', fontSize: '12px', color: '#536471', background: 'none', border: 'none', cursor: 'pointer' }}
         >
-          Omitir por ahora
+          Skip for now
         </button>
       </div>
     )
@@ -239,13 +240,13 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
         onClick={() => setStep('rethink_check')}
         style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#536471', fontSize: '13px', padding: '0 0 12px 0' }}
       >
-        ← Volver
+        ← Back
       </button>
 
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '20px' }}>
         <Avatar name={newName || suggestedName} size={52} />
         <div>
-          <p style={{ fontSize: '12px', color: '#536471', margin: '0 0 2px 0' }}>Nuevo contacto</p>
+          <p style={{ fontSize: '12px', color: '#536471', margin: '0 0 2px 0' }}>New contact</p>
           <p style={{ fontSize: '15px', fontWeight: 600, color: '#003720', margin: 0 }}>{newName || suggestedName || phone}</p>
           <p style={{ fontSize: '12px', color: '#536471', margin: '2px 0 0 0' }}>💬 {phone}</p>
         </div>
@@ -253,12 +254,12 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div>
-          <label style={labelStyle}>Nombre</label>
+          <label style={labelStyle}>Name</label>
           <input
             type="text"
             value={newName}
             onChange={e => setNewName(e.target.value)}
-            placeholder="Nombre completo"
+            placeholder="Full name"
             style={inputStyle}
             onFocus={e => (e.target.style.borderColor = '#003720')}
             onBlur={e => (e.target.style.borderColor = '#E3E3E3')}
@@ -266,16 +267,16 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
         </div>
 
         <div>
-          <label style={labelStyle}>Categoría</label>
+          <label style={labelStyle}>Category</label>
           <CategoryPicker value={category} onChange={setCategory} />
         </div>
 
         <div>
-          <label style={labelStyle}>¿Cuál es tu contexto con esta persona?</label>
+          <label style={labelStyle}>Your context with them</label>
           <textarea
             value={context}
             onChange={e => setContext(e.target.value)}
-            placeholder="¿Cómo la conociste? ¿Qué oportunidad ves? ¿Cuál es el objetivo de esta relación?"
+            placeholder="How did you meet? What's the opportunity? What's your goal with this relationship?"
             rows={3}
             style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
             onFocus={e => (e.target.style.borderColor = '#003720')}
@@ -284,12 +285,12 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
         </div>
 
         <div>
-          <label style={labelStyle}>LinkedIn (opcional)</label>
+          <label style={labelStyle}>LinkedIn (optional)</label>
           <input
             type="text"
             value={linkedinInput}
             onChange={e => setLinkedinInput(e.target.value)}
-            placeholder="linkedin.com/in/nombre"
+            placeholder="linkedin.com/in/username"
             style={inputStyle}
             onFocus={e => (e.target.style.borderColor = '#003720')}
             onBlur={e => (e.target.style.borderColor = '#E3E3E3')}
@@ -313,7 +314,7 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
           cursor: newName.trim() && !saving ? 'pointer' : 'not-allowed',
         }}
       >
-        {saving ? 'Guardando...' : 'Agregar a reThink →'}
+        {saving ? 'Saving...' : 'Add to reThink →'}
       </button>
     </div>
   )

@@ -3,7 +3,17 @@ interface Props {
   onChange: (v: string) => void
 }
 
-const CATEGORIES = ['Peer', 'Investor', 'Mentor', 'Customer', 'Collaborator', 'Recruiter', 'Other']
+// Values must match outreach_logs category CHECK constraint in DB
+const CATEGORIES: { value: string; label: string }[] = [
+  { value: 'peer',         label: 'Peer' },
+  { value: 'mentor',       label: 'Mentor' },
+  { value: 'client',       label: 'Client' },
+  { value: 'partner',      label: 'Partner' },
+  { value: 'business_dev', label: 'Business Dev' },
+  { value: 'job_us',       label: 'Job / Recruiter' },
+  { value: 'friend',       label: 'Friend' },
+  { value: 'family',       label: 'Family' },
+]
 
 export function CategoryPicker({ value, onChange }: Props) {
   return (
@@ -20,10 +30,11 @@ export function CategoryPicker({ value, onChange }: Props) {
         color: '#003720',
         background: 'white',
         cursor: 'pointer',
+        fontFamily: 'inherit',
       }}
     >
       {CATEGORIES.map(c => (
-        <option key={c} value={c}>{c}</option>
+        <option key={c.value} value={c.value}>{c.label}</option>
       ))}
     </select>
   )
