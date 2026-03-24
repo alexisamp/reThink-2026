@@ -5,6 +5,15 @@ const BUTTON_ID = 'rethink-people-trigger'
 const BURNHAM = '#003720'
 const PASTEL = '#79D65E'
 
+// Keep service worker alive so sidePanel.open() works (MV3 SW sleeps after ~30s)
+function keepSWAlive() {
+  try {
+    const port = chrome.runtime.connect({ name: 'keepalive' })
+    port.onDisconnect.addListener(() => setTimeout(keepSWAlive, 100))
+  } catch { /* extension context invalidated */ }
+}
+keepSWAlive()
+
 function isWhatsApp() { return window.location.hostname === 'web.whatsapp.com' }
 function isLinkedInProfile() { return /linkedin\.com\/in\/[^/?#]+/.test(window.location.href) }
 

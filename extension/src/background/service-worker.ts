@@ -187,6 +187,14 @@ function extractLinkedInProfileBasicInfo() {
   }
 }
 
+// ===== KEEPALIVE (content script holds a port to prevent SW sleep) =====
+
+chrome.runtime.onConnect.addListener(port => {
+  if (port.name === 'keepalive') {
+    port.onDisconnect.addListener(() => {})
+  }
+})
+
 // ===== MESSAGE HANDLERS =====
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
