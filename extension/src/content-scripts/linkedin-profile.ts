@@ -85,45 +85,25 @@ function extractCompany(): string | null {
   return null
 }
 
-function isProfileDisplayPhoto(url: string): boolean {
-  // LinkedIn profile photos contain 'profile-displayphoto' in the path.
-  // Nav avatars, company logos, and post images do NOT.
-  return url.indexOf('profile-displayphoto') !== -1
-}
-
 function findProfilePhotoUrl(): string | null {
-  // Exclude images inside the global nav (that's the logged-in user's own avatar)
-  const nav = document.querySelector('#global-nav, nav[aria-label]')
+  // The logged-in user's own avatar lives in the nav/header, NOT in <main>.
+  // The visited contact's profile photo is always inside <main>.
+  // So: only scan inside <main> to avoid picking up the wrong person's photo.
+  const mainEl = document.querySelector('main')
+  if (!mainEl) return null
 
-  // Step 1: specific class selectors scoped outside nav
-  const selectors = [
-    'img.pv-top-card-profile-picture__image--show',
-    'img.pv-top-card-profile-picture__image',
-    'img.profile-photo-edit__preview',
-    'img.EntityPhoto-circle-5',
-  ]
-  for (const sel of selectors) {
-    const el = document.querySelector(sel) as HTMLImageElement | null
-    if (!el) continue
-    if (nav?.contains(el)) continue  // skip if inside nav
-    const url = extractPhotoUrl(el)
-    if (url) return url
-  }
+  const imgs = Array.from(mainEl.querySelectorAll('img')) as HTMLImageElement[]
 
-  // Step 2: any img with 'profile-displayphoto' in the URL — most reliable signal
-  for (const img of Array.from(document.querySelectorAll('img')) as HTMLImageElement[]) {
-    if (nav?.contains(img)) continue
+  // Step 1: prefer images whose URL contains 'profile-displayphoto' (the contact's main photo)
+  for (const img of imgs) {
     const url = extractPhotoUrl(img)
-    if (url && isProfileDisplayPhoto(url)) return url
+    if (url && url.indexOf('profile-displayphoto') !== -1) return url
   }
 
-  // Step 3: profile photo inside the main content top card area
-  const topCard = document.querySelector('main .pv-top-card, main section:first-of-type, .scaffold-layout__main section')
-  if (topCard) {
-    for (const img of Array.from(topCard.querySelectorAll('img')) as HTMLImageElement[]) {
-      const url = extractPhotoUrl(img)
-      if (url && url.indexOf('media.licdn.com/dms/image') !== -1) return url
-    }
+  // Step 2: any media.licdn.com/dms/image inside main as fallback
+  for (const img of imgs) {
+    const url = extractPhotoUrl(img)
+    if (url && url.indexOf('media.licdn.com/dms/image') !== -1) return url
   }
 
   return null
