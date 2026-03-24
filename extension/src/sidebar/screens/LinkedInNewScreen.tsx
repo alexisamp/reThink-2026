@@ -107,6 +107,10 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
         })
 
       if (error) throw error
+
+      // Trigger prospecting habit update in service worker (non-blocking)
+      chrome.runtime.sendMessage({ type: 'UPDATE_PROSPECTING_HABIT' }).catch(() => {})
+
       onSaved()
     } catch (err: any) {
       console.error('Save error:', err)

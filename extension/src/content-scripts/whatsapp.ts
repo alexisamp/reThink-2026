@@ -11,6 +11,7 @@ const processedMessages = new Set<string>()
 
 let lastConversationUrl = window.location.href
 let lastConversationHeader = ''
+let lastConversationSwitchTime = 0   // track when we last switched — used to ignore history loads
 
 function startConversationChangeDetector() {
   setInterval(() => {
@@ -24,6 +25,7 @@ function startConversationChangeDetector() {
     if (urlChanged || headerChanged) {
       lastConversationUrl = currentUrl
       if (currentHeader.length > 0) lastConversationHeader = currentHeader
+      lastConversationSwitchTime = Date.now()  // mark switch time
       chrome.runtime.sendMessage({ type: 'WHATSAPP_CONVERSATION_CHANGED' })
         .catch(() => {}) // SW may not be awake yet
     }
@@ -75,6 +77,9 @@ function handleNewMessage(messageElement: HTMLElement) {
     // Deduplicate by data-id
     if (processedMessages.has(dataId)) return
     processedMessages.add(dataId)
+
+    // Skip messages that appear within 3s of a chat switch — those are history loads, not new messages
+    if (Date.now() - lastConversationSwitchTime < 3000) return
 
     // Extract phone from data-id (format: "true_PHONE@c.us_MSGID" or "false_PHONE@c.us_MSGID")
     const phoneMatch = dataId.match(/(?:true|false)_(.+?)@c\.us/)

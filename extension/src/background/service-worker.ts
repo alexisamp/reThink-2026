@@ -135,7 +135,7 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 
 // ===== WHATSAPP CONTACT INFO EXTRACTION =====
 
-async function updateWhatsAppContactInfo(tabId: number) {
+async function updateWhatsAppContactInfo(tabId: number, attempt = 1) {
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId },
@@ -149,12 +149,25 @@ async function updateWhatsAppContactInfo(tabId: number) {
         if (!contactInfo.phone.startsWith('+')) {
           contactInfo.phone = '+' + contactInfo.phone
         }
+        // Phone found — update storage to trigger onChanged → determineState()
+        await chrome.storage.local.set({
+          currentWhatsAppContact: contactInfo,
+          currentLinkedInProfile: null,
+        })
+      } else {
+        // Phone not found yet — could be new chat that hasn't loaded messages
+        if (contactInfo.name) {
+          // Write partial data (name only) so sidebar shows something
+          await chrome.storage.local.set({
+            currentWhatsAppContact: { ...contactInfo, phone: null },
+            currentLinkedInProfile: null,
+          })
+        }
+        if (attempt < 4) {
+          // Retry after messages load
+          setTimeout(() => updateWhatsAppContactInfo(tabId, attempt + 1), 1200)
+        }
       }
-      // Always update to trigger storage.onChanged → determineState() in sidebar
-      await chrome.storage.local.set({
-        currentWhatsAppContact: contactInfo,
-        currentLinkedInProfile: null,
-      })
     }
   } catch (error) {
     console.error('Failed to extract WhatsApp contact info:', error)
@@ -366,6 +379,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (!userId) { sendResponse({ isMapped: false }); break }
           const contact = await findContactByPhone(userId, stored.currentWhatsAppContact.phone)
           sendResponse({ isMapped: !!contact })
+          break
+        }
+
+        case 'UPDATE_PROSPECTING_HABIT': {
+          const userId = await getCurrentUserId()
+          if (userId) {
+            const today = new Date().toISOString().split('T')[0]
+            await updateProspectingHabit(userId, today)
+          }
+          sendResponse({ success: true })
           break
         }
 
