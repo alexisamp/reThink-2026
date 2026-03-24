@@ -219,6 +219,16 @@ export default function App() {
 // ===== SUPABASE HELPERS =====
 
 async function findContactByPhone(userId: string, phone: string): Promise<Partial<CurrentContact> | null> {
+  // Build all plausible phone variants to handle legacy stored formats
+  const digits = phone.replace(/\D/g, '')
+  const variants = Array.from(new Set([
+    phone,
+    digits,
+    '+' + digits,
+    ...(digits.startsWith('52') && digits.length > 10 ? ['+' + digits.slice(2), digits.slice(2)] : []),
+    ...(digits.startsWith('1') && digits.length === 11 ? ['+' + digits.slice(1), digits.slice(1)] : []),
+  ])).filter(Boolean)
+
   const { data, error } = await supabase
     .from('contact_phone_mappings')
     .select(`
@@ -235,7 +245,7 @@ async function findContactByPhone(userId: string, phone: string): Promise<Partia
       )
     `)
     .eq('user_id', userId)
-    .eq('phone_number', phone)
+    .in('phone_number', variants)
     .maybeSingle()
 
   if (error || !data) return null

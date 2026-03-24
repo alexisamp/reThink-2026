@@ -141,7 +141,12 @@ function extractWhatsAppContactInfo() {
       const dataId = msg.getAttribute('data-id')
       if (dataId?.includes('@c.us')) {
         const match = dataId.match(/(?:true|false)_(.+?)@c\.us/)
-        if (match?.[1]) { phone = match[1]; break }
+        if (match?.[1]) {
+          // WhatsApp data-id has full international number — just add +
+          const raw = match[1]
+          phone = raw.startsWith('+') ? raw : '+' + raw
+          break
+        }
       }
     }
 

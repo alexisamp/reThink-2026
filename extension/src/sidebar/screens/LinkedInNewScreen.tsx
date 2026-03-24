@@ -1,5 +1,4 @@
-// Phase 5: Full implementation
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { User } from '@supabase/supabase-js'
 import type { LinkedInProfile } from '../App'
 import { SidebarHeader } from '../App'
@@ -16,11 +15,71 @@ interface Props {
   onSaved: () => void
 }
 
+interface ContactResult {
+  id: string
+  name: string
+  company: string | null
+  profile_photo_url: string | null
+  phone: string | null
+}
+
+type Step = 'whatsapp_check' | 'new_contact_form'
+
 export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
+  const [step, setStep] = useState<Step>('whatsapp_check')
+  const [search, setSearch] = useState('')
+  const [results, setResults] = useState<ContactResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [linking, setLinking] = useState(false)
+
+  // Form state (step 2)
   const [name, setName] = useState(profile?.name ?? '')
   const [category, setCategory] = useState('Peer')
-  const [phone, setPhone] = useState('')
+  const [context, setContext] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const firstName = (profile?.name ?? 'this person').split(' ')[0]
+
+  // Debounced search for existing WhatsApp contacts
+  useEffect(() => {
+    if (step !== 'whatsapp_check') return
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!search.trim()) { setResults([]); return }
+
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true)
+      const { data } = await supabase
+        .from('outreach_logs')
+        .select('id, name, company, profile_photo_url, phone')
+        .eq('user_id', user.id)
+        .ilike('name', `%${search.trim()}%`)
+        .limit(5)
+      setResults((data ?? []) as ContactResult[])
+      setSearching(false)
+    }, 300)
+  }, [search, step, user.id])
+
+  async function handleLink(contact: ContactResult) {
+    setLinking(true)
+    try {
+      await supabase
+        .from('outreach_logs')
+        .update({
+          linkedin_url: profile?.linkedinUrl ?? null,
+          job_title: profile?.jobTitle ?? null,
+          company: profile?.company ?? contact.company,
+          profile_photo_url: contact.profile_photo_url ?? profile?.profilePhotoUrl ?? null,
+        })
+        .eq('id', contact.id)
+        .eq('user_id', user.id)
+      onSaved()
+    } catch (err) {
+      console.error('Link error:', err)
+    } finally {
+      setLinking(false)
+    }
+  }
 
   async function handleSave() {
     if (!name.trim()) return
@@ -28,13 +87,12 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
     try {
       const today = new Date().toISOString().split('T')[0]
 
-      // Upload photo to Supabase Storage if available
       let photoUrl = profile?.profilePhotoUrl ?? null
-      if (photoUrl && photoUrl.includes('media.licdn.com')) {
+      if (photoUrl?.includes('media.licdn.com')) {
         photoUrl = await uploadPhoto(photoUrl, user.id, profile?.linkedinUrl ?? null)
       }
 
-      const { data: contact, error: contactError } = await supabase
+      const { error } = await supabase
         .from('outreach_logs')
         .insert({
           user_id: user.id,
@@ -42,78 +100,187 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
           status: 'PROSPECT',
           category,
           linkedin_url: profile?.linkedinUrl ?? null,
-          phone: phone.trim() || null,
           health_score: 1,
           log_date: today,
           profile_photo_url: photoUrl,
           job_title: profile?.jobTitle ?? null,
           company: profile?.company ?? null,
+          personal_context: context.trim() || null,
         })
-        .select()
-        .single()
 
-      if (contactError || !contact) throw contactError
-
-      // Create phone mapping if phone provided
-      if (phone.trim()) {
-        await supabase.from('contact_phone_mappings').insert({
-          user_id: user.id,
-          contact_id: contact.id,
-          phone_number: phone.trim(),
-          label: null,
-        })
-      }
-
+      if (error) throw error
       onSaved()
     } catch (err) {
       console.error('Save error:', err)
-      alert('Failed to save contact. Please try again.')
+      alert('Error al guardar. Intentá de nuevo.')
     } finally {
       setSaving(false)
     }
   }
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: '13px',
+    border: '1px solid #E3E3E3',
+    borderRadius: '8px',
+    outline: 'none',
+    boxSizing: 'border-box',
+    color: '#003720',
+    fontFamily: 'inherit',
+  }
+
+  // ── STEP 1: WhatsApp check ─────────────────────────────────────────────────
+  if (step === 'whatsapp_check') {
+    return (
+      <div style={{ padding: '16px', background: 'white', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+        <SidebarHeader onSignOut={() => {}} />
+
+        {/* LinkedIn profile preview */}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '20px', padding: '12px', background: '#F7FAF8', borderRadius: '10px' }}>
+          <Avatar name={profile?.name} photoUrl={profile?.profilePhotoUrl} size={44} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: '14px', fontWeight: 600, color: '#003720', margin: '0 0 2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {profile?.name ?? '—'}
+            </p>
+            {(profile?.jobTitle || profile?.company) && (
+              <p style={{ fontSize: '12px', color: '#536471', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {[profile.jobTitle, profile.company].filter(Boolean).join(' · ')}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Question */}
+        <p style={{ fontSize: '14px', fontWeight: 600, color: '#003720', margin: '0 0 12px 0' }}>
+          ¿Ya hablás con {firstName} en WhatsApp?
+        </p>
+
+        {/* Search */}
+        <div style={{ position: 'relative', marginBottom: '12px' }}>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={`Buscar "${firstName}" en tus contactos...`}
+            style={inputStyle}
+            autoFocus
+          />
+          {searching && (
+            <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: '#536471' }}>
+              ...
+            </span>
+          )}
+        </div>
+
+        {/* Results */}
+        {results.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
+            {results.map(c => (
+              <div
+                key={c.id}
+                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: '1px solid #E3E3E3', borderRadius: '8px', cursor: linking ? 'not-allowed' : 'pointer', background: 'white' }}
+                onClick={() => !linking && handleLink(c)}
+              >
+                <Avatar name={c.name} photoUrl={c.profile_photo_url} size={36} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: '#003720', margin: 0 }}>{c.name}</p>
+                  {c.company && <p style={{ fontSize: '11px', color: '#536471', margin: 0 }}>{c.company}</p>}
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#79D65E', whiteSpace: 'nowrap' }}>
+                  {linking ? '...' : 'Vincular →'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {search.trim() && results.length === 0 && !searching && (
+          <p style={{ fontSize: '12px', color: '#536471', margin: '0 0 16px 0', textAlign: 'center' }}>
+            No se encontraron contactos con ese nombre
+          </p>
+        )}
+
+        {/* Divider */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '16px 0' }}>
+          <div style={{ flex: 1, height: '1px', background: '#E3E3E3' }} />
+          <span style={{ fontSize: '11px', color: '#536471' }}>o</span>
+          <div style={{ flex: 1, height: '1px', background: '#E3E3E3' }} />
+        </div>
+
+        {/* CTA — new contact */}
+        <button
+          onClick={() => setStep('new_contact_form')}
+          style={{
+            width: '100%',
+            padding: '11px',
+            background: '#003720',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: 500,
+            cursor: 'pointer',
+          }}
+        >
+          No, agregar {firstName} como nuevo contacto →
+        </button>
+      </div>
+    )
+  }
+
+  // ── STEP 2: New contact form ────────────────────────────────────────────────
   return (
     <div style={{ padding: '16px', background: 'white', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
-      <SidebarHeader onSignOut={() => {}} />
+      {/* Back button */}
+      <button
+        onClick={() => setStep('whatsapp_check')}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#536471', fontSize: '13px', padding: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '4px' }}
+      >
+        ← Volver
+      </button>
 
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px' }}>
-        <Avatar name={name || profile?.name} photoUrl={profile?.profilePhotoUrl} size={48} />
+      {/* Profile preview */}
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '20px' }}>
+        <Avatar name={name || profile?.name} photoUrl={profile?.profilePhotoUrl} size={52} />
         <div>
-          <p style={{ fontSize: '12px', color: '#536471', margin: '0 0 2px 0' }}>New contact</p>
-          <p style={{ fontSize: '14px', fontWeight: 600, color: '#003720', margin: 0 }}>Save to reThink</p>
+          <p style={{ fontSize: '12px', color: '#536471', margin: '0 0 2px 0' }}>Nuevo contacto</p>
+          <p style={{ fontSize: '15px', fontWeight: 600, color: '#003720', margin: 0 }}>{name || profile?.name || '—'}</p>
+          {(profile?.jobTitle || profile?.company) && (
+            <p style={{ fontSize: '12px', color: '#536471', margin: '2px 0 0 0' }}>
+              {[profile.jobTitle, profile.company].filter(Boolean).join(' · ')}
+            </p>
+          )}
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div>
-          <label style={{ fontSize: '11px', fontWeight: 600, color: '#536471', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</label>
+          <label style={labelStyle}>Nombre</label>
           <input
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="Full name"
-            style={{ width: '100%', padding: '8px 12px', fontSize: '13px', border: '1px solid #E3E3E3', borderRadius: '8px', outline: 'none', boxSizing: 'border-box', color: '#003720' }}
+            placeholder="Nombre completo"
+            style={inputStyle}
             onFocus={e => (e.target.style.borderColor = '#003720')}
             onBlur={e => (e.target.style.borderColor = '#E3E3E3')}
           />
         </div>
 
         <div>
-          <label style={{ fontSize: '11px', fontWeight: 600, color: '#536471', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Category</label>
+          <label style={labelStyle}>Categoría</label>
           <CategoryPicker value={category} onChange={setCategory} />
         </div>
 
         <div>
-          <label style={{ fontSize: '11px', fontWeight: 600, color: '#536471', display: 'block', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Already WhatsApping with them?
-          </label>
-          <input
-            type="tel"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            placeholder="Phone number (optional)"
-            style={{ width: '100%', padding: '8px 12px', fontSize: '13px', border: '1px solid #E3E3E3', borderRadius: '8px', outline: 'none', boxSizing: 'border-box', color: '#003720' }}
+          <label style={labelStyle}>¿Cuál es tu contexto con {firstName}?</label>
+          <textarea
+            value={context}
+            onChange={e => setContext(e.target.value)}
+            placeholder={`¿Cómo lo/la conociste? ¿Qué oportunidad ves? ¿Cuál es el objetivo de esta relación?`}
+            rows={4}
+            style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
             onFocus={e => (e.target.style.borderColor = '#003720')}
             onBlur={e => (e.target.style.borderColor = '#E3E3E3')}
           />
@@ -125,21 +292,31 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
         disabled={!name.trim() || saving}
         style={{
           width: '100%',
-          marginTop: '16px',
-          padding: '10px',
+          marginTop: '20px',
+          padding: '12px',
           background: name.trim() && !saving ? '#003720' : '#E3E3E3',
           color: name.trim() && !saving ? 'white' : '#536471',
           border: 'none',
           borderRadius: '8px',
           fontSize: '14px',
-          fontWeight: 500,
+          fontWeight: 600,
           cursor: name.trim() && !saving ? 'pointer' : 'not-allowed',
         }}
       >
-        {saving ? 'Saving...' : 'Save to reThink'}
+        {saving ? 'Guardando...' : `Agregar ${firstName} a reThink →`}
       </button>
     </div>
   )
+}
+
+const labelStyle: React.CSSProperties = {
+  fontSize: '11px',
+  fontWeight: 600,
+  color: '#536471',
+  display: 'block',
+  marginBottom: '4px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
 }
 
 async function uploadPhoto(photoUrl: string, userId: string, linkedinUrl: string | null): Promise<string | null> {
