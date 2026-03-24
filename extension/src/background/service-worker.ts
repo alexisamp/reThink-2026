@@ -107,13 +107,17 @@ async function updateWhatsAppContactInfo(tabId: number) {
 
     if (results && results[0]?.result) {
       const contactInfo = results[0].result
-      const existing = (await chrome.storage.local.get('currentWhatsAppContact')).currentWhatsAppContact
-      if (!existing || existing.phone !== contactInfo.phone || existing.name !== contactInfo.name) {
-        await chrome.storage.local.set({
-          currentWhatsAppContact: contactInfo,
-          currentLinkedInProfile: null,
-        })
+      if (contactInfo.phone) {
+        // Add '+' prefix if not present (WhatsApp data-id has full intl number without +)
+        if (!contactInfo.phone.startsWith('+')) {
+          contactInfo.phone = '+' + contactInfo.phone
+        }
       }
+      // Always update to trigger storage.onChanged → determineState() in sidebar
+      await chrome.storage.local.set({
+        currentWhatsAppContact: contactInfo,
+        currentLinkedInProfile: null,
+      })
     }
   } catch (error) {
     console.error('Failed to extract WhatsApp contact info:', error)
@@ -212,8 +216,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // OPEN_SIDEBAR must be called synchronously (no await) to preserve user gesture context
   if (message.type === 'OPEN_SIDEBAR') {
     const tabId = sender.tab?.id
+    const tabUrl = sender.tab?.url ?? ''
     if (tabId) {
       chrome.sidePanel.open({ tabId }).catch(err => console.warn('sidePanel.open error:', err))
+      // Async: extract contact info so panel has fresh data (storage.onChanged re-triggers determineState)
+      if (tabUrl.includes('web.whatsapp.com')) {
+        updateWhatsAppContactInfo(tabId)  // intentionally not awaited
+      }
     }
     sendResponse({ success: true })
     return false
