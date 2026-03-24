@@ -3,13 +3,21 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": [
-    "main"
+    "main",
+    "compact"
   ],
   "permissions": [
     "core:default",
     "updater:default",
     "process:allow-restart",
     "notification:default",
-    "opener:allow-open-url"
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://**" },
+        { "url": "http://**" },
+        { "url": "mailto:**" }
+      ]
+    }
   ]
 }

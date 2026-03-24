@@ -227,17 +227,27 @@ interface OutreachRowProps {
   onOpenDetail: () => void
 }
 
+function ContactAvatar({ name, photoUrl, size = 28 }: { name: string; photoUrl?: string | null; size?: number }) {
+  const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
+  const [imgFailed, setImgFailed] = useState(false)
+  return (
+    <div className="shrink-0 rounded-full overflow-hidden bg-mercury/60 flex items-center justify-center"
+      style={{ width: size, height: size, fontSize: size * 0.38 }}>
+      {photoUrl && !imgFailed
+        ? <img src={photoUrl} className="w-full h-full object-cover" onError={() => setImgFailed(true)} />
+        : <span className="font-semibold text-shuttle/60">{initials}</span>
+      }
+    </div>
+  )
+}
+
 function OutreachRow({ log, onEdit, onDelete, onOpenDetail }: OutreachRowProps) {
   return (
     <div
       className="group flex items-center gap-2 py-1.5 px-2 -mx-2 rounded hover:bg-gossip/20 transition-colors cursor-pointer"
       onClick={onOpenDetail}
     >
-      <span className={`text-[8px] font-mono uppercase px-1.5 py-0.5 rounded shrink-0 ${
-        log.category ? 'bg-burnham/10 text-burnham' : 'bg-shuttle/10 text-shuttle'
-      }`}>
-        {log.category ? log.category.slice(0, 3).toUpperCase() : 'PEE'}
-      </span>
+      <ContactAvatar name={log.name} photoUrl={log.profile_photo_url} />
       <div className="flex-1 min-w-0">
         <span className="text-[13px] font-medium text-burnham block truncate">{log.name}</span>
         {(log.company || log.job_title) && (

@@ -27,6 +27,17 @@ function daysSince(dateStr: string | null): number | null {
   return Math.floor((now.getTime() - then.getTime()) / (1000 * 60 * 60 * 24))
 }
 
+/** Returns true if the name looks like it was captured from a LinkedIn URL slug
+ *  e.g. "javiercopleJ", "JohnDoe", "juan-garcia-123" */
+function isSlugName(name: string): boolean {
+  if (!name || name.length < 4 || name.includes(' ')) return false
+  // camelCase slug: uppercase after position 0
+  if (/[A-Z]/.test(name.slice(1))) return true
+  // all-lowercase with hyphens or digits — URL slug
+  if (/^[a-z][a-z0-9\-]+$/.test(name)) return true
+  return false
+}
+
 function formatAgo(days: number): string {
   if (days === 0) return 'Today'
   if (days === 1) return '1d ago'
@@ -290,6 +301,11 @@ export default function People() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-burnham text-sm truncate">{contact.name}</span>
+                    {isSlugName(contact.name) && (
+                      <span className="text-[9px] bg-yellow-100 text-yellow-700 rounded px-1.5 py-0.5 flex-shrink-0" title="Name may be a URL slug — open and run Enrich to fix">
+                        fix name
+                      </span>
+                    )}
                     {contact.category && (
                       <span className="text-[9px] uppercase bg-mercury/40 text-shuttle rounded px-1.5 py-0.5 flex-shrink-0">
                         {CATEGORY_LABELS[contact.category] ?? contact.category}
