@@ -69,6 +69,7 @@ export default function App() {
   }, [])
 
   async function determineState() {
+    try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
       setSidebarState('unauthenticated')
@@ -105,6 +106,10 @@ export default function App() {
     } else {
       setCurrentContact(null)
       setSidebarState('default')
+    }
+    } catch (err) {
+      console.error('reThink: determineState error', err)
+      setSidebarState('unauthenticated') // fallback to login screen rather than hanging blank
     }
   }
 

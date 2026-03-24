@@ -8,28 +8,39 @@ console.log('reThink People: WhatsApp content script loaded')
 const processedMessages = new Set<string>()
 
 // ===== CONVERSATION CHANGE DETECTOR =====
+// Polls the phone number from message data-id attributes.
+// WhatsApp Web doesn't change the URL when switching chats, but every message
+// carries the contact's phone in its data-id ("true_PHONE@c.us_MSGID").
+// When the phone changes, a new conversation is active.
 
-let lastConversationUrl = window.location.href
-let lastConversationHeader = ''
+let currentConversationPhone: string | null = null
 let lastConversationSwitchTime = Date.now()  // init to now so initial history load is treated as a switch
+
+function getPhoneFromDom(): string | null {
+  const msgs = document.querySelectorAll('[data-id*="@c.us"]')
+  for (const msg of Array.from(msgs)) {
+    const dataId = msg.getAttribute('data-id')
+    if (!dataId) continue
+    const m = dataId.match(/(?:true|false)_(.+?)@c\.us/)
+    if (m?.[1]) return m[1]
+  }
+  return null
+}
 
 function startConversationChangeDetector() {
   setInterval(() => {
-    const currentUrl = window.location.href
-    const headerEl = document.querySelector('header [data-testid="conversation-info-header"]') as HTMLElement | null
-    const currentHeader = headerEl?.innerText?.split('\n')[0]?.trim() ?? ''
-
-    const urlChanged = currentUrl !== lastConversationUrl
-    const headerChanged = currentHeader.length > 0 && currentHeader !== lastConversationHeader
-
-    if (urlChanged || headerChanged) {
-      lastConversationUrl = currentUrl
-      if (currentHeader.length > 0) lastConversationHeader = currentHeader
-      lastConversationSwitchTime = Date.now()  // mark switch time
-      chrome.runtime.sendMessage({ type: 'WHATSAPP_CONVERSATION_CHANGED' })
-        .catch(() => {}) // SW may not be awake yet
+    const phone = getPhoneFromDom()
+    if (!phone) return  // messages not loaded yet
+    if (phone !== currentConversationPhone) {
+      currentConversationPhone = phone
+      lastConversationSwitchTime = Date.now()
+      // Send the phone directly so service worker doesn't need to re-extract
+      chrome.runtime.sendMessage({
+        type: 'WHATSAPP_CONVERSATION_CHANGED',
+        phone: '+' + phone,
+      }).catch(() => {})
     }
-  }, 800)
+  }, 600)
 }
 
 function initWhatsAppObserver() {

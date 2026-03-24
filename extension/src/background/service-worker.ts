@@ -318,8 +318,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case 'WHATSAPP_CONVERSATION_CHANGED': {
           const tabId = sender.tab?.id
           if (tabId) {
-            await chrome.storage.local.remove('currentWhatsAppContact')
-            await updateWhatsAppContactInfo(tabId)
+            if (message.phone) {
+              // Phone provided directly — write immediately (no race condition)
+              await chrome.storage.local.set({
+                currentWhatsAppContact: { phone: message.phone, name: null },
+                currentLinkedInProfile: null,
+              })
+            } else {
+              await chrome.storage.local.remove('currentWhatsAppContact')
+            }
+            // Extract name asynchronously (messages are already loaded when phone changed)
+            updateWhatsAppContactInfo(tabId)
           }
           sendResponse({ success: true })
           break

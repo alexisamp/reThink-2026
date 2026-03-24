@@ -25,7 +25,7 @@ export function DailyProgress({ userId }: Props) {
         .from('habits')
         .select('id, text, tracks_outreach, target_value')
         .eq('user_id', userId)
-        .eq('active', true)
+        .eq('is_active', true)
         .in('tracks_outreach', ['networking', 'prospecting'])
 
       if (!habits || habits.length === 0) return
