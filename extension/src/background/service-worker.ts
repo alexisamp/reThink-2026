@@ -25,9 +25,6 @@ chrome.runtime.onInstalled.addListener(async () => {
       const isLI = tab.url.includes('linkedin.com')
       if (!isWA && !isLI) continue
 
-      // Enable sidebar for this tab
-      await chrome.sidePanel.setOptions({ tabId: tab.id, enabled: true })
-
       // Inject content scripts manually
       const scripts: string[] = []
       if (isWA) scripts.push('src/content-scripts/whatsapp.js', 'src/content-scripts/floating-trigger.js')
@@ -57,17 +54,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 })
 
-// ===== TAB EVENTS — Enable/disable sidebar + update context =====
-
-chrome.tabs.onActivated.addListener(async ({ tabId }) => {
-  try {
-    const tab = await chrome.tabs.get(tabId)
-    const isReThinkSite = !!(tab.url?.includes('web.whatsapp.com') || tab.url?.includes('linkedin.com'))
-    await chrome.sidePanel.setOptions({ tabId, enabled: isReThinkSite })
-  } catch {
-    // Tab may not exist
-  }
-})
+// ===== TAB EVENTS — Update context only (no enable/disable — panel always available) =====
 
 let lastWhatsAppUrl: string | null = null
 
@@ -75,8 +62,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (!changeInfo.url) return
 
   const isWhatsApp = changeInfo.url.includes('web.whatsapp.com')
-  const isLinkedIn = changeInfo.url.includes('linkedin.com')
-  await chrome.sidePanel.setOptions({ tabId, enabled: isWhatsApp || isLinkedIn })
+  // Removed: setOptions enable/disable — was causing panel to be disabled when tab.url was briefly undefined
 
   // WhatsApp conversation change
   if (isWhatsApp && tab.url !== lastWhatsAppUrl) {
