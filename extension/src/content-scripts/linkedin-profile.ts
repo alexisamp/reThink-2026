@@ -16,6 +16,17 @@ function extractPhotoUrl(el: HTMLImageElement | null): string | null {
   return null
 }
 
+function cleanName(raw: string): string | null {
+  // LinkedIn h1 often contains accessibility suffixes like "· 3rd+" or "| Open to work"
+  // Strip them and take only the first line / first segment
+  const text = raw.split(/\n/)[0]           // first line only
+    .split(/\s*[|·•]\s*/)[0]               // strip everything after |, ·, or •
+    .replace(/\s+/g, ' ')                   // collapse whitespace
+    .trim()
+  if (text && text.length >= 2 && text.length < 70) return text
+  return null
+}
+
 function extractName(): string | null {
   // Multiple fallbacks — LinkedIn changes class names frequently
   const selectors = [
@@ -33,23 +44,11 @@ function extractName(): string | null {
   for (const sel of selectors) {
     const el = document.querySelector(sel) as HTMLElement | null
     if (el) {
-      const text = el.innerText?.trim()
-      // Sanity check: a name is 2-60 chars and doesn't look like a job title
-      if (text && text.length >= 2 && text.length < 60 && !text.includes('|') && !text.includes('·')) {
-        return text
-      }
+      const name = cleanName(el.innerText ?? '')
+      if (name) return name
     }
   }
-  // Fallback: extract from URL slug
-  const match = window.location.href.match(/linkedin\.com\/in\/([^/?#&]+)/)
-  if (match?.[1]) {
-    return match[1]
-      .split('-')
-      .filter(w => w.length > 1)
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ')
-  }
-  return null
+  return null  // do NOT fall back to URL slug — caller handles that
 }
 
 function extractJobTitle(): string | null {
@@ -85,75 +84,122 @@ function extractCompany(): string | null {
   return null
 }
 
-function extractProfileData() {
+function findProfilePhotoUrl(): string | null {
+  // Step 1: known class selectors
+  const selectors = [
+    'img.pv-top-card-profile-picture__image--show',
+    'img.pv-top-card-profile-picture__image',
+    'img.profile-photo-edit__preview',
+    'img.EntityPhoto-circle-5',
+    'img[data-ghost-classes]',
+  ]
+  for (const sel of selectors) {
+    const el = document.querySelector(sel) as HTMLImageElement | null
+    const url = extractPhotoUrl(el)
+    if (url) return url
+  }
+
+  // Step 2: scan imgs for 'profile-display'
+  for (const img of Array.from(document.querySelectorAll('img')) as HTMLImageElement[]) {
+    const url = extractPhotoUrl(img)
+    if (url && url.indexOf('profile-display') !== -1) return url
+  }
+
+  // Step 3: any media.licdn.com/dms/image in the top card area
+  const topCard = document.querySelector('.pv-top-card, .artdeco-card, main section')
+  if (topCard) {
+    for (const img of Array.from(topCard.querySelectorAll('img')) as HTMLImageElement[]) {
+      const url = extractPhotoUrl(img)
+      if (url && url.indexOf('media.licdn.com/dms/image') !== -1) return url
+    }
+  }
+
+  // Step 4: any media.licdn.com image on page (last resort)
+  for (const img of Array.from(document.querySelectorAll('img')) as HTMLImageElement[]) {
+    const url = extractPhotoUrl(img)
+    if (url && url.indexOf('media.licdn.com/dms/image') !== -1) return url
+  }
+
+  return null
+}
+
+// Fetch the photo from the content-script context (which has LinkedIn session cookies)
+// and return a compact JPEG base64 data URL to avoid fetching from the service worker
+// (which lacks LinkedIn auth cookies and would get a 401).
+async function fetchPhotoBase64(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { credentials: 'include', mode: 'cors' })
+    if (!res.ok) return null
+    const blob = await res.blob()
+    // Re-encode as JPEG at 80% quality via canvas to keep size small (~20-40KB)
+    return await compressToBase64(blob)
+  } catch {
+    return null
+  }
+}
+
+function compressToBase64(blob: Blob): Promise<string | null> {
+  return new Promise(resolve => {
+    const img = new Image()
+    const url = URL.createObjectURL(blob)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      try {
+        // Target: max 200×200, JPEG 80%
+        const MAX = 200
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { resolve(null); return }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.8))
+      } catch {
+        resolve(null)
+      }
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null) }
+    img.src = url
+  })
+}
+
+async function init() {
   const name = extractName()
   const jobTitle = extractJobTitle()
   const company = extractCompany()
   const linkedinUrl = cleanLinkedInUrl(window.location.href)
 
-  // Photo — 5-step chain
-  let profilePhotoUrl: string | null = null
+  if (!linkedinUrl) return
 
-  // Step 1: og:image meta
-  const ogImage = document.querySelector('meta[property="og:image"]')
-  if (ogImage) {
-    const ogUrl = ogImage.getAttribute('content') ?? ''
-    if (ogUrl && ogUrl.indexOf('media.licdn.com') !== -1) profilePhotoUrl = ogUrl
+  const photoUrl = findProfilePhotoUrl()
+
+  // Fetch photo in this content-script context (has LinkedIn cookies) and compress
+  let photoBase64: string | null = null
+  if (photoUrl) {
+    photoBase64 = await fetchPhotoBase64(photoUrl)
   }
 
-  // Step 2: known class selectors
-  if (!profilePhotoUrl) {
-    const selectors = [
-      'img.pv-top-card-profile-picture__image--show',
-      'img.pv-top-card-profile-picture__image',
-      'img.profile-photo-edit__preview',
-      'img.EntityPhoto-circle-5',
-      'img[data-ghost-classes]',
-    ]
-    for (const sel of selectors) {
-      const el = document.querySelector(sel) as HTMLImageElement | null
-      const url = extractPhotoUrl(el)
-      if (url) { profilePhotoUrl = url; break }
-    }
-  }
+  console.log('reThink: LinkedIn profile extracted:', name, linkedinUrl, photoUrl ? '📷' : '(no photo)')
 
-  // Step 3: scan imgs for 'profile-display'
-  if (!profilePhotoUrl) {
-    for (const img of Array.from(document.querySelectorAll('img')) as HTMLImageElement[]) {
-      const url = extractPhotoUrl(img)
-      if (url && url.indexOf('profile-display') !== -1) { profilePhotoUrl = url; break }
-    }
-  }
-
-  // Step 4: top card fallback
-  if (!profilePhotoUrl) {
-    const topCard = document.querySelector('.pv-top-card') ?? document.querySelector('.artdeco-card')
-    if (topCard) {
-      for (const img of Array.from(topCard.querySelectorAll('img')) as HTMLImageElement[]) {
-        const url = extractPhotoUrl(img)
-        if (url && url.indexOf('media.licdn.com/dms/image') !== -1) { profilePhotoUrl = url; break }
-      }
-    }
-  }
-
-  return { name, jobTitle, company, linkedinUrl, profilePhotoUrl }
+  chrome.runtime.sendMessage({
+    type: 'LINKEDIN_PROFILE_DATA',
+    name,
+    jobTitle,
+    company,
+    linkedinUrl,
+    profilePhotoUrl: photoUrl,   // keep raw URL as fallback
+    photoBase64,                  // compressed base64 — preferred for upload
+  })
 }
 
-function init() {
-  const data = extractProfileData()
-  if (!data.linkedinUrl) return
-
-  console.log('reThink: LinkedIn profile extracted:', data.name, data.linkedinUrl)
-  chrome.runtime.sendMessage({ type: 'LINKEDIN_PROFILE_DATA', ...data })
-}
-
-// Run after LinkedIn SPA settles — try at 1.5s and again at 3s in case page was slow
+// Run after LinkedIn SPA settles — try at 1.5s and again at 4s in case page was slow
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(init, 1500)
-    setTimeout(init, 3000)
+    setTimeout(() => init(), 1500)
+    setTimeout(() => init(), 4000)
   })
 } else {
-  setTimeout(init, 1500)
-  setTimeout(init, 3000)
+  setTimeout(() => init(), 1500)
+  setTimeout(() => init(), 4000)
 }

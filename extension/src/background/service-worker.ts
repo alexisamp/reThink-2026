@@ -402,7 +402,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         case 'LINKEDIN_PROFILE_DATA': {
-          // Always update — overwrite with fresh data (2nd attempt at 3s may have better data)
+          // Always update — overwrite with fresh data (2nd attempt at 4s may have better data)
           const existing = (await chrome.storage.local.get('currentLinkedInProfile')).currentLinkedInProfile
           const updated = {
             name: message.name ?? existing?.name ?? null,  // keep old name if new is null
@@ -417,17 +417,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           })
 
           // Upload photo in background (non-blocking)
-          if (message.profilePhotoUrl && message.linkedinUrl) {
-            uploadLinkedInPhoto(message.profilePhotoUrl, message.linkedinUrl).then(async (permanentUrl) => {
-              if (permanentUrl && permanentUrl !== message.profilePhotoUrl) {
-                const current = (await chrome.storage.local.get('currentLinkedInProfile')).currentLinkedInProfile
-                if (current?.linkedinUrl === message.linkedinUrl) {
-                  await chrome.storage.local.set({
-                    currentLinkedInProfile: { ...current, profilePhotoUrl: permanentUrl }
-                  })
+          // Prefer base64 from content script (has LinkedIn cookies) over URL fetch (no cookies)
+          if (message.linkedinUrl) {
+            const uploadFn = message.photoBase64
+              ? () => uploadLinkedInPhotoFromBase64(message.photoBase64, message.linkedinUrl)
+              : message.profilePhotoUrl
+                ? () => uploadLinkedInPhoto(message.profilePhotoUrl, message.linkedinUrl)
+                : null
+
+            if (uploadFn) {
+              uploadFn().then(async (permanentUrl) => {
+                if (permanentUrl) {
+                  const current = (await chrome.storage.local.get('currentLinkedInProfile')).currentLinkedInProfile
+                  if (current?.linkedinUrl === message.linkedinUrl) {
+                    await chrome.storage.local.set({
+                      currentLinkedInProfile: { ...current, profilePhotoUrl: permanentUrl }
+                    })
+                  }
+                  // Also persist to DB if contact exists
+                  const userId = await getCurrentUserId()
+                  if (userId) {
+                    await supabase.from('outreach_logs')
+                      .update({ profile_photo_url: permanentUrl })
+                      .eq('user_id', userId)
+                      .eq('linkedin_url', message.linkedinUrl)
+                  }
                 }
-              }
-            }).catch(() => {})
+              }).catch(() => {})
+            }
           }
 
           sendResponse({ success: true })
@@ -448,6 +465,51 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // ===== PHOTO UPLOAD =====
 
+// Upload from base64 data URL — content script fetched the image with LinkedIn cookies
+async function uploadLinkedInPhotoFromBase64(dataUrl: string, linkedinUrl: string): Promise<string | null> {
+  try {
+    const userId = await getCurrentUserId()
+    if (!userId) return null
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token
+    if (!token) return null
+
+    const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
+    if (!match) return null
+    const mimeType = match[1]
+    const base64Data = match[2]
+
+    const binaryString = atob(base64Data)
+    const bytes = new Uint8Array(binaryString.length)
+    for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i)
+
+    const slug = linkedinUrl.match(/\/in\/([^/?#]+)/)?.[1] ?? 'photo'
+    const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg'
+    const storagePath = `${userId}/${slug}.${ext}`
+
+    const uploadRes = await fetch(
+      `${SUPABASE_URL}/storage/v1/object/contact-photos/${storagePath}`,
+      {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${token}`,
+          'Content-Type': mimeType || 'image/jpeg',
+          'x-upsert': 'true',
+        },
+        body: bytes,
+      }
+    )
+    if (uploadRes.ok) {
+      return `${SUPABASE_URL}/storage/v1/object/public/contact-photos/${storagePath}`
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+// Upload by fetching a URL — fallback when content script didn't send base64
 async function uploadLinkedInPhoto(photoUrl: string, linkedinUrl: string): Promise<string | null> {
   try {
     const userId = await getCurrentUserId()

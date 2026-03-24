@@ -119,6 +119,12 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
         label: null,
       })
 
+      // If no LinkedIn provided, open a LinkedIn search in a new tab so user can find & enrich
+      if (!linkedinInput.trim()) {
+        const query = encodeURIComponent(newName.trim())
+        chrome.tabs.create({ url: `https://www.linkedin.com/search/results/people/?keywords=${query}`, active: false })
+      }
+
       onMapped()
     } catch {
       alert('Failed to create contact. Please try again.')
