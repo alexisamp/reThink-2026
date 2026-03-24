@@ -11,7 +11,7 @@ const processedMessages = new Set<string>()
 
 let lastConversationUrl = window.location.href
 let lastConversationHeader = ''
-let lastConversationSwitchTime = 0   // track when we last switched — used to ignore history loads
+let lastConversationSwitchTime = Date.now()  // init to now so initial history load is treated as a switch
 
 function startConversationChangeDetector() {
   setInterval(() => {
@@ -78,8 +78,8 @@ function handleNewMessage(messageElement: HTMLElement) {
     if (processedMessages.has(dataId)) return
     processedMessages.add(dataId)
 
-    // Skip messages that appear within 3s of a chat switch — those are history loads, not new messages
-    if (Date.now() - lastConversationSwitchTime < 3000) return
+    // Skip messages that appear within 5s of a chat switch/open — those are history loads, not new messages
+    if (Date.now() - lastConversationSwitchTime < 5000) return
 
     // Extract phone from data-id (format: "true_PHONE@c.us_MSGID" or "false_PHONE@c.us_MSGID")
     const phoneMatch = dataId.match(/(?:true|false)_(.+?)@c\.us/)

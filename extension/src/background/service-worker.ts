@@ -579,7 +579,23 @@ interface WhatsAppMessageEvent {
   timestamp: number
 }
 
+// In-memory mutex: prevents race conditions when multiple messages arrive simultaneously
+// (e.g., WhatsApp history load fires many events at once — all find "no active window" → all create interactions)
+const processingPhones = new Set<string>()
+
 async function handleWhatsAppMessage(event: WhatsAppMessageEvent) {
+  // Skip if already processing this phone — prevents duplicate interaction creation from concurrent events
+  if (processingPhones.has(event.phone)) return
+  processingPhones.add(event.phone)
+  try {
+    await _handleWhatsAppMessage(event)
+  } finally {
+    // Release mutex after a short delay so rapid messages are still grouped into the same window
+    setTimeout(() => processingPhones.delete(event.phone), 2000)
+  }
+}
+
+async function _handleWhatsAppMessage(event: WhatsAppMessageEvent) {
   try {
     const userId = await getCurrentUserId()
     if (!userId) return
