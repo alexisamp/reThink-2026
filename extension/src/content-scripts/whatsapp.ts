@@ -7,7 +7,32 @@ console.log('reThink People: WhatsApp content script loaded')
 
 const processedMessages = new Set<string>()
 
+// ===== CONVERSATION CHANGE DETECTOR =====
+
+let lastConversationUrl = window.location.href
+let lastConversationHeader = ''
+
+function startConversationChangeDetector() {
+  setInterval(() => {
+    const currentUrl = window.location.href
+    const headerEl = document.querySelector('header [data-testid="conversation-info-header"]') as HTMLElement | null
+    const currentHeader = headerEl?.innerText?.split('\n')[0]?.trim() ?? ''
+
+    const urlChanged = currentUrl !== lastConversationUrl
+    const headerChanged = currentHeader.length > 0 && currentHeader !== lastConversationHeader
+
+    if (urlChanged || headerChanged) {
+      lastConversationUrl = currentUrl
+      if (currentHeader.length > 0) lastConversationHeader = currentHeader
+      chrome.runtime.sendMessage({ type: 'WHATSAPP_CONVERSATION_CHANGED' })
+        .catch(() => {}) // SW may not be awake yet
+    }
+  }, 800)
+}
+
 function initWhatsAppObserver() {
+  startConversationChangeDetector()
+
   const checkReady = setInterval(() => {
     const panel = document.querySelector('[data-testid="conversation-panel-messages"]')
       ?? document.querySelector('div.copyable-area')
@@ -58,6 +83,9 @@ function handleNewMessage(messageElement: HTMLElement) {
 
     // Skip group chats — check for multiple participant indicator in header
     const participantEl = document.querySelector('header [data-testid="conversation-info-header"] span[title]')
+      ?? document.querySelector('header [data-testid="conversation-info-header"] span[dir]')
+      ?? document.querySelector('header span[data-testid="conversation-info-header-chat-title"]')
+      ?? document.querySelector('[data-testid="conversation-header"] span[title]')
     if (participantEl?.textContent?.includes(',')) return
 
     // Normalize phone

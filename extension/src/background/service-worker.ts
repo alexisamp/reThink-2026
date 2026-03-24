@@ -128,13 +128,47 @@ async function updateWhatsAppContactInfo(tabId: number) {
 function extractWhatsAppContactInfo() {
   try {
     let contactName = null
-    const header = document.querySelector('header [data-testid="conversation-info-header"]') as HTMLElement | null
-    if (header) {
-      const text = header.innerText?.trim()
-      if (text) {
-        const firstLine = text.split('\n')[0]?.trim()
-        if (firstLine && firstLine.length >= 2 && firstLine.length < 100) {
-          contactName = firstLine
+
+    // Try specific span selectors first (most reliable)
+    const nameSelectors = [
+      'header [data-testid="conversation-info-header"] span[title]',
+      'header span[data-testid="conversation-info-header-chat-title"]',
+      '[data-testid="conversation-header"] span[title]',
+      'header [data-testid="conversation-info-header"] span[dir]',
+    ]
+    for (const sel of nameSelectors) {
+      const el = document.querySelector(sel) as HTMLElement | null
+      if (el) {
+        const text = (el.getAttribute('title') || el.innerText)?.trim()
+        if (text && text.length >= 2 && text.length < 100) {
+          contactName = text
+          break
+        }
+      }
+    }
+
+    // Fallback: first span innerText in conversation header
+    if (!contactName) {
+      const header = document.querySelector('header [data-testid="conversation-info-header"]') as HTMLElement | null
+      if (header) {
+        const firstSpan = header.querySelector('span') as HTMLElement | null
+        if (firstSpan) {
+          const text = firstSpan.innerText?.trim()
+          if (text && text.length >= 2 && text.length < 100) contactName = text
+        }
+      }
+    }
+
+    // Fallback: full header innerText first line
+    if (!contactName) {
+      const header = document.querySelector('header [data-testid="conversation-info-header"]') as HTMLElement | null
+      if (header) {
+        const text = header.innerText?.trim()
+        if (text) {
+          const firstLine = text.split('\n')[0]?.trim()
+          if (firstLine && firstLine.length >= 2 && firstLine.length < 100) {
+            contactName = firstLine
+          }
         }
       }
     }
@@ -231,6 +265,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   ;(async () => {
     try {
       switch (message.type) {
+        case 'WHATSAPP_CONVERSATION_CHANGED': {
+          const tabId = sender.tab?.id
+          if (tabId) {
+            await chrome.storage.local.remove('currentWhatsAppContact')
+            await updateWhatsAppContactInfo(tabId)
+          }
+          sendResponse({ success: true })
+          break
+        }
+
         case 'whatsapp_message':
           await handleWhatsAppMessage(message)
           sendResponse({ success: true })

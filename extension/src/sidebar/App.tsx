@@ -234,14 +234,8 @@ async function findContactByPhone(userId: string, phone: string): Promise<Partia
     .select(`
       contact_id,
       outreach_logs!inner (
-        id,
-        name,
-        company,
-        health_score,
-        status,
-        profile_photo_url,
-        personal_context,
-        category
+        id, name, company, job_title, health_score, status, profile_photo_url,
+        personal_context, category, last_interaction_at
       )
     `)
     .eq('user_id', userId)
@@ -255,18 +249,20 @@ async function findContactByPhone(userId: string, phone: string): Promise<Partia
     reThinkId: contact.id,
     name: contact.name,
     company: contact.company,
+    jobTitle: contact.job_title,
     healthScore: contact.health_score,
     status: contact.status,
     profilePhotoUrl: contact.profile_photo_url,
     personalContext: contact.personal_context,
     category: contact.category,
+    lastInteractionAt: contact.last_interaction_at,
   }
 }
 
 async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Promise<Partial<CurrentContact> | null> {
   const { data, error } = await supabase
     .from('outreach_logs')
-    .select('id, name, company, health_score, status, profile_photo_url, personal_context, category')
+    .select('id, name, company, job_title, health_score, status, profile_photo_url, personal_context, category, last_interaction_at')
     .eq('user_id', userId)
     .eq('linkedin_url', linkedinUrl)
     .maybeSingle()
@@ -277,11 +273,13 @@ async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Pr
     reThinkId: data.id,
     name: data.name,
     company: data.company,
+    jobTitle: data.job_title,
     healthScore: data.health_score,
     status: data.status,
     profilePhotoUrl: data.profile_photo_url,
     personalContext: data.personal_context,
     category: data.category,
+    lastInteractionAt: data.last_interaction_at,
   }
 }
 
