@@ -176,6 +176,21 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
   // Open in reThink
   const [openingReThink, setOpeningReThink] = useState(false)
 
+  // Import meeting notes
+  const [showImportNotes, setShowImportNotes] = useState(false)
+  const [importNotesText, setImportNotesText] = useState('')
+  const [importNotesDate, setImportNotesDate] = useState(new Date().toISOString().split('T')[0])
+  const [importAnalyzing, setImportAnalyzing] = useState(false)
+  const [importSuggestions, setImportSuggestions] = useState<{
+    milestones: Array<{ type: string; label: string; isAnnual: boolean; date_mm_dd?: string; date_full?: string; show_days_before: number; notes?: string }>
+    context_bullets: string[]
+    interaction_type: 'in_person' | 'virtual_coffee'
+    meeting_summary: string
+  } | null>(null)
+  const [checkedMilestones, setCheckedMilestones] = useState<boolean[]>([])
+  const [checkedContext, setCheckedContext] = useState<boolean[]>([])
+  const [importSaving, setImportSaving] = useState(false)
+
   useEffect(() => {
     if (!contact.reThinkId) return
     loadInteractionCount()
@@ -454,6 +469,95 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
     setTimeout(() => setOpeningReThink(false), 2000)
   }
 
+  async function handleAnalyzeMeetingNotes() {
+    if (!importNotesText.trim() || !contact.reThinkId) return
+    setImportAnalyzing(true)
+    setImportSuggestions(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('https://amvezbymrnvrwcypivkf.supabase.co/functions/v1/analyze-meeting-notes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token ?? ''}`,
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtdmV6Ynltcm52cndjeXBpdmtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwMTIxNTgsImV4cCI6MjA4NDU4ODE1OH0.6qgaygMynKaKYB9TlcJAlyLMt87wc7D8PbA5ZeDGDUg',
+        },
+        body: JSON.stringify({
+          contact_name: contact.name,
+          notes: importNotesText.trim(),
+          meeting_date: importNotesDate,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setImportSuggestions(data)
+        setCheckedMilestones((data.milestones ?? []).map(() => true))
+        setCheckedContext((data.context_bullets ?? []).map(() => true))
+      }
+    } catch (e) {
+      console.error('analyze-meeting-notes error', e)
+    }
+    setImportAnalyzing(false)
+  }
+
+  async function handleImportNotesSave() {
+    if (!importSuggestions || !contact.reThinkId) return
+    setImportSaving(true)
+
+    // Get user_id from auth
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    const userId = authUser?.id
+
+    // Save checked milestones
+    const selectedMilestones = importSuggestions.milestones.filter((_, i) => checkedMilestones[i])
+    for (const m of selectedMilestones) {
+      const payload: Record<string, unknown> = {
+        user_id: userId,
+        contact_id: contact.reThinkId,
+        type: m.type,
+        label: m.label,
+        show_days_before: m.show_days_before ?? 7,
+        notes: m.notes ?? null,
+      }
+      if (m.isAnnual) payload.date_mm_dd = m.date_mm_dd ?? null
+      else payload.date_full = m.date_full ?? null
+      await supabase.from('contact_milestones').insert(payload)
+    }
+
+    // Append context bullets to personal_context
+    const selectedContext = importSuggestions.context_bullets.filter((_, i) => checkedContext[i])
+    if (selectedContext.length > 0) {
+      const existing = contact.personalContext?.trim() ?? ''
+      const updated = existing ? existing + '\n\n' + selectedContext.join('\n') : selectedContext.join('\n')
+      await supabase.from('outreach_logs').update({ personal_context: updated }).eq('id', contact.reThinkId)
+    }
+
+    // Log the interaction
+    chrome.runtime.sendMessage({
+      type: 'QUICK_LOG_INTERACTION',
+      payload: {
+        contactId: contact.reThinkId,
+        interactionType: importSuggestions.interaction_type ?? 'virtual_coffee',
+        date: importNotesDate,
+        notes: importSuggestions.meeting_summary ?? null,
+        category: contact.category,
+      }
+    })
+
+    // Reload milestones if any were added
+    if (selectedMilestones.length > 0) {
+      loadMilestones()
+    }
+
+    // Reset
+    setShowImportNotes(false)
+    setImportNotesText('')
+    setImportSuggestions(null)
+    setCheckedMilestones([])
+    setCheckedContext([])
+    setImportSaving(false)
+  }
+
   const score = contact.healthScore ?? 1
   const nameIsSlug = isSlugName(contact.name)
   const lastSeen = formatLastInteraction(contact.lastInteractionAt)
@@ -611,6 +715,128 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Import Meeting Notes */}
+      <div style={{ ...CARD }}>
+        <div
+          onClick={() => setShowImportNotes(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            cursor: 'pointer',
+          }}
+        >
+          <span style={{ fontSize: '13px' }}>📋</span>
+          <span style={{ fontSize: '12px', color: '#536471', fontWeight: 500 }}>Import meeting notes</span>
+          <span style={{ marginLeft: 'auto', fontSize: '10px', color: '#536471' }}>{showImportNotes ? '▲' : '▼'}</span>
+        </div>
+
+        {showImportNotes && !importSuggestions && (
+          <div style={{ paddingTop: '10px' }}>
+            <textarea
+              value={importNotesText}
+              onChange={e => setImportNotesText(e.target.value)}
+              placeholder="Paste Granola or meeting notes..."
+              rows={5}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                fontSize: '12px', padding: '8px 10px',
+                border: '1px solid #E3E3E3', borderRadius: '8px',
+                color: '#003720', background: '#f9f9f9',
+                resize: 'none', outline: 'none', fontFamily: 'inherit'
+              }}
+            />
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
+              <input
+                type="date"
+                value={importNotesDate}
+                onChange={e => setImportNotesDate(e.target.value)}
+                style={{
+                  flex: 1, fontSize: '11px', padding: '6px 8px',
+                  border: '1px solid #E3E3E3', borderRadius: '6px',
+                  color: '#003720', outline: 'none'
+                }}
+              />
+              <button
+                onClick={handleAnalyzeMeetingNotes}
+                disabled={importAnalyzing || !importNotesText.trim()}
+                style={{
+                  flex: 1, fontSize: '11px', fontWeight: 600,
+                  padding: '7px 10px', borderRadius: '8px',
+                  background: importAnalyzing || !importNotesText.trim() ? '#E3E3E3' : '#003720',
+                  color: importAnalyzing || !importNotesText.trim() ? '#536471' : 'white',
+                  border: 'none', cursor: importAnalyzing || !importNotesText.trim() ? 'default' : 'pointer'
+                }}
+              >
+                {importAnalyzing ? 'Analyzing…' : '✨ Analyze'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showImportNotes && importSuggestions && (
+          <div style={{ paddingTop: '10px' }}>
+            {importSuggestions.meeting_summary && (
+              <div style={{ background: '#E5F9BD', borderRadius: '8px', padding: '8px 10px', marginBottom: '10px' }}>
+                <p style={{ fontSize: '10px', color: '#536471', margin: '0 0 3px', textTransform: 'uppercase', fontWeight: 600 }}>Summary</p>
+                <p style={{ fontSize: '11px', color: '#003720', margin: 0 }}>{importSuggestions.meeting_summary}</p>
+              </div>
+            )}
+
+            {importSuggestions.milestones.length > 0 && (
+              <div style={{ marginBottom: '10px' }}>
+                <p style={{ fontSize: '10px', color: '#536471', margin: '0 0 6px', textTransform: 'uppercase', fontWeight: 600 }}>Milestones</p>
+                {importSuggestions.milestones.map((m, i) => (
+                  <label key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #E3E3E3', marginBottom: '4px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={checkedMilestones[i] ?? true}
+                      onChange={e => setCheckedMilestones(prev => { const n = [...prev]; n[i] = e.target.checked; return n })}
+                      style={{ marginTop: '2px', accentColor: '#003720' }}
+                    />
+                    <div>
+                      <p style={{ fontSize: '11px', fontWeight: 600, color: '#003720', margin: 0 }}>{m.label}</p>
+                      <p style={{ fontSize: '10px', color: '#536471', margin: 0 }}>{m.isAnnual ? (m.date_mm_dd || 'Annual') : (m.date_full || 'One-time')}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {importSuggestions.context_bullets.length > 0 && (
+              <div style={{ marginBottom: '10px' }}>
+                <p style={{ fontSize: '10px', color: '#536471', margin: '0 0 6px', textTransform: 'uppercase', fontWeight: 600 }}>Context insights</p>
+                {importSuggestions.context_bullets.map((bullet, i) => (
+                  <label key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #E3E3E3', marginBottom: '4px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={checkedContext[i] ?? true}
+                      onChange={e => setCheckedContext(prev => { const n = [...prev]; n[i] = e.target.checked; return n })}
+                      style={{ marginTop: '2px', accentColor: '#003720' }}
+                    />
+                    <p style={{ fontSize: '11px', color: '#003720', margin: 0 }}>{bullet}</p>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => setImportSuggestions(null)}
+                style={{ flex: 1, fontSize: '11px', padding: '7px', borderRadius: '8px', border: '1px solid #E3E3E3', background: 'white', color: '#536471', cursor: 'pointer' }}
+              >
+                ← Edit
+              </button>
+              <button
+                onClick={handleImportNotesSave}
+                disabled={importSaving}
+                style={{ flex: 2, fontSize: '11px', fontWeight: 600, padding: '7px', borderRadius: '8px', background: '#003720', color: 'white', border: 'none', cursor: importSaving ? 'default' : 'pointer' }}
+              >
+                {importSaving ? 'Saving…' : '✓ Save selected'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Milestones */}
