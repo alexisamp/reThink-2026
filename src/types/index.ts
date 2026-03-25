@@ -285,8 +285,23 @@ export interface Contact {
   attio_company_id?: string | null
   ai_enriched_at?: string | null
   profile_photo_url?: string | null
+  birthday?: string | null          // MM-DD
+  links?: Array<{url: string; label: string; type?: string; created_at?: string}> | null
   created_at: string
   updated_at: string
+}
+
+export interface ContactMilestone {
+  id: string
+  user_id: string
+  contact_id: string
+  type: 'birthday_contact' | 'birthday_child' | 'birthday_partner' | 'anniversary' | 'anniversary_work' | 'custom'
+  label: string
+  date_mm_dd?: string | null   // "MM-DD"
+  date_full?: string | null    // ISO date
+  show_days_before: number
+  notes?: string | null
+  created_at: string
 }
 
 export interface Interaction {

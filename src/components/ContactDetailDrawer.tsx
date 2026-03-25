@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   X, ArrowLeft, ArrowSquareOut, ChatCircle, Envelope, Phone,
   VideoCamera, Users, CaretDown, CaretUp, Trash, Plus, Check,
-  Globe, Sparkle, SpinnerGap,
+  Globe, Sparkle, SpinnerGap, Link,
 } from '@phosphor-icons/react'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useContactEnricher, hasGeminiEnrichKey } from '@/hooks/useContactEnricher'
@@ -15,9 +15,10 @@ import {
 } from '@/lib/funnelDefaults'
 import type {
   Contact, ContactStatus, ContactCategory,
-  ContactFunnelConfig, Interaction, Habit,
+  ContactFunnelConfig, Interaction, Habit, ContactMilestone,
 } from '@/types'
 import { openLink } from '@/lib/openLink'
+import { supabase } from '@/lib/supabase'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

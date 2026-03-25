@@ -271,7 +271,58 @@ function extractLinkedInProfileBasicInfo() {
     const match = rawUrl.match(/linkedin\.com\/in\/([^/?#&]+)/)
     const linkedinUrl = match ? `https://www.linkedin.com/in/${match[1]}` : null
 
-    return { name, jobTitle, linkedinUrl, url: rawUrl }
+    // Birthday extraction
+    let birthday: string | null = null
+
+    // 1. Try script tags for embedded JSON: {"birthday":{"day":N,"month":N}}
+    const scripts = document.querySelectorAll('script[type="application/json"], script:not([src])')
+    for (const script of Array.from(scripts)) {
+      const content = script.textContent ?? ''
+      if (!content.includes('"birthday"')) continue
+      const bdMatch = content.match(/"birthday"\s*:\s*\{\s*"day"\s*:\s*(\d+)\s*,\s*"month"\s*:\s*(\d+)\s*\}/)
+        ?? content.match(/"birthday"\s*:\s*\{\s*"month"\s*:\s*(\d+)\s*,\s*"day"\s*:\s*(\d+)\s*\}/)
+      if (bdMatch) {
+        // Handle both capture group orderings
+        let month: number, day: number
+        // Check which match pattern: day first or month first
+        const fullMatch = content.match(/"birthday"\s*:\s*\{[^}]*"day"\s*:\s*(\d+)[^}]*"month"\s*:\s*(\d+)/)
+        if (fullMatch) {
+          day = parseInt(fullMatch[1]); month = parseInt(fullMatch[2])
+        } else {
+          const fullMatch2 = content.match(/"birthday"\s*:\s*\{[^}]*"month"\s*:\s*(\d+)[^}]*"day"\s*:\s*(\d+)/)
+          if (fullMatch2) { month = parseInt(fullMatch2[1]); day = parseInt(fullMatch2[2]) }
+          else { month = parseInt(bdMatch[1]); day = parseInt(bdMatch[2]) }
+        }
+        if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+          birthday = `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+          break
+        }
+      }
+    }
+
+    // 2. Try DOM: element with data-field="birthday" or nearby "Birthday" label
+    if (!birthday) {
+      const bdField = document.querySelector('[data-field="birthday"]') as HTMLElement | null
+      if (bdField) {
+        birthday = bdField.innerText?.trim() ?? null
+      }
+    }
+    if (!birthday) {
+      // Look for a span/dt containing "Birthday" and grab the adjacent value
+      const allText = Array.from(document.querySelectorAll('dt, span, div'))
+      for (const el of allText) {
+        const htmlEl = el as HTMLElement
+        if (htmlEl.innerText?.trim() === 'Birthday') {
+          const sibling = htmlEl.nextElementSibling as HTMLElement | null
+          if (sibling) {
+            birthday = sibling.innerText?.trim() ?? null
+          }
+          break
+        }
+      }
+    }
+
+    return { name, jobTitle, linkedinUrl, url: rawUrl, birthday }
   } catch {
     return null
   }
@@ -401,11 +452,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             jobTitle: message.jobTitle ?? existing?.jobTitle ?? null,
             company: message.company ?? existing?.company ?? null,
             profilePhotoUrl: message.profilePhotoUrl ?? existing?.profilePhotoUrl ?? null,
+            birthday: message.birthday ?? existing?.birthday ?? null,
           }
           await chrome.storage.local.set({
             currentLinkedInProfile: updated,
             currentWhatsAppContact: null,
           })
+
+          // Save birthday to outreach_logs if found
+          if (message.birthday && message.linkedinUrl) {
+            const userId = await getCurrentUserId()
+            if (userId) {
+              await supabase.from('outreach_logs')
+                .update({ birthday: message.birthday })
+                .eq('user_id', userId)
+                .eq('linkedin_url', message.linkedinUrl)
+            }
+          }
 
           // Upload photo in background (non-blocking)
           // Prefer base64 from content script (has LinkedIn cookies) over URL fetch (no cookies)
@@ -464,9 +527,123 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break
         }
 
+        // ── Quick-log an interaction from the sidebar ─────────────────────
+        case 'QUICK_LOG_INTERACTION': {
+          const userId = await getCurrentUserId()
+          if (!userId) { sendResponse({ success: false, error: 'not_auth' }); break }
+          const { contactId, interactionType, direction = 'outbound', notes = null } = message
+          const today = new Date().toISOString().slice(0, 10)
+          const { data: interaction, error } = await supabase
+            .from('interactions')
+            .insert({ user_id: userId, contact_id: contactId, type: interactionType, direction, notes, interaction_date: today })
+            .select().single()
+          if (error || !interaction) { sendResponse({ success: false, error: error?.message }); break }
+          // Also insert an extension_interaction_window for consistency
+          await supabase.from('extension_interaction_windows').insert({
+            user_id: userId, contact_id: contactId, interaction_id: interaction.id,
+            channel: interactionType, direction,
+            window_start: new Date().toISOString(), window_end: new Date().toISOString(),
+            message_count: 1,
+          })
+          // Recompute health score
+          const { data: allInteractions } = await supabase
+            .from('interactions').select('type, interaction_date').eq('contact_id', contactId)
+          if (allInteractions) {
+            const { data: contactRow } = await supabase.from('outreach_logs').select('category').eq('id', contactId).single()
+            const score = computeHealthScoreLocal(allInteractions, contactRow?.category ?? null)
+            const lastDate = allInteractions.reduce((l: string, i: { interaction_date: string }) =>
+              i.interaction_date > l ? i.interaction_date : l, allInteractions[0]?.interaction_date ?? today)
+            await supabase.from('outreach_logs').update({
+              health_score: score, last_interaction_at: new Date(lastDate).toISOString()
+            }).eq('id', contactId)
+          }
+          sendResponse({ success: true })
+          break
+        }
+
+        // ── Update contact status (status bump) ───────────────────────────
+        case 'UPDATE_CONTACT_STATUS': {
+          const userId = await getCurrentUserId()
+          if (!userId) { sendResponse({ success: false, error: 'not_auth' }); break }
+          const { error } = await supabase
+            .from('outreach_logs')
+            .update({ status: message.status, updated_at: new Date().toISOString() })
+            .eq('id', message.contactId).eq('user_id', userId)
+          sendResponse({ success: !error, error: error?.message })
+          break
+        }
+
+        // ── Append a quick note to personal_context ───────────────────────
+        case 'APPEND_CONTACT_NOTE': {
+          const userId = await getCurrentUserId()
+          if (!userId) { sendResponse({ success: false, error: 'not_auth' }); break }
+          const { data: row } = await supabase
+            .from('outreach_logs').select('personal_context, attio_record_id').eq('id', message.contactId).single()
+          const existing = row?.personal_context?.trim() ?? ''
+          const timestamp = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          const newContext = existing
+            ? `${existing}\n[${timestamp}] ${message.note.trim()}`
+            : `[${timestamp}] ${message.note.trim()}`
+          const { error } = await supabase
+            .from('outreach_logs').update({ personal_context: newContext }).eq('id', message.contactId)
+          sendResponse({ success: !error, updatedContext: newContext })
+          break
+        }
+
+        // ── Add a link to a contact ────────────────────────────────────────
+        case 'ADD_CONTACT_LINK': {
+          const userId = await getCurrentUserId()
+          if (!userId) { sendResponse({ success: false, error: 'not_auth' }); break }
+          const { data: row } = await supabase
+            .from('outreach_logs').select('links').eq('id', message.contactId).single()
+          const links: Array<{ url: string; label: string; created_at: string }> = row?.links ?? []
+          links.push({ url: message.url, label: message.label || message.url, created_at: new Date().toISOString() })
+          const { error } = await supabase
+            .from('outreach_logs').update({ links }).eq('id', message.contactId)
+          sendResponse({ success: !error })
+          break
+        }
+
+        // ── Remove a link from a contact ──────────────────────────────────
+        case 'REMOVE_CONTACT_LINK': {
+          const userId = await getCurrentUserId()
+          if (!userId) { sendResponse({ success: false, error: 'not_auth' }); break }
+          const { data: row } = await supabase
+            .from('outreach_logs').select('links').eq('id', message.contactId).single()
+          const links = (row?.links ?? []).filter((_: unknown, i: number) => i !== message.index)
+          const { error } = await supabase
+            .from('outreach_logs').update({ links }).eq('id', message.contactId)
+          sendResponse({ success: !error })
+          break
+        }
+
+        // ── Update contact name (fix slug) ────────────────────────────────
+        case 'UPDATE_CONTACT_NAME': {
+          const userId = await getCurrentUserId()
+          if (!userId) { sendResponse({ success: false, error: 'not_auth' }); break }
+          const { error } = await supabase
+            .from('outreach_logs')
+            .update({ name: message.name.trim(), updated_at: new Date().toISOString() })
+            .eq('id', message.contactId).eq('user_id', userId)
+          sendResponse({ success: !error, error: error?.message })
+          break
+        }
+
+        // ── Open contact in reThink app (via Supabase signal) ─────────────
+        case 'OPEN_IN_RETHINK': {
+          const userId = await getCurrentUserId()
+          if (!userId) { sendResponse({ success: false }); break }
+          await supabase.from('app_signals').insert({
+            user_id: userId,
+            action: 'open_contact',
+            payload: { contact_id: message.contactId },
+          })
+          sendResponse({ success: true })
+          break
+        }
+
         default:
           sendResponse({ success: false, error: 'Unknown message type' })
-      }
     } catch (error) {
       console.error('Error handling message:', error)
       sendResponse({ success: false, error: String(error) })
@@ -748,6 +925,31 @@ async function uploadLinkedInPhoto(photoUrl: string, linkedinUrl: string): Promi
 }
 
 // ===== HELPERS =====
+
+// ── Health score (mirrors funnelDefaults.ts — kept in sync manually) ──────────
+const INTERACTION_PTS: Record<string, number> = {
+  in_person: 5, virtual_coffee: 4, call: 3, whatsapp: 3, email: 2, linkedin_msg: 1,
+}
+function _decayForProfile(daysAgo: number, profile: 'strict' | 'moderate' | 'lenient'): number {
+  if (profile === 'strict') {
+    if (daysAgo <= 3) return 1.0; if (daysAgo <= 14) return 0.7
+    if (daysAgo <= 30) return 0.3; if (daysAgo <= 60) return 0.05; return 0
+  }
+  if (profile === 'lenient') {
+    if (daysAgo <= 14) return 1.0; if (daysAgo <= 60) return 0.8
+    if (daysAgo <= 180) return 0.4; if (daysAgo <= 365) return 0.1; return 0
+  }
+  if (daysAgo <= 7) return 1.0; if (daysAgo <= 30) return 0.7
+  if (daysAgo <= 90) return 0.3; if (daysAgo <= 180) return 0.1; return 0
+}
+function computeHealthScoreLocal(interactions: Array<{ type: string; interaction_date: string }>, category: string | null): number {
+  const profile = ({ friend: 'strict', family: 'strict', mentor: 'lenient' } as Record<string, string>)[category ?? ''] ?? 'moderate'
+  const raw = interactions.reduce((sum, i) => {
+    const daysAgo = Math.floor((Date.now() - new Date(i.interaction_date).getTime()) / 86400000)
+    return sum + (INTERACTION_PTS[i.type] ?? 1) * _decayForProfile(daysAgo, profile as 'strict' | 'moderate' | 'lenient')
+  }, 0)
+  return Math.min(10, Math.max(1, Math.ceil(raw)))
+}
 
 async function getCurrentUserId(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession()

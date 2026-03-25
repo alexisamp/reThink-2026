@@ -44,7 +44,7 @@ const FOCUS_DURATIONS = [
 
 function formatMilestoneDate(date: string): string {
   const parts = date.split('-')
-  const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   if (parts.length >= 3) {
     const d = new Date(date + 'T12:00:00')
     if (!isNaN(d.getTime())) return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`
@@ -1881,8 +1881,8 @@ export default function Today() {
 
               {pendingTodos.length === 0 && doneHabits.length > 0 && doneHabits.length === habits.length && habits.length > 0 && (
                 <div className="mt-10 text-center">
-                  <p className="text-[11px] text-shuttle/30">Día sólido —{' '}
-                    <button onClick={() => setShowEndOfDay(true)} className="underline hover:text-shuttle/60 transition-colors">¿cerramos?</button>
+                  <p className="text-[11px] text-shuttle/30">Solid day —{' '}
+                    <button onClick={() => setShowEndOfDay(true)} className="underline hover:text-shuttle/60 transition-colors">wrap up?</button>
                   </p>
                 </div>
               )}
@@ -1955,7 +1955,7 @@ export default function Today() {
                       <div className="flex items-center justify-between text-[10px] text-shuttle/60 py-0.5">
                         <span className="truncate flex-1 text-shuttle/70">{upcoming.text.length > 28 ? upcoming.text.slice(0, 28) + '…' : upcoming.text}</span>
                         <span className="shrink-0 ml-2 font-mono text-[9px] text-shuttle/40">
-                          {daysLeft > 0 ? `${daysLeft}d` : daysLeft === 0 ? 'hoy' : 'pasado'}
+                          {daysLeft > 0 ? `${daysLeft}d` : daysLeft === 0 ? 'today' : 'past'}
                         </span>
                       </div>
                     )
@@ -2255,7 +2255,7 @@ export default function Today() {
                               {streak}
                             </span>
                           )}
-                          <button onClick={() => setEditingHabit(habit)} className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-shuttle p-0.5" title="Editar">
+                          <button onClick={() => setEditingHabit(habit)} className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-shuttle p-0.5" title="Edit">
                             <Pencil size={11} />
                           </button>
                           <span className="text-[9px] font-mono text-shuttle/20 border border-mercury/40 rounded px-1 shrink-0">{idx + 1}</span>
@@ -2286,7 +2286,7 @@ export default function Today() {
                                 {streak}
                               </span>
                             )}
-                            <button onClick={() => setEditingHabit(habit)} className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-shuttle p-0.5" title="Editar">
+                            <button onClick={() => setEditingHabit(habit)} className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-shuttle p-0.5" title="Edit">
                               <Pencil size={11} />
                             </button>
                           </div>
@@ -2586,10 +2586,10 @@ export default function Today() {
 
             <div className="flex items-center justify-between mt-5 pt-4 border-t border-mercury">
               <span className="text-[9px] text-shuttle/25 font-mono flex items-center gap-3">
-                <span>↵ agregar</span>
-                <span>Esc cerrar</span>
+                <span>↵ add</span>
+                <span>Esc close</span>
               </span>
-              <span className="text-[9px] text-shuttle/20 font-mono">@ objetivos · @m milestones · / comandos</span>
+              <span className="text-[9px] text-shuttle/20 font-mono">@ goals · @m milestones · / commands</span>
             </div>
           </div>
         </div>

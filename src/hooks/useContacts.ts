@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { hasAttioKey, syncFullContact, syncCompanyToAttio, syncAll as syncAllAttio, pullFromAttio, diffAttioFields } from '@/lib/attio'
 import { computeHealthScore, daysSince } from '@/lib/funnelDefaults'
-import type { Contact, ContactStatus, ContactCategory, Interaction, Habit } from '@/types'
+import type { Contact, ContactStatus, ContactCategory, Interaction, Habit, ContactMilestone } from '@/types'
 
 function localDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
@@ -56,9 +56,50 @@ export function useContacts(
       .gte('log_date', localDate(ninetyDaysAgo))
       .order('log_date', { ascending: false })
       .order('created_at', { ascending: false })
-    setContacts(data ?? [])
+    const loaded = data ?? []
+    setContacts(loaded)
     setLoading(false)
+    // Fire-and-forget: refresh all health scores in background
+    refreshAllHealthScoresInternal(loaded, userId)
   }, [userId])
+
+  // Internal helper that doesn't close over stale contacts state
+  async function refreshAllHealthScoresInternal(currentContacts: Contact[], uid: string) {
+    const { data: allInteractions } = await supabase
+      .from('interactions')
+      .select('contact_id, type, interaction_date')
+      .eq('user_id', uid)
+    if (!allInteractions) return
+
+    // Group by contact_id
+    const byContact = new Map<string, Array<{ type: string; interaction_date: string }>>()
+    for (const i of allInteractions) {
+      if (!byContact.has(i.contact_id)) byContact.set(i.contact_id, [])
+      byContact.get(i.contact_id)!.push({ type: i.type, interaction_date: i.interaction_date })
+    }
+
+    const drifted: Array<{ id: string; newScore: number }> = []
+    for (const contact of currentContacts) {
+      const interactions = byContact.get(contact.id) ?? []
+      const newScore = computeHealthScore(interactions, contact.category)
+      if (Math.abs(newScore - contact.health_score) >= 1) {
+        drifted.push({ id: contact.id, newScore })
+      }
+    }
+
+    if (drifted.length === 0) return
+
+    // Batch update in Supabase
+    await Promise.all(
+      drifted.map(({ id, newScore }) =>
+        supabase.from('outreach_logs').update({ health_score: newScore }).eq('id', id)
+      )
+    )
+
+    // Update local state
+    const scoreMap = new Map(drifted.map(d => [d.id, d.newScore]))
+    setContacts(prev => prev.map(c => scoreMap.has(c.id) ? { ...c, health_score: scoreMap.get(c.id)! } : c))
+  }
 
   useEffect(() => { fetchContacts() }, [fetchContacts])
 
@@ -98,6 +139,8 @@ export function useContacts(
       personal_context: input.personal_context ?? null,
       health_score: 1,
       attio_record_id: input.existing_attio_record_id ?? null,
+      birthday: null,
+      links: [],
     }
     const { data, error } = await supabase
       .from('outreach_logs').insert(payload).select().single()
@@ -108,7 +151,7 @@ export function useContacts(
     return data
   }, [userId, contacts, today, incrementProspectingHabit])
 
-  const updateContact = useCallback(async (id: string, updates: Partial<ContactInput & { status: ContactStatus }>): Promise<void> => {
+  const updateContact = useCallback(async (id: string, updates: Partial<ContactInput & { status: ContactStatus; birthday: string | null; links: Array<{url: string; label: string; type?: string; created_at?: string}> | null }>): Promise<void> => {
     if (!userId) return
     setSyncError(null)
     const existing = contacts.find(c => c.id === id)
@@ -118,7 +161,8 @@ export function useContacts(
     const fields = ['name','linkedin_url','category','status','notes','goal_id','job_title',
                     'company','location','connections_count','followers_count','email','phone',
                     'website','about','skills','personal_context',
-                    'company_domain','ai_enriched_at','profile_photo_url'] as const
+                    'company_domain','ai_enriched_at','profile_photo_url',
+                    'birthday','links'] as const
     for (const f of fields) {
       if (f in updates) patch[f] = (updates as Record<string, unknown>)[f] ?? null
     }
@@ -227,6 +271,13 @@ export function useContacts(
     setContacts(prev => prev.map(c => c.id === contactId ? { ...c, health_score: score } : c))
   }, [contacts])
 
+  // Public wrapper: refresh all health scores using current contacts state
+  const refreshAllHealthScores = useCallback(async (): Promise<void> => {
+    if (!userId) return
+    refreshAllHealthScoresInternal(contacts, userId)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, contacts])
+
   // Auto-flag DORMANT: contacts with last_interaction_at null or > 90 days and status is NURTURING/ENGAGED
   const autoFlagDormant = useCallback(async (): Promise<number> => {
     const staleContacts = contacts.filter(c => {
@@ -268,6 +319,7 @@ export function useContacts(
     syncCompany: syncCompanyToAttioHook,
     syncAll,
     updateHealthScore,
+    refreshAllHealthScores,
     autoFlagDormant,
     // Legacy aliases for callers still using old names
     logs: contacts,
