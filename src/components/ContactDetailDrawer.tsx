@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   X, ArrowLeft, ArrowSquareOut, ChatCircle, Envelope, Phone,
   VideoCamera, Users, CaretDown, CaretUp, Trash, Plus, Check,
-  Globe, Sparkle, SpinnerGap, PencilSimple,
+  Globe, Sparkle, SpinnerGap, PencilSimple, NotePencil,
 } from '@phosphor-icons/react'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useContactEnricher, hasGeminiEnrichKey } from '@/hooks/useContactEnricher'
@@ -194,6 +194,25 @@ export default function ContactDetailDrawer({
     notes: string
     isAnnual: boolean
   }>({ type: 'custom', label: '', date_mm_dd: '', date_full: '', show_days_before: 7, notes: '', isAnnual: true })
+
+  // ── Import meeting notes state ─────────────────────────────────────────────
+  const [showImportNotes, setShowImportNotes] = useState(false)
+  const [importNotesText, setImportNotesText] = useState('')
+  const [importNotesDate, setImportNotesDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [importNotesType, setImportNotesType] = useState<'in_person' | 'virtual_coffee'>('virtual_coffee')
+  const [importAnalyzing, setImportAnalyzing] = useState(false)
+  const [importSuggestions, setImportSuggestions] = useState<{
+    milestones: Array<{
+      type: string; label: string; isAnnual: boolean
+      date_mm_dd?: string; date_full?: string; show_days_before: number; notes?: string
+    }>
+    context_bullets: string[]
+    interaction_type: 'in_person' | 'virtual_coffee'
+    meeting_summary: string
+  } | null>(null)
+  const [checkedMilestones, setCheckedMilestones] = useState<boolean[]>([])
+  const [checkedContext, setCheckedContext] = useState<boolean[]>([])
+  const [importSaving, setImportSaving] = useState(false)
 
   // ── Links state ───────────────────────────────────────────────────────────
   const [links, setLinks] = useState<Array<{url: string; label: string; type?: string; created_at?: string}>>(contact?.links ?? [])
@@ -558,6 +577,95 @@ export default function ContactDetailDrawer({
   async function deleteMilestone(id: string) {
     await supabase.from('contact_milestones').delete().eq('id', id)
     setMilestones(prev => prev.filter(m => m.id !== id))
+  }
+
+  // ── Import meeting notes — analyze ────────────────────────────────────────
+  async function handleAnalyzeMeetingNotes() {
+    if (!importNotesText.trim() || !contact) return
+    setImportAnalyzing(true)
+    setImportSuggestions(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('https://amvezbymrnvrwcypivkf.supabase.co/functions/v1/analyze-meeting-notes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtdmV6Ynltcm52cndjeXBpdmtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwMTIxNTgsImV4cCI6MjA4NDU4ODE1OH0.6qgaygMynKaKYB9TlcJAlyLMt87wc7D8PbA5ZeDGDUg',
+        },
+        body: JSON.stringify({
+          contact_name: contact.name,
+          notes: importNotesText.trim(),
+          meeting_date: importNotesDate,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setImportSuggestions(data)
+        setCheckedMilestones(data.milestones.map(() => true))
+        setCheckedContext(data.context_bullets.map(() => true))
+        // Auto-detect interaction type from AI suggestion
+        if (data.interaction_type) setImportNotesType(data.interaction_type)
+      }
+    } catch (e) {
+      console.error('analyze-meeting-notes error', e)
+    }
+    setImportAnalyzing(false)
+  }
+
+  // ── Import meeting notes — save ───────────────────────────────────────────
+  async function handleImportNotesSave() {
+    if (!contact || !importSuggestions) return
+    setImportSaving(true)
+
+    // 1. Save checked milestones
+    const selectedMilestones = importSuggestions.milestones.filter((_, i) => checkedMilestones[i])
+    for (const m of selectedMilestones) {
+      const payload: Record<string, unknown> = {
+        user_id: (await supabase.auth.getUser()).data.user?.id,
+        contact_id: contact.id,
+        type: m.type,
+        label: m.label,
+        show_days_before: m.show_days_before,
+        notes: m.notes || null,
+      }
+      if (m.isAnnual) { payload.date_mm_dd = m.date_mm_dd || null }
+      else { payload.date_full = m.date_full || null }
+      const { data } = await supabase.from('contact_milestones').insert(payload).select().single()
+      if (data) setMilestones(prev => [...prev, data as ContactMilestone])
+    }
+
+    // 2. Append checked context bullets to personal_context
+    const selectedContext = importSuggestions.context_bullets.filter((_, i) => checkedContext[i])
+    if (selectedContext.length > 0) {
+      const existingContext = personalContext.trim()
+      const newContext = existingContext
+        ? existingContext + '\n\n' + selectedContext.join('\n')
+        : selectedContext.join('\n')
+      setPersonalContext(newContext)
+      await supabase.from('outreach_logs')
+        .update({ personal_context: newContext })
+        .eq('id', contact.id)
+    }
+
+    // 3. Log the interaction
+    await logInteraction(
+      contact.id,
+      importNotesType,
+      'outbound',
+      importSuggestions.meeting_summary || null,
+      importNotesDate,
+      contact.attio_record_id,
+      contact.category
+    )
+
+    // Reset
+    setShowImportNotes(false)
+    setImportNotesText('')
+    setImportSuggestions(null)
+    setCheckedMilestones([])
+    setCheckedContext([])
+    setImportSaving(false)
   }
 
   // ── links helpers ─────────────────────────────────────────────────────────
@@ -940,13 +1048,22 @@ export default function ContactDetailDrawer({
             <div className="px-4 py-3 border-b border-mercury">
               <div className="flex items-center justify-between mb-2">
                 <span className={sectionLabel + ' mb-0'}>Milestones</span>
-                <button
-                  onClick={() => setShowAddMilestone(p => !p)}
-                  className="flex items-center gap-1 text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors"
-                >
-                  <Plus size={10} />
-                  Add
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => { setShowImportNotes(true); setImportSuggestions(null); setImportNotesText('') }}
+                    className="p-1 rounded hover:bg-mercury/40 text-shuttle transition-colors"
+                    title="Import from meeting notes"
+                  >
+                    <NotePencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => setShowAddMilestone(p => !p)}
+                    className="flex items-center gap-1 text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors"
+                  >
+                    <Plus size={10} />
+                    Add
+                  </button>
+                </div>
               </div>
 
               {milestonesLoading && (
@@ -1457,6 +1574,163 @@ export default function ContactDetailDrawer({
           </>
         )}
       </div>
+
+      {/* Import Meeting Notes overlay */}
+      {showImportNotes && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[80vh] flex flex-col mx-4">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-mercury/60">
+              <div>
+                <p className="text-sm font-semibold text-burnham">Import Meeting Notes</p>
+                <p className="text-xs text-shuttle/60 mt-0.5">{contact?.name} · AI will suggest milestones & context</p>
+              </div>
+              <button onClick={() => setShowImportNotes(false)} className="p-1 rounded-lg hover:bg-mercury/40 text-shuttle">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {!importSuggestions ? (
+                /* Step 1: Input */
+                <>
+                  <textarea
+                    value={importNotesText}
+                    onChange={e => setImportNotesText(e.target.value)}
+                    placeholder="Paste your Granola notes or any meeting notes here..."
+                    rows={8}
+                    className="w-full text-sm bg-mercury/10 border border-mercury rounded-xl px-3 py-2.5 text-burnham placeholder-shuttle/30 focus:outline-none focus:border-burnham/30 resize-none"
+                  />
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="text-[10px] text-shuttle/60 uppercase tracking-wide font-medium mb-1 block">Meeting date</label>
+                      <input
+                        type="date"
+                        value={importNotesDate}
+                        onChange={e => setImportNotesDate(e.target.value)}
+                        className="w-full text-xs bg-white border border-mercury rounded-lg px-3 py-2 text-burnham focus:outline-none focus:border-burnham/30"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[10px] text-shuttle/60 uppercase tracking-wide font-medium mb-1 block">Meeting type</label>
+                      <div className="flex gap-1">
+                        {(['virtual_coffee', 'in_person'] as const).map(t => (
+                          <button
+                            key={t}
+                            onClick={() => setImportNotesType(t)}
+                            className={`flex-1 text-[10px] font-medium py-2 rounded-lg border transition-colors ${
+                              importNotesType === t ? 'bg-burnham text-white border-burnham' : 'bg-white text-shuttle border-mercury hover:border-shuttle/40'
+                            }`}
+                          >
+                            {t === 'virtual_coffee' ? 'Virtual' : 'In-person'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Step 2: Review suggestions */
+                <>
+                  {importSuggestions.meeting_summary && (
+                    <div className="bg-gossip/40 rounded-xl px-3 py-2.5">
+                      <p className="text-[10px] text-shuttle/60 uppercase tracking-wide font-medium mb-1">Meeting summary</p>
+                      <p className="text-xs text-burnham">{importSuggestions.meeting_summary}</p>
+                    </div>
+                  )}
+
+                  {importSuggestions.milestones.length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-shuttle/60 uppercase tracking-wide font-medium mb-2">Suggested milestones</p>
+                      <div className="space-y-1.5">
+                        {importSuggestions.milestones.map((m, i) => (
+                          <label key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg border border-mercury hover:bg-mercury/10 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checkedMilestones[i]}
+                              onChange={e => setCheckedMilestones(prev => { const n = [...prev]; n[i] = e.target.checked; return n })}
+                              className="mt-0.5 accent-burnham"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-burnham">{m.label}</p>
+                              <p className="text-[10px] text-shuttle/60">
+                                {m.isAnnual ? (m.date_mm_dd ? `Every year · ${m.date_mm_dd}` : 'Annual') : (m.date_full || 'One-time')}
+                                {' · '}remind {m.show_days_before}d before
+                              </p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {importSuggestions.context_bullets.length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-shuttle/60 uppercase tracking-wide font-medium mb-2">Context insights</p>
+                      <div className="space-y-1.5">
+                        {importSuggestions.context_bullets.map((bullet, i) => (
+                          <label key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg border border-mercury hover:bg-mercury/10 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checkedContext[i]}
+                              onChange={e => setCheckedContext(prev => { const n = [...prev]; n[i] = e.target.checked; return n })}
+                              className="mt-0.5 accent-burnham"
+                            />
+                            <p className="text-xs text-burnham">{bullet}</p>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {importSuggestions.milestones.length === 0 && importSuggestions.context_bullets.length === 0 && (
+                    <p className="text-sm text-shuttle/60 text-center py-4">No milestones or context detected in these notes.</p>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-4 border-t border-mercury/60 flex justify-between items-center gap-3">
+              {importSuggestions ? (
+                <>
+                  <button
+                    onClick={() => setImportSuggestions(null)}
+                    className="text-xs text-shuttle hover:text-burnham transition-colors"
+                  >
+                    ← Edit notes
+                  </button>
+                  <button
+                    onClick={handleImportNotesSave}
+                    disabled={importSaving || (checkedMilestones.every(v => !v) && checkedContext.every(v => !v))}
+                    className="flex items-center gap-2 bg-burnham text-white text-xs font-medium px-4 py-2 rounded-lg hover:bg-burnham/90 disabled:opacity-40 transition-colors"
+                  >
+                    {importSaving ? <SpinnerGap size={12} className="animate-spin" /> : <Check size={12} />}
+                    Save selected
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setShowImportNotes(false)}
+                    className="text-xs text-shuttle hover:text-burnham transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAnalyzeMeetingNotes}
+                    disabled={importAnalyzing || !importNotesText.trim()}
+                    className="flex items-center gap-2 bg-burnham text-white text-xs font-medium px-4 py-2 rounded-lg hover:bg-burnham/90 disabled:opacity-40 transition-colors"
+                  >
+                    {importAnalyzing ? <SpinnerGap size={12} className="animate-spin" /> : <Sparkle size={12} />}
+                    {importAnalyzing ? 'Analyzing…' : 'Analyze notes'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
