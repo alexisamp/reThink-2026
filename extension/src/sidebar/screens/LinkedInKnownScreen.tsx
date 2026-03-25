@@ -150,7 +150,6 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
   const [mLabel, setMLabel] = useState('')
   const [mDateMmDd, setMDateMmDd] = useState('')
   const [mDateFull, setMDateFull] = useState('')
-  const [mIsAnnual, setMIsAnnual] = useState(true)
   const [mRecurrence, setMRecurrence] = useState<'annual' | 'semi_annual' | 'biweekly' | 'one_time'>('annual')
   const [mShowBefore, setMShowBefore] = useState(7)
   const [mSaving, setMSaving] = useState(false)
@@ -940,7 +939,7 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
               {([['annual', 'Annual'], ['semi_annual', 'Semi-annual'], ['biweekly', 'Bi-weekly'], ['one_time', 'One-time']] as const).map(([val, lbl]) => (
                 <button
                   key={val}
-                  onClick={() => { setMRecurrence(val); setMIsAnnual(val === 'annual' || val === 'semi_annual') }}
+                  onClick={() => { setMRecurrence(val) }}
                   style={{ flex: 1, fontSize: '10px', fontWeight: 500, padding: '4px 6px', borderRadius: '6px', border: '1px solid', borderColor: mRecurrence === val ? '#003720' : '#E5E7EB', background: mRecurrence === val ? '#003720' : 'white', color: mRecurrence === val ? 'white' : '#536471', cursor: 'pointer', whiteSpace: 'nowrap' }}
                 >
                   {lbl}
@@ -963,7 +962,6 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
                 style={{ ...inputStyle }}
               />
             )}
-            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <label style={{ fontSize: '12px', color: '#536471', whiteSpace: 'nowrap' }}>Show</label>
               <input type="number" value={mShowBefore} onChange={e => setMShowBefore(parseInt(e.target.value) || 7)} min={1} max={30} style={{ ...inputStyle, width: '60px' }} />
