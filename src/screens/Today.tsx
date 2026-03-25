@@ -16,7 +16,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
-import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog, Capture, Contact, ContactStatus } from '@/types'
+import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog, Capture, Contact, ContactStatus, ContactMilestone } from '@/types'
 import { useContacts, type ContactInput } from '@/hooks/useContacts'
 import { createAttioTask, completeAttioTask, hasAttioKey } from '@/lib/attio'
 import ContactDetailDrawer from '@/components/ContactDetailDrawer'
@@ -60,6 +60,30 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0')
   const s = (seconds % 60).toString().padStart(2, '0')
   return `${m}:${s}`
+}
+
+function computeContactMilestoneDaysUntil(m: ContactMilestone): number | null {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  if (m.date_mm_dd) {
+    const [month, day] = m.date_mm_dd.split('-')
+    let next = new Date(today.getFullYear(), parseInt(month) - 1, parseInt(day))
+    if (next < today) next.setFullYear(today.getFullYear() + 1)
+    return Math.round((next.getTime() - today.getTime()) / 86400000)
+  }
+  if (m.date_full) {
+    const d = new Date(m.date_full); d.setHours(0, 0, 0, 0)
+    return Math.round((d.getTime() - today.getTime()) / 86400000)
+  }
+  return null
+}
+
+const CONTACT_MILESTONE_EMOJI: Record<string, string> = {
+  birthday_contact: '🎂',
+  birthday_child:   '👶',
+  birthday_partner: '💑',
+  anniversary:      '🎉',
+  anniversary_work: '💼',
+  custom:           '⭐',
 }
 
 /** Simple markdown → HTML renderer (no external lib). XSS-safe: HTML escapes first. */
@@ -568,6 +592,9 @@ export default function Today() {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
 
+  // Upcoming contact milestones
+  const [upcomingMilestones, setUpcomingMilestones] = useState<Array<ContactMilestone & { contact_name: string; daysUntil: number }>>([])
+
   // AI scorer (Phase 8)
   const gemini = useGeminiScorer()
 
@@ -748,6 +775,27 @@ export default function Today() {
       subscription.unsubscribe()
     }
   }, [userId, today])
+
+  // Load upcoming contact milestones (within 30 days)
+  useEffect(() => {
+    if (!userId) return
+    supabase
+      .from('contact_milestones')
+      .select('*, outreach_logs(name)')
+      .eq('user_id', userId)
+      .then(({ data }) => {
+        if (!data) return
+        const withDays = (data as Array<ContactMilestone & { outreach_logs?: { name?: string } }>)
+          .map(m => ({
+            ...m,
+            contact_name: m.outreach_logs?.name ?? 'Unknown',
+            daysUntil: computeContactMilestoneDaysUntil(m) ?? 999,
+          }))
+          .filter(m => m.daysUntil >= 0 && m.daysUntil <= 30)
+          .sort((a, b) => a.daysUntil - b.daysUntil)
+        setUpcomingMilestones(withDays as Array<ContactMilestone & { contact_name: string; daysUntil: number }>)
+      })
+  }, [userId])
 
   // Only initialize from DB once — prevents stale upsertReview responses from clobbering local pill markers
   useEffect(() => {
@@ -1846,6 +1894,80 @@ export default function Today() {
                   </div>
                 )}
               </section>
+
+              {/* ── Upcoming Contact Milestones ───────────────────────────── */}
+              {upcomingMilestones.length > 0 && (
+                <section className="mb-8">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest flex items-center gap-2">
+                      Upcoming
+                      <span className="font-mono font-normal text-shuttle/40 normal-case bg-mercury/60 px-1.5 py-0.5 rounded text-[9px]">
+                        {upcomingMilestones.length}
+                      </span>
+                    </h3>
+                  </div>
+
+                  {/* Today & Tomorrow */}
+                  {upcomingMilestones.filter(m => m.daysUntil <= 1).length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-[9px] font-mono text-shuttle/40 uppercase tracking-widest mb-1.5">Today &amp; Tomorrow</p>
+                      <div className="space-y-1">
+                        {upcomingMilestones.filter(m => m.daysUntil <= 1).map(m => {
+                          const contact = allContacts.find(c => c.name === m.contact_name)
+                          return (
+                            <button
+                              key={m.id}
+                              onClick={() => {
+                                if (contact) { setSelectedContact(contact); setDetailDrawerOpen(true) }
+                              }}
+                              className="group flex items-center gap-2 w-full py-1.5 px-2 -mx-2 rounded hover:bg-gossip/20 transition-colors text-left"
+                            >
+                              <span className="text-sm leading-none flex-shrink-0">{CONTACT_MILESTONE_EMOJI[m.type] ?? '⭐'}</span>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-[13px] font-medium text-burnham">{m.contact_name}</span>
+                                <span className="text-[11px] text-shuttle/50 ml-1.5">{m.label}</span>
+                              </div>
+                              <span className="text-[10px] font-medium text-green-500 flex-shrink-0">
+                                {m.daysUntil === 0 ? 'today!' : 'tomorrow'}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* This month (2-30 days) */}
+                  {upcomingMilestones.filter(m => m.daysUntil >= 2).length > 0 && (
+                    <div>
+                      <p className="text-[9px] font-mono text-shuttle/40 uppercase tracking-widest mb-1.5">This month</p>
+                      <div className="space-y-1">
+                        {upcomingMilestones.filter(m => m.daysUntil >= 2).map(m => {
+                          const contact = allContacts.find(c => c.name === m.contact_name)
+                          return (
+                            <button
+                              key={m.id}
+                              onClick={() => {
+                                if (contact) { setSelectedContact(contact); setDetailDrawerOpen(true) }
+                              }}
+                              className="group flex items-center gap-2 w-full py-1.5 px-2 -mx-2 rounded hover:bg-gossip/20 transition-colors text-left"
+                            >
+                              <span className="text-sm leading-none flex-shrink-0">{CONTACT_MILESTONE_EMOJI[m.type] ?? '⭐'}</span>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-[13px] font-medium text-burnham">{m.contact_name}</span>
+                                <span className="text-[11px] text-shuttle/50 ml-1.5">{m.label}</span>
+                              </div>
+                              <span className="text-[10px] text-shuttle/50 flex-shrink-0">
+                                in {m.daysUntil} day{m.daysUntil === 1 ? '' : 's'}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
 
               {/* ── Outreach ─────────────────────────────────────────────── */}
               <section className="mb-8">

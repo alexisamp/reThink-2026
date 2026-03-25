@@ -17,8 +17,10 @@ import WeeklyReview from '@/screens/WeeklyReview'
 import ReflectionLibrary from '@/screens/ReflectionLibrary'
 import YearAtAGlance from '@/screens/YearAtAGlance'
 import People from '@/screens/People'
+import ContactDetailDrawer from '@/components/ContactDetailDrawer'
 import { checkNotificationTriggers, formatNotificationMessage } from '@/lib/notifications'
 import { useUpdater } from '@/hooks/useUpdater'
+import type { Contact } from '@/types'
 
 function Splash() {
   return (
@@ -35,6 +37,10 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [hasWorkbook, setHasWorkbook] = useState<boolean | null>(null)
   const updater = useUpdater()
+
+  // App signals: open_contact from external triggers (e.g. Chrome extension)
+  const [signalContact, setSignalContact] = useState<Contact | null>(null)
+  const [signalDrawerOpen, setSignalDrawerOpen] = useState(false)
 
   // Check for updates silently on startup (Tauri only)
   useEffect(() => {
@@ -70,6 +76,46 @@ export default function App() {
       .eq('goal_type', 'ACTIVE')
       .limit(1)
       .then(({ data, error }) => setHasWorkbook(!error && (data?.length ?? 0) > 0))
+  }, [user])
+
+  // Realtime subscription: app_signals table — open_contact signal from extension
+  useEffect(() => {
+    if (!user) return
+
+    const channel = supabase
+      .channel('app-signals-realtime')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'app_signals',
+        filter: `user_id=eq.${user.id}`,
+      }, async (payload) => {
+        const record = payload.new as { id: string; action: string; payload: Record<string, unknown> }
+        if (record.action !== 'open_contact') return
+        const contactId = record.payload?.contact_id as string | undefined
+        if (!contactId) return
+
+        // Fetch the contact
+        const { data: contact } = await supabase
+          .from('outreach_logs')
+          .select('*')
+          .eq('id', contactId)
+          .eq('user_id', user.id)
+          .single()
+
+        if (contact) {
+          setSignalContact(contact as Contact)
+          setSignalDrawerOpen(true)
+        }
+
+        // Clean up the signal
+        await supabase.from('app_signals').delete().eq('id', record.id)
+      })
+      .subscribe()
+
+    return () => {
+      channel.unsubscribe()
+    }
   }, [user])
 
   // Smart Notifications (Sprint 11)
@@ -108,6 +154,7 @@ export default function App() {
   if (loading) return <Splash />
 
   return (
+    <>
     <BrowserRouter>
       <Routes>
         {/* Public */}
@@ -154,5 +201,31 @@ export default function App() {
         />
       </Routes>
     </BrowserRouter>
+
+    {/* Global: Contact drawer opened via app_signals realtime */}
+    {user && (
+      <ContactDetailDrawer
+        open={signalDrawerOpen}
+        contact={signalContact}
+        userId={user.id}
+        habits={[]}
+        upsertHabitCount={async () => {}}
+        funnelConfig={null}
+        onClose={() => { setSignalDrawerOpen(false); setSignalContact(null) }}
+        onUpdate={async (id, updates) => {
+          await supabase.from('outreach_logs').update(updates).eq('id', id)
+          if (signalContact && signalContact.id === id) {
+            setSignalContact(prev => prev ? { ...prev, ...updates } : null)
+          }
+        }}
+        onDelete={async (id) => {
+          await supabase.from('outreach_logs').delete().eq('id', id)
+          setSignalDrawerOpen(false)
+          setSignalContact(null)
+        }}
+        onSyncToAttio={async () => {}}
+      />
+    )}
+    </>
   )
 }

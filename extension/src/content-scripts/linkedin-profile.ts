@@ -1,5 +1,6 @@
 // LinkedIn profile content script — Phase 5
 // Extracts contact data from LinkedIn profile pages and sends to service worker
+export {}
 
 console.log('reThink People: LinkedIn profile content script loaded')
 

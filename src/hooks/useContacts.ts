@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { hasAttioKey, syncFullContact, syncCompanyToAttio, syncAll as syncAllAttio, pullFromAttio, diffAttioFields } from '@/lib/attio'
 import { computeHealthScore, daysSince } from '@/lib/funnelDefaults'
-import type { Contact, ContactStatus, ContactCategory, Interaction, Habit, ContactMilestone } from '@/types'
+import type { Contact, ContactStatus, ContactCategory, Interaction, Habit } from '@/types'
 
 function localDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   X, ArrowLeft, ArrowSquareOut, ChatCircle, Envelope, Phone,
   VideoCamera, Users, CaretDown, CaretUp, Trash, Plus, Check,
-  Globe, Sparkle, SpinnerGap, Link,
+  Globe, Sparkle, SpinnerGap,
 } from '@phosphor-icons/react'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useContactEnricher, hasGeminiEnrichKey } from '@/hooks/useContactEnricher'
@@ -24,6 +24,62 @@ import { supabase } from '@/lib/supabase'
 
 function localDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// ── Milestone helpers ─────────────────────────────────────────────────────────
+
+const MILESTONE_EMOJI: Record<ContactMilestone['type'], string> = {
+  birthday_contact: '🎂',
+  birthday_child:   '👶',
+  birthday_partner: '💑',
+  anniversary:      '🎉',
+  anniversary_work: '💼',
+  custom:           '⭐',
+}
+
+const MILESTONE_LABELS: Record<ContactMilestone['type'], string> = {
+  birthday_contact: 'Their birthday',
+  birthday_child:   "Child's birthday",
+  birthday_partner: "Partner's birthday",
+  anniversary:      'Anniversary',
+  anniversary_work: 'Work anniversary',
+  custom:           'Custom',
+}
+
+function formatMilestoneDateDisplay(m: ContactMilestone): string {
+  if (m.date_mm_dd) {
+    const [month, day] = m.date_mm_dd.split('-')
+    return new Date(2000, parseInt(month) - 1, parseInt(day)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+  if (m.date_full) return new Date(m.date_full).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return ''
+}
+
+function daysUntilMilestone(m: ContactMilestone): number | null {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  if (m.date_mm_dd) {
+    const [month, day] = m.date_mm_dd.split('-')
+    let next = new Date(today.getFullYear(), parseInt(month) - 1, parseInt(day))
+    if (next < today) next.setFullYear(today.getFullYear() + 1)
+    return Math.round((next.getTime() - today.getTime()) / 86400000)
+  }
+  if (m.date_full) {
+    const d = new Date(m.date_full); d.setHours(0, 0, 0, 0)
+    return Math.round((d.getTime() - today.getTime()) / 86400000)
+  }
+  return null
+}
+
+// ── Link type icons ───────────────────────────────────────────────────────────
+
+const LINK_TYPE_ICONS: Record<string, string> = {
+  shared_doc:    '📄',
+  their_content: '📰',
+  resource:      '🔗',
+}
+
+function getLinkIcon(type?: string): string {
+  return LINK_TYPE_ICONS[type ?? 'resource'] ?? '🔗'
 }
 
 function daysSince(dateStr: string | null): number | null {
@@ -123,6 +179,31 @@ export default function ContactDetailDrawer({
 
   const { enriching, enrichError, enrich } = useContactEnricher()
 
+  // ── Milestones state ──────────────────────────────────────────────────────
+  const [milestones, setMilestones] = useState<ContactMilestone[]>([])
+  const [milestonesLoading, setMilestonesLoading] = useState(false)
+  const [showAddMilestone, setShowAddMilestone] = useState(false)
+  const [newMilestone, setNewMilestone] = useState<{
+    type: ContactMilestone['type']
+    label: string
+    date_mm_dd: string
+    date_full: string
+    show_days_before: number
+    notes: string
+    isAnnual: boolean
+  }>({ type: 'custom', label: '', date_mm_dd: '', date_full: '', show_days_before: 7, notes: '', isAnnual: true })
+
+  // ── Links state ───────────────────────────────────────────────────────────
+  const [links, setLinks] = useState<Array<{url: string; label: string; type?: string; created_at?: string}>>(contact?.links ?? [])
+  const [showAddLink, setShowAddLink] = useState(false)
+  const [newLinkUrl, setNewLinkUrl] = useState('')
+  const [newLinkLabel, setNewLinkLabel] = useState('')
+  const [newLinkType, setNewLinkType] = useState<string>('resource')
+
+  // ── Birthday state ────────────────────────────────────────────────────────
+  const [birthdayInput, setBirthdayInput] = useState(contact?.birthday ?? '')
+  const [birthdayError, setBirthdayError] = useState('')
+
   // Log form state
   const [logType, setLogType] = useState<Interaction['type']>('whatsapp')
   const [logDirection, setLogDirection] = useState<Interaction['direction']>('outbound')
@@ -159,9 +240,29 @@ export default function ContactDetailDrawer({
     setContextBannerText('')
     setEnrichStatus('idle')
 
+    // Sync links and birthday from contact prop
+    setLinks(contact.links ?? [])
+    setBirthdayInput(contact.birthday ?? '')
+    setBirthdayError('')
+
     // Fetch interactions for this contact
     fetchInteractions(contact.id)
   }, [contact?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load milestones when contact changes
+  useEffect(() => {
+    if (!contact?.id) return
+    setMilestonesLoading(true)
+    supabase
+      .from('contact_milestones')
+      .select('*')
+      .eq('contact_id', contact.id)
+      .order('date_mm_dd')
+      .then(({ data }) => {
+        setMilestones(data ?? [])
+        setMilestonesLoading(false)
+      })
+  }, [contact?.id])
 
   // ── auto-pull from Attio on mount ─────────────────────────────────────────
   useEffect(() => {
@@ -402,6 +503,76 @@ export default function ContactDetailDrawer({
     return `Last enriched: ${days} days ago`
   }
 
+  // ── birthday days until ───────────────────────────────────────────────────
+  function birthdayDaysUntil(mmdd: string): number | null {
+    if (!/^\d{2}-\d{2}$/.test(mmdd)) return null
+    const [month, day] = mmdd.split('-')
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    let next = new Date(today.getFullYear(), parseInt(month) - 1, parseInt(day))
+    if (next < today) next.setFullYear(today.getFullYear() + 1)
+    return Math.round((next.getTime() - today.getTime()) / 86400000)
+  }
+
+  // ── milestone save ────────────────────────────────────────────────────────
+  async function saveMilestone() {
+    if (!contact) return
+    const payload: Record<string, unknown> = {
+      contact_id: contact.id,
+      user_id: userId,
+      type: newMilestone.type,
+      label: newMilestone.label.trim() || MILESTONE_LABELS[newMilestone.type],
+      show_days_before: newMilestone.show_days_before,
+      notes: newMilestone.notes || null,
+    }
+    if (newMilestone.isAnnual) {
+      payload.date_mm_dd = newMilestone.date_mm_dd || null
+      payload.date_full = null
+    } else {
+      payload.date_full = newMilestone.date_full || null
+      payload.date_mm_dd = null
+    }
+    const { data } = await supabase
+      .from('contact_milestones')
+      .insert(payload)
+      .select()
+      .single()
+    if (data) {
+      setMilestones(prev => [...prev, data as ContactMilestone])
+    }
+    setShowAddMilestone(false)
+    setNewMilestone({ type: 'custom', label: '', date_mm_dd: '', date_full: '', show_days_before: 7, notes: '', isAnnual: true })
+  }
+
+  async function deleteMilestone(id: string) {
+    await supabase.from('contact_milestones').delete().eq('id', id)
+    setMilestones(prev => prev.filter(m => m.id !== id))
+  }
+
+  // ── links helpers ─────────────────────────────────────────────────────────
+  async function saveLink() {
+    if (!contact || !newLinkUrl.trim()) return
+    const newEntry = {
+      url: newLinkUrl.trim(),
+      label: newLinkLabel.trim() || newLinkUrl.trim(),
+      type: newLinkType,
+      created_at: new Date().toISOString(),
+    }
+    const newLinks = [...links, newEntry]
+    setLinks(newLinks)
+    await onUpdate(contact.id, { links: newLinks })
+    setNewLinkUrl('')
+    setNewLinkLabel('')
+    setNewLinkType('resource')
+    setShowAddLink(false)
+  }
+
+  async function removeLink(idx: number) {
+    if (!contact) return
+    const newLinks = links.filter((_, i) => i !== idx)
+    setLinks(newLinks)
+    await onUpdate(contact.id, { links: newLinks })
+  }
+
   // ── section label style ───────────────────────────────────────────────────
   const sectionLabel = 'text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-2'
 
@@ -614,6 +785,37 @@ export default function ContactDetailDrawer({
                     ].filter(Boolean).join(' · ')}
                   </p>
                 )}
+                {/* Birthday */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm leading-none flex-shrink-0">🎂</span>
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={birthdayInput}
+                      onChange={e => { setBirthdayInput(e.target.value); setBirthdayError('') }}
+                      onBlur={() => {
+                        if (!contact) return
+                        if (birthdayInput && !/^\d{2}-\d{2}$/.test(birthdayInput)) {
+                          setBirthdayError('Use MM-DD format (e.g. 03-27)')
+                          return
+                        }
+                        onUpdate(contact.id, { birthday: birthdayInput || null })
+                      }}
+                      placeholder="MM-DD (e.g. 03-27)"
+                      className="w-full text-xs bg-mercury/10 border border-mercury rounded px-2 py-1 placeholder-shuttle/30 text-burnham focus:outline-none focus:border-burnham/30"
+                    />
+                    {birthdayError && (
+                      <p className="text-[10px] text-red-400 mt-0.5">{birthdayError}</p>
+                    )}
+                    {!birthdayError && birthdayInput && (() => {
+                      const days = birthdayDaysUntil(birthdayInput)
+                      if (days === null) return null
+                      if (days > 30) return null
+                      if (days === 0) return <p className="text-[10px] text-green-500 mt-0.5">🎉 Today!</p>
+                      return <p className="text-[10px] text-green-600 mt-0.5">🎂 {days} day{days === 1 ? '' : 's'} away</p>
+                    })()}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -952,6 +1154,254 @@ export default function ContactDetailDrawer({
                 )}
               </div>
             )}
+
+            {/* ── 13. Links ─────────────────────────────────────────────────── */}
+            <div className="px-4 py-3 border-b border-mercury">
+              <div className="flex items-center justify-between mb-2">
+                <span className={sectionLabel + ' mb-0'}>Links</span>
+                <button
+                  onClick={() => setShowAddLink(p => !p)}
+                  className="flex items-center gap-1 text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors"
+                >
+                  <Plus size={10} />
+                  Add
+                </button>
+              </div>
+
+              {links.length === 0 && !showAddLink && (
+                <p className="text-[11px] text-shuttle/40">No links saved yet.</p>
+              )}
+
+              {links.length > 0 && (
+                <ul className="space-y-1.5 mb-2">
+                  {links.map((link, idx) => (
+                    <li key={idx} className="group flex items-center gap-2">
+                      <span className="text-sm leading-none flex-shrink-0">{getLinkIcon(link.type)}</span>
+                      <button
+                        onClick={() => openLink(link.url)}
+                        className="flex-1 text-xs text-burnham/80 hover:text-burnham truncate text-left transition-colors"
+                        title={link.url}
+                      >
+                        {link.label}
+                      </button>
+                      <button
+                        onClick={() => removeLink(idx)}
+                        className="opacity-0 group-hover:opacity-100 text-shuttle/30 hover:text-red-400 transition-all flex-shrink-0"
+                        aria-label="Remove link"
+                      >
+                        <X size={12} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {showAddLink && (
+                <div className="space-y-1.5 mt-2">
+                  <input
+                    type="url"
+                    value={newLinkUrl}
+                    onChange={e => setNewLinkUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full text-xs bg-white border border-mercury rounded px-2 py-1.5 text-burnham placeholder-shuttle/30 focus:outline-none focus:border-burnham/30"
+                  />
+                  <input
+                    type="text"
+                    value={newLinkLabel}
+                    onChange={e => setNewLinkLabel(e.target.value)}
+                    placeholder="Label (e.g. Company deck, Their blog)"
+                    className="w-full text-xs bg-white border border-mercury rounded px-2 py-1.5 text-burnham placeholder-shuttle/30 focus:outline-none focus:border-burnham/30"
+                  />
+                  <select
+                    value={newLinkType}
+                    onChange={e => setNewLinkType(e.target.value)}
+                    className="w-full text-xs bg-white border border-mercury rounded px-2 py-1.5 text-burnham focus:outline-none"
+                  >
+                    <option value="resource">🔗 Resource</option>
+                    <option value="their_content">📰 Their content</option>
+                    <option value="shared_doc">📄 Shared doc</option>
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveLink}
+                      disabled={!newLinkUrl.trim()}
+                      className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium bg-burnham text-white rounded px-3 py-1.5 hover:bg-burnham/90 disabled:opacity-40 transition-colors"
+                    >
+                      <Check size={11} weight="bold" />
+                      Save
+                    </button>
+                    <button
+                      onClick={() => { setShowAddLink(false); setNewLinkUrl(''); setNewLinkLabel(''); setNewLinkType('resource') }}
+                      className="text-[11px] text-shuttle/60 hover:text-shuttle px-3 py-1.5 rounded border border-mercury transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── 14. Milestones ────────────────────────────────────────────── */}
+            <div className="px-4 py-3 border-b border-mercury">
+              <div className="flex items-center justify-between mb-2">
+                <span className={sectionLabel + ' mb-0'}>Milestones</span>
+                <button
+                  onClick={() => setShowAddMilestone(p => !p)}
+                  className="flex items-center gap-1 text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors"
+                >
+                  <Plus size={10} />
+                  Add
+                </button>
+              </div>
+
+              {milestonesLoading && (
+                <p className="text-[11px] text-shuttle/40">Loading…</p>
+              )}
+
+              {!milestonesLoading && milestones.length === 0 && !showAddMilestone && (
+                <p className="text-[11px] text-shuttle/40">No milestones yet.</p>
+              )}
+
+              {milestones.length > 0 && (
+                <ul className="space-y-1.5 mb-2">
+                  {milestones.map(m => {
+                    const days = daysUntilMilestone(m)
+                    return (
+                      <li key={m.id} className="group flex items-center gap-2">
+                        <span className="text-sm leading-none flex-shrink-0">{MILESTONE_EMOJI[m.type]}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs text-burnham/80 truncate block">{m.label}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-shuttle/50">{formatMilestoneDateDisplay(m)}</span>
+                            {days !== null && days <= 30 && (
+                              <span className={`text-[10px] font-medium ${days === 0 ? 'text-green-500' : days <= 30 ? 'text-green-600' : 'text-shuttle/40'}`}>
+                                {days === 0 ? 'today! 🎉' : `in ${days} day${days === 1 ? '' : 's'}`}
+                              </span>
+                            )}
+                            {days !== null && days < 0 && (
+                              <span className="text-[10px] text-shuttle/40">{Math.abs(days)} days ago</span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => deleteMilestone(m.id)}
+                          className="opacity-0 group-hover:opacity-100 text-shuttle/30 hover:text-red-400 transition-all flex-shrink-0"
+                          aria-label="Delete milestone"
+                        >
+                          <X size={12} />
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+
+              {showAddMilestone && (
+                <div className="space-y-2 mt-2 p-3 bg-mercury/10 rounded-lg border border-mercury">
+                  {/* Type */}
+                  <select
+                    value={newMilestone.type}
+                    onChange={e => setNewMilestone(p => ({ ...p, type: e.target.value as ContactMilestone['type'] }))}
+                    className="w-full text-xs bg-white border border-mercury rounded px-2 py-1.5 text-burnham focus:outline-none"
+                  >
+                    {(Object.keys(MILESTONE_LABELS) as ContactMilestone['type'][]).map(t => (
+                      <option key={t} value={t}>{MILESTONE_EMOJI[t]} {MILESTONE_LABELS[t]}</option>
+                    ))}
+                  </select>
+
+                  {/* Label */}
+                  <input
+                    type="text"
+                    value={newMilestone.label}
+                    onChange={e => setNewMilestone(p => ({ ...p, label: e.target.value }))}
+                    placeholder={
+                      newMilestone.type === 'birthday_child' ? "Child's name (optional)" :
+                      newMilestone.type === 'anniversary_work' ? 'Company name (optional)' :
+                      newMilestone.type === 'custom' ? 'Event name' : 'Label (optional)'
+                    }
+                    className="w-full text-xs bg-white border border-mercury rounded px-2 py-1.5 text-burnham placeholder-shuttle/30 focus:outline-none focus:border-burnham/30"
+                  />
+
+                  {/* Annual vs one-time toggle */}
+                  <div className="flex gap-1">
+                    {[{ label: 'Annual (MM-DD)', val: true }, { label: 'One-time (full date)', val: false }].map(opt => (
+                      <button
+                        key={String(opt.val)}
+                        onClick={() => setNewMilestone(p => ({ ...p, isAnnual: opt.val }))}
+                        className={`flex-1 text-[10px] font-medium py-1 rounded border transition-colors ${
+                          newMilestone.isAnnual === opt.val
+                            ? 'bg-burnham text-white border-burnham'
+                            : 'bg-white text-shuttle border-mercury hover:border-shuttle/40'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Date input */}
+                  {newMilestone.isAnnual ? (
+                    <input
+                      type="text"
+                      value={newMilestone.date_mm_dd}
+                      onChange={e => setNewMilestone(p => ({ ...p, date_mm_dd: e.target.value }))}
+                      placeholder="MM-DD (e.g. 07-15)"
+                      className="w-full text-xs bg-white border border-mercury rounded px-2 py-1.5 text-burnham placeholder-shuttle/30 focus:outline-none focus:border-burnham/30"
+                    />
+                  ) : (
+                    <input
+                      type="date"
+                      value={newMilestone.date_full}
+                      onChange={e => setNewMilestone(p => ({ ...p, date_full: e.target.value }))}
+                      className="w-full text-xs bg-white border border-mercury rounded px-2 py-1.5 text-burnham focus:outline-none"
+                    />
+                  )}
+
+                  {/* Days before */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-shuttle/60 flex-shrink-0">Remind</span>
+                    <input
+                      type="number"
+                      value={newMilestone.show_days_before}
+                      onChange={e => setNewMilestone(p => ({ ...p, show_days_before: parseInt(e.target.value) || 7 }))}
+                      min={0}
+                      max={30}
+                      className="w-14 text-xs bg-white border border-mercury rounded px-2 py-1 text-burnham focus:outline-none"
+                    />
+                    <span className="text-[10px] text-shuttle/60">days before</span>
+                  </div>
+
+                  {/* Notes */}
+                  <textarea
+                    value={newMilestone.notes}
+                    onChange={e => setNewMilestone(p => ({ ...p, notes: e.target.value }))}
+                    rows={2}
+                    placeholder="Notes (optional)"
+                    className="w-full text-xs bg-white border border-mercury rounded px-2 py-1.5 placeholder-shuttle/30 text-burnham resize-none focus:outline-none"
+                  />
+
+                  {/* Actions */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveMilestone}
+                      className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium bg-burnham text-white rounded px-3 py-1.5 hover:bg-burnham/90 transition-colors"
+                    >
+                      <Check size={11} weight="bold" />
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowAddMilestone(false)
+                        setNewMilestone({ type: 'custom', label: '', date_mm_dd: '', date_full: '', show_days_before: 7, notes: '', isAnnual: true })
+                      }}
+                      className="text-[11px] text-shuttle/60 hover:text-shuttle px-3 py-1.5 rounded border border-mercury transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* ── Footer: delete ────────────────────────────────────────────── */}
             <div className="p-4 border-t border-mercury mt-auto sticky bottom-0 bg-white">

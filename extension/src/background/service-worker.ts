@@ -644,6 +644,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         default:
           sendResponse({ success: false, error: 'Unknown message type' })
+      } // end switch
     } catch (error) {
       console.error('Error handling message:', error)
       sendResponse({ success: false, error: String(error) })
@@ -1132,7 +1133,7 @@ async function _handleWhatsAppMessage(event: WhatsAppMessageEvent) {
         .insert({
           user_id: userId,
           contact_id: contact.id,
-          interaction_id: interaction.id,
+          interaction_id: interaction!.id,
           channel: 'whatsapp',
           window_start: windowStart.toISOString(),
           window_end: windowEnd.toISOString(),
@@ -1214,7 +1215,7 @@ async function handleLinkedInMessage(event: LinkedInMessageEvent) {
         .insert({
           user_id: userId,
           contact_id: contact.id,
-          interaction_id: interaction.id,
+          interaction_id: interaction!.id,
           channel: 'linkedin_msg',
           window_start: windowStart.toISOString(),
           window_end: windowEnd.toISOString(),

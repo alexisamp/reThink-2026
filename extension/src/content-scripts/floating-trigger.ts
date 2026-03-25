@@ -1,5 +1,6 @@
 // Floating trigger button — Phase 4
 // Injects the reThink People trigger button on LinkedIn profiles and WhatsApp Web
+export {}
 
 const BUTTON_ID = 'rethink-people-trigger'
 const BURNHAM = '#003720'

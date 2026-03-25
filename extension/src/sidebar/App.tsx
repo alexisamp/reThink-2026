@@ -26,7 +26,7 @@ export interface CurrentContact {
   linkedinName?: string
   // Resolved reThink data
   reThinkId?: string
-  name?: string
+  name?: string | null
   company?: string | null
   jobTitle?: string | null
   healthScore?: number
@@ -36,6 +36,8 @@ export interface CurrentContact {
   pendingTodosCount?: number
   personalContext?: string | null
   category?: string | null
+  birthday?: string | null        // MM-DD format
+  links?: Array<{ url: string; label: string; type?: string; created_at?: string }>
 }
 
 export interface LinkedInProfile {
@@ -70,46 +72,46 @@ export default function App() {
 
   async function determineState() {
     try {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      setSidebarState('unauthenticated')
-      setUser(null)
-      return
-    }
-    setUser(session.user)
-
-    const stored = await chrome.storage.local.get(['currentWhatsAppContact', 'currentLinkedInProfile'])
-
-    if (stored.currentWhatsAppContact?.phone) {
-      const contact = await findContactByPhone(session.user.id, stored.currentWhatsAppContact.phone)
-      if (contact) {
-        setCurrentContact({ phone: stored.currentWhatsAppContact.phone, ...contact })
-        setSidebarState('whatsapp_mapped')
-      } else {
-        setCurrentContact({
-          phone: stored.currentWhatsAppContact.phone,
-          linkedinName: stored.currentWhatsAppContact.name,
-        })
-        setSidebarState('whatsapp_unmapped')
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setSidebarState('unauthenticated')
+        setUser(null)
+        return
       }
-    } else if (stored.currentLinkedInProfile?.linkedinUrl) {
-      const profile = stored.currentLinkedInProfile as LinkedInProfile
-      setLinkedInProfile(profile)
-      const contact = await findContactByLinkedInUrl(session.user.id, profile.linkedinUrl!)
-      if (contact) {
-        setCurrentContact({ linkedinUrl: profile.linkedinUrl!, linkedinName: profile.name ?? undefined, ...contact })
-        setSidebarState('linkedin_known')
+      setUser(session.user)
+
+      const stored = await chrome.storage.local.get(['currentWhatsAppContact', 'currentLinkedInProfile'])
+
+      if (stored.currentWhatsAppContact?.phone) {
+        const contact = await findContactByPhone(session.user.id, stored.currentWhatsAppContact.phone)
+        if (contact) {
+          setCurrentContact({ phone: stored.currentWhatsAppContact.phone, ...contact })
+          setSidebarState('whatsapp_mapped')
+        } else {
+          setCurrentContact({
+            phone: stored.currentWhatsAppContact.phone,
+            linkedinName: stored.currentWhatsAppContact.name,
+          })
+          setSidebarState('whatsapp_unmapped')
+        }
+      } else if (stored.currentLinkedInProfile?.linkedinUrl) {
+        const profile = stored.currentLinkedInProfile as LinkedInProfile
+        setLinkedInProfile(profile)
+        const contact = await findContactByLinkedInUrl(session.user.id, profile.linkedinUrl!)
+        if (contact) {
+          setCurrentContact({ linkedinUrl: profile.linkedinUrl!, linkedinName: profile.name ?? undefined, ...contact })
+          setSidebarState('linkedin_known')
+        } else {
+          setCurrentContact({ linkedinUrl: profile.linkedinUrl!, linkedinName: profile.name ?? undefined })
+          setSidebarState('linkedin_new')
+        }
       } else {
-        setCurrentContact({ linkedinUrl: profile.linkedinUrl!, linkedinName: profile.name ?? undefined })
-        setSidebarState('linkedin_new')
+        setCurrentContact(null)
+        setSidebarState('default')
       }
-    } else {
-      setCurrentContact(null)
-      setSidebarState('default')
-    }
     } catch (err) {
       console.error('reThink: determineState error', err)
-      setSidebarState('unauthenticated') // fallback to login screen rather than hanging blank
+      setSidebarState('unauthenticated')
     }
   }
 
@@ -119,17 +121,14 @@ export default function App() {
       const clientId = '652244567794-rjti1jj53ljnubdq0m6v0rmuji7521nq.apps.googleusercontent.com'
       const scopes = ['openid', 'email', 'profile']
 
-      // 1. Generate plain nonce
       const nonce = crypto.randomUUID()
 
-      // 2. Hash the nonce with SHA-256 for Google
       const encoder = new TextEncoder()
       const data = encoder.encode(nonce)
       const hashBuffer = await crypto.subtle.digest('SHA-256', data)
       const hashArray = Array.from(new Uint8Array(hashBuffer))
       const hashedNonce = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 
-      // 3. Send HASHED nonce to Google
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&response_type=id_token&redirect_uri=${encodeURIComponent(redirectURL)}&scope=${encodeURIComponent(scopes.join(' '))}&nonce=${hashedNonce}`
 
       const responseUrl = await chrome.identity.launchWebAuthFlow({
@@ -142,7 +141,6 @@ export default function App() {
         const idToken = params.get('id_token')
 
         if (idToken) {
-          // 4. Pass PLAIN nonce to Supabase (not hashed)
           const { data: authData, error } = await supabase.auth.signInWithIdToken({
             provider: 'google',
             token: idToken,
@@ -224,7 +222,6 @@ export default function App() {
 // ===== SUPABASE HELPERS =====
 
 async function findContactByPhone(userId: string, phone: string): Promise<Partial<CurrentContact> | null> {
-  // Build all plausible phone variants to handle legacy stored formats
   const digits = phone.replace(/\D/g, '')
   const variants = Array.from(new Set([
     phone,
@@ -240,7 +237,7 @@ async function findContactByPhone(userId: string, phone: string): Promise<Partia
       contact_id,
       outreach_logs!inner (
         id, name, company, job_title, health_score, status, profile_photo_url,
-        personal_context, category, last_interaction_at
+        personal_context, category, last_interaction_at, birthday, links
       )
     `)
     .eq('user_id', userId)
@@ -261,6 +258,8 @@ async function findContactByPhone(userId: string, phone: string): Promise<Partia
     personalContext: contact.personal_context,
     category: contact.category,
     lastInteractionAt: contact.last_interaction_at,
+    birthday: contact.birthday,
+    links: contact.links ?? [],
   }
 }
 
@@ -269,7 +268,7 @@ async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Pr
   const withSlash = normalized + '/'
   const { data, error } = await supabase
     .from('outreach_logs')
-    .select('id, name, company, job_title, health_score, status, profile_photo_url, personal_context, category, last_interaction_at')
+    .select('id, name, company, job_title, health_score, status, profile_photo_url, personal_context, category, last_interaction_at, birthday, links')
     .eq('user_id', userId)
     .in('linkedin_url', [normalized, withSlash])
     .maybeSingle()
@@ -287,6 +286,8 @@ async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Pr
     personalContext: data.personal_context,
     category: data.category,
     lastInteractionAt: data.last_interaction_at,
+    birthday: (data as any).birthday,
+    links: (data as any).links ?? [],
   }
 }
 
@@ -331,14 +332,201 @@ function LoginScreen({ onSignIn }: { onSignIn: () => void }) {
   )
 }
 
+// ===== DEFAULT SCREEN: TODAY'S BRIEFING =====
+
+interface MilestoneCard {
+  contactName: string
+  label: string
+  daysUntil: number
+  emoji: string
+}
+
+interface ReminderCard {
+  text: string
+  contactName: string | null
+}
+
+function milestoneEmoji(type: string): string {
+  if (type === 'birthday_contact') return '🎂'
+  if (type === 'birthday_child') return '👶'
+  if (type === 'birthday_partner') return '💑'
+  if (type.startsWith('anniversary')) return '🎉'
+  return '⭐'
+}
+
+function daysUntilMmDd(mmdd: string): number {
+  const today = new Date()
+  const [m, d] = mmdd.split('-').map(Number)
+  const target = new Date(today.getFullYear(), m - 1, d)
+  const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  if (target < todayNorm) target.setFullYear(today.getFullYear() + 1)
+  return Math.round((target.getTime() - todayNorm.getTime()) / 86400000)
+}
+
+function greeting(): string {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
 function DefaultScreen({ user, onSignOut }: { user: User; onSignOut: () => void }) {
+  const [milestoneCards, setMilestoneCards] = useState<MilestoneCard[]>([])
+  const [reminderCards, setReminderCards] = useState<ReminderCard[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadBriefing()
+  }, [user.id])
+
+  async function loadBriefing() {
+    setLoading(true)
+    try {
+      // Load upcoming milestones (all contacts)
+      const { data: milestones } = await supabase
+        .from('contact_milestones')
+        .select('type, label, date_mm_dd, show_days_before, contact_id')
+        .eq('user_id', user.id)
+        .not('date_mm_dd', 'is', null)
+
+      const upcomingIds = (milestones ?? [])
+        .filter(m => {
+          if (!m.date_mm_dd) return false
+          const days = daysUntilMmDd(m.date_mm_dd)
+          return days <= (m.show_days_before ?? 7)
+        })
+        .map(m => m.contact_id)
+
+      let contactNames: Record<string, string> = {}
+      if (upcomingIds.length > 0) {
+        const { data: contacts } = await supabase
+          .from('outreach_logs')
+          .select('id, name')
+          .in('id', upcomingIds)
+        ;(contacts ?? []).forEach((c: any) => { contactNames[c.id] = c.name })
+      }
+
+      const cards: MilestoneCard[] = (milestones ?? [])
+        .filter(m => {
+          if (!m.date_mm_dd) return false
+          const days = daysUntilMmDd(m.date_mm_dd)
+          return days <= (m.show_days_before ?? 7)
+        })
+        .map(m => ({
+          contactName: contactNames[m.contact_id] ?? 'Unknown',
+          label: m.label,
+          daysUntil: daysUntilMmDd(m.date_mm_dd!),
+          emoji: milestoneEmoji(m.type),
+        }))
+        .sort((a, b) => a.daysUntil - b.daysUntil)
+
+      setMilestoneCards(cards)
+
+      // Load active reminders
+      const todayStr = new Date().toISOString().split('T')[0]
+      const { data: reminders } = await (supabase as any)
+        .from('contact_reminders')
+        .select('text, contact_id')
+        .eq('user_id', user.id)
+        .lte('show_from', todayStr)
+        .gte('show_until', todayStr)
+
+      let reminderContactNames: Record<string, string> = {}
+      const reminderContactIds = [...new Set((reminders ?? []).map((r: any) => r.contact_id).filter(Boolean))]
+      if (reminderContactIds.length > 0) {
+        const { data: rContacts } = await supabase
+          .from('outreach_logs')
+          .select('id, name')
+          .in('id', reminderContactIds)
+        ;(rContacts ?? []).forEach((c: any) => { reminderContactNames[c.id] = c.name })
+      }
+
+      setReminderCards(
+        (reminders ?? []).map((r: any) => ({
+          text: r.text,
+          contactName: r.contact_id ? (reminderContactNames[r.contact_id] ?? null) : null,
+        }))
+      )
+    } catch {
+      // Fail silently
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const hasContent = milestoneCards.length > 0 || reminderCards.length > 0
+
   return (
     <div style={{ padding: '16px', background: 'white', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
       <SidebarHeader onSignOut={onSignOut} />
-      <DailyProgress userId={user.id} />
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 16px', color: '#536471', fontSize: '13px', textAlign: 'center' }}>
-        <p style={{ margin: 0, lineHeight: 1.5 }}>Open a WhatsApp conversation or LinkedIn profile to get started.</p>
-      </div>
+
+      <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#003720', margin: '0 0 16px 0' }}>
+        {greeting()}
+      </h2>
+
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
+          <div style={{ width: '16px', height: '16px', border: '2px solid #E3E3E3', borderTop: '2px solid #003720', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        </div>
+      ) : (
+        <>
+          {milestoneCards.length > 0 && (
+            <div style={{ marginBottom: '16px' }}>
+              <p style={{ fontSize: '10px', fontWeight: 600, color: '#536471', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                Coming up
+              </p>
+              {milestoneCards.map((card, i) => (
+                <div
+                  key={i}
+                  style={{ padding: '10px 12px', background: '#E5F9BD', borderRadius: '10px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '10px' }}
+                >
+                  <span style={{ fontSize: '20px' }}>{card.emoji}</span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: '#003720', margin: '0 0 1px 0' }}>
+                      {card.contactName}
+                    </p>
+                    <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>
+                      {card.label}
+                    </p>
+                  </div>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: card.daysUntil === 0 ? '#003720' : '#536471', whiteSpace: 'nowrap' }}>
+                    {card.daysUntil === 0 ? 'today!' : `in ${card.daysUntil}d`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {reminderCards.length > 0 && (
+            <div style={{ marginBottom: '16px' }}>
+              <p style={{ fontSize: '10px', fontWeight: 600, color: '#536471', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+                Active reminders
+              </p>
+              {reminderCards.map((card, i) => (
+                <div
+                  key={i}
+                  style={{ padding: '10px 12px', background: '#F8FAF8', borderRadius: '10px', marginBottom: '6px' }}
+                >
+                  <p style={{ fontSize: '13px', color: '#003720', margin: '0 0 2px 0' }}>{card.text}</p>
+                  {card.contactName && (
+                    <p style={{ fontSize: '11px', color: '#536471', margin: 0 }}>{card.contactName}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!hasContent && (
+            <div style={{ padding: '24px 0', textAlign: 'center' }}>
+              <p style={{ fontSize: '13px', color: '#536471', margin: '0 0 4px 0' }}>All clear — no upcoming milestones this week.</p>
+              <p style={{ fontSize: '12px', color: '#536471', margin: 0, lineHeight: 1.5 }}>Open a WhatsApp conversation or LinkedIn profile to get started.</p>
+            </div>
+          )}
+
+          <DailyProgress userId={user.id} />
+        </>
+      )}
     </div>
   )
 }

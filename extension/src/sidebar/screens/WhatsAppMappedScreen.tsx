@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import type { User } from '@supabase/supabase-js'
 import type { CurrentContact } from '../App'
 import { SidebarHeader } from '../App'
@@ -74,7 +74,6 @@ function formatMmDd(mmdd: string | null): string {
 
 function daysUntilMmDd(mmdd: string): number {
   const today = new Date()
-  const todayMD = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
   const [m, d] = mmdd.split('-').map(Number)
   const target = new Date(today.getFullYear(), m - 1, d)
   const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate())
@@ -113,14 +112,6 @@ function isSlugName(name: string | null | undefined): boolean {
   return false
 }
 
-function todayMD(): string {
-  const t = new Date()
-  return `${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
-}
-
-function todayISO(): string {
-  return new Date().toISOString().split('T')[0]
-}
 
 function formatDatePrefix(): string {
   return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -231,7 +222,6 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
 
   async function checkSmartBanner() {
     if (!contact.reThinkId) return
-    const today = todayMD()
 
     // Check birthday field on contact
     if (contact.birthday) {
