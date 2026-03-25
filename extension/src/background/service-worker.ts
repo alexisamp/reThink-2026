@@ -713,12 +713,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const { data: row } = await supabase
             .from('outreach_logs').select('personal_context, attio_record_id').eq('id', message.contactId).single()
           const existing = row?.personal_context?.trim() ?? ''
-          const timestamp = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-          const newContext = existing
-            ? `${existing}\n[${timestamp}] ${message.note.trim()}`
-            : `[${timestamp}] ${message.note.trim()}`
+          let newContext: string
+          if (message.replace) {
+            // Replace mode: the note IS the full new context value (from the context textarea)
+            newContext = message.note.trim()
+          } else {
+            const timestamp = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            newContext = existing
+              ? `${existing}\n[${timestamp}] ${message.note.trim()}`
+              : `[${timestamp}] ${message.note.trim()}`
+          }
           const { error } = await supabase
             .from('outreach_logs').update({ personal_context: newContext }).eq('id', message.contactId)
+
+          // Push to Attio if the record is linked (bidirectional sync — reThink → Attio)
+          // Note: Attio → reThink reverse sync would require a webhook/polling setup (out of scope)
+          const attioRecordId = row?.attio_record_id
+          if (!error && attioRecordId) {
+            const attioKey = await getStoredAttioKey()
+            if (attioKey) {
+              try {
+                await fetch(`https://api.attio.com/v2/objects/people/records/${attioRecordId}`, {
+                  method: 'PATCH',
+                  headers: { 'Authorization': `Bearer ${attioKey}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    data: { values: { description: [{ value: newContext }] } }
+                  }),
+                })
+              } catch {
+                // Attio sync failure is non-fatal — local save succeeded
+              }
+            }
+          }
+
           sendResponse({ success: !error, updatedContext: newContext })
           break
         }

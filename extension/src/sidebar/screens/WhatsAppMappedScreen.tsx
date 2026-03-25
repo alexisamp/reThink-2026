@@ -39,7 +39,7 @@ interface Props {
 
 // ===== HELPERS =====
 
-const STATUSES = ['PROSPECT', 'INTRO', 'CONNECTED', 'RECONNECT', 'ENGAGED', 'NURTURING', 'DORMANT']
+const STATUSES = ['PROSPECT', 'ON_RADAR', 'INTRO', 'CONNECTED', 'RECONNECT', 'ENGAGED', 'NURTURING', 'DORMANT']
 
 const SECTION_HEADING: React.CSSProperties = {
   fontSize: '10px',
@@ -677,8 +677,19 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
               )}
             </div>
           )}
-          {/* F02: Last interaction below name */}
-          <p style={{ fontSize: '10px', color: '#536471', margin: '0 0 3px 0' }}>{lastSeen}</p>
+          {/* Prominent metrics row — interactions + last seen */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '2px 0 4px 0' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#003720' }}>
+              {interactionCount} interaction{interactionCount !== 1 ? 's' : ''}
+            </span>
+            <span style={{ fontSize: '10px', color: '#536471' }}>·</span>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#003720' }}>{lastSeen}</span>
+          </div>
+          {currentStatus === 'ON_RADAR' && (
+            <p style={{ fontSize: '10px', fontStyle: 'italic', color: '#94A3B8', margin: '0 0 3px 0' }}>
+              First interaction will activate this contact
+            </p>
+          )}
           {/* F02: Headline — first line of personal_context, editable */}
           {headlineEditing ? (
             <input
@@ -712,11 +723,14 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
             ) : (
               <span style={{ fontSize: '12px', fontWeight: 600, color: scoreColor }}>{score}</span>
             )}
-            {contact.category && (
-              <span style={{ background: '#E5E7EB', color: '#536471', borderRadius: '100px', padding: '2px 8px', fontSize: '11px' }}>
-                {contact.category}
-              </span>
-            )}
+            {contact.category && (() => {
+              const isMuted = contact.category === 'PROSPECT' || contact.category === 'ON_RADAR'
+              return (
+                <span style={{ background: isMuted ? 'transparent' : '#E5E7EB', color: '#536471', borderRadius: '100px', padding: '2px 8px', fontSize: '11px', border: isMuted ? '1px dashed #C4C4C4' : '1px solid transparent' }}>
+                  {contact.category}
+                </span>
+              )
+            })()}
           </div>
         </div>
       </div>
@@ -979,6 +993,14 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
                 <span style={{ fontSize: '11px', color: '#536471', marginLeft: '6px' }}>{new Date(m.date_full).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
               )}
             </div>
+            <button
+              onClick={async () => {
+                await supabase.from('contact_milestones').delete().eq('id', m.id)
+                setMilestones(prev => prev.filter(x => x.id !== m.id))
+              }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#C4C4C4', fontSize: '16px', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+              title="Delete milestone"
+            >×</button>
           </div>
         ))}
 
@@ -1005,19 +1027,43 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
               ))}
             </div>
             {(mRecurrence === 'annual' || mRecurrence === 'semi_annual') ? (
-              <input
-                type="text"
-                value={mDateMmDd}
-                onChange={e => setMDateMmDd(e.target.value)}
-                placeholder="MM-DD (e.g. 03-24)"
-                style={{ ...inputStyle }}
-              />
+              /* Custom month + day selector for annual/semi-annual milestones */
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <select
+                  value={mDateMmDd ? mDateMmDd.split('-')[0] : ''}
+                  onChange={e => {
+                    const month = e.target.value
+                    const day = mDateMmDd ? mDateMmDd.split('-')[1] || '01' : '01'
+                    setMDateMmDd(month ? `${month}-${day}` : '')
+                  }}
+                  style={{ flex: 1, border: '1px solid #E3E3E3', borderRadius: '6px', padding: '6px 8px', fontSize: '12px', color: '#003720', outline: 'none', fontFamily: 'inherit', background: 'white' }}
+                >
+                  <option value="">Month</option>
+                  {['01','02','03','04','05','06','07','08','09','10','11','12'].map((m, i) => (
+                    <option key={m} value={m}>{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i]}</option>
+                  ))}
+                </select>
+                <select
+                  value={mDateMmDd ? mDateMmDd.split('-')[1] || '' : ''}
+                  onChange={e => {
+                    const month = mDateMmDd ? mDateMmDd.split('-')[0] || '01' : '01'
+                    setMDateMmDd(e.target.value ? `${month}-${e.target.value}` : '')
+                  }}
+                  style={{ flex: 1, border: '1px solid #E3E3E3', borderRadius: '6px', padding: '6px 8px', fontSize: '12px', color: '#003720', outline: 'none', fontFamily: 'inherit', background: 'white' }}
+                >
+                  <option value="">Day</option>
+                  {Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0')).map(d => (
+                    <option key={d} value={d}>{parseInt(d)}</option>
+                  ))}
+                </select>
+              </div>
             ) : (
+              /* Styled date input for one-time / bi-weekly milestones */
               <input
                 type="date"
                 value={mDateFull}
                 onChange={e => setMDateFull(e.target.value)}
-                style={{ ...inputStyle }}
+                style={{ border: '1px solid #E3E3E3', borderRadius: '6px', padding: '6px 8px', fontSize: '12px', color: '#003720', outline: 'none', fontFamily: 'inherit', background: 'white', width: '100%', boxSizing: 'border-box' }}
               />
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1176,11 +1222,6 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
         {noteSaved && <p style={{ fontSize: '11px', color: '#79D65E', margin: '6px 0 0 0' }}>✓ Saved</p>}
       </div>
 
-      {/* Stats row */}
-      <p style={{ fontSize: '12px', color: '#536471', margin: '0 0 10px 0' }}>
-        {interactionCount} interaction{interactionCount !== 1 ? 's' : ''} · last {lastSeen.toLowerCase()}
-      </p>
-
       {/* Daily Progress */}
       <DailyProgress userId={user.id} />
 
@@ -1235,6 +1276,7 @@ export function Avatar({ name, photoUrl, size }: { name?: string | null; photoUr
 export function StatusPill({ status }: { status: string }) {
   const styles: Record<string, { bg: string; color: string }> = {
     PROSPECT:  { bg: '#F1F5F9', color: '#94A3B8' },  // slate/grey — clearly "not yet active"
+    ON_RADAR:  { bg: '#F1F5F9', color: '#94A3B8' },  // same muted look — no prior relationship
     INTRO:     { bg: '#E5F9BD', color: '#003720' },
     CONNECTED: { bg: '#79D65E', color: '#003720' },
     ENGAGED:   { bg: '#79D65E', color: '#003720' },
