@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   Lightning, Check, Play, Pause, Stop,
   Timer, CalendarBlank, SidebarSimple,
@@ -595,6 +595,18 @@ export default function Today() {
   // Upcoming contact milestones
   const [upcomingMilestones, setUpcomingMilestones] = useState<Array<ContactMilestone & { contact_name: string; daysUntil: number }>>([])
 
+  // Cold contacts for Relationship Agenda
+  const [coldContacts, setColdContacts] = useState<Array<{ id: string; name: string; health_score: number; last_interaction_date?: string | null; days_since: number }>>([])
+
+  // Meetings today (F08)
+  const [meetingsToday, setMeetingsToday] = useState<Array<{
+    summary: string
+    start: string
+    contactName?: string
+    contactId?: string
+    contactScore?: number
+  }>>([])
+
   // AI scorer (Phase 8)
   const gemini = useGeminiScorer()
 
@@ -795,6 +807,78 @@ export default function Today() {
           .sort((a, b) => a.daysUntil - b.daysUntil)
         setUpcomingMilestones(withDays as Array<ContactMilestone & { contact_name: string; daysUntil: number }>)
       })
+  }, [userId])
+
+  // Load cold contacts (health_score ≤ 5, no interaction in 30+ days)
+  useEffect(() => {
+    if (!userId) return
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    supabase
+      .from('outreach_logs')
+      .select('id, name, health_score, last_interaction_date')
+      .eq('user_id', userId)
+      .lte('health_score', 5)
+      .or(`last_interaction_date.is.null,last_interaction_date.lte.${thirtyDaysAgo}`)
+      .order('health_score', { ascending: true })
+      .limit(5)
+      .then(({ data }) => {
+        if (!data) return
+        const now = Date.now()
+        setColdContacts(data.map(c => ({
+          ...c,
+          health_score: c.health_score ?? 0,
+          days_since: c.last_interaction_date
+            ? Math.floor((now - new Date(c.last_interaction_date).getTime()) / 86400000)
+            : 999
+        })))
+      })
+  }, [userId])
+
+  // Load today's meetings with known contacts (F08)
+  useEffect(() => {
+    if (!userId) return
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      const token = session?.provider_token
+      if (!token) return
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      const todayEnd = new Date()
+      todayEnd.setHours(23, 59, 59, 999)
+      const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
+      url.searchParams.set('timeMin', todayStart.toISOString())
+      url.searchParams.set('timeMax', todayEnd.toISOString())
+      url.searchParams.set('singleEvents', 'true')
+      url.searchParams.set('orderBy', 'startTime')
+      url.searchParams.set('maxResults', '10')
+      try {
+        const res = await fetch(url.toString(), { headers: { 'Authorization': `Bearer ${token}` } })
+        if (!res.ok) return
+        const data = await res.json()
+        const events = (data.items ?? []) as Array<{
+          id: string; summary?: string;
+          start: { dateTime?: string; date?: string }
+          attendees?: Array<{ email: string; displayName?: string }>
+        }>
+        const { data: contacts } = await supabase
+          .from('outreach_logs')
+          .select('id, name, health_score, email')
+          .eq('user_id', userId)
+          .not('email', 'is', null)
+        const emailToContact = new Map((contacts ?? []).map(c => [c.email?.toLowerCase(), c]))
+        const meetings = events.map(evt => {
+          const attendeeEmails = (evt.attendees ?? []).map((a: { email: string }) => a.email.toLowerCase())
+          const matchedContact = attendeeEmails.map((e: string) => emailToContact.get(e)).find(Boolean)
+          return {
+            summary: evt.summary ?? '(Meeting)',
+            start: evt.start.dateTime ?? evt.start.date ?? '',
+            contactName: matchedContact?.name,
+            contactId: matchedContact?.id,
+            contactScore: matchedContact?.health_score,
+          }
+        })
+        setMeetingsToday(meetings)
+      } catch { /* Calendar not available */ }
+    })
   }, [userId])
 
   // Only initialize from DB once — prevents stale upsertReview responses from clobbering local pill markers
@@ -1030,6 +1114,62 @@ export default function Today() {
     )
     return Math.round((monthLogs.length / daysElapsed) * 100)
   }
+
+  // Relationship Agenda — ranked list of up to 5 items (milestones urgent → cold contacts → milestones upcoming)
+  const relationshipAgenda = useMemo(() => {
+    const items: Array<{
+      key: string
+      type: 'milestone' | 'cold'
+      contactName: string
+      reason: string
+      contactId?: string
+      score?: number
+    }> = []
+
+    // Priority 1: urgent milestones (today or tomorrow)
+    upcomingMilestones
+      .filter(m => m.daysUntil <= 1)
+      .forEach(m => {
+        const c = allContacts.find(c => c.name === m.contact_name)
+        items.push({
+          key: `ms-${m.id}`,
+          type: 'milestone',
+          contactName: m.contact_name,
+          reason: m.daysUntil === 0 ? `${m.label} today` : `${m.label} tomorrow`,
+          contactId: c?.id,
+        })
+      })
+
+    // Priority 2: cold contacts
+    coldContacts.forEach(c => {
+      if (items.length >= 5) return
+      items.push({
+        key: `cold-${c.id}`,
+        type: 'cold',
+        contactName: c.name,
+        reason: c.days_since >= 999 ? 'Never contacted' : `Last contact: ${c.days_since}d ago`,
+        contactId: c.id,
+        score: c.health_score,
+      })
+    })
+
+    // Priority 3: upcoming milestones (2-30 days)
+    upcomingMilestones
+      .filter(m => m.daysUntil >= 2)
+      .forEach(m => {
+        if (items.length >= 5) return
+        const c = allContacts.find(c => c.name === m.contact_name)
+        items.push({
+          key: `ms-${m.id}`,
+          type: 'milestone',
+          contactName: m.contact_name,
+          reason: `${m.label} in ${m.daysUntil}d`,
+          contactId: c?.id,
+        })
+      })
+
+    return items.slice(0, 5)
+  }, [upcomingMilestones, coldContacts, allContacts])
 
   const toggleTodo = async (id: string) => {
     if (!userId) return
@@ -1894,6 +2034,39 @@ export default function Today() {
                   </div>
                 )}
               </section>
+
+              {/* ── Meetings Today (F08) ──────────────────────────────────── */}
+              {meetingsToday.length > 0 && (
+                <section className="mb-8">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest flex items-center gap-2">
+                      Today's Meetings
+                      <span className="font-mono font-normal text-shuttle/40 normal-case bg-mercury/60 px-1.5 py-0.5 rounded text-[9px]">
+                        {meetingsToday.length}
+                      </span>
+                    </h3>
+                  </div>
+                  <div className="space-y-1">
+                    {meetingsToday.map((mtg, i) => (
+                      <div key={i} className="flex items-start gap-2 py-2 border-b border-mercury/30">
+                        <span className="text-sm">📅</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-burnham truncate">{mtg.summary}</p>
+                          {mtg.contactName && (
+                            <p className="text-[10px] text-shuttle/60">
+                              with {mtg.contactName}
+                              {mtg.contactScore !== undefined && ` · score: ${mtg.contactScore}`}
+                            </p>
+                          )}
+                          <p className="text-[10px] text-shuttle/40">
+                            {mtg.start ? new Date(mtg.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* ── Upcoming Contact Milestones ───────────────────────────── */}
               {upcomingMilestones.length > 0 && (

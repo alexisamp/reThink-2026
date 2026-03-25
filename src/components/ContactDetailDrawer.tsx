@@ -101,6 +101,23 @@ function healthDotColor(score: number): string {
   return 'text-pastel'
 }
 
+function healthScoreColor(score: number): string {
+  if (score >= 7) return '#79D65E'
+  if (score >= 4) return '#F59E0B'
+  return '#EF4444'
+}
+
+function getScoreTrend(score: number, interactions: Interaction[]): '↑' | '→' | '↓' {
+  const now = Date.now()
+  const lastInteraction = interactions[0]?.interaction_date
+  if (!lastInteraction) return score <= 3 ? '↓' : '→'
+  const lastMs = new Date(lastInteraction).getTime()
+  const daysSince = (now - lastMs) / (24 * 60 * 60 * 1000)
+  if (daysSince < 30) return '↑'
+  if (daysSince > 60) return '↓'
+  return '→'
+}
+
 const INTERACTION_TYPE_LABELS: Record<Interaction['type'], string> = {
   whatsapp:      'WhatsApp',
   linkedin_msg:  'LinkedIn',
@@ -193,7 +210,8 @@ export default function ContactDetailDrawer({
     show_days_before: number
     notes: string
     isAnnual: boolean
-  }>({ type: 'custom', label: '', date_mm_dd: '', date_full: '', show_days_before: 7, notes: '', isAnnual: true })
+    recurrence: 'annual' | 'semi_annual' | 'biweekly' | 'one_time'
+  }>({ type: 'custom', label: '', date_mm_dd: '', date_full: '', show_days_before: 7, notes: '', isAnnual: true, recurrence: 'annual' })
 
   // ── Import meeting notes state ─────────────────────────────────────────────
   const [showImportNotes, setShowImportNotes] = useState(false)
@@ -213,6 +231,18 @@ export default function ContactDetailDrawer({
   const [checkedMilestones, setCheckedMilestones] = useState<boolean[]>([])
   const [checkedContext, setCheckedContext] = useState<boolean[]>([])
   const [importSaving, setImportSaving] = useState(false)
+
+  // ── Calendar state ────────────────────────────────────────────────────────
+  const [calendarEvents, setCalendarEvents] = useState<Array<{
+    id: string
+    summary: string
+    start: string
+    end: string
+    isPast: boolean
+  }>>([])
+  const [calendarLoading, setCalendarLoading] = useState(false)
+  const [meetingSuggestion, setMeetingSuggestion] = useState<{ eventId: string; summary: string; date: string } | null>(null)
+  const [todoSuggestionDismissed, setTodoSuggestionDismissed] = useState(false)
 
   // ── Links state ───────────────────────────────────────────────────────────
   const [links, setLinks] = useState<Array<{url: string; label: string; type?: string; created_at?: string}>>(contact?.links ?? [])
@@ -268,6 +298,11 @@ export default function ContactDetailDrawer({
 
     // Fetch interactions for this contact
     fetchInteractions(contact.id)
+    // Load Google Calendar events for this contact
+    setCalendarEvents([])
+    setMeetingSuggestion(null)
+    setTodoSuggestionDismissed(false)
+    loadCalendarEvents()
   }, [contact?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load milestones when contact changes
@@ -547,6 +582,8 @@ export default function ContactDetailDrawer({
   // ── milestone save ────────────────────────────────────────────────────────
   async function saveMilestone() {
     if (!contact) return
+    // Map recurrence → isAnnual for backward compat
+    const isAnnual = newMilestone.recurrence === 'annual' || newMilestone.recurrence === 'semi_annual'
     const payload: Record<string, unknown> = {
       contact_id: contact.id,
       user_id: userId,
@@ -554,8 +591,9 @@ export default function ContactDetailDrawer({
       label: newMilestone.label.trim() || MILESTONE_LABELS[newMilestone.type],
       show_days_before: newMilestone.show_days_before,
       notes: newMilestone.notes || null,
+      recurrence: newMilestone.recurrence,
     }
-    if (newMilestone.isAnnual) {
+    if (isAnnual) {
       payload.date_mm_dd = newMilestone.date_mm_dd || null
       payload.date_full = null
     } else {
@@ -571,7 +609,7 @@ export default function ContactDetailDrawer({
       setMilestones(prev => [...prev, data as ContactMilestone])
     }
     setShowAddMilestone(false)
-    setNewMilestone({ type: 'custom', label: '', date_mm_dd: '', date_full: '', show_days_before: 7, notes: '', isAnnual: true })
+    setNewMilestone({ type: 'custom', label: '', date_mm_dd: '', date_full: '', show_days_before: 7, notes: '', isAnnual: true, recurrence: 'annual' })
   }
 
   async function deleteMilestone(id: string) {
@@ -668,6 +706,51 @@ export default function ContactDetailDrawer({
     setImportSaving(false)
   }
 
+  // ── Calendar events loader ───────────────────────────────────────────────
+  async function loadCalendarEvents() {
+    if (!contact?.email) return
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.provider_token
+    if (!token) return
+    setCalendarLoading(true)
+    try {
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+      const ninetyDaysAhead = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
+      const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
+      url.searchParams.set('q', contact.email)
+      url.searchParams.set('timeMin', ninetyDaysAgo)
+      url.searchParams.set('timeMax', ninetyDaysAhead)
+      url.searchParams.set('singleEvents', 'true')
+      url.searchParams.set('orderBy', 'startTime')
+      url.searchParams.set('maxResults', '10')
+      const res = await fetch(url.toString(), {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const events = (data.items ?? []).map((e: Record<string, unknown>) => {
+          const startRaw = (e.start as Record<string,string>)?.dateTime ?? (e.start as Record<string,string>)?.date ?? ''
+          const endRaw = (e.end as Record<string, string>)?.dateTime ?? (e.end as Record<string,string>)?.date ?? ''
+          return {
+            id: e.id as string,
+            summary: (e.summary as string) ?? '(No title)',
+            start: startRaw,
+            end: endRaw,
+            isPast: new Date(startRaw) < new Date(),
+          }
+        })
+        setCalendarEvents(events)
+        const upcomingEvent = events.find((e: { isPast: boolean }) => !e.isPast)
+        if (upcomingEvent && !todoSuggestionDismissed) {
+          setMeetingSuggestion({ eventId: upcomingEvent.id, summary: upcomingEvent.summary, date: upcomingEvent.start })
+        }
+      }
+    } catch (e) {
+      console.error('loadCalendarEvents error', e)
+    }
+    setCalendarLoading(false)
+  }
+
   // ── links helpers ─────────────────────────────────────────────────────────
   async function saveLink() {
     if (!contact || !newLinkUrl.trim()) return
@@ -737,6 +820,37 @@ export default function ContactDetailDrawer({
                 <X size={16} />
               </button>
             </div>
+
+            {/* ── 1c. Meeting suggestion banner (F07) ──────────────────────── */}
+            {meetingSuggestion && !todoSuggestionDismissed && (
+              <div className="mx-4 mt-3 p-3 bg-gossip/50 rounded-xl border border-pastel/30 flex items-start gap-2">
+                <span className="text-sm">📅</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-burnham">Meeting: {meetingSuggestion.summary}</p>
+                  <p className="text-[10px] text-shuttle/70">
+                    {new Date(meetingSuggestion.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </p>
+                  <button
+                    className="mt-1.5 text-[10px] font-semibold text-burnham underline"
+                    onClick={async () => {
+                      const dueDate = new Date(new Date(meetingSuggestion.date).getTime() - 24 * 60 * 60 * 1000)
+                        .toISOString().split('T')[0]
+                      const { data: { user } } = await supabase.auth.getUser()
+                      await supabase.from('todos').insert({
+                        user_id: user?.id,
+                        text: `Prepare for "${meetingSuggestion.summary}" with ${contact?.name}`,
+                        date: dueDate,
+                        effort: 2,
+                      })
+                      setTodoSuggestionDismissed(true)
+                    }}
+                  >
+                    + Create prep todo (due day before)
+                  </button>
+                </div>
+                <button onClick={() => setTodoSuggestionDismissed(true)} className="text-shuttle/40 hover:text-shuttle text-lg leading-none">×</button>
+              </div>
+            )}
 
             {/* ── 1b. Personal context first-flow banner ───────────────────── */}
             {showContextBanner && (
@@ -1028,13 +1142,26 @@ export default function ContactDetailDrawer({
             <div className="px-4 py-3 border-b border-mercury">
               <div className={sectionLabel}>Relationship health</div>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                   <span className={`text-base leading-none tracking-tight ${healthDotClass}`}>
                     {'●'.repeat(healthScore)}{'○'.repeat(Math.max(0, 10 - healthScore))}
                   </span>
-                  <span className={`text-xs font-semibold ml-1 ${healthDotClass}`}>
+                  <span className="text-xs font-semibold ml-1" style={{ color: healthScoreColor(healthScore) }}>
                     {healthScore}/10
                   </span>
+                  {(() => {
+                    const trend = getScoreTrend(healthScore, sortedInteractions)
+                    const color = trend === '↑' ? '#22c55e' : trend === '↓' ? '#ef4444' : '#f97316'
+                    return (
+                      <span className="text-sm font-bold leading-none" style={{ color }} title={
+                        trend === '↑' ? 'Trending up — recent interaction' :
+                        trend === '↓' ? 'Trending down — no contact in 60+ days' :
+                        'Stable — no contact in 30-60 days'
+                      }>
+                        {trend}
+                      </span>
+                    )
+                  })()}
                 </div>
                 <span className="text-[10px] text-shuttle/50">
                   {lastDays === null
@@ -1130,13 +1257,21 @@ export default function ContactDetailDrawer({
                     }
                     className="w-full text-xs bg-white border border-mercury rounded px-2 py-1.5 text-burnham placeholder-shuttle/30 focus:outline-none focus:border-burnham/30"
                   />
-                  <div className="flex gap-1">
-                    {[{ label: 'Annual (MM-DD)', val: true }, { label: 'One-time (full date)', val: false }].map(opt => (
+                  <div className="flex gap-1 flex-wrap">
+                    {([
+                      { label: 'Annual', val: 'annual' as const },
+                      { label: 'Semi-annual', val: 'semi_annual' as const },
+                      { label: 'Bi-weekly', val: 'biweekly' as const },
+                      { label: 'One-time', val: 'one_time' as const },
+                    ] as const).map(opt => (
                       <button
-                        key={String(opt.val)}
-                        onClick={() => setNewMilestone(p => ({ ...p, isAnnual: opt.val }))}
+                        key={opt.val}
+                        onClick={() => {
+                          const isAnnual = opt.val === 'annual' || opt.val === 'semi_annual'
+                          setNewMilestone(p => ({ ...p, recurrence: opt.val, isAnnual }))
+                        }}
                         className={`flex-1 text-[10px] font-medium py-1 rounded border transition-colors ${
-                          newMilestone.isAnnual === opt.val
+                          newMilestone.recurrence === opt.val
                             ? 'bg-burnham text-white border-burnham'
                             : 'bg-white text-shuttle border-mercury hover:border-shuttle/40'
                         }`}
@@ -1145,7 +1280,7 @@ export default function ContactDetailDrawer({
                       </button>
                     ))}
                   </div>
-                  {newMilestone.isAnnual ? (
+                  {newMilestone.recurrence === 'annual' || newMilestone.recurrence === 'semi_annual' ? (
                     <input
                       type="text"
                       value={newMilestone.date_mm_dd}
@@ -1190,7 +1325,7 @@ export default function ContactDetailDrawer({
                     <button
                       onClick={() => {
                         setShowAddMilestone(false)
-                        setNewMilestone({ type: 'custom', label: '', date_mm_dd: '', date_full: '', show_days_before: 7, notes: '', isAnnual: true })
+                        setNewMilestone({ type: 'custom', label: '', date_mm_dd: '', date_full: '', show_days_before: 7, notes: '', isAnnual: true, recurrence: 'annual' })
                       }}
                       className="text-[11px] text-shuttle/60 hover:text-shuttle px-3 py-1.5 rounded border border-mercury transition-colors"
                     >
@@ -1537,6 +1672,31 @@ export default function ContactDetailDrawer({
                 </div>
               )}
             </div>
+
+            {/* ── 14. Calendar events (F06) ─────────────────────────────────── */}
+            {contact?.email && (
+              <div className="px-4 py-3 border-b border-mercury">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-shuttle/60">Calendar</span>
+                  {calendarLoading && <SpinnerGap size={12} className="animate-spin text-shuttle/40" />}
+                </div>
+                {!calendarLoading && calendarEvents.length === 0 && (
+                  <p className="text-xs text-shuttle/40 italic">No shared calendar events found</p>
+                )}
+                {calendarEvents.map(evt => {
+                  const dateStr = new Date(evt.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  return (
+                    <div key={evt.id} className={`flex items-start gap-2 py-1.5 border-b border-mercury/30 last:border-0 ${evt.isPast ? 'opacity-60' : ''}`}>
+                      <span className="text-[10px] mt-0.5">{evt.isPast ? '✓' : '📅'}</span>
+                      <div className="min-w-0">
+                        <p className="text-xs text-burnham font-medium truncate">{evt.summary}</p>
+                        <p className="text-[10px] text-shuttle/60">{dateStr}{evt.isPast ? ' · past' : ' · upcoming'}</p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
 
             {/* ── Footer: delete ────────────────────────────────────────────── */}
             <div className="p-4 border-t border-mercury mt-auto sticky bottom-0 bg-white">
