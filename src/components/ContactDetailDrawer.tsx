@@ -19,6 +19,7 @@ import type {
 } from '@/types'
 import { openLink } from '@/lib/openLink'
 import { supabase } from '@/lib/supabase'
+import { syncGmailInteractions } from '@/lib/gmail'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -231,6 +232,10 @@ export default function ContactDetailDrawer({
   const [checkedMilestones, setCheckedMilestones] = useState<boolean[]>([])
   const [checkedContext, setCheckedContext] = useState<boolean[]>([])
   const [importSaving, setImportSaving] = useState(false)
+
+  // ── Gmail state ───────────────────────────────────────────────────────────
+  const [gmailSyncing, setGmailSyncing] = useState(false)
+  const [gmailResult, setGmailResult] = useState<{ synced: number; skipped: number; error?: string } | null>(null)
 
   // ── Calendar state ────────────────────────────────────────────────────────
   const [calendarEvents, setCalendarEvents] = useState<Array<{
@@ -749,6 +754,23 @@ export default function ContactDetailDrawer({
       console.error('loadCalendarEvents error', e)
     }
     setCalendarLoading(false)
+  }
+
+  // ── Gmail sync (F05) ──────────────────────────────────────────────────────
+  async function handleSyncGmail() {
+    if (!contact?.email) return
+    setGmailSyncing(true)
+    setGmailResult(null)
+    const result = await syncGmailInteractions({
+      contactId: contact.id,
+      contactEmail: contact.email,
+      attioRecordId: contact.attio_record_id,
+      category: contact.category,
+    })
+    setGmailResult(result)
+    setGmailSyncing(false)
+    // Refresh interactions list
+    if (result.synced > 0) fetchInteractions(contact.id)
   }
 
   // ── links helpers ─────────────────────────────────────────────────────────
@@ -1695,6 +1717,36 @@ export default function ContactDetailDrawer({
                     </div>
                   )
                 })}
+              </div>
+            )}
+
+            {/* ── 15. Gmail sync (F05) ──────────────────────────────────────── */}
+            {contact?.email && (
+              <div className="px-4 py-3 border-b border-mercury">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-shuttle/60">Gmail</span>
+                  <button
+                    onClick={handleSyncGmail}
+                    disabled={gmailSyncing}
+                    className="flex items-center gap-1.5 text-[10px] font-medium text-burnham border border-mercury rounded-lg px-2.5 py-1 hover:bg-mercury/30 disabled:opacity-40 transition-colors"
+                  >
+                    {gmailSyncing
+                      ? <><SpinnerGap size={10} className="animate-spin" /> Syncing…</>
+                      : <><Envelope size={10} /> Sync emails</>
+                    }
+                  </button>
+                </div>
+                {gmailResult && (
+                  <p className={`mt-1.5 text-[10px] ${gmailResult.error ? 'text-red-500' : 'text-shuttle/60'}`}>
+                    {gmailResult.error
+                      ? gmailResult.error
+                      : `${gmailResult.synced} new interaction${gmailResult.synced !== 1 ? 's' : ''} synced${gmailResult.skipped > 0 ? ` · ${gmailResult.skipped} already logged` : ''}`
+                    }
+                  </p>
+                )}
+                {!gmailResult && (
+                  <p className="mt-1 text-[10px] text-shuttle/40">Auto-logs email threads as interactions</p>
+                )}
               </div>
             )}
 

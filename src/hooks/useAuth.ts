@@ -20,7 +20,14 @@ export function useAuth() {
   const signInWithGoogle = () =>
     supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: {
+        redirectTo: window.location.origin,
+        scopes: [
+          'https://www.googleapis.com/auth/gmail.readonly',
+          'https://www.googleapis.com/auth/calendar',
+        ].join(' '),
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+      },
     })
 
   const signOut = () => supabase.auth.signOut()
