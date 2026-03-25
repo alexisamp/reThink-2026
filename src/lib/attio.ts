@@ -436,6 +436,34 @@ export async function listAllAttioPersons(): Promise<AttioPersonResult[]> {
   return results
 }
 
+/**
+ * Push a plain-text note to an existing Attio person record.
+ * Used to sync personal_context → Attio notes.
+ */
+export async function pushContactNote(attioRecordId: string, note: string): Promise<void> {
+  const key = getApiKey()
+  if (!key || !attioRecordId || !note.trim()) return
+  try {
+    await fetch('https://api.attio.com/v2/notes', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        data: {
+          parent_object: 'people',
+          parent_record_id: attioRecordId,
+          title: 'Context from reThink',
+          content_plaintext: note.trim(),
+        },
+      }),
+    })
+  } catch (e) {
+    console.error('pushContactNote error:', e)
+  }
+}
+
 /** Creates a task in Attio linked to a person record. */
 export async function createAttioTask(
   attioRecordId: string,

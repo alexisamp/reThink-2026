@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { hasAttioKey, syncFullContact, syncCompanyToAttio, syncAll as syncAllAttio, pullFromAttio, diffAttioFields } from '@/lib/attio'
+import { hasAttioKey, syncFullContact, syncCompanyToAttio, syncAll as syncAllAttio, pullFromAttio, diffAttioFields, pushContactNote } from '@/lib/attio'
 import { computeHealthScore, daysSince } from '@/lib/funnelDefaults'
 import type { Contact, ContactStatus, ContactCategory, Interaction, Habit } from '@/types'
 
@@ -175,6 +175,11 @@ export function useContacts(
     }
     const updatedContacts = contacts.map(c => c.id === id ? { ...c, ...patch } : c)
     setContacts(updatedContacts)
+
+    // F13: push personal_context to Attio when it changes
+    if ('personal_context' in patch && patch.personal_context && existing.attio_record_id && hasAttioKey()) {
+      pushContactNote(existing.attio_record_id, patch.personal_context as string).catch(() => {})
+    }
 
     // Attio: update if synced (fire-and-forget — errors surface via syncError)
     if (existing.attio_record_id && hasAttioKey()) {

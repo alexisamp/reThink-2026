@@ -106,6 +106,13 @@ export default function App() {
         if (contact) {
           setSignalContact(contact as Contact)
           setSignalDrawerOpen(true)
+          // Bring Tauri window to front
+          if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+            import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+              const w = getCurrentWindow()
+              w.show().then(() => w.setFocus())
+            }).catch(() => {})
+          }
         }
 
         // Clean up the signal
