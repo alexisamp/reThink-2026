@@ -1172,8 +1172,19 @@ async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Pr
 // F01: Get stored Attio API key from chrome.storage.local
 async function getStoredAttioKey(): Promise<string | null> {
   try {
+    // 1. Check chrome.storage.local (fastest — cached from previous lookup)
     const result = await chrome.storage.local.get('attio_api_key')
-    return result.attio_api_key?.trim() ?? null
+    if (result.attio_api_key?.trim()) return result.attio_api_key.trim()
+
+    // 2. Fallback: read from Supabase user metadata (set by reThink Settings)
+    const { data: { user } } = await supabase.auth.getUser()
+    const keyFromMeta = user?.user_metadata?.attio_api_key?.trim() ?? null
+    if (keyFromMeta) {
+      // Cache locally so next call is instant
+      await chrome.storage.local.set({ attio_api_key: keyFromMeta })
+      return keyFromMeta
+    }
+    return null
   } catch {
     return null
   }

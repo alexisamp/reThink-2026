@@ -129,10 +129,12 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
     }).catch(() => {})
   }
 
-  const saveAttioKey = () => {
+  const saveAttioKey = async () => {
     const trimmed = attioKey.trim()
     if (trimmed) localStorage.setItem('attio_api_key', trimmed)
     else localStorage.removeItem('attio_api_key')
+    // Sync to Supabase user metadata so the Chrome extension can read it
+    await supabase.auth.updateUser({ data: { attio_api_key: trimmed || null } })
     setAttioSaved(true)
     setTimeout(() => setAttioSaved(false), 2000)
   }
