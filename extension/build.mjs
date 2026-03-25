@@ -87,6 +87,13 @@ async function buildExtension() {
   await cp('manifest.json', 'dist/manifest.json')
   await cp('icons', 'dist/icons', { recursive: true })
 
+  // Copy public images to dist root (accessible as /whatsapp.png etc. in the extension)
+  const { readdir } = await import('fs/promises')
+  const publicFiles = await readdir('public').catch(() => [])
+  for (const file of publicFiles) {
+    await cp(`public/${file}`, `dist/${file}`).catch(() => {})
+  }
+
   // Copy and fix sidebar index.html (replace .tsx with .js)
   const { readFile, writeFile } = await import('fs/promises')
   let indexHtml = await readFile('src/sidebar/index.html', 'utf-8')
