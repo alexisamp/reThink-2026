@@ -301,6 +301,7 @@ export interface ContactMilestone {
   date_full?: string | null    // ISO date
   show_days_before: number
   notes?: string | null
+  recurrence?: string | null   // 'annual' | 'semi_annual' | 'biweekly' | 'one_time'
   created_at: string
 }
 

@@ -2068,77 +2068,51 @@ export default function Today() {
                 </section>
               )}
 
-              {/* ── Upcoming Contact Milestones ───────────────────────────── */}
-              {upcomingMilestones.length > 0 && (
+              {/* ── Relationship Agenda ───────────────────────────────────── */}
+              {relationshipAgenda.length > 0 && (
                 <section className="mb-8">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest flex items-center gap-2">
-                      Upcoming
+                      Relationship Agenda
                       <span className="font-mono font-normal text-shuttle/40 normal-case bg-mercury/60 px-1.5 py-0.5 rounded text-[9px]">
-                        {upcomingMilestones.length}
+                        {relationshipAgenda.length}
                       </span>
                     </h3>
                   </div>
 
-                  {/* Today & Tomorrow */}
-                  {upcomingMilestones.filter(m => m.daysUntil <= 1).length > 0 && (
-                    <div className="mb-3">
-                      <p className="text-[9px] font-mono text-shuttle/40 uppercase tracking-widest mb-1.5">Today &amp; Tomorrow</p>
-                      <div className="space-y-1">
-                        {upcomingMilestones.filter(m => m.daysUntil <= 1).map(m => {
-                          const contact = allContacts.find(c => c.name === m.contact_name)
-                          return (
-                            <button
-                              key={m.id}
-                              onClick={() => {
-                                if (contact) { setSelectedContact(contact); setDetailDrawerOpen(true) }
-                              }}
-                              className="group flex items-center gap-2 w-full py-1.5 px-2 -mx-2 rounded hover:bg-gossip/20 transition-colors text-left"
+                  <div className="space-y-1">
+                    {relationshipAgenda.map(item => {
+                      const contactObj = item.contactId ? allContacts.find(c => c.id === item.contactId) : undefined
+                      const scoreColor = item.score !== undefined
+                        ? item.score >= 7 ? '#79D65E' : item.score >= 4 ? '#F59E0B' : '#EF4444'
+                        : undefined
+                      return (
+                        <button
+                          key={item.key}
+                          onClick={() => {
+                            if (contactObj) { setSelectedContact(contactObj); setDetailDrawerOpen(true) }
+                          }}
+                          className="group flex items-center gap-2 w-full py-1.5 px-2 -mx-2 rounded hover:bg-gossip/20 transition-colors text-left"
+                        >
+                          <span className="text-sm leading-none flex-shrink-0">
+                            {item.type === 'cold' ? '🧊' : '⭐'}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-[13px] font-medium text-burnham">{item.contactName}</span>
+                            <span className="text-[11px] text-shuttle/50 ml-1.5">{item.reason}</span>
+                          </div>
+                          {item.score !== undefined && scoreColor && (
+                            <span
+                              className="text-[10px] font-semibold flex-shrink-0 px-1.5 py-0.5 rounded"
+                              style={{ color: scoreColor, background: scoreColor + '18' }}
                             >
-                              <span className="text-sm leading-none flex-shrink-0">{CONTACT_MILESTONE_EMOJI[m.type] ?? '⭐'}</span>
-                              <div className="flex-1 min-w-0">
-                                <span className="text-[13px] font-medium text-burnham">{m.contact_name}</span>
-                                <span className="text-[11px] text-shuttle/50 ml-1.5">{m.label}</span>
-                              </div>
-                              <span className="text-[10px] font-medium text-green-500 flex-shrink-0">
-                                {m.daysUntil === 0 ? 'today!' : 'tomorrow'}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* This month (2-30 days) */}
-                  {upcomingMilestones.filter(m => m.daysUntil >= 2).length > 0 && (
-                    <div>
-                      <p className="text-[9px] font-mono text-shuttle/40 uppercase tracking-widest mb-1.5">This month</p>
-                      <div className="space-y-1">
-                        {upcomingMilestones.filter(m => m.daysUntil >= 2).map(m => {
-                          const contact = allContacts.find(c => c.name === m.contact_name)
-                          return (
-                            <button
-                              key={m.id}
-                              onClick={() => {
-                                if (contact) { setSelectedContact(contact); setDetailDrawerOpen(true) }
-                              }}
-                              className="group flex items-center gap-2 w-full py-1.5 px-2 -mx-2 rounded hover:bg-gossip/20 transition-colors text-left"
-                            >
-                              <span className="text-sm leading-none flex-shrink-0">{CONTACT_MILESTONE_EMOJI[m.type] ?? '⭐'}</span>
-                              <div className="flex-1 min-w-0">
-                                <span className="text-[13px] font-medium text-burnham">{m.contact_name}</span>
-                                <span className="text-[11px] text-shuttle/50 ml-1.5">{m.label}</span>
-                              </div>
-                              <span className="text-[10px] text-shuttle/50 flex-shrink-0">
-                                in {m.daysUntil} day{m.daysUntil === 1 ? '' : 's'}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
+                              {item.score}/10
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </section>
               )}
 

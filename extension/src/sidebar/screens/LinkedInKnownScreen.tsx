@@ -151,6 +151,7 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
   const [mDateMmDd, setMDateMmDd] = useState('')
   const [mDateFull, setMDateFull] = useState('')
   const [mIsAnnual, setMIsAnnual] = useState(true)
+  const [mRecurrence, setMRecurrence] = useState<'annual' | 'semi_annual' | 'biweekly' | 'one_time'>('annual')
   const [mShowBefore, setMShowBefore] = useState(7)
   const [mSaving, setMSaving] = useState(false)
 
@@ -375,23 +376,25 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
     )
     setMSaving(true)
     try {
+      const isAnnual = mRecurrence === 'annual' || mRecurrence === 'semi_annual'
       const insertData: any = {
         user_id: user.id,
         contact_id: contact.reThinkId,
         type: mType,
         label: finalLabel,
         show_days_before: mShowBefore,
+        recurrence: mRecurrence,
       }
-      if (mIsAnnual && mDateMmDd) {
+      if (isAnnual && mDateMmDd) {
         insertData.date_mm_dd = mDateMmDd
-      } else if (!mIsAnnual && mDateFull) {
+      } else if (!isAnnual && mDateFull) {
         insertData.date_full = mDateFull
         const parts = mDateFull.split('-')
         insertData.date_mm_dd = `${parts[1]}-${parts[2]}`
       }
       await supabase.from('contact_milestones').insert(insertData)
       setShowMilestoneForm(false)
-      setMType('birthday_contact'); setMLabel(''); setMDateMmDd(''); setMDateFull(''); setMShowBefore(7)
+      setMType('birthday_contact'); setMLabel(''); setMDateMmDd(''); setMDateFull(''); setMShowBefore(7); setMRecurrence('annual')
       loadMilestones()
     } catch {
       // ignore
@@ -933,27 +936,33 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
               <option value="custom">Custom</option>
             </select>
             <input type="text" value={mLabel} onChange={e => setMLabel(e.target.value)} placeholder="Label (e.g. Sarah's birthday)" style={inputStyle} />
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <label style={{ fontSize: '12px', color: '#536471', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <input type="checkbox" checked={mIsAnnual} onChange={e => setMIsAnnual(e.target.checked)} />
-                Annual
-              </label>
-              {mIsAnnual ? (
-                <input
-                  type="text"
-                  value={mDateMmDd}
-                  onChange={e => setMDateMmDd(e.target.value)}
-                  placeholder="MM-DD (e.g. 03-24)"
-                  style={{ ...inputStyle, flex: 1 }}
-                />
-              ) : (
-                <input
-                  type="date"
-                  value={mDateFull}
-                  onChange={e => setMDateFull(e.target.value)}
-                  style={{ ...inputStyle, flex: 1 }}
-                />
-              )}
+            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+              {([['annual', 'Annual'], ['semi_annual', 'Semi-annual'], ['biweekly', 'Bi-weekly'], ['one_time', 'One-time']] as const).map(([val, lbl]) => (
+                <button
+                  key={val}
+                  onClick={() => { setMRecurrence(val); setMIsAnnual(val === 'annual' || val === 'semi_annual') }}
+                  style={{ flex: 1, fontSize: '10px', fontWeight: 500, padding: '4px 6px', borderRadius: '6px', border: '1px solid', borderColor: mRecurrence === val ? '#003720' : '#E5E7EB', background: mRecurrence === val ? '#003720' : 'white', color: mRecurrence === val ? 'white' : '#536471', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  {lbl}
+                </button>
+              ))}
+            </div>
+            {(mRecurrence === 'annual' || mRecurrence === 'semi_annual') ? (
+              <input
+                type="text"
+                value={mDateMmDd}
+                onChange={e => setMDateMmDd(e.target.value)}
+                placeholder="MM-DD (e.g. 03-24)"
+                style={{ ...inputStyle }}
+              />
+            ) : (
+              <input
+                type="date"
+                value={mDateFull}
+                onChange={e => setMDateFull(e.target.value)}
+                style={{ ...inputStyle }}
+              />
+            )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <label style={{ fontSize: '12px', color: '#536471', whiteSpace: 'nowrap' }}>Show</label>
