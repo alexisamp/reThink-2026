@@ -38,6 +38,7 @@ export interface CurrentContact {
   category?: string | null
   birthday?: string | null        // MM-DD format
   links?: Array<{ url: string; label: string; type?: string; created_at?: string }>
+  email?: string | null
 }
 
 export interface LinkedInProfile {

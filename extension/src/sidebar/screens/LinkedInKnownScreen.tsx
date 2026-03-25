@@ -182,6 +182,15 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
   // Open in reThink
   const [openingReThink, setOpeningReThink] = useState(false)
 
+  // Calendar events
+  const [calendarEvents, setCalendarEvents] = useState<Array<{id: string; summary: string; start: string; isPast: boolean}>>([])
+  const [calendarLoading, setCalendarLoading] = useState(false)
+  const [calendarError, setCalendarError] = useState<string | null>(null)
+
+  // Gmail sync
+  const [gmailSyncing, setGmailSyncing] = useState(false)
+  const [gmailResult, setGmailResult] = useState<string | null>(null)
+
   // Import meeting notes
   const [showImportNotes, setShowImportNotes] = useState(false)
   const [importNotesText, setImportNotesText] = useState('')
@@ -203,6 +212,7 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
     loadMilestones()
     loadTodos()
     checkSmartBanner()
+    if (contact.email) loadCalendarEvents()
     chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
       if (tabs[0]?.url) setLinkUrl(tabs[0].url)
     })
@@ -233,6 +243,96 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
       .eq('completed', false)
       .order('date', { ascending: true })
     setTodos((data ?? []) as Todo[])
+  }
+
+  async function loadCalendarEvents() {
+    if (!contact.email) return
+    setCalendarLoading(true)
+    setCalendarError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.provider_token
+      if (!token) { setCalendarError('no_token'); setCalendarLoading(false); return }
+
+      const now = new Date()
+      const timeMin = new Date(now.getTime() - 90 * 24 * 3600 * 1000).toISOString()
+      const timeMax = new Date(now.getTime() + 60 * 24 * 3600 * 1000).toISOString()
+      const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?q=${encodeURIComponent(contact.email)}&timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime&maxResults=15`
+
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) {
+        setCalendarError(res.status === 403 ? 'no_scope' : 'error')
+        setCalendarLoading(false)
+        return
+      }
+      const data = await res.json()
+      const events = (data.items ?? []).filter((e: any) =>
+        e.attendees?.some((a: any) => a.email?.toLowerCase() === contact.email?.toLowerCase())
+      )
+      setCalendarEvents(events.map((e: any) => ({
+        id: e.id,
+        summary: e.summary ?? 'Meeting',
+        start: e.start?.dateTime ?? e.start?.date ?? '',
+        isPast: new Date(e.start?.dateTime ?? e.start?.date ?? '') < now,
+      })))
+    } catch { setCalendarError('error') }
+    setCalendarLoading(false)
+  }
+
+  async function handleSyncGmail() {
+    if (!contact.email || !contact.reThinkId) return
+    setGmailSyncing(true)
+    setGmailResult(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.provider_token
+      const userId = session?.user.id
+      if (!token || !userId) {
+        setGmailResult('Re-sign in for Gmail access')
+        setGmailSyncing(false)
+        return
+      }
+      const q = encodeURIComponent(`from:${contact.email} OR to:${contact.email}`)
+      const listRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/threads?q=${q}&maxResults=20`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (!listRes.ok) {
+        setGmailResult(listRes.status === 403 ? 'Gmail permission denied — re-sign in' : `Gmail error ${listRes.status}`)
+        setGmailSyncing(false)
+        return
+      }
+      const listData = await listRes.json()
+      const threads: Array<{id: string}> = listData.threads ?? []
+      let synced = 0, skipped = 0
+      for (const thread of threads) {
+        const tRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/threads/${thread.id}?format=metadata&metadataHeaders=Date&metadataHeaders=Subject`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        if (!tRes.ok) { skipped++; continue }
+        const tData = await tRes.json()
+        const firstMsg = tData.messages?.[0]
+        const subject = firstMsg?.payload?.headers?.find((h: any) => h.name === 'Subject')?.value ?? ''
+        const epochMs = firstMsg?.internalDate
+        const interaction_date = epochMs
+          ? new Date(parseInt(epochMs)).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0]
+        const { error } = await supabase.from('interactions').insert({
+          user_id: userId,
+          contact_id: contact.reThinkId,
+          type: 'email',
+          direction: 'outbound',
+          notes: subject ? `Subject: ${subject}` : null,
+          interaction_date,
+          external_id: `gmail_thread_${thread.id}`,
+        })
+        if (error) skipped++; else synced++
+      }
+      setGmailResult(synced > 0 ? `${synced} new interactions logged` : `All ${skipped} already synced`)
+      if (synced > 0) loadInteractionCount()
+    } catch { setGmailResult('Error — check connection') }
+    setGmailSyncing(false)
   }
 
   async function checkSmartBanner() {
@@ -1166,6 +1266,56 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
 
       {/* Daily Progress */}
       <DailyProgress userId={user.id} />
+
+      {/* Calendar + Gmail */}
+      {contact.email && (
+        <>
+          {/* Calendar Events */}
+          <div style={{ ...CARD }}>
+            <p style={SECTION_HEADING}>Upcoming meetings</p>
+            {calendarLoading && (
+              <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>Loading…</p>
+            )}
+            {!calendarLoading && (calendarError === 'no_token' || calendarError === 'no_scope') && (
+              <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>Re-sign in to see calendar events</p>
+            )}
+            {!calendarLoading && calendarError === 'error' && (
+              <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>Could not load calendar</p>
+            )}
+            {!calendarLoading && !calendarError && calendarEvents.length === 0 && (
+              <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>No shared events found</p>
+            )}
+            {!calendarLoading && !calendarError && calendarEvents.map(ev => {
+              const d = ev.start ? new Date(ev.start) : null
+              const dateStr = d ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''
+              return (
+                <div key={ev.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', opacity: ev.isPast ? 0.6 : 1 }}>
+                  <span style={{ fontSize: '12px', color: '#003720', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60%' }}>{ev.summary}</span>
+                  <span style={{ fontSize: '10px', color: '#536471', whiteSpace: 'nowrap', marginLeft: '8px' }}>
+                    {dateStr}{ev.isPast ? ' · past' : ' · upcoming'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Gmail Sync */}
+          <div style={{ ...CARD }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <p style={SECTION_HEADING}>Gmail</p>
+              <button
+                onClick={handleSyncGmail}
+                disabled={gmailSyncing}
+                style={{ background: '#003720', color: 'white', padding: '5px 10px', borderRadius: '6px', fontSize: '11px', border: 'none', cursor: gmailSyncing ? 'not-allowed' : 'pointer', opacity: gmailSyncing ? 0.7 : 1 }}
+              >
+                {gmailSyncing ? 'Syncing…' : 'Sync emails'}
+              </button>
+            </div>
+            <p style={{ fontSize: '11px', color: '#536471', margin: '0 0 4px 0' }}>Auto-logs email threads as interactions</p>
+            {gmailResult && <p style={{ fontSize: '11px', color: '#003720', margin: '4px 0 0 0', fontWeight: 500 }}>{gmailResult}</p>}
+          </div>
+        </>
+      )}
 
       {/* Open in reThink */}
       <button
