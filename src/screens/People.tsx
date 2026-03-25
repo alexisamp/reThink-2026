@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  MagnifyingGlass, Plus, ArrowSquareOut, UserCircle,
+  MagnifyingGlass, Plus, ArrowSquareOut, UserCircle, Sparkle, ArrowsClockwise, X,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Contact, ContactStatus, ContactCategory, Habit, HabitLog } from '@/types'
@@ -13,6 +13,9 @@ import {
 import OutreachPanel from '@/components/OutreachPanel'
 import ContactDetailDrawer from '@/components/ContactDetailDrawer'
 import { openLink } from '@/lib/openLink'
+import { enrichContact, hasGeminiEnrichKey } from '@/hooks/useContactEnricher'
+import { hasAttioKey, listAllAttioPersons } from '@/lib/attio'
+import type { AttioPersonResult } from '@/lib/attio'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -64,6 +67,17 @@ export default function People() {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [outreachPanelOpen, setOutreachPanelOpen] = useState(false)
+
+  // Bulk re-enrich (fix slug names)
+  const [bulkEnriching, setBulkEnriching] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null)
+  const bulkCancelRef = useRef(false)
+
+  // Attio import flow
+  const [attioChecking, setAttioChecking] = useState(false)
+  const [attioCandidates, setAttioCandidates] = useState<(AttioPersonResult & { selected: boolean })[] | null>(null)
+  const [attioImporting, setAttioImporting] = useState(false)
+  const [attioImportDone, setAttioImportDone] = useState<number | null>(null)
 
   const today = localDate()
 
@@ -179,11 +193,91 @@ export default function People() {
     await addContact(input)
   }
 
+  // ── Bulk re-enrich (fix slug-style names) ─────────────────────────────────
+  async function handleBulkFixNames() {
+    const slugContacts = contacts.filter(c => isSlugName(c.name))
+    if (slugContacts.length === 0) return
+    setBulkEnriching(true)
+    bulkCancelRef.current = false
+    setBulkProgress({ done: 0, total: slugContacts.length })
+    for (let i = 0; i < slugContacts.length; i++) {
+      if (bulkCancelRef.current) break
+      const c = slugContacts[i]
+      const result = await enrichContact({
+        name: c.name,
+        company: c.company,
+        company_domain: c.company_domain,
+        job_title: c.job_title,
+        about: c.about,
+        personal_context: c.personal_context,
+        linkedin_url: c.linkedin_url,
+      })
+      if (result) {
+        const patch: Partial<Contact> = { ai_enriched_at: new Date().toISOString() }
+        if (result.name) patch.name = result.name
+        if (result.job_title && !c.job_title) patch.job_title = result.job_title
+        if (result.company && !c.company) patch.company = result.company
+        if (result.company_domain) patch.company_domain = result.company_domain
+        if (result.profile_photo_url) patch.profile_photo_url = result.profile_photo_url
+        await updateContact(c.id, patch)
+      }
+      setBulkProgress({ done: i + 1, total: slugContacts.length })
+    }
+    setBulkEnriching(false)
+    setBulkProgress(null)
+  }
+
+  // ── Attio → reThink import flow ────────────────────────────────────────────
+  async function handleCheckAttio() {
+    setAttioChecking(true)
+    setAttioCandidates(null)
+    setAttioImportDone(null)
+    const attioPersons = await listAllAttioPersons()
+    // Build a set of normalized LinkedIn URLs from existing contacts
+    const existingLinkedins = new Set(
+      contacts
+        .map(c => c.linkedin_url?.replace(/\/$/, '').toLowerCase())
+        .filter(Boolean)
+    )
+    const existingNames = new Set(contacts.map(c => c.name.toLowerCase().trim()))
+    // Find Attio people not in reThink
+    const missing = attioPersons.filter(p => {
+      if (p.linkedin_url) {
+        const norm = p.linkedin_url.replace(/\/$/, '').toLowerCase()
+        return !existingLinkedins.has(norm)
+      }
+      return !existingNames.has(p.full_name.toLowerCase().trim())
+    })
+    setAttioCandidates(missing.map(p => ({ ...p, selected: true })))
+    setAttioChecking(false)
+  }
+
+  async function handleAttioImport() {
+    if (!attioCandidates || !userId) return
+    const toImport = attioCandidates.filter(c => c.selected)
+    if (toImport.length === 0) return
+    setAttioImporting(true)
+    let created = 0
+    for (const person of toImport) {
+      await addContact({
+        name: person.full_name,
+        linkedin_url: person.linkedin_url ?? null,
+        job_title: person.job_title ?? null,
+        email: person.email ?? null,
+        existing_attio_record_id: person.record_id,
+      })
+      created++
+    }
+    setAttioImporting(false)
+    setAttioImportDone(created)
+    setAttioCandidates(null)
+  }
+
   // ── render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-white px-4 pt-6 pb-32 max-w-2xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-semibold text-burnham">People</h1>
           {!loading && (
@@ -192,14 +286,114 @@ export default function People() {
             </span>
           )}
         </div>
-        <button
-          onClick={() => setOutreachPanelOpen(true)}
-          className="flex items-center gap-1.5 bg-burnham text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-burnham/90 transition-colors"
-        >
-          <Plus size={14} weight="bold" />
-          Add person
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Fix slug names — only shown when there are slug contacts and Gemini key exists */}
+          {!loading && hasGeminiEnrichKey() && contacts.some(c => isSlugName(c.name)) && (
+            <button
+              onClick={bulkEnriching ? () => { bulkCancelRef.current = true } : handleBulkFixNames}
+              disabled={false}
+              className="flex items-center gap-1 text-[11px] text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-2.5 py-1.5 hover:bg-yellow-100 transition-colors"
+              title="Auto-fix names that look like LinkedIn URL slugs"
+            >
+              <Sparkle size={12} weight="fill" />
+              {bulkEnriching && bulkProgress
+                ? `${bulkProgress.done}/${bulkProgress.total} — cancel`
+                : `Fix ${contacts.filter(c => isSlugName(c.name)).length} names`}
+            </button>
+          )}
+          {/* Import from Attio */}
+          {hasAttioKey() && (
+            <button
+              onClick={handleCheckAttio}
+              disabled={attioChecking}
+              className="flex items-center gap-1 text-[11px] text-shuttle bg-mercury/30 border border-mercury rounded-lg px-2.5 py-1.5 hover:bg-mercury/60 transition-colors disabled:opacity-50"
+              title="Find Attio contacts not yet in reThink"
+            >
+              {attioChecking
+                ? <ArrowsClockwise size={12} className="animate-spin" />
+                : <img src="/attio.png" alt="Attio" className="w-3 h-3 object-contain" />}
+              {attioChecking ? 'Checking…' : 'Sync Attio'}
+            </button>
+          )}
+          <button
+            onClick={() => setOutreachPanelOpen(true)}
+            className="flex items-center gap-1.5 bg-burnham text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-burnham/90 transition-colors"
+          >
+            <Plus size={14} weight="bold" />
+            Add person
+          </button>
+        </div>
       </div>
+
+      {/* Attio import result banner */}
+      {attioImportDone !== null && (
+        <div className="flex items-center justify-between bg-gossip/20 border border-gossip/40 rounded-lg px-3 py-2 mb-3 text-[12px] text-burnham">
+          <span>✓ Imported {attioImportDone} contact{attioImportDone !== 1 ? 's' : ''} from Attio</span>
+          <button onClick={() => setAttioImportDone(null)}><X size={12} /></button>
+        </div>
+      )}
+
+      {/* Attio import modal */}
+      {attioCandidates !== null && (
+        <div className="mb-4 border border-mercury rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 bg-mercury/20 border-b border-mercury">
+            <span className="text-[12px] font-semibold text-burnham">
+              {attioCandidates.length === 0
+                ? 'All Attio contacts are already in reThink ✓'
+                : `${attioCandidates.filter(c => c.selected).length} Attio contacts not in reThink`}
+            </span>
+            <button onClick={() => setAttioCandidates(null)} className="text-shuttle hover:text-burnham">
+              <X size={14} />
+            </button>
+          </div>
+          {attioCandidates.length > 0 && (
+            <>
+              <ul className="max-h-64 overflow-y-auto divide-y divide-mercury/40">
+                {attioCandidates.map((p, i) => (
+                  <li key={p.record_id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-mercury/10">
+                    <input
+                      type="checkbox"
+                      checked={p.selected}
+                      onChange={e => setAttioCandidates(prev =>
+                        prev ? prev.map((c, j) => j === i ? { ...c, selected: e.target.checked } : c) : prev
+                      )}
+                      className="accent-burnham"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-medium text-burnham truncate">{p.full_name}</div>
+                      {(p.job_title || p.email) && (
+                        <div className="text-[10px] text-shuttle/50 truncate">
+                          {[p.job_title, p.email].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
+                    </div>
+                    {p.linkedin_url && (
+                      <button onClick={() => openLink(p.linkedin_url!)} className="text-shuttle/40 hover:text-shuttle flex-shrink-0">
+                        <ArrowSquareOut size={12} />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <div className="px-4 py-2.5 border-t border-mercury flex items-center justify-between gap-3">
+                <button
+                  onClick={() => setAttioCandidates(prev => prev?.map(c => ({ ...c, selected: true })) ?? prev)}
+                  className="text-[11px] text-shuttle hover:text-burnham"
+                >
+                  Select all
+                </button>
+                <button
+                  onClick={handleAttioImport}
+                  disabled={attioImporting || attioCandidates.filter(c => c.selected).length === 0}
+                  className="flex items-center gap-1.5 bg-burnham text-white text-[12px] font-medium px-3 py-1.5 rounded-lg hover:bg-burnham/90 disabled:opacity-50 transition-colors"
+                >
+                  {attioImporting ? 'Importing…' : `Import ${attioCandidates.filter(c => c.selected).length} contacts`}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative mb-3">

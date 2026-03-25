@@ -58,6 +58,8 @@ export interface AttioPersonResult {
   record_id: string
   full_name: string
   linkedin_url: string | null
+  job_title?: string
+  email?: string
 }
 
 interface AttioCreateResult {
@@ -386,6 +388,52 @@ export function diffAttioFields(
   if (attioData.job_title && attioData.job_title !== contact.job_title) diff.job_title = attioData.job_title
   if (attioData.location && attioData.location !== contact.location) diff.location = attioData.location
   return diff
+}
+
+/** Fetches ALL person records from Attio (paginated, up to 500). Used for sync comparison. */
+export async function listAllAttioPersons(): Promise<AttioPersonResult[]> {
+  const apiKey = getApiKey()
+  if (!apiKey) return []
+
+  const results: AttioPersonResult[] = []
+  let offset = 0
+  const limit = 100
+
+  try {
+    while (true) {
+      const res = await fetch(`${BASE}/v2/objects/people/records/query`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit, offset }),
+      })
+      if (!res.ok) break
+      const json = await res.json()
+      const records = json?.data as Array<Record<string, unknown>> | undefined
+      if (!Array.isArray(records) || records.length === 0) break
+
+      for (const r of records) {
+        const values = r['values'] as Record<string, unknown> | undefined
+        const nameObj = (values?.['name'] as Array<{ full_name?: string }> | undefined)?.[0]
+        const linkedinArr = values?.['linkedin_profile_url'] as Array<{ value?: string }> | undefined
+        const jobArr = values?.['job_title'] as Array<{ value?: string }> | undefined
+        const emailArr = values?.['email_addresses'] as Array<{ email_address?: string }> | undefined
+        const recordId = (r['id'] as Record<string, string> | undefined)?.['record_id'] ?? ''
+        if (!recordId || !nameObj?.full_name) continue
+        results.push({
+          record_id: recordId,
+          full_name: nameObj.full_name,
+          linkedin_url: linkedinArr?.[0]?.value ?? null,
+          job_title: jobArr?.[0]?.value ?? undefined,
+          email: emailArr?.[0]?.email_address ?? undefined,
+        } as AttioPersonResult & { job_title?: string; email?: string })
+      }
+
+      if (records.length < limit) break
+      offset += limit
+    }
+  } catch { /* non-blocking */ }
+
+  return results
 }
 
 /** Creates a task in Attio linked to a person record. */

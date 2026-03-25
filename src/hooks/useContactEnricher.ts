@@ -34,6 +34,85 @@ export function hasGeminiEnrichKey() {
   return !!GEMINI_API_KEY
 }
 
+/** Standalone (non-hook) version — safe to call in loops/batch jobs */
+export async function enrichContact(opts: {
+  name: string
+  company?: string | null
+  company_domain?: string | null
+  job_title?: string | null
+  about?: string | null
+  personal_context?: string | null
+  linkedin_url?: string | null
+}): Promise<EnrichResult | null> {
+  if (!GEMINI_API_KEY) return null
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30000)
+  try {
+    const prompt = [
+      `You are a relationship intelligence assistant. Given information about a person, enrich their profile.`,
+      ``,
+      `Person: ${opts.name}`,
+      opts.company ? `Company: ${opts.company}${opts.company_domain ? ` (${opts.company_domain})` : ''}` : '',
+      opts.job_title ? `Job Title: ${opts.job_title}` : '',
+      opts.about ? `About (LinkedIn): ${opts.about.substring(0, 500)}` : '',
+      opts.personal_context ? `Personal Context: ${opts.personal_context}` : '',
+      opts.linkedin_url ? `LinkedIn URL: ${opts.linkedin_url}` : '',
+      ``,
+      `Return a JSON object with these fields (omit fields you're not confident about):`,
+      `{`,
+      `  "name": "string — ONLY include if the provided name looks like a URL slug, concatenated words, or is clearly wrong (e.g. 'JavierCopleJ' should be 'Javier Cople'). Omit if the name looks correct.",`,
+      `  "job_title": "string — corrected job title if missing or truncated",`,
+      `  "company": "string — corrected company name if missing or wrong",`,
+      `  "company_domain": "string — the company's official website domain (e.g. granola.so)",`,
+      `  "skills": "string — 3-5 comma-separated professional skills",`,
+      `  "about": "string — improved/expanded bio if missing or too short",`,
+      `  "relationship_context": "string — 1-2 sentences on why this person could be valuable",`,
+      `  "approach_angles": "string — 2-3 specific ways to add value or start a conversation",`,
+      `  "enrichment_notes": "string — any other relevant context",`,
+      `  "profile_photo_url": "string — publicly accessible image URL (.jpg/.png/.webp only)"`,
+      `}`,
+      `Only return valid JSON. No markdown, no explanation.`,
+    ].filter(Boolean).join('\n')
+
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          tools: [{ google_search: {} }],
+        }),
+      }
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    const raw: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    const jsonStr = raw.match(/\{[\s\S]*\}/)?.[0] ?? 'null'
+    const parsed = JSON.parse(jsonStr)
+    if (!parsed) return null
+    const rawPhotoUrl: string | null = parsed.profile_photo_url || null
+    const validPhotoUrl = rawPhotoUrl && /\.(jpg|jpeg|png|webp)(\?.*)?$/i.test(rawPhotoUrl) ? rawPhotoUrl : null
+    return {
+      name: parsed.name || null,
+      job_title: parsed.job_title || null,
+      company: parsed.company || null,
+      company_domain: parsed.company_domain || null,
+      skills: parsed.skills || null,
+      about: parsed.about || null,
+      relationship_context: parsed.relationship_context || null,
+      approach_angles: parsed.approach_angles || null,
+      enrichment_notes: parsed.enrichment_notes || null,
+      profile_photo_url: validPhotoUrl,
+    }
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 export function useContactEnricher(): UseContactEnricherReturn {
   const [enriching, setEnriching] = useState(false)
   const [enrichError, setEnrichError] = useState<string | null>(null)

@@ -267,7 +267,7 @@ function OutreachRow({ log, onEdit, onDelete, onOpenDetail }: OutreachRowProps) 
         </button>
       )}
       {log.attio_record_id && (
-        <span className="opacity-0 group-hover:opacity-40 text-[8px] font-mono text-pastel shrink-0">attio</span>
+        <img src="/attio.png" alt="Attio" className="w-3 h-3 object-contain opacity-0 group-hover:opacity-40 transition-opacity shrink-0" />
       )}
       <button
         onClick={e => { e.stopPropagation(); onEdit() }}

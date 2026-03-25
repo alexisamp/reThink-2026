@@ -849,7 +849,10 @@ export default function ContactDetailDrawer({
             {/* ── 11. Attio section ─────────────────────────────────────────── */}
             {attioEligible && (
               <div className="px-4 py-3 border-b border-mercury">
-                <div className={sectionLabel}>Attio</div>
+                <div className={sectionLabel}>
+                  <img src="/attio.png" alt="" className="w-3 h-3 object-contain inline-block mr-1 opacity-60" />
+                  Attio
+                </div>
 
                 {/* Company domain field */}
                 <div className="flex items-center gap-1.5 mb-2">
