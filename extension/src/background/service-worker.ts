@@ -423,6 +423,139 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break
         }
 
+        // F01: Look up contact by phone, with Attio fallback auto-import
+        case 'LOAD_CONTACT_BY_PHONE': {
+          const userId = await getCurrentUserId()
+          if (!userId) { sendResponse({ contact: null }); break }
+          const phone: string = message.phone
+          const contact = await findContactByPhone(userId, phone)
+          if (contact) {
+            const { data: full } = await supabase
+              .from('outreach_logs')
+              .select('id, name, health_score, status, last_interaction_at, personal_context, category, job_title, company, profile_photo_url, birthday, links')
+              .eq('id', contact.id)
+              .single()
+            sendResponse({ contact: full, source: 'local' })
+            break
+          }
+          // Not found locally — try Attio by phone number
+          const attioKey = await getStoredAttioKey()
+          if (attioKey && phone) {
+            try {
+              const searchRes = await fetch('https://api.attio.com/v2/objects/people/records/query', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${attioKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  filter: { phone_numbers: { "$any_of": [{ "$eq": phone }] } },
+                  limit: 1
+                })
+              })
+              if (searchRes.ok) {
+                const attioData = await searchRes.json()
+                const person = attioData?.data?.[0]
+                if (person) {
+                  const name = person.values?.name?.[0]?.full_name ??
+                               `${person.values?.first_name?.[0]?.value ?? ''} ${person.values?.last_name?.[0]?.value ?? ''}`.trim()
+                  const email = person.values?.email_addresses?.[0]?.email_address ?? null
+                  const linkedin = person.values?.linkedin?.[0]?.value ?? null
+                  const title = person.values?.job_title?.[0]?.value ?? null
+                  if (name) {
+                    const { data: newContact } = await supabase
+                      .from('outreach_logs')
+                      .insert({
+                        user_id: userId,
+                        name,
+                        phone,
+                        email,
+                        linkedin_url: linkedin,
+                        job_title: title,
+                        attio_record_id: person.id?.record_id ?? null,
+                        status: 'PROSPECT',
+                        health_score: 0,
+                      })
+                      .select()
+                      .single()
+                    if (newContact) {
+                      sendResponse({ contact: newContact, source: 'attio_auto_import' })
+                      break
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('Attio auto-resolve error (phone):', e)
+            }
+          }
+          sendResponse({ contact: null, source: 'not_found' })
+          break
+        }
+
+        // F01: Look up contact by LinkedIn URL, with Attio fallback auto-import
+        case 'LOAD_CONTACT_BY_LINKEDIN': {
+          const userId = await getCurrentUserId()
+          if (!userId) { sendResponse({ contact: null }); break }
+          const linkedinUrl: string = message.linkedinUrl
+          const contact = await findContactByLinkedInUrl(userId, linkedinUrl)
+          if (contact) {
+            const { data: full } = await supabase
+              .from('outreach_logs')
+              .select('id, name, health_score, status, last_interaction_at, personal_context, category, job_title, company, profile_photo_url, birthday, links')
+              .eq('id', contact.id)
+              .single()
+            sendResponse({ contact: full, source: 'local' })
+            break
+          }
+          // Not found locally — try Attio by LinkedIn URL
+          const attioKeyLI = await getStoredAttioKey()
+          if (attioKeyLI && linkedinUrl) {
+            try {
+              const normalizedLI = normalizeLinkedInUrl(linkedinUrl)
+              const searchRes = await fetch('https://api.attio.com/v2/objects/people/records/query', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${attioKeyLI}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  filter: { linkedin_profile_url: { "$eq": normalizedLI } },
+                  limit: 1
+                })
+              })
+              if (searchRes.ok) {
+                const attioData = await searchRes.json()
+                const person = attioData?.data?.[0]
+                if (person) {
+                  const name = person.values?.name?.[0]?.full_name ??
+                               `${person.values?.first_name?.[0]?.value ?? ''} ${person.values?.last_name?.[0]?.value ?? ''}`.trim()
+                  const email = person.values?.email_addresses?.[0]?.email_address ?? null
+                  const title = person.values?.job_title?.[0]?.value ?? null
+                  if (name) {
+                    const { data: newContact } = await supabase
+                      .from('outreach_logs')
+                      .insert({
+                        user_id: userId,
+                        name,
+                        linkedin_url: linkedinUrl,
+                        email,
+                        job_title: title,
+                        attio_record_id: person.id?.record_id ?? null,
+                        status: 'PROSPECT',
+                        health_score: 0,
+                      })
+                      .select()
+                      .single()
+                    if (newContact) {
+                      sendResponse({ contact: newContact, source: 'attio_auto_import' })
+                      break
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('Attio auto-resolve error (linkedin):', e)
+            }
+          }
+          sendResponse({ contact: null, source: 'not_found' })
+          break
+        }
+
         case 'GET_WHATSAPP_CONTACT_STATUS': {
           const stored = await chrome.storage.local.get('currentWhatsAppContact')
           if (!stored.currentWhatsAppContact?.phone) { sendResponse({ isMapped: false }); break }
@@ -982,20 +1115,41 @@ async function findContactByPhone(userId: string, phone: string): Promise<Contac
   return { id: contactData.id, name: contactData.name }
 }
 
+// F09: Normalize LinkedIn URLs for comparison (strip trailing slash, normalize www)
+function normalizeLinkedInUrl(url: string): string {
+  return url.replace(/\/$/, '').replace('www.linkedin.com', 'linkedin.com').toLowerCase()
+}
+
 async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Promise<Contact | null> {
-  // Normalize: strip trailing slash for consistent matching
+  // F09: Generate all normalized variants for matching
   const normalized = linkedinUrl.replace(/\/$/, '')
   const withSlash = normalized + '/'
+  const noWww = normalizeLinkedInUrl(linkedinUrl)
+  const noWwwSlash = noWww + '/'
+  const withWww = noWww.replace('linkedin.com', 'www.linkedin.com')
+  const withWwwSlash = withWww + '/'
+
+  const variants = Array.from(new Set([normalized, withSlash, noWww, noWwwSlash, withWww, withWwwSlash]))
 
   const { data, error } = await supabase
     .from('outreach_logs')
     .select('id, name')
     .eq('user_id', userId)
-    .in('linkedin_url', [normalized, withSlash])
+    .in('linkedin_url', variants)
     .maybeSingle()
 
   if (error || !data) return null
   return { id: data.id, name: data.name }
+}
+
+// F01: Get stored Attio API key from chrome.storage.local
+async function getStoredAttioKey(): Promise<string | null> {
+  try {
+    const result = await chrome.storage.local.get('attio_api_key')
+    return result.attio_api_key?.trim() ?? null
+  } catch {
+    return null
+  }
 }
 
 interface ActiveWindow {

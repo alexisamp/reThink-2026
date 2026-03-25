@@ -138,6 +138,12 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
   const [contextOriginal, setContextOriginal] = useState(contact.personalContext ?? '')
   const [contextSaved, setContextSaved] = useState(false)
 
+  // Headline (first line of personal_context, editable inline)
+  const firstContextLine = (contact.personalContext ?? '').split('\n')[0].slice(0, 80)
+  const [headlineEditing, setHeadlineEditing] = useState(false)
+  const [headlineValue, setHeadlineValue] = useState(firstContextLine)
+  const [headlineSaving, setHeadlineSaving] = useState(false)
+
   // Status
   const [currentStatus, setCurrentStatus] = useState(contact.status ?? '')
   const [statusSaving, setStatusSaving] = useState(false)
@@ -323,6 +329,26 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
     }
   }
 
+  async function handleHeadlineSave() {
+    if (!contact.reThinkId) return
+    setHeadlineSaving(true)
+    try {
+      // Replace the first line of personal_context with the new headline value
+      const existing = contact.personalContext ?? ''
+      const lines = existing.split('\n')
+      lines[0] = headlineValue.trim()
+      const updated = lines.join('\n').trim()
+      await supabase.from('outreach_logs').update({ personal_context: updated }).eq('id', contact.reThinkId)
+      setContextValue(updated)
+      setContextOriginal(updated)
+    } catch {
+      // ignore
+    } finally {
+      setHeadlineSaving(false)
+      setHeadlineEditing(false)
+    }
+  }
+
   async function handleStatusChange(newStatus: string) {
     if (!contact.reThinkId) return
     setStatusSaving(true)
@@ -356,6 +382,11 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
         setLogNote('')
         setInteractionCount(prev => prev + 1)
         setTimeout(() => setLogToast(false), 2000)
+        // F14: if PROSPECT, auto-upgrade to INTRO on first interaction
+        if (currentStatus === 'PROSPECT' && contact.reThinkId) {
+          await supabase.from('outreach_logs').update({ status: 'INTRO' }).eq('id', contact.reThinkId)
+          setCurrentStatus('INTRO')
+        }
       }
     } catch {
       // ignore
@@ -591,7 +622,8 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
     setImportSaving(false)
   }
 
-  const score = contact.healthScore ?? 1
+  const score = contact.healthScore ?? 0
+  const scoreColor = score >= 7 ? '#79D65E' : score >= 4 ? '#F59E0B' : '#EF4444'
   const nameIsSlug = isSlugName(contact.name)
   const lastSeen = formatLastInteraction(contact.lastInteractionAt)
 
@@ -643,13 +675,41 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
               )}
             </div>
           )}
+          {/* F02: Last interaction below name */}
+          <p style={{ fontSize: '10px', color: '#536471', margin: '0 0 3px 0' }}>{lastSeen}</p>
+          {/* F02: Headline — first line of personal_context, editable */}
+          {headlineEditing ? (
+            <input
+              type="text"
+              value={headlineValue}
+              onChange={e => setHeadlineValue(e.target.value)}
+              onBlur={handleHeadlineSave}
+              onKeyDown={e => { if (e.key === 'Enter') handleHeadlineSave(); if (e.key === 'Escape') setHeadlineEditing(false) }}
+              autoFocus
+              maxLength={80}
+              placeholder="Add context about this person…"
+              style={{ fontSize: '11px', fontStyle: 'italic', color: '#536471', border: 'none', borderBottom: '1px solid #E5E7EB', outline: 'none', padding: '0', background: 'transparent', fontFamily: 'inherit', width: '100%', marginBottom: '4px' }}
+            />
+          ) : (
+            <p
+              onClick={() => setHeadlineEditing(true)}
+              style={{ fontSize: '11px', fontStyle: 'italic', color: '#536471', margin: '0 0 4px 0', cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              {headlineValue || (headlineSaving ? '...' : 'Add context about this person…')}
+            </p>
+          )}
           {(contact.jobTitle || contact.company) && (
-            <p style={{ fontSize: '12px', color: '#536471', margin: '0 0 6px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <p style={{ fontSize: '12px', color: '#536471', margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {[contact.jobTitle, contact.company].filter(Boolean).join(' · ')}
             </p>
           )}
+          {/* F02: Score with color + category pill (NO StatusPill here — BUG04) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            {currentStatus && <StatusPill status={currentStatus} />}
+            {currentStatus === 'PROSPECT' && (!contact.healthScore || contact.healthScore === 0) ? (
+              <span style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>No interactions yet</span>
+            ) : (
+              <span style={{ fontSize: '12px', fontWeight: 600, color: scoreColor }}>{score}</span>
+            )}
             {contact.category && (
               <span style={{ background: '#E5E7EB', color: '#536471', borderRadius: '100px', padding: '2px 8px', fontSize: '11px' }}>
                 {contact.category}
@@ -751,9 +811,12 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
         </div>
       )}
 
-      {/* Status Selector */}
+      {/* Status — BUG04: StatusPill lives here in scrollable content, not in header */}
       <div style={{ ...CARD }}>
-        <p style={SECTION_HEADING}>Move to</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+          <p style={{ ...SECTION_HEADING, marginBottom: 0 }}>Status</p>
+          {currentStatus && <StatusPill status={currentStatus} />}
+        </div>
         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
           {STATUSES.map(s => (
             <button
@@ -1164,7 +1227,7 @@ export function Avatar({ name, photoUrl, size }: { name?: string | null; photoUr
 
 export function StatusPill({ status }: { status: string }) {
   const styles: Record<string, { bg: string; color: string }> = {
-    PROSPECT:  { bg: '#E5F9BD', color: '#003720' },
+    PROSPECT:  { bg: '#F1F5F9', color: '#94A3B8' },  // slate/grey — clearly "not yet active"
     INTRO:     { bg: '#E5F9BD', color: '#003720' },
     CONNECTED: { bg: '#79D65E', color: '#003720' },
     ENGAGED:   { bg: '#79D65E', color: '#003720' },
