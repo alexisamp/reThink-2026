@@ -261,6 +261,7 @@ async function findContactByPhone(userId: string, phone: string): Promise<Partia
     lastInteractionAt: contact.last_interaction_at,
     birthday: contact.birthday,
     links: contact.links ?? [],
+    email: contact.email ?? null,
   }
 }
 
@@ -289,6 +290,7 @@ async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Pr
     lastInteractionAt: data.last_interaction_at,
     birthday: (data as any).birthday,
     links: (data as any).links ?? [],
+    email: (data as any).email ?? null,
   }
 }
 
