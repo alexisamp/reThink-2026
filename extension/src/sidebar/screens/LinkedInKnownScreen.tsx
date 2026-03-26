@@ -283,7 +283,8 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
 
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       if (!res.ok) {
-        setCalendarError(res.status === 403 ? 'no_scope' : 'error')
+        // 401 = expired token, 403 = missing scope — both need re-auth
+        setCalendarError(res.status === 401 || res.status === 403 ? 'no_scope' : 'error')
         setCalendarLoading(false)
         return
       }

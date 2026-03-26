@@ -92,12 +92,12 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
     })
     supabase.auth.getSession().then(({ data }) => {
       const session = data.session
-      const isGoogle = session?.user?.app_metadata?.provider === 'google'
-      // provider_token only exists right after OAuth — also check user_metadata (persisted by useAuth)
+      // Don't check provider === 'google' — user may have signed up via email then linked Google OAuth.
+      // Check for stored token in user_metadata (saved by useAuth onAuthStateChange or reconnect flow).
       const storedToken = session?.user?.user_metadata?.google_access_token
       const hasToken = !!(session?.provider_token || storedToken)
-      setGoogleConnected(isGoogle && hasToken)
-      setGoogleEmail(isGoogle ? (session?.user?.email ?? null) : null)
+      setGoogleConnected(hasToken)
+      setGoogleEmail(hasToken ? (session?.user?.email ?? null) : null)
       // If provider_token is present (just came back from OAuth), persist it so extension can use it
       if (session?.provider_token) {
         supabase.auth.updateUser({ data: { google_access_token: session.provider_token } })
