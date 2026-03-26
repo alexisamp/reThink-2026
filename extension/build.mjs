@@ -100,6 +100,16 @@ async function buildExtension() {
   indexHtml = indexHtml.replace('/src/sidebar/main.tsx', './main.js')
   await writeFile('dist/src/sidebar/index.html', indexHtml)
 
+  // Inject secrets into built JS (kept out of source code / git)
+  const googleSecret = process.env.GOOGLE_CLIENT_SECRET || ''
+  if (googleSecret) {
+    const sidebarJs = await readFile('dist/src/sidebar/main.js', 'utf-8')
+    await writeFile('dist/src/sidebar/main.js', sidebarJs.replaceAll('__GOOGLE_CLIENT_SECRET__', googleSecret))
+    console.log('  🔑 Injected Google client secret')
+  } else {
+    console.warn('  ⚠️  GOOGLE_CLIENT_SECRET not set — token auto-refresh will not work')
+  }
+
   console.log('✅ Build complete! Extension ready in dist/')
 }
 

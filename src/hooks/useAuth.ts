@@ -16,7 +16,11 @@ export function useAuth() {
       // Persist provider_token to user_metadata immediately on sign-in so the
       // Chrome extension can use it as fallback (provider_token vanishes after token refresh)
       if (event === 'SIGNED_IN' && session?.provider_token) {
-        supabase.auth.updateUser({ data: { google_access_token: session.provider_token } })
+        const meta: Record<string, string> = { google_access_token: session.provider_token }
+        if (session.provider_refresh_token) {
+          meta.google_refresh_token = session.provider_refresh_token
+        }
+        supabase.auth.updateUser({ data: meta })
       }
     })
     return () => subscription.unsubscribe()

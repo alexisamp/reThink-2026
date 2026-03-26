@@ -11,43 +11,43 @@ import { supabase } from '../../lib/supabase'
 // chrome.identity.getAuthToken() only works in Chrome proper (needs Chrome account infra).
 
 const GOOGLE_CLIENT_ID = '652244567794-rjti1jj53ljnubdq0m6v0rmuji7521nq.apps.googleusercontent.com'
-const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly'
+const GOOGLE_CLIENT_SECRET = '__GOOGLE_CLIENT_SECRET__'
 
-async function getGoogleApiTokenInteractive(): Promise<string | null> {
-  const redirectUri = `https://${chrome.runtime.id}.chromiumapp.org/`
-  const authUrl = new URL('https://accounts.google.com/o/oauth2/auth')
-  authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID)
-  authUrl.searchParams.set('redirect_uri', redirectUri)
-  authUrl.searchParams.set('response_type', 'token')
-  authUrl.searchParams.set('scope', GOOGLE_SCOPES)
-  authUrl.searchParams.set('prompt', 'consent')
-
-  return new Promise((resolve) => {
-    chrome.identity.launchWebAuthFlow(
-      { url: authUrl.toString(), interactive: true },
-      (responseUrl) => {
-        if (chrome.runtime.lastError || !responseUrl) { resolve(null); return }
-        try {
-          const hash = new URL(responseUrl).hash.slice(1)
-          const token = new URLSearchParams(hash).get('access_token')
-          if (token) {
-            supabase.auth.updateUser({ data: { google_access_token: token } }).catch(() => {})
-          }
-          resolve(token)
-        } catch { resolve(null) }
-      }
-    )
-  })
+async function refreshGoogleToken(refreshToken: string): Promise<string | null> {
+  try {
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const newToken = data.access_token as string | null
+    if (newToken) {
+      await supabase.auth.updateUser({ data: { google_access_token: newToken } }).catch(() => {})
+    }
+    return newToken ?? null
+  } catch { return null }
 }
 
 async function getGoogleApiToken(interactive = false): Promise<string | null> {
-  if (!interactive) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      return (user?.user_metadata?.google_access_token as string | undefined) ?? null
-    } catch { return null }
-  }
-  return getGoogleApiTokenInteractive()
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    const meta = user?.user_metadata ?? {}
+    const stored = meta.google_access_token as string | undefined
+    if (stored && !interactive) return stored
+    const refreshToken = meta.google_refresh_token as string | undefined
+    if (refreshToken) {
+      const fresh = await refreshGoogleToken(refreshToken)
+      if (fresh) return fresh
+    }
+    return null
+  } catch { return null }
 }
 
 // ===== TYPES =====
