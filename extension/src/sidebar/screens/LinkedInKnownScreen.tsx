@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import type { User } from '@supabase/supabase-js'
 import type { CurrentContact } from '../App'
 import { SidebarHeader } from '../App'
-import { AvatarWithDot, StatusPill } from './WhatsAppMappedScreen'
+import { AvatarWithDot } from './WhatsAppMappedScreen'
 import { DailyProgress } from '../components/DailyProgress'
 import { supabase } from '../../lib/supabase'
 
@@ -52,7 +52,7 @@ const SECTION_HEADING: React.CSSProperties = {
 }
 
 const CARD: React.CSSProperties = {
-  padding: '12px',
+  padding: '10px 12px',
   background: '#F8FAF8',
   borderRadius: '10px',
   marginBottom: '10px',
@@ -101,14 +101,6 @@ function formatLastInteraction(ts: string | null | undefined): string {
   return `${days} days ago`
 }
 
-function isSlugName(name: string | null | undefined): boolean {
-  if (!name) return false
-  if (!name.includes(' ') && (
-    /[a-z][A-Z]/.test(name) ||
-    /^[a-z0-9-]+$/.test(name)
-  )) return true
-  return false
-}
 
 function formatDatePrefix(): string {
   return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -692,7 +684,6 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
 
   const score = contact.healthScore ?? 0
   const scoreColor = score >= 7 ? '#79D65E' : score >= 4 ? '#F59E0B' : '#EF4444'
-  const nameIsSlug = isSlugName(contact.name)
   const lastSeen = formatLastInteraction(contact.lastInteractionAt)
 
   const inputStyle: React.CSSProperties = {
@@ -736,11 +727,12 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
               <p style={{ fontSize: '15px', fontWeight: 700, color: '#003720', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {nameValue || contact.name || 'Unknown'}
               </p>
-              {nameIsSlug && (
-                <button onClick={() => setEditingName(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', fontSize: '13px', color: '#536471' }} title="Edit name">
-                  ✏️
-                </button>
-              )}
+              <button onClick={() => setEditingName(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: '#536471', display: 'flex', alignItems: 'center' }} title="Edit name">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
             </div>
           )}
           {/* Prominent metrics row — interactions + last seen */}
@@ -810,7 +802,7 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
             onChange={e => setContextValue(e.target.value)}
             onBlur={handleContextBlur}
             placeholder="Who is this person to you? What's the opportunity? What do you know about them?"
-            rows={3}
+            rows={2}
             style={{ width: '100%', border: 'none', background: 'transparent', fontSize: '13px', color: '#003720', fontFamily: 'inherit', resize: 'vertical', outline: 'none', lineHeight: 1.5, boxSizing: 'border-box' }}
           />
           {contextSaved && <span style={{ fontSize: '11px', color: '#79D65E', position: 'absolute', bottom: '2px', right: '4px' }}>✓ Saved</span>}
@@ -869,30 +861,26 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
         )}
       </div>
 
-      {/* Status — BUG04: StatusPill lives here in scrollable content, not in header */}
-      <div style={{ ...CARD }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <p style={{ ...SECTION_HEADING, marginBottom: 0 }}>Status</p>
-          {currentStatus && <StatusPill status={currentStatus} />}
-        </div>
-        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-          {STATUSES.map(s => (
-            <button
-              key={s}
-              onClick={() => !statusSaving && handleStatusChange(s)}
-              style={{
-                padding: '4px 10px', borderRadius: '100px', fontSize: '11px', fontWeight: 500,
-                border: '1px solid',
-                borderColor: currentStatus === s ? '#003720' : '#E5E7EB',
-                background: currentStatus === s ? '#003720' : 'white',
-                color: currentStatus === s ? 'white' : '#536471',
-                cursor: statusSaving ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+      {/* Status — compact horizontal scrollable pill row */}
+      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px', marginBottom: '8px', scrollbarWidth: 'none' }}>
+        {STATUSES.map(s => (
+          <button
+            key={s}
+            onClick={() => !statusSaving && handleStatusChange(s)}
+            style={{
+              flexShrink: 0,
+              padding: '4px 10px', borderRadius: '100px', fontSize: '11px', fontWeight: 500,
+              border: '1px solid',
+              borderColor: currentStatus === s ? '#003720' : '#E5E7EB',
+              background: currentStatus === s ? '#003720' : 'white',
+              color: currentStatus === s ? 'white' : '#536471',
+              cursor: statusSaving ? 'not-allowed' : 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {s}
+          </button>
+        ))}
       </div>
 
       {/* Import Meeting Notes */}
