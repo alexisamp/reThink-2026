@@ -61,6 +61,11 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
   const [chromeExtCopied, setChromeExtCopied] = useState(false)
   const [chromeExtCode, setChromeExtCode] = useState('')
 
+  // Google integration
+  const [googleConnected, setGoogleConnected] = useState(false)
+  const [googleEmail, setGoogleEmail] = useState<string | null>(null)
+  const [googleConnecting, setGoogleConnecting] = useState(false)
+
   // Funnel
   const [deletingStage, setDeletingStage] = useState<ContactStatus | null>(null)
   const [migrateTo, setMigrateTo] = useState<ContactStatus>('PROSPECT')
@@ -84,6 +89,13 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
       supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle().then(({ data: p }) => {
         if (p) setProfile(p as Profile)
       })
+    })
+    supabase.auth.getSession().then(({ data }) => {
+      const session = data.session
+      const isGoogle = session?.user?.app_metadata?.provider === 'google'
+      const hasToken = !!session?.provider_token
+      setGoogleConnected(isGoogle && hasToken)
+      setGoogleEmail(isGoogle ? (session?.user?.email ?? null) : null)
     })
   }, [open])
 
@@ -137,6 +149,24 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
     await supabase.auth.updateUser({ data: { attio_api_key: trimmed || null } })
     setAttioSaved(true)
     setTimeout(() => setAttioSaved(false), 2000)
+  }
+
+  const reconnectGoogle = async () => {
+    setGoogleConnecting(true)
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+        scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar',
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+      },
+    })
+    // After redirect returns, save provider_token to user_metadata
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.provider_token) {
+      await supabase.auth.updateUser({ data: { google_access_token: session.provider_token } })
+    }
+    setGoogleConnecting(false)
   }
 
   const statusLabel: Record<typeof updater.status, string> = {
@@ -576,6 +606,41 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
                       </button>
                     </div>
                   )}
+                </SettingCard>
+
+                <SettingCard
+                  icon={<ArrowClockwise size={16} className="text-shuttle/60" />}
+                  label="Google Calendar & Gmail"
+                  description="Grant access to see meetings with your contacts and auto-log email interactions."
+                >
+                  <div className="flex items-center gap-2 mt-1">
+                    {googleConnected ? (
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <CheckCircle size={15} className="text-pastel" weight="fill" />
+                        <span className="text-burnham font-medium">Connected</span>
+                        {googleEmail && (
+                          <span className="text-shuttle/50 text-xs">as {googleEmail}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <WarningCircle size={15} className="text-shuttle/40" weight="fill" />
+                        <span className="text-shuttle/60">Not connected</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3">
+                    <button
+                      onClick={reconnectGoogle}
+                      disabled={googleConnecting}
+                      className="px-4 py-2 text-sm font-medium bg-burnham text-white rounded-xl hover:bg-burnham/90 transition-colors disabled:opacity-60"
+                    >
+                      {googleConnecting ? 'Connecting…' : 'Reconnect Google →'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-shuttle/40 mt-2">
+                    Reconnecting grants access to: see meetings with your contacts · auto-log email interactions
+                  </p>
                 </SettingCard>
 
                 <SettingCard

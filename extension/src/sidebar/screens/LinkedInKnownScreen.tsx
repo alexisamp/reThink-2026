@@ -6,13 +6,20 @@ import { AvatarWithDot } from './WhatsAppMappedScreen'
 import { DailyProgress } from '../components/DailyProgress'
 import { supabase } from '../../lib/supabase'
 
-function getGoogleApiToken(interactive = false): Promise<string | null> {
-  return new Promise((resolve) => {
+// Gets a Google API access token.
+// 1. Tries chrome.identity (works when extension is verified for sensitive scopes).
+// 2. Falls back to token stored via reThink Settings → Integrations → Reconnect Google.
+async function getGoogleApiToken(interactive = false): Promise<string | null> {
+  const chromeToken = await new Promise<string | null>((resolve) => {
     chrome.identity.getAuthToken({ interactive }, (token) => {
       if (chrome.runtime.lastError || !token) resolve(null)
       else resolve(token as string)
     })
   })
+  if (chromeToken) return chromeToken
+
+  const { data: { user } } = await supabase.auth.getUser()
+  return (user?.user_metadata?.google_access_token as string | undefined) ?? null
 }
 
 // ===== TYPES =====
