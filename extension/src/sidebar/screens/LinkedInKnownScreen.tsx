@@ -7,34 +7,47 @@ import { DailyProgress } from '../components/DailyProgress'
 import { supabase } from '../../lib/supabase'
 
 // Gets a Google API access token.
-// 1. Tries chrome.identity (extension flow) — clears stale cache on interactive to force re-scope.
-// 2. Falls back to token stored in reThink Settings → Integrations → Reconnect Google.
+// Uses launchWebAuthFlow — works in Comet, Arc, Edge and any Chromium browser.
+// chrome.identity.getAuthToken() only works in Chrome proper (needs Chrome account infra).
+
+const GOOGLE_CLIENT_ID = '652244567794-rjti1jj53ljnubdq0m6v0rmuji7521nq.apps.googleusercontent.com'
+const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.readonly'
+
+async function getGoogleApiTokenInteractive(): Promise<string | null> {
+  const redirectUri = `https://${chrome.runtime.id}.chromiumapp.org/`
+  const authUrl = new URL('https://accounts.google.com/o/oauth2/auth')
+  authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID)
+  authUrl.searchParams.set('redirect_uri', redirectUri)
+  authUrl.searchParams.set('response_type', 'token')
+  authUrl.searchParams.set('scope', GOOGLE_SCOPES)
+  authUrl.searchParams.set('prompt', 'consent')
+
+  return new Promise((resolve) => {
+    chrome.identity.launchWebAuthFlow(
+      { url: authUrl.toString(), interactive: true },
+      (responseUrl) => {
+        if (chrome.runtime.lastError || !responseUrl) { resolve(null); return }
+        try {
+          const hash = new URL(responseUrl).hash.slice(1)
+          const token = new URLSearchParams(hash).get('access_token')
+          if (token) {
+            supabase.auth.updateUser({ data: { google_access_token: token } }).catch(() => {})
+          }
+          resolve(token)
+        } catch { resolve(null) }
+      }
+    )
+  })
+}
+
 async function getGoogleApiToken(interactive = false): Promise<string | null> {
-  const getToken = (forceInteractive: boolean) =>
-    new Promise<string | null>((resolve) => {
-      chrome.identity.getAuthToken({ interactive: forceInteractive }, (token) => {
-        if (chrome.runtime.lastError || !token) resolve(null)
-        else resolve(token as string)
-      })
-    })
-
-  const removeToken = (token: string) =>
-    new Promise<void>((resolve) => chrome.identity.removeCachedAuthToken({ token }, resolve))
-
-  if (interactive) {
-    const stale = await getToken(false)
-    if (stale) await removeToken(stale)
-    const fresh = await getToken(true)
-    if (fresh) return fresh
-  } else {
-    const token = await getToken(false)
-    if (token) return token
+  if (!interactive) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      return (user?.user_metadata?.google_access_token as string | undefined) ?? null
+    } catch { return null }
   }
-
-  try {
-    const { data: { user } } = await supabase.auth.getUser()
-    return (user?.user_metadata?.google_access_token as string | undefined) ?? null
-  } catch { return null }
+  return getGoogleApiTokenInteractive()
 }
 
 // ===== TYPES =====
