@@ -11,8 +11,13 @@ export function useAuth() {
       setUser(session?.user ?? null)
       setLoading(false)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null)
+      // Persist provider_token to user_metadata immediately on sign-in so the
+      // Chrome extension can use it as fallback (provider_token vanishes after token refresh)
+      if (event === 'SIGNED_IN' && session?.provider_token) {
+        supabase.auth.updateUser({ data: { google_access_token: session.provider_token } })
+      }
     })
     return () => subscription.unsubscribe()
   }, [])
