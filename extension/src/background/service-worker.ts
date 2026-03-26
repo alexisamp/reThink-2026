@@ -432,7 +432,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (contact) {
             const { data: full } = await supabase
               .from('outreach_logs')
-              .select('id, name, health_score, status, last_interaction_at, personal_context, category, job_title, company, profile_photo_url, birthday, links')
+              .select('id, name, health_score, status, last_interaction_at, personal_context, category, job_title, company, profile_photo_url, birthday, links, email')
               .eq('id', contact.id)
               .single()
             sendResponse({ contact: full, source: 'local' })
@@ -499,7 +499,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (contact) {
             const { data: full } = await supabase
               .from('outreach_logs')
-              .select('id, name, health_score, status, last_interaction_at, personal_context, category, job_title, company, profile_photo_url, birthday, links')
+              .select('id, name, health_score, status, last_interaction_at, personal_context, category, job_title, company, profile_photo_url, birthday, links, email')
               .eq('id', contact.id)
               .single()
             sendResponse({ contact: full, source: 'local' })

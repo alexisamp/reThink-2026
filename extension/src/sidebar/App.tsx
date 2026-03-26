@@ -238,7 +238,7 @@ async function findContactByPhone(userId: string, phone: string): Promise<Partia
       contact_id,
       outreach_logs!inner (
         id, name, company, job_title, health_score, status, profile_photo_url,
-        personal_context, category, last_interaction_at, birthday, links
+        personal_context, category, last_interaction_at, birthday, links, email
       )
     `)
     .eq('user_id', userId)
@@ -269,7 +269,7 @@ async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Pr
   const withSlash = normalized + '/'
   const { data, error } = await supabase
     .from('outreach_logs')
-    .select('id, name, company, job_title, health_score, status, profile_photo_url, personal_context, category, last_interaction_at, birthday, links')
+    .select('id, name, company, job_title, health_score, status, profile_photo_url, personal_context, category, last_interaction_at, birthday, links, email')
     .eq('user_id', userId)
     .in('linkedin_url', [normalized, withSlash])
     .maybeSingle()
