@@ -7,19 +7,34 @@ import { DailyProgress } from '../components/DailyProgress'
 import { supabase } from '../../lib/supabase'
 
 // Gets a Google API access token.
-// 1. Tries chrome.identity (works when extension is verified for sensitive scopes).
-// 2. Falls back to token stored via reThink Settings → Integrations → Reconnect Google.
+// 1. Tries chrome.identity (extension flow) — clears stale cache on interactive to force re-scope.
+// 2. Falls back to token stored in reThink Settings → Integrations → Reconnect Google.
 async function getGoogleApiToken(interactive = false): Promise<string | null> {
-  const chromeToken = await new Promise<string | null>((resolve) => {
-    chrome.identity.getAuthToken({ interactive }, (token) => {
-      if (chrome.runtime.lastError || !token) resolve(null)
-      else resolve(token as string)
+  const getToken = (forceInteractive: boolean) =>
+    new Promise<string | null>((resolve) => {
+      chrome.identity.getAuthToken({ interactive: forceInteractive }, (token) => {
+        if (chrome.runtime.lastError || !token) resolve(null)
+        else resolve(token as string)
+      })
     })
-  })
-  if (chromeToken) return chromeToken
 
-  const { data: { user } } = await supabase.auth.getUser()
-  return (user?.user_metadata?.google_access_token as string | undefined) ?? null
+  const removeToken = (token: string) =>
+    new Promise<void>((resolve) => chrome.identity.removeCachedAuthToken({ token }, resolve))
+
+  if (interactive) {
+    const stale = await getToken(false)
+    if (stale) await removeToken(stale)
+    const fresh = await getToken(true)
+    if (fresh) return fresh
+  } else {
+    const token = await getToken(false)
+    if (token) return token
+  }
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    return (user?.user_metadata?.google_access_token as string | undefined) ?? null
+  } catch { return null }
 }
 
 // ===== TYPES =====
@@ -1280,7 +1295,12 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
               <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>Loading…</p>
             )}
             {!calendarLoading && (calendarError === 'no_token' || calendarError === 'no_scope') && (
-              <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>Re-sign in to see calendar events</p>
+              <button
+                onClick={() => { setCalendarError(null); getGoogleApiToken(true).then(() => loadCalendarEvents()) }}
+                style={{ fontSize: '11px', color: '#003720', background: '#E5F9BD', border: 'none', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontWeight: 500 }}
+              >
+                Connect Google Calendar
+              </button>
             )}
             {!calendarLoading && calendarError === 'error' && (
               <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>Could not load calendar</p>

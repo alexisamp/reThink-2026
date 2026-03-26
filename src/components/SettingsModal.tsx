@@ -96,6 +96,10 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
       const hasToken = !!session?.provider_token
       setGoogleConnected(isGoogle && hasToken)
       setGoogleEmail(isGoogle ? (session?.user?.email ?? null) : null)
+      // If provider_token is present (just came back from OAuth), persist it so extension can use it
+      if (session?.provider_token) {
+        supabase.auth.updateUser({ data: { google_access_token: session.provider_token } })
+      }
     })
   }, [open])
 
@@ -153,6 +157,8 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
 
   const reconnectGoogle = async () => {
     setGoogleConnecting(true)
+    // signInWithOAuth redirects the browser to Google — page will reload after.
+    // On return, the useEffect above detects provider_token and saves it to user_metadata.
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -161,12 +167,7 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
         queryParams: { access_type: 'offline', prompt: 'consent' },
       },
     })
-    // After redirect returns, save provider_token to user_metadata
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session?.provider_token) {
-      await supabase.auth.updateUser({ data: { google_access_token: session.provider_token } })
-    }
-    setGoogleConnecting(false)
+    // Nothing here runs — browser has already navigated to Google
   }
 
   const statusLabel: Record<typeof updater.status, string> = {
