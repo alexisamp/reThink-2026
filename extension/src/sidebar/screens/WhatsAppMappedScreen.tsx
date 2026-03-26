@@ -290,12 +290,12 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
     setTodos((data ?? []) as Todo[])
   }
 
-  async function loadCalendarEvents() {
+  async function loadCalendarEvents(preloadedToken?: string) {
     if (!contact.email) return
     setCalendarLoading(true)
     setCalendarError(null)
     try {
-      const token = await getGoogleApiToken(false)
+      const token = preloadedToken ?? await getGoogleApiToken(false)
       if (!token) { setCalendarError('no_token'); setCalendarLoading(false); return }
 
       const now = new Date()
@@ -329,11 +329,12 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
     setGmailSyncing(true)
     setGmailResult(null)
     try {
-      const token = await getGoogleApiToken(true) // interactive=true so Chrome prompts for scopes
+      let token = await getGoogleApiToken(false)
+      if (!token) token = await getGoogleApiToken(true) // interactive only if no stored token
       const { data: { session } } = await supabase.auth.getSession()
       const userId = session?.user.id
       if (!token || !userId) {
-        setGmailResult('Connect Google account — click again to authorize')
+        setGmailResult('Token expired — click Connect Google Calendar first')
         setGmailSyncing(false)
         return
       }
@@ -1370,12 +1371,20 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
               <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>Loading…</p>
             )}
             {!calendarLoading && (calendarError === 'no_token' || calendarError === 'no_scope') && (
-              <button
-                onClick={() => { setCalendarError(null); getGoogleApiToken(true).then(() => loadCalendarEvents()) }}
-                style={{ fontSize: '11px', color: '#003720', background: '#E5F9BD', border: 'none', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontWeight: 500 }}
-              >
-                Connect Google Calendar
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>Token expired — reconnect to load events</p>
+                <button
+                  onClick={async () => {
+                    setCalendarError(null)
+                    const token = await getGoogleApiToken(true)
+                    if (token) loadCalendarEvents(token)
+                    else setCalendarError('no_token')
+                  }}
+                  style={{ fontSize: '11px', color: '#003720', background: '#E5F9BD', border: 'none', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontWeight: 500, alignSelf: 'flex-start' }}
+                >
+                  Connect Google Calendar →
+                </button>
+              </div>
             )}
             {!calendarLoading && calendarError === 'error' && (
               <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>Could not load calendar</p>
