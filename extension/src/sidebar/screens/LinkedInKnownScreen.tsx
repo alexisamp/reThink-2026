@@ -6,6 +6,15 @@ import { AvatarWithDot } from './WhatsAppMappedScreen'
 import { DailyProgress } from '../components/DailyProgress'
 import { supabase } from '../../lib/supabase'
 
+function getGoogleApiToken(interactive = false): Promise<string | null> {
+  return new Promise((resolve) => {
+    chrome.identity.getAuthToken({ interactive }, (token) => {
+      if (chrome.runtime.lastError || !token) resolve(null)
+      else resolve(token as string)
+    })
+  })
+}
+
 // ===== TYPES =====
 
 interface Milestone {
@@ -242,8 +251,7 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
     setCalendarLoading(true)
     setCalendarError(null)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.provider_token
+      const token = await getGoogleApiToken(false)
       if (!token) { setCalendarError('no_token'); setCalendarLoading(false); return }
 
       const now = new Date()
@@ -276,11 +284,11 @@ export function LinkedInKnownScreen({ contact, user, onSignOut }: Props) {
     setGmailSyncing(true)
     setGmailResult(null)
     try {
+      const token = await getGoogleApiToken(true)
       const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.provider_token
       const userId = session?.user.id
       if (!token || !userId) {
-        setGmailResult('Re-sign in for Gmail access')
+        setGmailResult('Connect Google account — click again to authorize')
         setGmailSyncing(false)
         return
       }

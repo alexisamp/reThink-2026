@@ -5,6 +5,16 @@ import { SidebarHeader } from '../App'
 import { DailyProgress } from '../components/DailyProgress'
 import { supabase } from '../../lib/supabase'
 
+// Gets a Google API access token using Chrome's identity API (supports Calendar + Gmail scopes)
+function getGoogleApiToken(interactive = false): Promise<string | null> {
+  return new Promise((resolve) => {
+    chrome.identity.getAuthToken({ interactive }, (token) => {
+      if (chrome.runtime.lastError || !token) resolve(null)
+      else resolve(token as string)
+    })
+  })
+}
+
 // ===== TYPES =====
 
 interface Milestone {
@@ -248,8 +258,7 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
     setCalendarLoading(true)
     setCalendarError(null)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.provider_token
+      const token = await getGoogleApiToken(false)
       if (!token) { setCalendarError('no_token'); setCalendarLoading(false); return }
 
       const now = new Date()
@@ -282,11 +291,11 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
     setGmailSyncing(true)
     setGmailResult(null)
     try {
+      const token = await getGoogleApiToken(true) // interactive=true so Chrome prompts for scopes
       const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.provider_token
       const userId = session?.user.id
       if (!token || !userId) {
-        setGmailResult('Re-sign in for Gmail access')
+        setGmailResult('Connect Google account — click again to authorize')
         setGmailSyncing(false)
         return
       }
@@ -1323,7 +1332,12 @@ export function WhatsAppMappedScreen({ contact, user, onSignOut }: Props) {
               <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>Loading…</p>
             )}
             {!calendarLoading && (calendarError === 'no_token' || calendarError === 'no_scope') && (
-              <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>Re-sign in to see calendar events</p>
+              <button
+                onClick={() => { setCalendarError(null); chrome.identity.getAuthToken({ interactive: true }, () => loadCalendarEvents()) }}
+                style={{ fontSize: '11px', color: '#003720', background: '#E5F9BD', border: 'none', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontWeight: 500 }}
+              >
+                Connect Google Calendar
+              </button>
             )}
             {!calendarLoading && calendarError === 'error' && (
               <p style={{ fontSize: '12px', color: '#536471', margin: 0 }}>Could not load calendar</p>

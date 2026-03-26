@@ -58,6 +58,12 @@
   ],
   "oauth2": {
     "client_id": "652244567794-rjti1jj53ljnubdq0m6v0rmuji7521nq.apps.googleusercontent.com",
-    "scopes": ["openid", "email", "profile"]
+    "scopes": [
+      "openid",
+      "email",
+      "profile",
+      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/gmail.readonly"
+    ]
   }
 }
