@@ -1,137 +1,250 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
-  MagnifyingGlass, Plus, ArrowSquareOut, UserCircle, Sparkle, ArrowsClockwise, X,
+  MagnifyingGlass, Plus, Users, Funnel, Table, Kanban,
+  WhatsappLogo, LinkedinLogo, X, TwitterLogo,
+  DotOutline,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
-import type { Contact, ContactStatus, ContactCategory, Habit, HabitLog } from '@/types'
+import type { Contact, ContactStatus } from '@/types'
 import { useContacts } from '@/hooks/useContacts'
-import { useFunnelConfig } from '@/hooks/useFunnelConfig'
-import {
-  FUNNEL_STAGE_ORDER,
-  CATEGORY_LABELS,
-} from '@/lib/funnelDefaults'
 import OutreachPanel from '@/components/OutreachPanel'
-import ContactDetailDrawer from '@/components/ContactDetailDrawer'
-import { openLink } from '@/lib/openLink'
-import { enrichContact, hasGeminiEnrichKey } from '@/hooks/useContactEnricher'
-import { hasAttioKey, listAllAttioPersons } from '@/lib/attio'
-import type { AttioPersonResult } from '@/lib/attio'
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext, horizontalListSortingStrategy,
+} from '@dnd-kit/sortable'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function localDate(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 function daysSince(dateStr: string | null): number | null {
   if (!dateStr) return null
-  const then = new Date(dateStr)
-  const now = new Date()
-  return Math.floor((now.getTime() - then.getTime()) / (1000 * 60 * 60 * 24))
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
 }
 
-/** Returns true if the name looks like it was captured from a LinkedIn URL slug
- *  e.g. "javiercopleJ", "JohnDoe", "juan-garcia-123" */
-function isSlugName(name: string): boolean {
-  if (!name || name.length < 4 || name.includes(' ')) return false
-  // camelCase slug: uppercase after position 0
-  if (/[A-Z]/.test(name.slice(1))) return true
-  // all-lowercase with hyphens or digits — URL slug
-  if (/^[a-z][a-z0-9\-]+$/.test(name)) return true
-  return false
-}
-
-function formatAgo(days: number): string {
+function formatAgo(days: number | null): string {
+  if (days === null) return '—'
   if (days === 0) return 'Today'
   if (days === 1) return '1d ago'
-  return `${days}d ago`
+  if (days < 7) return `${days}d ago`
+  if (days < 30) return `${Math.floor(days / 7)}w ago`
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`
+  return `${Math.floor(days / 365)}y ago`
 }
 
-function healthColor(score: number): string {
-  if (score <= 3) return 'text-red-400'
-  if (score <= 6) return 'text-yellow-400'
-  return 'text-pastel'
+function healthIndicator(days: number | null): { dot: string; label: string } {
+  if (days === null) return { dot: 'bg-mercury', label: 'Never' }
+  if (days <= 14) return { dot: 'bg-pastel', label: 'Active' }
+  if (days <= 30) return { dot: 'bg-yellow-400', label: 'Warm' }
+  return { dot: 'bg-red-400', label: 'Cold' }
 }
 
-// ── component ─────────────────────────────────────────────────────────────────
+const TIER_COLORS: Record<number, string> = {
+  1: 'bg-pastel text-burnham',
+  2: 'bg-yellow-100 text-yellow-800',
+  3: 'bg-mercury text-shuttle',
+}
+
+const STATUS_ORDER: ContactStatus[] = [
+  'PROSPECT', 'INTRO', 'CONNECTED', 'ENGAGED', 'NURTURING', 'RECONNECT', 'DORMANT',
+]
+
+const KANBAN_COLUMNS: { status: ContactStatus; label: string; dot: string }[] = [
+  { status: 'PROSPECT',   label: 'Prospect',   dot: 'bg-mercury' },
+  { status: 'INTRO',      label: 'Intro',      dot: 'bg-blue-400' },
+  { status: 'CONNECTED',  label: 'Connected',  dot: 'bg-pastel' },
+  { status: 'ENGAGED',    label: 'Engaged',    dot: 'bg-pastel' },
+  { status: 'NURTURING',  label: 'Nurturing',  dot: 'bg-burnham' },
+  { status: 'DORMANT',    label: 'Dormant',    dot: 'bg-red-300' },
+]
+
+function ContactAvatar({ name, photoUrl, size = 28 }: { name: string; photoUrl?: string | null; size?: number }) {
+  const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
+  const [imgFailed, setImgFailed] = useState(false)
+  return (
+    <div
+      className="shrink-0 rounded-full overflow-hidden bg-mercury/60 flex items-center justify-center"
+      style={{ width: size, height: size, fontSize: size * 0.38 }}
+    >
+      {photoUrl && !imgFailed
+        ? <img src={photoUrl} className="w-full h-full object-cover" onError={() => setImgFailed(true)} />
+        : <span className="font-semibold text-shuttle/60">{initials}</span>
+      }
+    </div>
+  )
+}
+
+// ── Channel icons ─────────────────────────────────────────────────────────────
+function ChannelIcons({ channels }: { channels: Array<{ channel: string }> }) {
+  return (
+    <div className="flex items-center gap-1">
+      {channels.map(c => {
+        if (c.channel === 'whatsapp') return <WhatsappLogo key="wa" size={11} className="text-green-500" />
+        if (c.channel === 'linkedin') return <LinkedinLogo key="li" size={11} className="text-blue-500" />
+        if (c.channel === 'x') return <TwitterLogo key="x" size={11} className="text-shuttle" />
+        if (c.channel === 'exit5') return <span key="e5" className="text-[9px] font-bold text-shuttle/60">E5</span>
+        return null
+      })}
+    </div>
+  )
+}
+
+// ── Tag pills ─────────────────────────────────────────────────────────────────
+function TagPill({ tag }: { tag: string }) {
+  const isBod = tag === 'board_of_directors'
+  return (
+    <span className={[
+      'text-[9px] px-1.5 py-0.5 rounded font-mono whitespace-nowrap',
+      isBod ? 'bg-burnham text-gossip' : 'bg-mercury/60 text-shuttle/60',
+    ].join(' ')}>
+      {tag.replace(/_/g, ' ')}
+    </span>
+  )
+}
+
+// ── Table row ─────────────────────────────────────────────────────────────────
+
+interface TableRowProps {
+  contact: Contact
+  channels: Array<{ outreach_log_id: string; channel: string }>
+  onRowClick: (c: Contact) => void
+}
+
+function TableRow({ contact, channels, onRowClick }: TableRowProps) {
+  const myChannels = channels.filter(ch => ch.outreach_log_id === contact.id)
+  const days = daysSince(contact.last_interaction_at)
+  const health = healthIndicator(days)
+  const tags: string[] = Array.isArray((contact as unknown as Record<string, unknown>).tags)
+    ? (contact as unknown as Record<string, unknown[]>).tags as string[]
+    : []
+
+  return (
+    <tr
+      className="group border-b border-mercury/30 hover:bg-gossip/10 cursor-pointer transition-colors"
+      onClick={() => onRowClick(contact)}
+    >
+      {/* Name + avatar */}
+      <td className="py-2 pl-4 pr-3">
+        <div className="flex items-center gap-2.5">
+          <ContactAvatar name={contact.name} photoUrl={contact.profile_photo_url} size={26} />
+          <span className="text-[13px] font-medium text-burnham truncate max-w-[160px]">{contact.name}</span>
+        </div>
+      </td>
+
+      {/* Company */}
+      <td className="py-2 px-3 text-[12px] text-shuttle truncate max-w-[120px]">
+        {contact.company ?? '—'}
+      </td>
+
+      {/* Role */}
+      <td className="py-2 px-3 text-[12px] text-shuttle truncate max-w-[120px]">
+        {contact.job_title ?? '—'}
+      </td>
+
+      {/* Tier */}
+      <td className="py-2 px-3">
+        {contact.tier ? (
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${TIER_COLORS[contact.tier]}`}>
+            T{contact.tier}
+          </span>
+        ) : <span className="text-shuttle/30 text-[11px]">—</span>}
+      </td>
+
+      {/* Last contact */}
+      <td className="py-2 px-3 text-[12px] text-shuttle/70 whitespace-nowrap">
+        {formatAgo(days)}
+      </td>
+
+      {/* Health */}
+      <td className="py-2 px-3">
+        <div className="flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full ${health.dot}`} />
+          <span className="text-[11px] text-shuttle/60">{health.label}</span>
+        </div>
+      </td>
+
+      {/* Tags */}
+      <td className="py-2 px-3">
+        <div className="flex items-center gap-1 flex-wrap max-w-[140px]">
+          {tags.slice(0, 2).map(t => <TagPill key={t} tag={t} />)}
+        </div>
+      </td>
+
+      {/* Channels */}
+      <td className="py-2 pl-3 pr-4">
+        <ChannelIcons channels={myChannels} />
+      </td>
+    </tr>
+  )
+}
+
+// ── Kanban card ───────────────────────────────────────────────────────────────
+
+function KanbanCard({ contact, onClick }: { contact: Contact; onClick: () => void }) {
+  const days = daysSince(contact.last_interaction_at)
+  const health = healthIndicator(days)
+  return (
+    <div
+      onClick={onClick}
+      className="bg-white border border-mercury rounded-lg p-2.5 cursor-pointer hover:border-burnham/20 hover:shadow-sm transition-all"
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <ContactAvatar name={contact.name} photoUrl={contact.profile_photo_url} size={22} />
+        <span className="text-[12px] font-medium text-burnham truncate">{contact.name}</span>
+      </div>
+      {contact.company && (
+        <p className="text-[10px] text-shuttle/60 truncate mb-1.5">{contact.company}</p>
+      )}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1">
+          <span className={`w-1.5 h-1.5 rounded-full ${health.dot}`} />
+        </div>
+        {days !== null && (
+          <span className="text-[9px] font-mono text-shuttle/40">{formatAgo(days)}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+type ViewMode = 'table' | 'kanban'
 
 export default function People() {
+  const navigate = useNavigate()
   const [userId, setUserId] = useState<string | null>(null)
-  const [habits, setHabits] = useState<Habit[]>([])
-  const [habitLogs, setHabitLogs] = useState<HabitLog[]>([])
-  const [profile, setProfile] = useState<{ contact_funnel_config: import('@/types').ContactFunnelConfig | null } | null>(null)
-
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<ContactStatus | 'all'>('all')
-  const [categoryFilter, setCategoryFilter] = useState<ContactCategory | 'all'>('all')
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [outreachPanelOpen, setOutreachPanelOpen] = useState(false)
+  const [editingContact, setEditingContact] = useState<Contact | null>(null)
 
-  // Bulk re-enrich (fix slug names)
-  const [bulkEnriching, setBulkEnriching] = useState(false)
-  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null)
-  const bulkCancelRef = useRef(false)
+  // Contact channels (loaded separately)
+  const [channels, setChannels] = useState<Array<{ outreach_log_id: string; channel: string }>>([])
 
-  // Attio import flow
-  const [attioChecking, setAttioChecking] = useState(false)
-  const [attioCandidates, setAttioCandidates] = useState<(AttioPersonResult & { selected: boolean })[] | null>(null)
-  const [attioImporting, setAttioImporting] = useState(false)
-  const [attioImportDone, setAttioImportDone] = useState<number | null>(null)
-
-  const today = localDate()
-
-  // ── init: get user + habits ───────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      setUserId(user.id)
-      Promise.all([
-        supabase.from('habits').select('*').eq('user_id', user.id).eq('is_active', true),
-        supabase.from('habit_logs').select('*').eq('user_id', user.id).eq('log_date', today),
-        supabase.from('profiles').select('contact_funnel_config').eq('id', user.id).maybeSingle(),
-      ]).then(([habitsRes, logsRes, profileRes]) => {
-        setHabits((habitsRes.data ?? []) as Habit[])
-        setHabitLogs((logsRes.data ?? []) as HabitLog[])
-        setProfile(profileRes.data as { contact_funnel_config: import('@/types').ContactFunnelConfig | null } | null)
-      })
+      if (user) setUserId(user.id)
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── habit count upsert ────────────────────────────────────────────────────
-  const upsertHabitCount = useCallback(async (habitId: string, count: number) => {
+  // Load channels
+  useEffect(() => {
     if (!userId) return
-    const existing = habitLogs.find(l => l.habit_id === habitId)
-    if (existing) {
-      await supabase.from('habit_logs').update({ value: count }).eq('id', existing.id)
-      setHabitLogs(prev => prev.map(l => l.id === existing.id ? { ...l, value: count } : l))
-    } else {
-      const { data } = await supabase
-        .from('habit_logs')
-        .insert({ habit_id: habitId, user_id: userId, log_date: today, value: count })
-        .select().single()
-      if (data) setHabitLogs(prev => [...prev, data as HabitLog])
-    }
-  }, [userId, habitLogs, today])
+    supabase
+      .from('contact_channels')
+      .select('outreach_log_id, channel')
+      .then(({ data }) => setChannels(data ?? []))
+  }, [userId])
 
-  // ── hooks ─────────────────────────────────────────────────────────────────
-  const {
-    contacts,
-    loading,
-    syncing,
-    syncError,
-    addContact,
-    updateContact,
-    deleteContact,
-    syncContactToAttio,
-    syncCompany,
-    syncAll,
-  } = useContacts(userId ?? undefined, habits, upsertHabitCount)
+  const { contacts, loading, addContact, updateContact, deleteContact } = useContacts(
+    userId ?? undefined,
+    [],
+    async () => {},
+  )
 
-  const { getLabel, getActiveStages } = useFunnelConfig(userId ?? undefined, profile)
-
-  // ── goals (needed for OutreachPanel) ──────────────────────────────────────
+  // Goals for OutreachPanel
   const [goals, setGoals] = useState<{ id: string; text: string; alias: string | null }[]>([])
   useEffect(() => {
     if (!userId) return
@@ -139,455 +252,193 @@ export default function People() {
       .then(({ data }) => setGoals(data ?? []))
   }, [userId])
 
-  // ── filtering + sorting ───────────────────────────────────────────────────
-  const filtered = contacts
-    .filter(c => {
-      if (statusFilter !== 'all' && c.status !== statusFilter) return false
-      if (categoryFilter !== 'all' && c.category !== categoryFilter) return false
-      if (search.trim()) {
-        const q = search.trim().toLowerCase()
-        if (!c.name.toLowerCase().includes(q)) return false
-      }
-      return true
-    })
-    .sort((a, b) => {
-      // last_interaction_at DESC NULLS LAST, then created_at DESC
-      const aDate = a.last_interaction_at ?? null
-      const bDate = b.last_interaction_at ?? null
-      if (aDate && bDate) return bDate.localeCompare(aDate)
-      if (aDate) return -1
-      if (bDate) return 1
-      return b.created_at.localeCompare(a.created_at)
-    })
-
-  const activeStages = getActiveStages()
-
-  // ── handlers ──────────────────────────────────────────────────────────────
-  function openDetail(contact: Contact) {
-    setSelectedContact(contact)
-    setDrawerOpen(true)
-  }
-
-  function closeDetail() {
-    setDrawerOpen(false)
-    setTimeout(() => setSelectedContact(null), 200)
-  }
-
-  async function handleUpdateContact(id: string, updates: Partial<Contact>): Promise<void> {
-    await updateContact(id, updates)
-    // Keep selectedContact in sync
-    setSelectedContact(prev => prev && prev.id === id ? { ...prev, ...updates } : prev)
-  }
-
-  async function handleDeleteContact(id: string): Promise<void> {
-    await deleteContact(id)
-    closeDetail()
-  }
-
-  async function handleSyncToAttio(id: string): Promise<void> {
-    await syncContactToAttio(id)
-  }
-
-  // OutreachPanel save handler (add new contact)
-  async function handleSaveContact(input: import('@/hooks/useContacts').ContactInput): Promise<void> {
-    await addContact(input)
-  }
-
-  // ── Bulk re-enrich (fix slug-style names) ─────────────────────────────────
-  async function handleBulkFixNames() {
-    const slugContacts = contacts.filter(c => isSlugName(c.name))
-    if (slugContacts.length === 0) return
-    setBulkEnriching(true)
-    bulkCancelRef.current = false
-    setBulkProgress({ done: 0, total: slugContacts.length })
-    for (let i = 0; i < slugContacts.length; i++) {
-      if (bulkCancelRef.current) break
-      const c = slugContacts[i]
-      const result = await enrichContact({
-        name: c.name,
-        company: c.company,
-        company_domain: c.company_domain,
-        job_title: c.job_title,
-        about: c.about,
-        personal_context: c.personal_context,
-        linkedin_url: c.linkedin_url,
-      })
-      if (result) {
-        const patch: Partial<Contact> = { ai_enriched_at: new Date().toISOString() }
-        if (result.name) patch.name = result.name
-        if (result.job_title && !c.job_title) patch.job_title = result.job_title
-        if (result.company && !c.company) patch.company = result.company
-        if (result.company_domain) patch.company_domain = result.company_domain
-        if (result.profile_photo_url) patch.profile_photo_url = result.profile_photo_url
-        await updateContact(c.id, patch)
-      }
-      setBulkProgress({ done: i + 1, total: slugContacts.length })
-    }
-    setBulkEnriching(false)
-    setBulkProgress(null)
-  }
-
-  // ── Attio → reThink import flow ────────────────────────────────────────────
-  async function handleCheckAttio() {
-    setAttioChecking(true)
-    setAttioCandidates(null)
-    setAttioImportDone(null)
-    const attioPersons = await listAllAttioPersons()
-    // Build a set of normalized LinkedIn URLs from existing contacts
-    const existingLinkedins = new Set(
-      contacts
-        .map(c => c.linkedin_url?.replace(/\/$/, '').toLowerCase())
-        .filter(Boolean)
+  const filtered = contacts.filter(c => {
+    if (!search.trim()) return true
+    const q = search.trim().toLowerCase()
+    return (
+      c.name.toLowerCase().includes(q) ||
+      (c.company ?? '').toLowerCase().includes(q) ||
+      (c.job_title ?? '').toLowerCase().includes(q)
     )
-    const existingNames = new Set(contacts.map(c => c.name.toLowerCase().trim()))
-    // Find Attio people not in reThink
-    const missing = attioPersons.filter(p => {
-      if (p.linkedin_url) {
-        const norm = p.linkedin_url.replace(/\/$/, '').toLowerCase()
-        return !existingLinkedins.has(norm)
-      }
-      return !existingNames.has(p.full_name.toLowerCase().trim())
-    })
-    setAttioCandidates(missing.map(p => ({ ...p, selected: true })))
-    setAttioChecking(false)
+  }).sort((a, b) => {
+    const aDate = a.last_interaction_at ?? a.created_at
+    const bDate = b.last_interaction_at ?? b.created_at
+    return bDate.localeCompare(aDate)
+  })
+
+  const handleRowClick = useCallback((c: Contact) => {
+    navigate(`/people/${c.id}`)
+  }, [navigate])
+
+  const handleNewPerson = () => {
+    setEditingContact(null)
+    setOutreachPanelOpen(true)
   }
 
-  async function handleAttioImport() {
-    if (!attioCandidates || !userId) return
-    const toImport = attioCandidates.filter(c => c.selected)
-    if (toImport.length === 0) return
-    setAttioImporting(true)
-    let created = 0
-    for (const person of toImport) {
-      await addContact({
-        name: person.full_name,
-        linkedin_url: person.linkedin_url ?? null,
-        job_title: person.job_title ?? null,
-        email: person.email ?? null,
-        existing_attio_record_id: person.record_id,
-      })
-      created++
-    }
-    setAttioImporting(false)
-    setAttioImportDone(created)
-    setAttioCandidates(null)
-  }
+  // Kanban: update status via drag or click
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
-  // ── render ────────────────────────────────────────────────────────────────
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const contactId = active.id as string
+    const newStatus = over.id as ContactStatus
+    if (!STATUS_ORDER.includes(newStatus)) return
+    await updateContact(contactId, { status: newStatus })
+  }, [updateContact])
+
   return (
-    <div className="min-h-screen bg-white px-4 pt-6 pb-32 max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold text-burnham">People</h1>
-          {!loading && (
-            <span className="text-[11px] font-medium text-shuttle bg-mercury/40 rounded-full px-2 py-0.5">
-              {contacts.length}
+    <div className="h-screen flex flex-col bg-white text-burnham font-sans">
+      {/* ── Header bar ─────────────────────────────────────────────────────── */}
+      <header className="flex items-center justify-between px-6 py-3.5 border-b border-mercury/60 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-sm bg-pastel flex items-center justify-center shrink-0">
+              <Users size={11} weight="fill" className="text-white" />
             </span>
-          )}
+            <h1 className="text-base font-semibold text-burnham">People</h1>
+          </div>
+          <span className="text-[11px] text-shuttle/40 font-mono">{filtered.length}</span>
         </div>
         <div className="flex items-center gap-2">
-          {/* Fix slug names — only shown when there are slug contacts and Gemini key exists */}
-          {!loading && hasGeminiEnrichKey() && contacts.some(c => isSlugName(c.name)) && (
+          {/* View toggle */}
+          <div className="flex items-center gap-0.5 bg-mercury/20 rounded-lg p-0.5">
             <button
-              onClick={bulkEnriching ? () => { bulkCancelRef.current = true } : handleBulkFixNames}
-              disabled={false}
-              className="flex items-center gap-1 text-[11px] text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg px-2.5 py-1.5 hover:bg-yellow-100 transition-colors"
-              title="Auto-fix names that look like LinkedIn URL slugs"
+              onClick={() => setViewMode('table')}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-white shadow-sm text-burnham' : 'text-shuttle/50 hover:text-shuttle'}`}
+              title="Table view"
             >
-              <Sparkle size={12} weight="fill" />
-              {bulkEnriching && bulkProgress
-                ? `${bulkProgress.done}/${bulkProgress.total} — cancel`
-                : `Fix ${contacts.filter(c => isSlugName(c.name)).length} names`}
+              <Table size={14} />
             </button>
-          )}
-          {/* Import from Attio */}
-          {hasAttioKey() && (
             <button
-              onClick={handleCheckAttio}
-              disabled={attioChecking}
-              className="flex items-center gap-1 text-[11px] text-shuttle bg-mercury/30 border border-mercury rounded-lg px-2.5 py-1.5 hover:bg-mercury/60 transition-colors disabled:opacity-50"
-              title="Find Attio contacts not yet in reThink"
+              onClick={() => setViewMode('kanban')}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white shadow-sm text-burnham' : 'text-shuttle/50 hover:text-shuttle'}`}
+              title="Kanban view"
             >
-              {attioChecking
-                ? <ArrowsClockwise size={12} className="animate-spin" />
-                : <img src="/attio.png" alt="Attio" className="w-3 h-3 object-contain" />}
-              {attioChecking ? 'Checking…' : 'Sync Attio'}
-            </button>
-          )}
-          <button
-            onClick={() => setOutreachPanelOpen(true)}
-            className="flex items-center gap-1.5 bg-burnham text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-burnham/90 transition-colors"
-          >
-            <Plus size={14} weight="bold" />
-            Add person
-          </button>
-        </div>
-      </div>
-
-      {/* Attio import result banner */}
-      {attioImportDone !== null && (
-        <div className="flex items-center justify-between bg-gossip/20 border border-gossip/40 rounded-lg px-3 py-2 mb-3 text-[12px] text-burnham">
-          <span>✓ Imported {attioImportDone} contact{attioImportDone !== 1 ? 's' : ''} from Attio</span>
-          <button onClick={() => setAttioImportDone(null)}><X size={12} /></button>
-        </div>
-      )}
-
-      {/* Attio import modal */}
-      {attioCandidates !== null && (
-        <div className="mb-4 border border-mercury rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2.5 bg-mercury/20 border-b border-mercury">
-            <span className="text-[12px] font-semibold text-burnham">
-              {attioCandidates.length === 0
-                ? 'All Attio contacts are already in reThink ✓'
-                : `${attioCandidates.filter(c => c.selected).length} Attio contacts not in reThink`}
-            </span>
-            <button onClick={() => setAttioCandidates(null)} className="text-shuttle hover:text-burnham">
-              <X size={14} />
+              <Kanban size={14} />
             </button>
           </div>
-          {attioCandidates.length > 0 && (
-            <>
-              <ul className="max-h-64 overflow-y-auto divide-y divide-mercury/40">
-                {attioCandidates.map((p, i) => (
-                  <li key={p.record_id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-mercury/10">
-                    <input
-                      type="checkbox"
-                      checked={p.selected}
-                      onChange={e => setAttioCandidates(prev =>
-                        prev ? prev.map((c, j) => j === i ? { ...c, selected: e.target.checked } : c) : prev
-                      )}
-                      className="accent-burnham"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-medium text-burnham truncate">{p.full_name}</div>
-                      {(p.job_title || p.email) && (
-                        <div className="text-[10px] text-shuttle/50 truncate">
-                          {[p.job_title, p.email].filter(Boolean).join(' · ')}
-                        </div>
-                      )}
-                    </div>
-                    {p.linkedin_url && (
-                      <button onClick={() => openLink(p.linkedin_url!)} className="text-shuttle/40 hover:text-shuttle flex-shrink-0">
-                        <ArrowSquareOut size={12} />
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              <div className="px-4 py-2.5 border-t border-mercury flex items-center justify-between gap-3">
-                <button
-                  onClick={() => setAttioCandidates(prev => prev?.map(c => ({ ...c, selected: true })) ?? prev)}
-                  className="text-[11px] text-shuttle hover:text-burnham"
-                >
-                  Select all
-                </button>
-                <button
-                  onClick={handleAttioImport}
-                  disabled={attioImporting || attioCandidates.filter(c => c.selected).length === 0}
-                  className="flex items-center gap-1.5 bg-burnham text-white text-[12px] font-medium px-3 py-1.5 rounded-lg hover:bg-burnham/90 disabled:opacity-50 transition-colors"
-                >
-                  {attioImporting ? 'Importing…' : `Import ${attioCandidates.filter(c => c.selected).length} contacts`}
-                </button>
-              </div>
-            </>
+          <button
+            onClick={handleNewPerson}
+            className="flex items-center gap-1.5 bg-burnham hover:bg-burnham/90 text-gossip text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Plus size={13} />
+            New Person
+          </button>
+        </div>
+      </header>
+
+      {/* ── Filter bar ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 px-6 py-2.5 border-b border-mercury/30 shrink-0">
+        <div className="relative">
+          <MagnifyingGlass size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-shuttle/40" />
+          <input
+            type="text"
+            placeholder="Search people…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-7 pr-3 py-1 text-xs border border-mercury rounded-lg bg-white focus:outline-none focus:border-burnham/30 w-48"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-shuttle/40 hover:text-shuttle">
+              <X size={11} />
+            </button>
           )}
         </div>
-      )}
-
-      {/* Search */}
-      <div className="relative mb-3">
-        <MagnifyingGlass
-          size={14}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-shuttle/50"
-        />
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search by name…"
-          className="w-full pl-8 pr-3 py-2 text-sm bg-mercury/20 border border-mercury rounded-lg placeholder-shuttle/40 text-burnham focus:outline-none focus:border-burnham/30"
-        />
-      </div>
-
-      {/* Status filter pills */}
-      <div className="flex gap-1.5 flex-wrap mb-2">
-        <button
-          onClick={() => setStatusFilter('all')}
-          className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${
-            statusFilter === 'all'
-              ? 'bg-burnham text-white border-burnham'
-              : 'bg-white text-shuttle border-mercury hover:border-shuttle/40'
-          }`}
-        >
-          All
-        </button>
-        {FUNNEL_STAGE_ORDER.filter(s => activeStages.includes(s)).map(s => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(prev => prev === s ? 'all' : s)}
-            className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${
-              statusFilter === s
-                ? 'bg-burnham text-white border-burnham'
-                : 'bg-white text-shuttle border-mercury hover:border-shuttle/40'
-            }`}
-          >
-            {getLabel(s)}
-          </button>
-        ))}
-      </div>
-
-      {/* Category filter chips */}
-      <div className="flex gap-1.5 flex-wrap mb-5">
-        <button
-          onClick={() => setCategoryFilter('all')}
-          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors ${
-            categoryFilter === 'all'
-              ? 'bg-shuttle text-white border-shuttle'
-              : 'bg-white text-shuttle/70 border-mercury hover:border-shuttle/30'
-          }`}
-        >
-          All categories
-        </button>
-        {(Object.keys(CATEGORY_LABELS) as ContactCategory[]).map(cat => (
-          <button
-            key={cat}
-            onClick={() => setCategoryFilter(prev => prev === cat ? 'all' : cat)}
-            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors ${
-              categoryFilter === cat
-                ? 'bg-shuttle text-white border-shuttle'
-                : 'bg-white text-shuttle/70 border-mercury hover:border-shuttle/30'
-            }`}
-          >
-            {CATEGORY_LABELS[cat]}
-          </button>
-        ))}
-      </div>
-
-      {/* Contact list */}
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="w-5 h-5 border-[1.5px] border-mercury border-t-burnham rounded-full animate-spin" />
+        <div className="flex items-center gap-1.5 text-[11px] text-shuttle/50">
+          <Funnel size={11} />
+          <span>Sorted by last contact</span>
         </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-16 text-center">
-          <UserCircle size={40} className="text-mercury" weight="thin" />
-          <p className="text-sm text-shuttle/60">
-            {contacts.length === 0
-              ? 'No people yet. Add someone to get started.'
-              : 'No people match your filters.'}
-          </p>
-        </div>
-      ) : (
-        <ul className="divide-y divide-mercury/60">
-          {filtered.map(contact => {
-            const days = daysSince(contact.last_interaction_at)
-            return (
-              <li
-                key={contact.id}
-                onClick={() => openDetail(contact)}
-                className="flex items-center gap-3 py-3 cursor-pointer hover:bg-mercury/10 -mx-2 px-2 rounded-lg transition-colors"
-              >
-                {/* Avatar */}
-                <ContactAvatar name={contact.name} photoUrl={contact.profile_photo_url ?? null} healthScore={contact.health_score} />
+      </div>
 
-                {/* Name + meta */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-burnham text-sm truncate">{contact.name}</span>
-                    {isSlugName(contact.name) && (
-                      <span className="text-[9px] bg-yellow-100 text-yellow-700 rounded px-1.5 py-0.5 flex-shrink-0" title="Name may be a URL slug — open and run Enrich to fix">
-                        fix name
-                      </span>
-                    )}
-                    {contact.category && (
-                      <span className="text-[9px] uppercase bg-mercury/40 text-shuttle rounded px-1.5 py-0.5 flex-shrink-0">
-                        {CATEGORY_LABELS[contact.category] ?? contact.category}
-                      </span>
-                    )}
+      {/* ── Content ────────────────────────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {loading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="w-5 h-5 border-[1.5px] border-mercury border-t-burnham rounded-full animate-spin" />
+          </div>
+        ) : viewMode === 'table' ? (
+          /* ── Table view ─────────────────────────────────────────────── */
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-mercury/50 bg-white sticky top-0 z-10">
+                {['Name', 'Company', 'Role', 'Tier', 'Last Contact', 'Health', 'Tags', 'Channels'].map(h => (
+                  <th key={h} className="py-2 px-3 first:pl-4 last:pr-4 text-[10px] font-semibold text-shuttle/50 uppercase tracking-wider whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-sm text-shuttle/40">
+                    {search ? 'No results for this search' : 'No contacts yet — add your first person'}
+                  </td>
+                </tr>
+              ) : filtered.map(contact => (
+                <TableRow
+                  key={contact.id}
+                  contact={contact}
+                  channels={channels}
+                  onRowClick={handleRowClick}
+                />
+              ))}
+            </tbody>
+            {/* Footer count */}
+            <tfoot>
+              <tr className="border-t border-mercury/40">
+                <td colSpan={8} className="py-2 pl-4 text-[10px] font-mono text-shuttle/40">
+                  {filtered.length} {filtered.length === 1 ? 'person' : 'people'}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        ) : (
+          /* ── Kanban view ─────────────────────────────────────────────── */
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <div className="flex gap-4 p-6 h-full overflow-x-auto">
+              {KANBAN_COLUMNS.map(col => {
+                const colContacts = filtered.filter(c => c.status === col.status)
+                return (
+                  <div key={col.status} className="flex-shrink-0 w-52">
+                    {/* Column header */}
+                    <div className="flex items-center gap-2 mb-3 px-1">
+                      <span className={`w-2 h-2 rounded-full ${col.dot}`} />
+                      <span className="text-[11px] font-semibold text-shuttle">{col.label}</span>
+                      <span className="ml-auto text-[10px] font-mono text-shuttle/40">{colContacts.length}</span>
+                    </div>
+                    {/* Cards */}
+                    <SortableContext items={[col.status]} strategy={horizontalListSortingStrategy}>
+                      <div className="space-y-2 min-h-[80px]">
+                        {colContacts.map(c => (
+                          <KanbanCard key={c.id} contact={c} onClick={() => navigate(`/people/${c.id}`)} />
+                        ))}
+                        {colContacts.length === 0 && (
+                          <div className="h-16 border border-dashed border-mercury/50 rounded-lg flex items-center justify-center">
+                            <DotOutline size={16} className="text-mercury" />
+                          </div>
+                        )}
+                      </div>
+                    </SortableContext>
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] text-shuttle/60 bg-mercury/30 rounded px-1.5 py-0.5">
-                      {getLabel(contact.status)}
-                    </span>
-                    <span className="text-[10px] text-shuttle/40">
-                      {days === null ? 'No contact yet' : formatAgo(days)}
-                    </span>
-                  </div>
-                </div>
+                )
+              })}
+            </div>
+          </DndContext>
+        )}
+      </div>
 
-                {/* LinkedIn */}
-                {contact.linkedin_url && (
-                  <button
-                    onClick={e => { e.stopPropagation(); openLink(contact.linkedin_url!) }}
-                    className="text-shuttle/40 hover:text-shuttle flex-shrink-0"
-                    title="Open LinkedIn"
-                  >
-                    <ArrowSquareOut size={14} />
-                  </button>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-      )}
-
-      {/* Outreach panel (add person) */}
+      {/* OutreachPanel for adding/editing contacts */}
       <OutreachPanel
         open={outreachPanelOpen}
-        onClose={() => setOutreachPanelOpen(false)}
-        editingLog={null}
-        goals={goals}
-        onSave={handleSaveContact}
-        syncing={syncing}
-        onSpawnTodo={() => {}}
-      />
-
-      {/* Contact detail drawer */}
-      <ContactDetailDrawer
-        open={drawerOpen}
-        onClose={closeDetail}
-        contact={selectedContact}
-        onUpdate={handleUpdateContact}
-        onDelete={handleDeleteContact}
-        onSyncToAttio={handleSyncToAttio}
-        onSyncCompany={syncCompany}
-        onSyncAll={syncAll}
-        funnelConfig={profile?.contact_funnel_config ?? null}
+        editingLog={editingContact}
+        onClose={() => { setOutreachPanelOpen(false); setEditingContact(null) }}
         userId={userId ?? ''}
-        habits={habits}
-        upsertHabitCount={upsertHabitCount}
-        saveError={syncError}
-      />
-    </div>
-  )
-}
-
-// ── Avatar component ───────────────────────────────────────────────────────────
-
-function ContactAvatar({ name, photoUrl, healthScore }: { name: string; photoUrl: string | null; healthScore: number }) {
-  const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
-  const dotColor = healthScore <= 3 ? '#f87171' : healthScore <= 6 ? '#fbbf24' : '#79D65E'
-
-  return (
-    <div className="relative flex-shrink-0">
-      {photoUrl ? (
-        <img
-          src={photoUrl}
-          alt={name}
-          className="w-9 h-9 rounded-full object-cover"
-          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex' }}
-        />
-      ) : null}
-      <div
-        className="w-9 h-9 rounded-full bg-mercury/60 flex items-center justify-center text-[13px] font-semibold text-shuttle"
-        style={{ display: photoUrl ? 'none' : 'flex' }}
-      >
-        {initials}
-      </div>
-      <span
-        className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white"
-        style={{ background: dotColor }}
+        goals={goals}
+        onAdd={async input => { await addContact(input); setOutreachPanelOpen(false) }}
+        onUpdate={async (id, input) => { await updateContact(id, input); setOutreachPanelOpen(false) }}
+        onDelete={async id => { await deleteContact(id); setOutreachPanelOpen(false) }}
       />
     </div>
   )
