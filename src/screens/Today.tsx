@@ -31,6 +31,7 @@ import NewsletterPill from '@/components/NewsletterPill'
 import MilestoneDetailModal from '@/components/MilestoneDetailModal'
 import HabitEditModal from '@/components/HabitEditModal'
 import { openLink } from '@/lib/openLink'
+import { GoalKPIWidget } from '@/components/GoalKPIWidget'
 import OutreachPanel from '@/components/OutreachPanel'
 import { useGeminiScorer, hasGeminiKey } from '@/hooks/useGeminiScorer'
 import { getSettings } from '@/lib/userSettings'
@@ -1571,8 +1572,8 @@ export default function Today() {
 
       {/* ─── Main content ──────────────────────────────────────────────── */}
       <main
-        className="fixed top-0 bottom-0 right-0 flex flex-col overflow-hidden transition-all duration-300"
-        style={{ left: sidebarOpen ? 'clamp(280px, 30%, 360px)' : '2.5rem' }}
+        className="fixed top-0 bottom-0 left-0 flex flex-col overflow-hidden transition-all duration-300"
+        style={{ right: sidebarOpen ? 'clamp(280px, 30%, 360px)' : '2.5rem' }}
       >
 
         {/* ── One Thing header ──────────────────────────────────────── */}
@@ -1627,6 +1628,20 @@ export default function Today() {
             <div className={`w-full ${!sidebarOpen ? 'max-w-2xl mx-auto' : ''} px-8 py-8 pt-10`}>
 
               <p className="text-[10px] font-mono text-shuttle/40 mb-4">{monthStr}</p>
+
+              {/* ── Three-Goal KPI Widget ────────────────────────────── */}
+              {userId && (
+                <GoalKPIWidget
+                  userId={userId}
+                  weekStart={startOfWeek}
+                  habitsLog={[...logs, ...recentLogs]}
+                  weekDates={Array.from({ length: 7 }, (_, i) => {
+                    const d = new Date(startOfWeek + 'T12:00:00')
+                    d.setDate(d.getDate() + i)
+                    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                  })}
+                />
+              )}
 
               {/* Weekly context */}
               {habits.length > 0 && (
@@ -2161,35 +2176,18 @@ export default function Today() {
         )}
       </main>
 
-      {/* ─── Left Sidebar — fixed so it never scrolls away ────────────── */}
-      <aside className={`${sidebarOpen ? 'w-[clamp(280px,30%,360px)]' : 'w-10'} fixed top-0 left-0 h-screen bg-white border-r border-mercury flex flex-col z-20 transition-all duration-300 overflow-visible`}>
-        {/* ─── Sidebar header: logo + name + toggle ─── */}
-        {sidebarOpen ? (
-          <div className="flex items-center justify-between px-4 pt-4 pb-3 shrink-0">
-            <div className="flex items-center gap-2">
-              <img src="/logo-sm.png" alt="reThink" className="w-6 h-6 rounded-md object-cover shrink-0" />
-              <span className="text-sm font-semibold text-burnham tracking-tight">reThink</span>
-            </div>
-            <button
-              onClick={() => setSidebarOpen(v => !v)}
-              className="p-1.5 rounded hover:bg-mercury/60 text-shuttle/50 hover:text-burnham transition-colors"
-              title="Collapse ⌘B"
-            >
-              <SidebarSimple size={14} weight="regular" />
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center pt-4 pb-3 gap-3 shrink-0">
-            <img src="/logo-sm.png" alt="reThink" className="w-6 h-6 rounded-md object-cover" />
-            <button
-              onClick={() => setSidebarOpen(v => !v)}
-              className="p-1 rounded hover:bg-mercury/60 text-shuttle/50 hover:text-burnham transition-colors"
-              title="Expand ⌘B"
-            >
-              <SidebarSimple size={14} weight="regular" />
-            </button>
-          </div>
-        )}
+      {/* ─── Right Sidebar — journal, pulse, wrap-up ────────────────────── */}
+      <aside className={`${sidebarOpen ? 'w-[clamp(280px,30%,360px)]' : 'w-10'} fixed top-0 right-0 h-screen bg-white border-l border-mercury flex flex-col z-20 transition-all duration-300 overflow-visible`}>
+        {/* ─── Sidebar header: toggle only (nav is in AppShell) ─── */}
+        <div className={`flex ${sidebarOpen ? 'justify-end px-4' : 'justify-center'} pt-4 pb-3 shrink-0`}>
+          <button
+            onClick={() => setSidebarOpen(v => !v)}
+            className="p-1.5 rounded hover:bg-mercury/60 text-shuttle/50 hover:text-burnham transition-colors"
+            title={sidebarOpen ? 'Collapse ⌘B' : 'Expand ⌘B'}
+          >
+            <SidebarSimple size={14} weight="regular" />
+          </button>
+        </div>
 
         {sidebarOpen && (
           <>
@@ -2335,8 +2333,8 @@ export default function Today() {
         </>
       )}
 
-      {/* ─── Floating Pomodoro Widget ────────────────────────────────── */}
-      <div className="fixed top-4 right-14 z-40 flex flex-col items-end gap-1.5">
+      {/* ─── Floating Pomodoro Widget — REMOVED in v2 ───────────────────── */}
+      {false && <div className="fixed top-4 right-14 z-40 flex flex-col items-end gap-1.5">
         {/* Pill: icon + time + controls + gear */}
         <div className={`flex items-center gap-1.5 border rounded-full px-2.5 py-1.5 shadow-md transition-all duration-300 ${timerRunning ? 'bg-gossip/60 border-pastel/50 shadow-pastel/20' : 'bg-white border-mercury'}`}>
           <Timer size={11} className={`shrink-0 transition-colors ${timerRunning ? 'text-burnham' : 'text-shuttle/60'}`} />
@@ -2479,7 +2477,7 @@ export default function Today() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* ── Habit Drawer (⌘H) ───────────────────────────────── */}
       {habitDrawerOpen && (
