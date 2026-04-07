@@ -201,7 +201,7 @@ export default function PersonDetail() {
     setNotesDraft(c?.notes ?? '')
     setInteractions(ints ?? [])
     setChannels(chans ?? [])
-    setOpportunities((opps as { data: Opportunity[] }).data ?? [])
+    setOpportunities(((opps as unknown) as { data: Opportunity[] | null }).data ?? [])
     setLoading(false)
   }, [id, user])
 

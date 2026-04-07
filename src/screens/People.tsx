@@ -434,11 +434,18 @@ export default function People() {
         open={outreachPanelOpen}
         editingLog={editingContact}
         onClose={() => { setOutreachPanelOpen(false); setEditingContact(null) }}
-        userId={userId ?? ''}
         goals={goals}
-        onAdd={async input => { await addContact(input); setOutreachPanelOpen(false) }}
-        onUpdate={async (id, input) => { await updateContact(id, input); setOutreachPanelOpen(false) }}
-        onDelete={async id => { await deleteContact(id); setOutreachPanelOpen(false) }}
+        onSave={async input => {
+          if (editingContact) {
+            await updateContact(editingContact.id, input)
+          } else {
+            await addContact(input)
+          }
+          setOutreachPanelOpen(false)
+          setEditingContact(null)
+        }}
+        syncing={false}
+        onSpawnTodo={() => {}}
       />
     </div>
   )
