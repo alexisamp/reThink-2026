@@ -70,6 +70,17 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
         })
         .eq('id', contact.id)
         .eq('user_id', user.id)
+
+      if (profile?.linkedinUrl) {
+        await supabase.from('contact_channels').upsert({
+          outreach_log_id: contact.id,
+          channel: 'linkedin',
+          channel_identifier: profile.linkedinUrl.toLowerCase().replace(/\/$/, ''),
+          channel_name: contact.name,
+          verified: true,
+        }, { onConflict: 'channel,channel_identifier', ignoreDuplicates: true })
+      }
+
       onSaved()
     } catch (err: any) {
       console.error('Link error:', err)
@@ -89,7 +100,7 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
         photoUrl = await uploadPhoto(photoUrl, user.id, profile?.linkedinUrl ?? null)
       }
 
-      const { error } = await supabase
+      const { data: newContact, error } = await supabase
         .from('outreach_logs')
         .insert({
           user_id: user.id,
@@ -105,8 +116,20 @@ export function LinkedInNewScreen({ profile, user, onSaved }: Props) {
           company: profile?.company ?? null,
           personal_context: context.trim() || null,
         })
+        .select('id')
+        .single()
 
-      if (error) throw error
+      if (error || !newContact) throw error
+
+      if (profile?.linkedinUrl) {
+        await supabase.from('contact_channels').upsert({
+          outreach_log_id: newContact.id,
+          channel: 'linkedin',
+          channel_identifier: profile.linkedinUrl.toLowerCase().replace(/\/$/, ''),
+          channel_name: name.trim(),
+          verified: true,
+        }, { onConflict: 'channel,channel_identifier', ignoreDuplicates: true })
+      }
 
       // Trigger prospecting habit update in service worker (non-blocking)
       chrome.runtime.sendMessage({ type: 'UPDATE_PROSPECTING_HABIT' }).catch(() => {})

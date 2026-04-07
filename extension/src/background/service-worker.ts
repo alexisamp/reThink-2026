@@ -1123,6 +1123,27 @@ interface Contact {
 }
 
 async function findContactByPhone(userId: string, phone: string): Promise<Contact | null> {
+  // Primary: contact_channels (new unified table)
+  const variants = phoneVariants(phone)
+  const { data: channelData } = await supabase
+    .from('contact_channels')
+    .select(`
+      outreach_log_id,
+      outreach_logs!inner (
+        id,
+        name
+      )
+    `)
+    .eq('channel', 'whatsapp')
+    .in('channel_identifier', variants)
+    .maybeSingle()
+
+  if (channelData) {
+    const contactData = channelData.outreach_logs as any
+    return { id: contactData.id, name: contactData.name }
+  }
+
+  // Fallback: legacy contact_phone_mappings (for backward compat during migration)
   const { data, error } = await supabase
     .from('contact_phone_mappings')
     .select(`
@@ -1155,9 +1176,28 @@ async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Pr
   const noWwwSlash = noWww + '/'
   const withWww = noWww.replace('linkedin.com', 'www.linkedin.com')
   const withWwwSlash = withWww + '/'
-
   const variants = Array.from(new Set([normalized, withSlash, noWww, noWwwSlash, withWww, withWwwSlash]))
 
+  // Primary: contact_channels (new unified table)
+  const { data: channelData } = await supabase
+    .from('contact_channels')
+    .select(`
+      outreach_log_id,
+      outreach_logs!inner (
+        id,
+        name
+      )
+    `)
+    .eq('channel', 'linkedin')
+    .in('channel_identifier', variants)
+    .maybeSingle()
+
+  if (channelData) {
+    const contactData = channelData.outreach_logs as any
+    return { id: contactData.id, name: contactData.name }
+  }
+
+  // Fallback: legacy outreach_logs.linkedin_url
   const { data, error } = await supabase
     .from('outreach_logs')
     .select('id, name')

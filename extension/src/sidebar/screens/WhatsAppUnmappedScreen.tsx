@@ -73,13 +73,20 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
   async function handleLink(contactId: string) {
     setLinking(true)
     try {
-      const { error } = await supabase.from('contact_phone_mappings').insert({
-        user_id: user.id,
-        contact_id: contactId,
-        phone_number: phone,
-        label: null,
-      })
-      if (error && error.code !== '23505') throw error
+      // Write to contact_channels (new unified table)
+      const { error: chErr } = await supabase.from('contact_channels').upsert({
+        outreach_log_id: contactId,
+        channel: 'whatsapp',
+        channel_identifier: phone,
+        verified: true,
+      }, { onConflict: 'channel,channel_identifier', ignoreDuplicates: true })
+      if (chErr && chErr.code !== '23505') throw chErr
+
+      // Also write legacy table for backward compat during migration
+      await supabase.from('contact_phone_mappings').insert({
+        user_id: user.id, contact_id: contactId, phone_number: phone, label: null,
+      }).then(() => {})  // ignore duplicate errors silently
+
       onMapped()
     } catch {
       alert('Failed to link contact. Please try again.')
@@ -112,12 +119,19 @@ export function WhatsAppUnmappedScreen({ phone, suggestedName, user, onMapped }:
 
       if (contactError || !contact) throw contactError
 
+      // Write to contact_channels (new unified table)
+      await supabase.from('contact_channels').upsert({
+        outreach_log_id: contact.id,
+        channel: 'whatsapp',
+        channel_identifier: phone,
+        channel_name: newName.trim() || null,
+        verified: true,
+      }, { onConflict: 'channel,channel_identifier', ignoreDuplicates: true })
+
+      // Also write legacy table for backward compat during migration
       await supabase.from('contact_phone_mappings').insert({
-        user_id: user.id,
-        contact_id: contact.id,
-        phone_number: phone,
-        label: null,
-      })
+        user_id: user.id, contact_id: contact.id, phone_number: phone, label: null,
+      }).then(() => {})
 
       // If no LinkedIn provided, open a LinkedIn search in a new tab so user can find & enrich
       if (!linkedinInput.trim()) {
