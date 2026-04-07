@@ -285,8 +285,15 @@ export interface Contact {
   attio_company_id?: string | null
   ai_enriched_at?: string | null
   profile_photo_url?: string | null
-  birthday?: string | null          // MM-DD
+  birthday?: string | null          // MM-DD or ISO date (v2 uses ISO date column)
   links?: Array<{url: string; label: string; type?: string; created_at?: string}> | null
+  // v2 new fields
+  company_id?: string | null
+  interests?: string | null
+  looking_for?: string | null
+  tier?: 1 | 2 | 3 | null
+  referred_by?: string | null
+  advisory_role?: string | null
   created_at: string
   updated_at: string
 }
@@ -313,6 +320,13 @@ export interface Interaction {
   direction: 'outbound' | 'inbound'
   notes: string | null
   interaction_date: string
+  // v2 new fields
+  opportunity_id?: string | null
+  value_log_id?: string | null
+  next_step?: string | null
+  next_step_date?: string | null
+  next_step_owner?: 'me' | 'them' | null
+  channel?: 'whatsapp' | 'linkedin' | 'exit5' | 'x' | 'email' | 'call' | 'in_person' | 'other' | null
   created_at: string
 }
 
@@ -320,3 +334,106 @@ export interface Interaction {
 export type OutreachLog = Contact
 export type OutreachStatus = ContactStatus
 export type OutreachType = ContactCategory
+
+// ─── v2 New Types ─────────────────────────────────────────────────────────────
+
+export interface Company {
+  id: string
+  user_id: string
+  name: string
+  domain: string | null
+  sector: string | null
+  size: string | null
+  notes: string | null
+  key_insight: string | null
+  logo_url: string | null
+  created_at: string
+}
+
+export type OpportunityType = 'job' | 'consulting' | 'business' | 'partnership' | 'other'
+export type OpportunityStage = 'exploring' | 'active' | 'negotiating' | 'won' | 'lost'
+
+export interface Opportunity {
+  id: string
+  user_id: string
+  company_id: string | null
+  title: string
+  type: OpportunityType
+  stage: OpportunityStage
+  estimated_value: number | null
+  target_date: string | null
+  notes: string | null
+  decision_filter_pass: boolean | null
+  interview_prep: Record<string, unknown> | null
+  interview_map: Record<string, unknown> | null
+  negotiation_prep: Record<string, unknown> | null
+  created_at: string
+  // Joined fields
+  company?: Company | null
+}
+
+export interface ContactChannel {
+  id: string
+  outreach_log_id: string
+  channel: 'whatsapp' | 'linkedin' | 'exit5' | 'x'
+  channel_identifier: string
+  channel_name: string | null
+  verified: boolean
+  created_at: string
+}
+
+export interface OpportunityContact {
+  opportunity_id: string
+  outreach_log_id: string
+  role: 'champion' | 'contact' | 'decision_maker' | 'blocker' | null
+}
+
+export type ValueLogType = 'introduction' | 'content' | 'referral' | 'advice' | 'endorsement' | 'opportunity' | 'other'
+
+export interface ValueLog {
+  id: string
+  user_id: string
+  outreach_log_id: string
+  type: ValueLogType
+  description: string | null
+  date: string
+  created_at: string
+}
+
+export type PlaybookEntryType =
+  | 'pitch' | 'story' | 'value_prop' | 'positioning' | 'skill'
+  | 'objection' | 'value_bank' | 'template' | 'persona' | 'script' | 'boundary'
+
+export type StoryFramework = 'car' | 'icarq' | 'disney' | 'clear'
+
+export interface PlaybookEntry {
+  id: string
+  user_id: string
+  type: PlaybookEntryType
+  title: string
+  content: string | null
+  tags: string[]
+  framework: StoryFramework | null
+  list_order: number
+  updated_at: string
+  created_at: string
+}
+
+export interface EnglishSession {
+  id: string
+  user_id: string
+  type: 'reading' | 'ai_conversation' | 'podcast' | 'real_conversation' | 'other'
+  minutes: number
+  source: 'manual' | 'jacob_app'
+  date: string
+  created_at: string
+}
+
+export interface WeeklyKpi {
+  id: string
+  user_id: string
+  week_start: string
+  conversations_count: number
+  english_minutes: number
+  created_at: string
+}
