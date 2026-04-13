@@ -3,8 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, CaretRight, PencilSimple, Check, Plus,
   WhatsappLogo, LinkedinLogo, TwitterLogo, Star, Briefcase,
-  Heart, Lightning, HandCoins, ChatCircle, Buildings,
-  Trash, Target, User,
+  Trash, Target, User, ArrowSquareOut, X,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -276,13 +275,18 @@ export default function PersonDetail() {
   const [newVLDesc, setNewVLDesc] = useState('')
   const [notesDraft, setNotesDraft] = useState('')
   const [notesSaving, setNotesSaving] = useState(false)
+  const [linkedinModalOpen, setLinkedinModalOpen] = useState(false)
+  const [liAbout, setLiAbout] = useState('')
+  const [liFollowers, setLiFollowers] = useState('')
+  const [liConnections, setLiConnections] = useState('')
+  const [liSaving, setLiSaving] = useState(false)
 
   const { logs: valueLogs, add: addValueLog, remove: removeValueLog } = useValueLogs(user?.id ?? null, id)
 
   const load = useCallback(async () => {
     if (!id || !user) return
     setLoading(true)
-    const [{ data: c }, { data: ints }, { data: chans }, { data: opps }] = await Promise.all([
+    const [{ data: c }, { data: ints }, { data: chans }, oppsResult] = await Promise.all([
       supabase.from('outreach_logs').select('*').eq('id', id).single(),
       supabase.from('interactions').select('*').eq('contact_id', id).order('interaction_date', { ascending: false }),
       supabase.from('contact_channels').select('*').eq('outreach_log_id', id),
@@ -291,16 +295,17 @@ export default function PersonDetail() {
         .select('opportunity_id')
         .eq('outreach_log_id', id)
         .then(async ({ data: links }) => {
-          if (!links || links.length === 0) return { data: [] }
+          if (!links || links.length === 0) return { data: [] as Opportunity[] }
           const ids = links.map(l => l.opportunity_id)
-          return supabase.from('opportunities').select('*, company:companies(*)').in('id', ids)
+          const { data } = await supabase.from('opportunities').select('*, company:companies(*)').in('id', ids)
+          return { data: (data ?? []) as Opportunity[] }
         }),
     ])
     setContact(c ?? null)
     setNotesDraft(c?.notes ?? '')
     setInteractions(ints ?? [])
     setChannels(chans ?? [])
-    setOpportunities(((opps as unknown) as { data: Opportunity[] | null }).data ?? [])
+    setOpportunities(oppsResult.data ?? [])
     setLoading(false)
   }, [id, user])
 
@@ -339,6 +344,22 @@ export default function PersonDetail() {
     setNotesSaving(true)
     await updateField('notes', notesDraft.trim() || null)
     setNotesSaving(false)
+  }
+
+  const saveLinkedInEnrich = async () => {
+    setLiSaving(true)
+    const parts: string[] = []
+    if (liFollowers.trim()) parts.push(`Followers: ${liFollowers.trim()}`)
+    if (liConnections.trim()) parts.push(`Connections: ${liConnections.trim()}`)
+    if (liAbout.trim()) parts.push(liAbout.trim())
+    if (parts.length > 0) {
+      await updateField('personal_context', parts.join('\n'))
+    }
+    setLiSaving(false)
+    setLinkedinModalOpen(false)
+    setLiAbout('')
+    setLiFollowers('')
+    setLiConnections('')
   }
 
   const logInteraction = async () => {
@@ -802,7 +823,7 @@ export default function PersonDetail() {
             <EditableField label="Company" value={contact.company} onSave={v => updateField('company', v)} />
             <EditableField label="Location" value={contact.location} onSave={v => updateField('location', v)} />
 
-            {/* LinkedIn URL — auto-links channel */}
+            {/* LinkedIn URL — auto-links channel + fetch button */}
             <EditableField
               label="LinkedIn"
               value={contact.linkedin_url}
@@ -812,6 +833,83 @@ export default function PersonDetail() {
               }}
               placeholder="https://linkedin.com/in/..."
             />
+            {contact.linkedin_url && (
+              <div className="flex items-center gap-2 -mt-1 mb-2">
+                <a
+                  href={contact.linkedin_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1 text-[10px] text-shuttle hover:text-burnham transition-colors"
+                >
+                  <ArrowSquareOut size={10} /> Open
+                </a>
+                <span className="text-mercury">·</span>
+                <button
+                  onClick={() => {
+                    setLiAbout(contact.personal_context ?? '')
+                    setLiFollowers('')
+                    setLiConnections('')
+                    setLinkedinModalOpen(true)
+                  }}
+                  className="flex items-center gap-1 text-[10px] text-burnham hover:underline"
+                >
+                  <LinkedinLogo size={10} /> Fetch profile
+                </button>
+              </div>
+            )}
+
+            {/* LinkedIn enrich modal */}
+            {linkedinModalOpen && (
+              <div className="mb-3 p-3 bg-gossip/10 border border-gossip/40 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-burnham/70">LinkedIn Profile</p>
+                  <button onClick={() => setLinkedinModalOpen(false)} className="text-shuttle hover:text-burnham">
+                    <X size={10} />
+                  </button>
+                </div>
+                <p className="text-[10px] text-shuttle mb-2">Open the profile, copy data below:</p>
+                <div className="flex gap-1.5 mb-1.5">
+                  <div className="flex-1">
+                    <SidebarLabel>Followers</SidebarLabel>
+                    <input
+                      value={liFollowers}
+                      onChange={e => setLiFollowers(e.target.value)}
+                      placeholder="e.g. 2.4k"
+                      className="w-full text-[11px] border border-mercury rounded px-1.5 py-0.5 focus:outline-none focus:border-burnham bg-white"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <SidebarLabel>Connections</SidebarLabel>
+                    <input
+                      value={liConnections}
+                      onChange={e => setLiConnections(e.target.value)}
+                      placeholder="e.g. 500+"
+                      className="w-full text-[11px] border border-mercury rounded px-1.5 py-0.5 focus:outline-none focus:border-burnham bg-white"
+                    />
+                  </div>
+                </div>
+                <SidebarLabel>About / Bio</SidebarLabel>
+                <textarea
+                  value={liAbout}
+                  onChange={e => setLiAbout(e.target.value)}
+                  placeholder="Paste their About section..."
+                  rows={3}
+                  className="w-full text-[11px] border border-mercury rounded px-1.5 py-1 resize-none focus:outline-none focus:border-burnham bg-white mt-0.5 mb-1.5"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveLinkedInEnrich}
+                    disabled={liSaving}
+                    className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-burnham text-gossip rounded disabled:opacity-50"
+                  >
+                    <Check size={8} /> {liSaving ? 'Saving...' : 'Save to profile'}
+                  </button>
+                  <button onClick={() => setLinkedinModalOpen(false)} className="text-[10px] text-shuttle hover:text-burnham">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Tier */}
             <div className="mb-2">
