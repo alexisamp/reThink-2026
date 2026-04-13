@@ -117,16 +117,27 @@ export default function CompanyDetail() {
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {/* header */}
           <div className="flex items-center gap-4 mb-6">
-            <div className="w-14 h-14 rounded-lg bg-gossip flex items-center justify-center text-burnham font-semibold text-xl border border-pastel">
-              {company.logo_url ? (
-                <img src={company.logo_url} alt={company.name} className="w-14 h-14 rounded-lg object-cover" />
+            {(() => {
+              const logoSrc = company.logo_url
+                || (company.domain
+                  ? `https://www.google.com/s2/favicons?domain=${company.domain}&sz=128`
+                  : null)
+              return logoSrc ? (
+                <img
+                  src={logoSrc}
+                  alt={company.name}
+                  className="w-12 h-12 rounded-lg object-contain border border-mercury bg-white p-1"
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
               ) : (
-                company.name[0]?.toUpperCase()
-              )}
-            </div>
+                <div className="w-12 h-12 rounded-lg bg-gossip flex items-center justify-center text-burnham font-semibold text-xl border border-pastel">
+                  {company.name[0]?.toUpperCase()}
+                </div>
+              )
+            })()}
             <div>
-              <h1 className="text-xl font-semibold text-midnight">{company.name}</h1>
-              <p className="text-sm text-shuttle">{[company.sector, company.domain].filter(Boolean).join(' · ') || 'No details'}</p>
+              <h1 className="text-[15px] font-semibold text-midnight">{company.name}</h1>
+              <p className="text-[12px] text-shuttle">{[company.sector, company.domain].filter(Boolean).join(' · ') || 'No details'}</p>
             </div>
           </div>
 

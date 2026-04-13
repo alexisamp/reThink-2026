@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  ArrowLeft, CaretRight, X, Check, PencilSimple, Briefcase,
-  DotOutline, Target,
+  ArrowLeft, CaretRight, Check, PencilSimple, Target,
+  Copy, Users, FileText, ChatTeardrop, Briefcase,
+  CheckCircle, Warning, Circle,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import type { Opportunity, OpportunityStage, OpportunityType, Contact } from '@/types'
+import type { Opportunity, OpportunityStage, OpportunityType, Contact, Interaction } from '@/types'
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -20,18 +21,46 @@ const STAGE_COLORS: Record<OpportunityStage, string> = {
   lost: 'text-red-700 bg-red-100',
 }
 
-const STAGE_DOT: Record<OpportunityStage, string> = {
-  exploring: 'text-shuttle',
-  active: 'text-pastel',
-  negotiating: 'text-yellow-500',
-  won: 'text-green-500',
-  lost: 'text-red-400',
+const STAGE_BAR: Record<OpportunityStage, string> = {
+  exploring: 'bg-mercury',
+  active: 'bg-pastel',
+  negotiating: 'bg-yellow-400',
+  won: 'bg-green-400',
+  lost: 'bg-red-400',
 }
 
 const TYPE_LABELS: Record<OpportunityType, string> = {
   job: 'Job', consulting: 'Consulting', business: 'Business',
   partnership: 'Partnership', other: 'Other',
 }
+
+// ── types ─────────────────────────────────────────────────────────────────────
+
+interface InterviewMapEntry {
+  name: string
+  role: string
+  round: number
+  status: 'pending' | 'completed' | 'scheduled'
+  notes?: string
+}
+
+interface LocalDocs {
+  folder?: string
+  pretalk?: string
+  conversations?: string
+  [key: string]: string | undefined
+}
+
+interface InterviewPrepData {
+  tldr?: string
+  local_docs?: LocalDocs
+  current_round?: number
+  decision_filter?: Record<string, string>
+  value_ledger_balance?: string
+  [key: string]: unknown
+}
+
+type Tab = 'overview' | 'stakeholders' | 'transcripts' | 'local_files' | 'negotiation'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -42,18 +71,50 @@ function formatValue(n: number | null): string {
   return `$${n}`
 }
 
-// ── editable field ────────────────────────────────────────────────────────────
+function roundStatusIcon(status: string) {
+  if (status === 'completed') return <CheckCircle size={14} weight="fill" className="text-pastel" />
+  if (status === 'scheduled') return <Warning size={14} weight="fill" className="text-yellow-500" />
+  return <Circle size={14} className="text-mercury" />
+}
+
+function filterStatusIcon(val: string) {
+  if (val === '✅' || val === 'true') return <CheckCircle size={13} weight="fill" className="text-pastel" />
+  if (val === '⚠️') return <Warning size={13} weight="fill" className="text-yellow-500" />
+  return <Circle size={13} className="text-mercury" />
+}
+
+// ── sub-components ────────────────────────────────────────────────────────────
+
+function SidebarLabel({ children }: { children: React.ReactNode }) {
+  return <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/60">{children}</span>
+}
+
+function SidebarValue({ children }: { children: React.ReactNode }) {
+  return <span className="text-[12px] text-midnight">{children}</span>
+}
+
+function SidebarRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 mb-2">
+      <SidebarLabel>{label}</SidebarLabel>
+      <SidebarValue>{children}</SidebarValue>
+    </div>
+  )
+}
 
 function EditableField({
-  label, value, onSave, multiline = false,
+  label, value, onSave, multiline = false, placeholder,
 }: {
   label: string
   value: string | null | undefined
   onSave: (val: string | null) => Promise<void>
   multiline?: boolean
+  placeholder?: string
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value ?? '')
+
+  useEffect(() => { setDraft(value ?? '') }, [value])
 
   const save = async () => {
     await onSave(draft.trim() || null)
@@ -62,70 +123,87 @@ function EditableField({
 
   if (editing) {
     return (
-      <div className="flex flex-col gap-1">
-        <span className="text-xs text-shuttle uppercase tracking-wide">{label}</span>
+      <div className="flex flex-col gap-1 mb-3">
+        <SidebarLabel>{label}</SidebarLabel>
         {multiline ? (
           <textarea
-            className="text-sm border border-mercury rounded px-2 py-1 resize-none bg-white focus:outline-none focus:border-burnham"
+            className="text-[12px] border border-mercury rounded px-2 py-1 resize-none bg-white focus:outline-none focus:border-burnham"
             rows={4} value={draft} onChange={e => setDraft(e.target.value)} autoFocus
           />
         ) : (
           <input
-            className="text-sm border border-mercury rounded px-2 py-1 bg-white focus:outline-none focus:border-burnham"
+            className="text-[12px] border border-mercury rounded px-2 py-1 bg-white focus:outline-none focus:border-burnham"
             value={draft} onChange={e => setDraft(e.target.value)} autoFocus
             onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
           />
         )}
         <div className="flex gap-1">
-          <button onClick={save} className="flex items-center gap-1 text-xs px-2 py-0.5 bg-burnham text-gossip rounded">
-            <Check size={10} /> Save
+          <button onClick={save} className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 bg-burnham text-gossip rounded">
+            <Check size={8} /> Save
           </button>
-          <button onClick={() => setEditing(false)} className="text-xs px-2 py-0.5 text-shuttle hover:text-burnham">Cancel</button>
+          <button onClick={() => setEditing(false)} className="text-[10px] px-2 py-0.5 text-shuttle hover:text-burnham">Cancel</button>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="group flex flex-col gap-0.5">
-      <span className="text-xs text-shuttle uppercase tracking-wide">{label}</span>
+    <div className="group flex flex-col gap-0.5 mb-3">
+      <SidebarLabel>{label}</SidebarLabel>
       <div className="flex items-start gap-1">
-        <span className="text-sm text-midnight flex-1 whitespace-pre-wrap">{value || <span className="text-mercury italic">—</span>}</span>
-        <button onClick={() => { setDraft(value ?? ''); setEditing(true) }} className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-shuttle hover:text-burnham transition-opacity">
-          <PencilSimple size={12} />
+        <span className="text-[12px] text-midnight flex-1 whitespace-pre-wrap">
+          {value || <span className="text-mercury italic text-[11px]">{placeholder ?? '—'}</span>}
+        </span>
+        <button onClick={() => { setDraft(value ?? ''); setEditing(true) }}
+          className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-shuttle hover:text-burnham transition-opacity">
+          <PencilSimple size={10} />
         </button>
       </div>
     </div>
   )
 }
 
-// ── accordion section ─────────────────────────────────────────────────────────
+/** Editable free-text field for main content area */
+function ContentField({ label, value, onSave }: { label: string; value: string | null | undefined; onSave: (val: string | null) => Promise<void> }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value ?? '')
 
-function AccordionSection({ title, badge, children, defaultOpen = true }: {
-  title: string
-  badge?: string
-  children: React.ReactNode
-  defaultOpen?: boolean
-}) {
-  const [open, setOpen] = useState(defaultOpen)
+  useEffect(() => { setDraft(value ?? '') }, [value])
+
+  const save = async () => {
+    await onSave(draft.trim() || null)
+    setEditing(false)
+  }
+
   return (
-    <div className="border border-mercury rounded-lg overflow-hidden mb-4">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-mercury/30 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-midnight">{title}</span>
-          {badge && (
-            <span className="text-xs px-1.5 py-0.5 bg-gossip text-burnham rounded-full">{badge}</span>
-          )}
+    <div className="group mb-4">
+      <div className="flex items-center gap-2 mb-1.5">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50">{label}</p>
+        {!editing && (
+          <button onClick={() => { setDraft(value ?? ''); setEditing(true) }}
+            className="opacity-0 group-hover:opacity-100 text-shuttle hover:text-burnham transition-opacity">
+            <PencilSimple size={10} />
+          </button>
+        )}
+      </div>
+      {editing ? (
+        <div className="flex flex-col gap-2">
+          <textarea
+            className="w-full text-[13px] border border-mercury rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-burnham bg-white"
+            rows={5}
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button onClick={save} className="text-[11px] px-3 py-1 bg-burnham text-gossip rounded">Save</button>
+            <button onClick={() => setEditing(false)} className="text-[11px] px-2 py-1 text-shuttle hover:text-burnham">Cancel</button>
+          </div>
         </div>
-        <span className="text-shuttle text-lg leading-none">{open ? '−' : '+'}</span>
-      </button>
-      {open && (
-        <div className="px-4 py-3 bg-white border-t border-mercury">
-          {children}
-        </div>
+      ) : (
+        <p className="text-[13px] text-midnight whitespace-pre-wrap leading-relaxed">
+          {value || <span className="text-mercury italic">Click to add...</span>}
+        </p>
       )}
     </div>
   )
@@ -140,6 +218,10 @@ export default function OpportunityDetail() {
   const [opp, setOpp] = useState<Opportunity | null>(null)
   const [contacts, setContacts] = useState<Contact[]>([])
   const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<Tab>('overview')
+  const [transcriptText, setTranscriptText] = useState('')
+  const [transcriptSaving, setTranscriptSaving] = useState(false)
+  const [copiedPath, setCopiedPath] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!id || !user) return
@@ -152,10 +234,7 @@ export default function OpportunityDetail() {
 
     if (links && links.length > 0) {
       const contactIds = links.map(l => l.outreach_log_id)
-      const { data: people } = await supabase
-        .from('outreach_logs')
-        .select('*')
-        .in('id', contactIds)
+      const { data: people } = await supabase.from('outreach_logs').select('*').in('id', contactIds)
       setContacts(people ?? [])
     }
     setLoading(false)
@@ -169,262 +248,539 @@ export default function OpportunityDetail() {
     setOpp(prev => prev ? { ...prev, [field]: value } : null)
   }, [id])
 
-  const updateStage = async (stage: OpportunityStage) => {
-    await updateField('stage', stage)
+  const saveTranscript = async () => {
+    if (!user || !id || !transcriptText.trim()) return
+    setTranscriptSaving(true)
+    await supabase.from('interactions').insert({
+      user_id: user.id,
+      contact_id: contacts[0]?.id ?? null,
+      opportunity_id: id,
+      type: 'virtual_coffee',
+      direction: 'outbound',
+      notes: transcriptText.trim(),
+      interaction_date: new Date().toISOString().split('T')[0],
+    })
+    setTranscriptText('')
+    setTranscriptSaving(false)
   }
 
-  if (loading) return <div className="flex items-center justify-center h-full text-shuttle text-sm">Loading...</div>
+  const copyPath = (path: string) => {
+    navigator.clipboard.writeText(path)
+    setCopiedPath(path)
+    setTimeout(() => setCopiedPath(null), 2000)
+  }
+
+  if (loading) return <div className="flex items-center justify-center h-full text-shuttle text-[13px]">Loading...</div>
   if (!opp) return (
     <div className="flex flex-col items-center justify-center h-full gap-3">
-      <p className="text-shuttle">Opportunity not found.</p>
-      <Link to="/people/opportunities" className="text-sm text-burnham underline">Back to Opportunities</Link>
+      <p className="text-shuttle text-[13px]">Opportunity not found.</p>
+      <Link to="/people/opportunities" className="text-[12px] text-burnham underline">Back to Opportunities</Link>
     </div>
   )
 
+  const prepData = (opp.interview_prep ?? {}) as InterviewPrepData
+  const interviewMap = (Array.isArray(opp.interview_map) ? opp.interview_map : []) as InterviewMapEntry[]
+  const localDocs = prepData.local_docs as LocalDocs | undefined
+  const decisionFilter = prepData.decision_filter as Record<string, string> | undefined
   const isActive = opp.stage === 'active'
   const isNegotiating = opp.stage === 'negotiating'
+  const showNegotiation = isActive || isNegotiating
+
+  // group stakeholders by round
+  const rounds = Array.from(new Set(interviewMap.map(e => e.round))).sort()
+
+  const TAB_CONFIG: { key: Tab; label: string; icon: React.ReactNode; show?: boolean }[] = [
+    { key: 'overview', label: 'Overview', icon: <Briefcase size={12} /> },
+    { key: 'stakeholders', label: 'Stakeholders', icon: <Users size={12} />, show: isActive || isNegotiating },
+    { key: 'transcripts', label: 'Transcripts', icon: <ChatTeardrop size={12} /> },
+    { key: 'local_files', label: 'Local Files', icon: <FileText size={12} />, show: !!localDocs },
+    { key: 'negotiation', label: 'Negotiation', icon: <Target size={12} />, show: showNegotiation },
+  ]
 
   return (
-    <div className="flex flex-col h-full bg-[#FAFAFA]">
-      {/* breadcrumb */}
-      <div className="flex items-center gap-2 px-6 py-3 bg-white border-b border-mercury">
-        <Link to="/people/opportunities" className="text-shuttle hover:text-burnham"><ArrowLeft size={16} weight="bold" /></Link>
-        <span className="text-shuttle text-sm">Opportunities</span>
-        <CaretRight size={12} className="text-mercury" />
-        <span className="text-sm font-medium text-midnight truncate max-w-[300px]">{opp.title}</span>
-        <button onClick={() => navigate('/people/opportunities')} className="ml-auto text-shuttle hover:text-burnham p-1 rounded hover:bg-mercury">
-          <X size={16} />
-        </button>
+    <div className="flex flex-col h-full bg-[#F7F7F5]">
+      {/* ── breadcrumb ── */}
+      <div className="flex items-center gap-2 px-5 py-2.5 bg-white border-b border-mercury shrink-0">
+        <Link to="/people/opportunities" className="text-shuttle hover:text-burnham transition-colors">
+          <ArrowLeft size={14} weight="bold" />
+        </Link>
+        <span className="text-[12px] text-shuttle">Opportunities</span>
+        <CaretRight size={10} className="text-mercury" />
+        <span className="text-[12px] font-medium text-midnight truncate max-w-[300px]">{opp.title}</span>
+      </div>
+
+      {/* ── TLDR bar ── */}
+      {prepData.tldr && (
+        <div className="px-5 py-2 bg-gossip/20 border-b border-gossip/40 shrink-0">
+          <p className="text-[12px] text-burnham leading-relaxed">
+            <span className="font-semibold mr-1.5">TLDR:</span>
+            {prepData.tldr}
+          </p>
+        </div>
+      )}
+
+      {/* ── stage pipeline ── */}
+      <div className="px-5 py-2.5 bg-white border-b border-mercury shrink-0">
+        <div className="flex items-center gap-0.5">
+          {STAGES.map((s, i) => {
+            const passed = STAGES.indexOf(opp.stage) >= i
+            const isCurrent = opp.stage === s
+            return (
+              <div key={s} className="flex items-center flex-1">
+                <button
+                  onClick={() => updateField('stage', s)}
+                  className={[
+                    'flex-1 py-1 px-1.5 text-[11px] rounded text-center font-medium transition-all relative',
+                    isCurrent ? STAGE_COLORS[s] : passed ? 'text-burnham/50' : 'text-shuttle/40 hover:bg-mercury/50',
+                  ].join(' ')}
+                >
+                  {isCurrent && (
+                    <span className={`absolute inset-0 rounded opacity-30 ${STAGE_BAR[s]}`} />
+                  )}
+                  <span className="relative">{s}</span>
+                </button>
+                {i < STAGES.length - 1 && (
+                  <span className="text-mercury text-[10px] mx-0.5">›</span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── tabs ── */}
+      <div className="flex items-center gap-0 px-5 bg-white border-b border-mercury shrink-0">
+        {TAB_CONFIG.filter(t => t.show !== false).map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex items-center gap-1.5 px-3 py-2 text-[12px] border-b-2 transition-colors ${
+              tab === t.key
+                ? 'border-burnham text-burnham font-medium'
+                : 'border-transparent text-shuttle hover:text-midnight'
+            }`}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* main */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          {/* header */}
-          <div className="flex items-start gap-4 mb-6">
-            <div className="w-12 h-12 rounded-lg bg-gossip flex items-center justify-center text-burnham">
-              <Target size={24} />
-            </div>
-            <div className="flex-1">
-              <h1 className="text-xl font-semibold text-midnight">{opp.title}</h1>
-              <div className="flex items-center gap-2 mt-1">
-                <DotOutline size={14} weight="fill" className={STAGE_DOT[opp.stage]} />
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STAGE_COLORS[opp.stage]}`}>
-                  {opp.stage}
-                </span>
-                <span className="text-xs text-shuttle">·</span>
-                <span className="text-xs text-shuttle">{TYPE_LABELS[opp.type]}</span>
-                {opp.company && (
-                  <>
-                    <span className="text-xs text-shuttle">·</span>
-                    <Link to={`/people/companies/${opp.company.id}`} className="text-xs text-burnham hover:underline">
-                      {opp.company.name}
-                    </Link>
-                  </>
+        {/* main content */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+
+          {/* ── OVERVIEW tab ── */}
+          {tab === 'overview' && (
+            <div>
+              {/* header */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-lg bg-gossip/40 flex items-center justify-center text-burnham shrink-0">
+                  <Target size={18} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-[15px] font-semibold text-midnight">{opp.title}</h1>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${STAGE_COLORS[opp.stage]}`}>
+                      {opp.stage}
+                    </span>
+                    <span className="text-[11px] text-shuttle/60">{TYPE_LABELS[opp.type]}</span>
+                    {opp.company && (
+                      <>
+                        <span className="text-mercury">·</span>
+                        <Link to={`/people/companies/${opp.company.id}`} className="text-[11px] text-burnham hover:underline">
+                          {opp.company.name}
+                        </Link>
+                      </>
+                    )}
+                    {opp.estimated_value && (
+                      <>
+                        <span className="text-mercury">·</span>
+                        <span className="text-[12px] font-semibold text-midnight">{formatValue(opp.estimated_value)}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Decision filter checklist */}
+              {decisionFilter && Object.keys(decisionFilter).length > 0 && (
+                <div className="mb-5 p-3 bg-white border border-mercury rounded-lg">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">Decision Filter</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {Object.entries(decisionFilter).map(([key, val]) => (
+                      <div key={key} className="flex items-center gap-1.5">
+                        {filterStatusIcon(val)}
+                        <span className="text-[11px] text-midnight capitalize">{key.replace(/_/g, ' ')}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {prepData.value_ledger_balance && (
+                    <p className="text-[11px] text-shuttle mt-2 pt-2 border-t border-mercury/50">
+                      {prepData.value_ledger_balance}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Notes */}
+              <ContentField
+                label="Notes"
+                value={opp.notes}
+                onSave={v => updateField('notes', v)}
+              />
+
+              {/* People — always expanded */}
+              <div className="mt-2">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">
+                  People ({contacts.length})
+                </p>
+                {contacts.length === 0 ? (
+                  <p className="text-[12px] text-mercury italic">No contacts linked.</p>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {contacts.map(c => (
+                      <Link
+                        key={c.id}
+                        to={`/people/${c.id}`}
+                        className="flex items-center gap-2.5 px-3 py-2 bg-white border border-mercury rounded-lg hover:border-burnham transition-colors"
+                      >
+                        <div className="w-6 h-6 rounded-full bg-gossip flex items-center justify-center text-burnham text-[11px] font-semibold shrink-0">
+                          {c.name[0]?.toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] font-medium text-midnight truncate">{c.name}</p>
+                          <p className="text-[10px] text-shuttle truncate">{c.job_title || c.status}</p>
+                        </div>
+                        <CaretRight size={10} className="text-mercury shrink-0" />
+                      </Link>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
-            {opp.estimated_value && (
-              <div className="text-right">
-                <p className="text-lg font-semibold text-midnight">{formatValue(opp.estimated_value)}</p>
-                <p className="text-xs text-shuttle">est. value</p>
-              </div>
-            )}
-          </div>
+          )}
 
-          {/* stage pipeline */}
-          <div className="flex items-center gap-1 mb-6 p-3 bg-white border border-mercury rounded-lg">
-            {STAGES.map((s, i) => (
-              <div key={s} className="flex items-center flex-1">
+          {/* ── STAKEHOLDERS tab ── */}
+          {tab === 'stakeholders' && (
+            <div>
+              <p className="text-[13px] font-semibold text-midnight mb-4">
+                Interview Map
+                {prepData.current_round && (
+                  <span className="ml-2 text-[11px] font-normal text-shuttle">
+                    (current: Round {prepData.current_round})
+                  </span>
+                )}
+              </p>
+
+              {interviewMap.length === 0 ? (
+                <div className="text-center py-8">
+                  <Users size={28} className="text-mercury mx-auto mb-2" />
+                  <p className="text-[12px] text-shuttle">No stakeholders mapped.</p>
+                  <p className="text-[11px] text-mercury mt-1">Populated by the jacob-prep plugin.</p>
+                </div>
+              ) : (
+                <div>
+                  {rounds.map(round => {
+                    const roundPeople = interviewMap.filter(e => e.round === round)
+                    const allDone = roundPeople.every(e => e.status === 'completed')
+                    return (
+                      <div key={round} className="mb-6">
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                            allDone ? 'bg-pastel text-white' : 'bg-mercury text-shuttle'
+                          }`}>
+                            {round}
+                          </div>
+                          <span className="text-[12px] font-semibold text-midnight">Round {round}</span>
+                          {allDone && (
+                            <span className="text-[10px] text-pastel font-medium">Completed</span>
+                          )}
+                        </div>
+                        <div className="ml-3 border-l-2 border-mercury pl-4 flex flex-col gap-3">
+                          {roundPeople.map((person, idx) => (
+                            <div key={idx} className="relative flex gap-3 pb-2">
+                              <div className="absolute -left-5 top-0.5">
+                                {roundStatusIcon(person.status)}
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-[13px] font-medium text-midnight">{person.name}</p>
+                                <p className="text-[11px] text-shuttle">{person.role}</p>
+                                {person.notes && (
+                                  <p className="text-[12px] text-shuttle/80 mt-1 leading-relaxed">{person.notes}</p>
+                                )}
+                                <span className={`mt-1 inline-block text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                  person.status === 'completed' ? 'bg-gossip text-burnham' :
+                                  person.status === 'scheduled' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-mercury text-shuttle'
+                                }`}>
+                                  {person.status}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* CLOSER framework prep */}
+              {isActive && (
+                <div className="mt-6 pt-4 border-t border-mercury">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50 mb-3">CLOSER Framework</p>
+                  <div className="flex flex-col gap-3">
+                    {[
+                      { key: 'C', label: 'Clarify the role & fit' },
+                      { key: 'L', label: 'Listen for pain points' },
+                      { key: 'O', label: 'Offer your value' },
+                      { key: 'S', label: 'Show concrete results' },
+                      { key: 'E', label: 'Explore culture & growth' },
+                      { key: 'R', label: 'Request next steps' },
+                    ].map(item => (
+                      <ContentField
+                        key={item.key}
+                        label={`${item.key} — ${item.label}`}
+                        value={(prepData as Record<string, string | undefined>)[`closer_${item.key.toLowerCase()}`] ?? null}
+                        onSave={v => updateField('interview_prep', { ...prepData, [`closer_${item.key.toLowerCase()}`]: v })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── TRANSCRIPTS tab ── */}
+          {tab === 'transcripts' && (
+            <div>
+              <p className="text-[13px] font-semibold text-midnight mb-1">Paste Transcript</p>
+              <p className="text-[12px] text-shuttle mb-4">Paste a Granola transcript or conversation notes below. It will be saved as an interaction.</p>
+              <textarea
+                value={transcriptText}
+                onChange={e => setTranscriptText(e.target.value)}
+                placeholder="Paste transcript here..."
+                rows={12}
+                className="w-full text-[12px] border border-mercury rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-burnham bg-white font-mono"
+              />
+              <div className="flex items-center gap-3 mt-3">
                 <button
-                  onClick={() => updateStage(s)}
-                  className={`flex-1 py-1.5 px-2 text-xs rounded-md text-center font-medium transition-colors ${
-                    opp.stage === s ? STAGE_COLORS[s] : 'text-shuttle hover:bg-mercury'
-                  }`}
+                  onClick={saveTranscript}
+                  disabled={!transcriptText.trim() || transcriptSaving}
+                  className="flex items-center gap-1 text-[11px] px-3 py-1.5 bg-burnham text-gossip rounded-lg disabled:opacity-50"
                 >
-                  {s}
+                  <Check size={11} /> {transcriptSaving ? 'Saving...' : 'Save as interaction'}
                 </button>
-                {i < STAGES.length - 1 && <span className="text-mercury mx-0.5">›</span>}
+                {transcriptText && (
+                  <button
+                    onClick={() => setTranscriptText('')}
+                    className="text-[11px] text-shuttle hover:text-burnham"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
-            ))}
+            </div>
+          )}
+
+          {/* ── LOCAL FILES tab ── */}
+          {tab === 'local_files' && (
+            <div>
+              <p className="text-[13px] font-semibold text-midnight mb-1">Local Files</p>
+              {!localDocs ? (
+                <p className="text-[12px] text-mercury italic">No local docs linked. Populated by the jacob-prep plugin via interview_prep.local_docs.</p>
+              ) : (
+                <div className="flex flex-col gap-3 mt-3">
+                  {localDocs.folder && (
+                    <div className="p-3 bg-white border border-mercury rounded-lg">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-1">Folder</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-[12px] text-midnight font-mono flex-1 truncate">{localDocs.folder}</p>
+                        <button
+                          onClick={() => copyPath(localDocs.folder!)}
+                          className="flex items-center gap-1 text-[10px] px-2 py-0.5 border border-mercury text-shuttle hover:text-burnham hover:border-burnham rounded transition-colors"
+                        >
+                          {copiedPath === localDocs.folder ? <Check size={10} /> : <Copy size={10} />}
+                          {copiedPath === localDocs.folder ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {Object.entries(localDocs)
+                    .filter(([k]) => k !== 'folder')
+                    .map(([key, filename]) => {
+                      if (!filename) return null
+                      const fullPath = localDocs.folder
+                        ? `${localDocs.folder}/${filename}`
+                        : filename
+                      return (
+                        <div key={key} className="p-3 bg-white border border-mercury rounded-lg">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-1">{key}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-[12px] text-midnight flex-1 truncate">{filename}</p>
+                            <button
+                              onClick={() => copyPath(fullPath)}
+                              className="flex items-center gap-1 text-[10px] px-2 py-0.5 border border-mercury text-shuttle hover:text-burnham hover:border-burnham rounded transition-colors"
+                            >
+                              {copiedPath === fullPath ? <Check size={10} /> : <Copy size={10} />}
+                              {copiedPath === fullPath ? 'Copied' : 'Copy path'}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── NEGOTIATION tab ── */}
+          {tab === 'negotiation' && (
+            <div>
+              <p className="text-[13px] font-semibold text-midnight mb-4">Negotiation Prep</p>
+
+              <div className="mb-5">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50 mb-3">GAINS Framework</p>
+                <div className="flex flex-col gap-1">
+                  {[
+                    { key: 'G', label: 'Goals — what you want' },
+                    { key: 'A', label: 'Assumptions — their constraints' },
+                    { key: 'I', label: 'Issues — what you\'re trading' },
+                    { key: 'N', label: 'Needs — non-negotiables' },
+                    { key: 'S', label: 'Solutions — creative trades' },
+                  ].map(item => {
+                    const prep = (opp.negotiation_prep as Record<string, string> | null) ?? {}
+                    return (
+                      <ContentField
+                        key={item.key}
+                        label={`${item.key} — ${item.label}`}
+                        value={prep[item.key.toLowerCase()] ?? null}
+                        onSave={v => updateField('negotiation_prep', { ...prep, [item.key.toLowerCase()]: v })}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-mercury">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50 mb-3">Comp Levers & Scripts</p>
+                {[
+                  { key: 'comp_target', label: 'Base salary target / range' },
+                  { key: 'scripts', label: 'Deflection scripts (counter-offer, delay, anchor)' },
+                  { key: 'pillars', label: 'Three Pillars (value, market, urgency)' },
+                ].map(item => {
+                  const prep = (opp.negotiation_prep as Record<string, string> | null) ?? {}
+                  return (
+                    <ContentField
+                      key={item.key}
+                      label={item.label}
+                      value={prep[item.key] ?? null}
+                      onSave={v => updateField('negotiation_prep', { ...prep, [item.key]: v })}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── sidebar ── */}
+        <aside className="w-[240px] flex-shrink-0 border-l border-mercury bg-white overflow-y-auto px-4 py-4">
+
+          <div className="mb-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">Details</p>
           </div>
 
-          {/* notes */}
-          <AccordionSection title="Notes">
-            <EditableField label="Notes" value={opp.notes} onSave={v => updateField('notes', v)} multiline />
-          </AccordionSection>
+          <EditableField label="Title" value={opp.title} onSave={v => updateField('title', v ?? opp.title)} />
 
-          {/* Interview Prep — only shown when stage = active */}
-          {isActive && (
-            <AccordionSection title="Interview Prep" badge="CLOSER framework">
-              <div className="flex flex-col gap-4">
-                <p className="text-xs text-shuttle">Use the CLOSER framework to prepare for your interviews.</p>
-                {['C — Clarify the role & fit', 'L — Listen for pain points', 'O — Offer your value', 'S — Show concrete results', 'E — Explore culture & growth', 'R — Request next steps'].map(item => (
-                  <EditableField
-                    key={item}
-                    label={item}
-                    value={(opp.interview_prep as Record<string, string> | null)?.[item.split(' — ')[0]] ?? null}
-                    onSave={v => updateField('interview_prep', { ...(opp.interview_prep as Record<string, unknown> ?? {}), [item.split(' — ')[0]]: v })}
-                    multiline
-                  />
-                ))}
-              </div>
-            </AccordionSection>
+          <div className="mb-2">
+            <SidebarLabel>Stage</SidebarLabel>
+            <select
+              value={opp.stage}
+              onChange={e => updateField('stage', e.target.value)}
+              className="mt-0.5 w-full text-[12px] border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham bg-white"
+            >
+              {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+
+          <div className="mb-2">
+            <SidebarLabel>Type</SidebarLabel>
+            <select
+              value={opp.type}
+              onChange={e => updateField('type', e.target.value)}
+              className="mt-0.5 w-full text-[12px] border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham bg-white"
+            >
+              {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+
+          <EditableField
+            label="Est. Value ($)"
+            value={opp.estimated_value?.toString() ?? null}
+            onSave={v => updateField('estimated_value', v ? Number(v) : null)}
+            placeholder="0"
+          />
+          <EditableField label="Target Date" value={opp.target_date} onSave={v => updateField('target_date', v)} placeholder="YYYY-MM-DD" />
+
+          {opp.company && (
+            <SidebarRow label="Company">
+              <Link to={`/people/companies/${opp.company.id}`} className="text-burnham hover:underline">
+                {opp.company.name}
+              </Link>
+            </SidebarRow>
           )}
 
-          {isActive && (
-            <AccordionSection title="Interview Map" defaultOpen={false}>
-              <div className="flex flex-col gap-3">
-                <p className="text-xs text-shuttle">Map the stakeholders you'll meet and key topics per round.</p>
-                <EditableField
-                  label="Rounds & Stakeholders"
-                  value={(opp.interview_map as Record<string, string> | null)?.rounds ?? null}
-                  onSave={v => updateField('interview_map', { ...(opp.interview_map as Record<string, unknown> ?? {}), rounds: v })}
-                  multiline
-                />
-                <EditableField
-                  label="Key Topics to Cover"
-                  value={(opp.interview_map as Record<string, string> | null)?.topics ?? null}
-                  onSave={v => updateField('interview_map', { ...(opp.interview_map as Record<string, unknown> ?? {}), topics: v })}
-                  multiline
-                />
-                <EditableField
-                  label="Questions to Ask"
-                  value={(opp.interview_map as Record<string, string> | null)?.questions ?? null}
-                  onSave={v => updateField('interview_map', { ...(opp.interview_map as Record<string, unknown> ?? {}), questions: v })}
-                  multiline
-                />
-              </div>
-            </AccordionSection>
-          )}
+          {/* Decision filter toggle */}
+          <div className="mb-3">
+            <SidebarLabel>Decision Filter</SidebarLabel>
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                onClick={() => updateField('decision_filter_pass', !opp.decision_filter_pass)}
+                className={`w-8 h-4 rounded-full transition-colors ${opp.decision_filter_pass ? 'bg-pastel' : 'bg-mercury'}`}
+              >
+                <div className={`w-3 h-3 rounded-full bg-white shadow transition-transform mx-0.5 ${opp.decision_filter_pass ? 'translate-x-4' : 'translate-x-0'}`} />
+              </button>
+              <SidebarValue>{opp.decision_filter_pass ? 'Passes' : 'Not evaluated'}</SidebarValue>
+            </div>
+          </div>
 
-          {/* Negotiation Prep — only shown when stage = negotiating */}
-          {isNegotiating && (
-            <AccordionSection title="Negotiation Prep" badge="GAINS framework">
-              <div className="flex flex-col gap-4">
-                <p className="text-xs text-shuttle">Use the GAINS framework to prepare your negotiation strategy.</p>
-                {['G — Goals (what you want)', 'A — Assumptions (their constraints)', 'I — Issues (what you\'re trading)', 'N — Needs (non-negotiables)', 'S — Solutions (creative trades)'].map(item => (
-                  <EditableField
-                    key={item}
-                    label={item}
-                    value={(opp.negotiation_prep as Record<string, string> | null)?.[item.split(' — ')[0]] ?? null}
-                    onSave={v => updateField('negotiation_prep', { ...(opp.negotiation_prep as Record<string, unknown> ?? {}), [item.split(' — ')[0]]: v })}
-                    multiline
-                  />
-                ))}
-              </div>
-            </AccordionSection>
-          )}
-
-          {isNegotiating && (
-            <AccordionSection title="Comp Levers & Scripts" defaultOpen={false}>
-              <div className="flex flex-col gap-3">
-                <EditableField
-                  label="Base salary target / range"
-                  value={(opp.negotiation_prep as Record<string, string> | null)?.comp_target ?? null}
-                  onSave={v => updateField('negotiation_prep', { ...(opp.negotiation_prep as Record<string, unknown> ?? {}), comp_target: v })}
-                  multiline
-                />
-                <EditableField
-                  label="Deflection scripts (counter-offer, delay, anchor)"
-                  value={(opp.negotiation_prep as Record<string, string> | null)?.scripts ?? null}
-                  onSave={v => updateField('negotiation_prep', { ...(opp.negotiation_prep as Record<string, unknown> ?? {}), scripts: v })}
-                  multiline
-                />
-                <EditableField
-                  label="Three Pillars (value, market, urgency)"
-                  value={(opp.negotiation_prep as Record<string, string> | null)?.pillars ?? null}
-                  onSave={v => updateField('negotiation_prep', { ...(opp.negotiation_prep as Record<string, unknown> ?? {}), pillars: v })}
-                  multiline
-                />
-              </div>
-            </AccordionSection>
-          )}
-
-          {/* People */}
+          {/* Linked people */}
           {contacts.length > 0 && (
-            <AccordionSection title={`People (${contacts.length})`} defaultOpen={false}>
-              <div className="flex flex-col gap-2">
+            <div className="mb-3 pt-3 border-t border-mercury">
+              <SidebarLabel>People ({contacts.length})</SidebarLabel>
+              <div className="flex flex-col gap-1 mt-1">
                 {contacts.map(c => (
                   <Link
                     key={c.id}
                     to={`/people/${c.id}`}
-                    className="flex items-center gap-2 p-2 bg-[#FAFAFA] border border-mercury rounded hover:border-burnham transition-colors"
+                    className="flex items-center gap-1.5 hover:text-burnham transition-colors"
                   >
-                    <div className="w-7 h-7 rounded-full bg-gossip flex items-center justify-center text-burnham text-xs font-medium">
+                    <div className="w-4 h-4 rounded-full bg-gossip flex items-center justify-center text-burnham text-[8px] font-bold shrink-0">
                       {c.name[0]?.toUpperCase()}
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-midnight">{c.name}</p>
-                      <p className="text-xs text-shuttle">{c.job_title || c.status}</p>
-                    </div>
+                    <span className="text-[11px] text-midnight truncate">{c.name}</span>
                   </Link>
                 ))}
               </div>
-            </AccordionSection>
+            </div>
           )}
-        </div>
 
-        {/* sidebar */}
-        <aside className="w-[260px] flex-shrink-0 border-l border-mercury bg-white overflow-y-auto px-4 py-5">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-shuttle mb-4">Details</h4>
-          <div className="flex flex-col gap-3">
-            <EditableField label="Title" value={opp.title} onSave={v => updateField('title', v ?? opp.title)} />
-
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-shuttle uppercase tracking-wide">Stage</span>
-              <select
-                value={opp.stage}
-                onChange={e => updateStage(e.target.value as OpportunityStage)}
-                className="text-sm border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham"
-              >
-                {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-shuttle uppercase tracking-wide">Type</span>
-              <select
-                value={opp.type}
-                onChange={e => updateField('type', e.target.value)}
-                className="text-sm border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham"
-              >
-                {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </div>
-
-            <EditableField
-              label="Est. Value ($)"
-              value={opp.estimated_value?.toString() ?? null}
-              onSave={v => updateField('estimated_value', v ? Number(v) : null)}
-            />
-            <EditableField label="Target Date" value={opp.target_date} onSave={v => updateField('target_date', v)} />
-
-            {opp.company && (
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs text-shuttle uppercase tracking-wide">Company</span>
-                <Link to={`/people/companies/${opp.company.id}`} className="text-sm text-burnham hover:underline">
-                  {opp.company.name}
-                </Link>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-shuttle uppercase tracking-wide">Decision Filter</span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => updateField('decision_filter_pass', !opp.decision_filter_pass)}
-                  className={`w-8 h-4 rounded-full transition-colors ${opp.decision_filter_pass ? 'bg-pastel' : 'bg-mercury'}`}
-                >
-                  <div className={`w-3 h-3 rounded-full bg-white shadow transition-transform mx-0.5 ${opp.decision_filter_pass ? 'translate-x-4' : 'translate-x-0'}`} />
-                </button>
-                <span className="text-sm text-shuttle">{opp.decision_filter_pass ? 'Passes filter' : 'Not evaluated'}</span>
-              </div>
-            </div>
+          <div className="pt-3 border-t border-mercury">
+            <p className="text-[10px] text-mercury">
+              Created {new Date(opp.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </p>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-mercury">
-            <p className="text-xs text-mercury">Created {new Date(opp.created_at).toLocaleDateString()}</p>
+          <div className="mt-3">
+            <button
+              onClick={() => navigate('/people/opportunities')}
+              className="flex items-center gap-1 text-[11px] text-shuttle hover:text-burnham"
+            >
+              <ArrowLeft size={11} /> Back to Opportunities
+            </button>
           </div>
         </aside>
       </div>

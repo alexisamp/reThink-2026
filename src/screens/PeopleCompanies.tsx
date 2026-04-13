@@ -25,13 +25,26 @@ function formatAgo(days: number | null): string {
   return `${Math.floor(days / 365)}y ago`
 }
 
-function CompanyAvatar({ company }: { company: Company }) {
-  if (company.logo_url) {
-    return <img src={company.logo_url} alt={company.name} className="w-8 h-8 rounded object-cover border border-mercury" />
+function CompanyAvatar({ company, size = 8 }: { company: Company; size?: number }) {
+  const logoSrc = company.logo_url
+    || (company.domain
+      ? `https://www.google.com/s2/favicons?domain=${company.domain}&sz=128`
+      : null)
+
+  const dim = `w-${size} h-${size}`
+  if (logoSrc) {
+    return (
+      <img
+        src={logoSrc}
+        alt={company.name}
+        className={`${dim} rounded object-cover border border-mercury bg-white`}
+        onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+      />
+    )
   }
   const letter = company.name[0]?.toUpperCase() ?? '?'
   return (
-    <div className="w-8 h-8 rounded bg-gossip flex items-center justify-center text-burnham font-semibold text-sm border border-pastel">
+    <div className={`${dim} rounded bg-gossip flex items-center justify-center text-burnham font-semibold text-sm border border-pastel`}>
       {letter}
     </div>
   )

@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  ArrowLeft, ArrowRight, X, CaretRight, PencilSimple, Check, Plus,
+  ArrowLeft, CaretRight, PencilSimple, Check, Plus,
   WhatsappLogo, LinkedinLogo, TwitterLogo, Star, Briefcase,
-  UserCircle, Heart, Lightning, HandCoins, ChatCircle, Buildings,
-  CalendarBlank, ArrowsClockwise, Trash,
+  Heart, Lightning, HandCoins, ChatCircle, Buildings,
+  Trash, Target, User,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -28,6 +28,10 @@ function formatAgo(days: number | null): string {
   return `${Math.floor(days / 365)}y ago`
 }
 
+function formatDate(d: string) {
+  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 function healthColor(days: number | null): string {
   if (days === null) return 'text-shuttle'
   if (days <= 14) return 'text-pastel'
@@ -35,16 +39,43 @@ function healthColor(days: number | null): string {
   return 'text-red-400'
 }
 
+function healthDotColor(days: number | null): string {
+  if (days === null) return 'bg-mercury'
+  if (days <= 14) return 'bg-pastel'
+  if (days <= 30) return 'bg-yellow-400'
+  return 'bg-red-400'
+}
+
 function healthLabel(days: number | null): string {
-  if (days === null) return 'Never contacted'
+  if (days === null) return 'Never'
   if (days <= 14) return 'Active'
   if (days <= 30) return 'Warm'
   return 'Cold'
 }
 
-const INTERACTION_ICONS: Record<string, string> = {
-  whatsapp: '💬', linkedin_msg: '💼', email: '📧',
-  call: '📞', virtual_coffee: '☕', in_person: '🤝',
+/** Normalize phone to E.164-ish (strips non-digits, adds + if starts with country code) */
+function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  if (digits.length >= 10) return `+${digits}`
+  return raw
+}
+
+const INTERACTION_TYPES: { key: Interaction['type'], label: string }[] = [
+  { key: 'whatsapp', label: 'WhatsApp' },
+  { key: 'linkedin_msg', label: 'LinkedIn DM' },
+  { key: 'email', label: 'Email' },
+  { key: 'call', label: 'Call' },
+  { key: 'virtual_coffee', label: 'Virtual Coffee' },
+  { key: 'in_person', label: 'In Person' },
+]
+
+const INTERACTION_DOT: Record<string, string> = {
+  whatsapp: 'bg-green-400',
+  linkedin_msg: 'bg-blue-400',
+  email: 'bg-shuttle',
+  call: 'bg-burnham',
+  virtual_coffee: 'bg-yellow-400',
+  in_person: 'bg-pastel',
 }
 
 const VALUE_TYPE_LABELS: Record<string, string> = {
@@ -53,31 +84,66 @@ const VALUE_TYPE_LABELS: Record<string, string> = {
 }
 
 const CHANNEL_ICONS: Record<string, React.ReactNode> = {
-  whatsapp: <WhatsappLogo size={16} weight="fill" className="text-green-500" />,
-  linkedin: <LinkedinLogo size={16} weight="fill" className="text-blue-500" />,
-  x: <TwitterLogo size={16} weight="fill" className="text-shuttle" />,
-  exit5: <Star size={16} weight="fill" className="text-yellow-500" />,
+  whatsapp: <WhatsappLogo size={13} weight="fill" className="text-green-500" />,
+  linkedin: <LinkedinLogo size={13} weight="fill" className="text-blue-500" />,
+  x: <TwitterLogo size={13} weight="fill" className="text-shuttle" />,
+  exit5: <Star size={13} weight="fill" className="text-yellow-500" />,
 }
 
-const TIER_LABELS: Record<number, string> = { 1: 'T1 — Core', 2: 'T2 — Strategic', 3: 'T3 — Peripheral' }
 const TIER_COLORS: Record<number, string> = {
   1: 'bg-gossip text-burnham',
   2: 'bg-yellow-100 text-yellow-800',
   3: 'bg-mercury text-shuttle',
 }
 
-// ── inline editable field ─────────────────────────────────────────────────────
+const TIER_LABELS: Record<number, string> = {
+  1: 'T1', 2: 'T2', 3: 'T3',
+}
 
+const STAGE_COLORS: Record<string, string> = {
+  exploring: 'text-shuttle', active: 'text-burnham font-medium',
+  negotiating: 'text-yellow-700 font-medium', won: 'text-pastel', lost: 'text-red-400',
+}
+
+// ── sub-components ────────────────────────────────────────────────────────────
+
+function SidebarLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/60">
+      {children}
+    </span>
+  )
+}
+
+function SidebarValue({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-[12px] text-midnight">{children}</span>
+  )
+}
+
+function SidebarSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-5">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">{title}</p>
+      {children}
+    </div>
+  )
+}
+
+/** Inline editable field — compact, sidebar density */
 function EditableField({
-  label, value, onSave, multiline = false,
+  label, value, onSave, multiline = false, placeholder,
 }: {
   label: string
   value: string | null | undefined
   onSave: (val: string | null) => Promise<void>
   multiline?: boolean
+  placeholder?: string
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value ?? '')
+
+  useEffect(() => { setDraft(value ?? '') }, [value])
 
   const save = async () => {
     await onSave(draft.trim() || null)
@@ -86,11 +152,11 @@ function EditableField({
 
   if (editing) {
     return (
-      <div className="flex flex-col gap-1">
-        <span className="text-xs text-shuttle uppercase tracking-wide">{label}</span>
+      <div className="flex flex-col gap-1 mb-2">
+        <SidebarLabel>{label}</SidebarLabel>
         {multiline ? (
           <textarea
-            className="text-sm border border-mercury rounded px-2 py-1 resize-none bg-white focus:outline-none focus:border-burnham"
+            className="text-[12px] border border-mercury rounded px-2 py-1 resize-none bg-white focus:outline-none focus:border-burnham"
             rows={3}
             value={draft}
             onChange={e => setDraft(e.target.value)}
@@ -98,7 +164,7 @@ function EditableField({
           />
         ) : (
           <input
-            className="text-sm border border-mercury rounded px-2 py-1 bg-white focus:outline-none focus:border-burnham"
+            className="text-[12px] border border-mercury rounded px-2 py-1 bg-white focus:outline-none focus:border-burnham"
             value={draft}
             onChange={e => setDraft(e.target.value)}
             autoFocus
@@ -106,10 +172,10 @@ function EditableField({
           />
         )}
         <div className="flex gap-1">
-          <button onClick={save} className="flex items-center gap-1 text-xs px-2 py-0.5 bg-burnham text-gossip rounded">
-            <Check size={10} /> Save
+          <button onClick={save} className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 bg-burnham text-gossip rounded">
+            <Check size={8} /> Save
           </button>
-          <button onClick={() => setEditing(false)} className="text-xs px-2 py-0.5 text-shuttle hover:text-burnham">
+          <button onClick={() => setEditing(false)} className="text-[10px] px-2 py-0.5 text-shuttle hover:text-burnham">
             Cancel
           </button>
         </div>
@@ -118,38 +184,70 @@ function EditableField({
   }
 
   return (
-    <div className="group flex flex-col gap-0.5">
-      <span className="text-xs text-shuttle uppercase tracking-wide">{label}</span>
-      <div className="flex items-start gap-1">
-        <span className="text-sm text-midnight flex-1">{value || <span className="text-mercury italic">—</span>}</span>
-        <button
-          onClick={() => { setDraft(value ?? ''); setEditing(true) }}
-          className="opacity-0 group-hover:opacity-100 text-shuttle hover:text-burnham transition-opacity"
-        >
-          <PencilSimple size={12} />
-        </button>
+    <div className="group flex items-baseline justify-between mb-2">
+      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+        <SidebarLabel>{label}</SidebarLabel>
+        <SidebarValue>
+          {value || <span className="text-mercury italic text-[11px]">{placeholder ?? '—'}</span>}
+        </SidebarValue>
       </div>
+      <button
+        onClick={() => { setDraft(value ?? ''); setEditing(true) }}
+        className="opacity-0 group-hover:opacity-100 text-shuttle hover:text-burnham transition-opacity flex-shrink-0 ml-1"
+      >
+        <PencilSimple size={10} />
+      </button>
     </div>
   )
 }
 
-// ── highlight card ────────────────────────────────────────────────────────────
+// ── stat pill ─────────────────────────────────────────────────────────────────
 
-function HighlightCard({ icon, label, value, sub, color = 'text-shuttle' }: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  sub?: string
-  color?: string
-}) {
+function StatPill({ label, value, color = 'text-shuttle' }: { label: string; value: string; color?: string }) {
   return (
-    <div className="flex flex-col gap-1 p-3 bg-white border border-mercury rounded-lg">
-      <div className={`flex items-center gap-1.5 ${color}`}>
-        {icon}
-        <span className="text-xs font-medium uppercase tracking-wide">{label}</span>
+    <div className="flex items-center gap-1.5">
+      <span className={`text-[13px] font-semibold ${color}`}>{value}</span>
+      <span className="text-[11px] text-shuttle/60">{label}</span>
+    </div>
+  )
+}
+
+// ── interaction timeline item ─────────────────────────────────────────────────
+
+function TimelineItem({ interaction, onDelete }: { interaction: Interaction; onDelete: () => void }) {
+  const typeLabel = INTERACTION_TYPES.find(t => t.key === interaction.type)?.label ?? interaction.type
+  return (
+    <div className="relative flex gap-3 pb-4 group">
+      {/* dot + line */}
+      <div className="flex flex-col items-center">
+        <div className={`w-2 h-2 rounded-full mt-1 shrink-0 ${INTERACTION_DOT[interaction.type] ?? 'bg-mercury'}`} />
+        <div className="w-px bg-mercury flex-1 mt-1" />
       </div>
-      <p className="text-base font-semibold text-midnight">{value}</p>
-      {sub && <p className="text-xs text-shuttle">{sub}</p>}
+      {/* content */}
+      <div className="flex-1 min-w-0 pb-1">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="text-[12px] font-medium text-midnight">{typeLabel}</span>
+          {interaction.channel && (
+            <span className="text-[10px] px-1.5 py-0.5 bg-mercury/50 text-shuttle rounded">{interaction.channel}</span>
+          )}
+          <span className="text-[11px] text-shuttle/60 ml-auto">{formatDate(interaction.interaction_date)}</span>
+          <button
+            onClick={onDelete}
+            className="opacity-0 group-hover:opacity-100 text-mercury hover:text-red-400 transition-opacity"
+          >
+            <Trash size={10} />
+          </button>
+        </div>
+        {interaction.notes && (
+          <p className="text-[12px] text-shuttle leading-relaxed">{interaction.notes}</p>
+        )}
+        {interaction.next_step && (
+          <p className="text-[11px] text-burnham mt-1 bg-gossip/30 px-2 py-0.5 rounded inline-block">
+            Next: {interaction.next_step}
+            {interaction.next_step_date && ` · ${interaction.next_step_date}`}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
@@ -172,6 +270,7 @@ export default function PersonDetail() {
   const [addingInteraction, setAddingInteraction] = useState(false)
   const [newInterType, setNewInterType] = useState<Interaction['type']>('call')
   const [newInterNotes, setNewInterNotes] = useState('')
+  const [newInterNextStep, setNewInterNextStep] = useState('')
   const [addingValueLog, setAddingValueLog] = useState(false)
   const [newVLType, setNewVLType] = useState<ValueLog['type']>('introduction')
   const [newVLDesc, setNewVLDesc] = useState('')
@@ -213,6 +312,29 @@ export default function PersonDetail() {
     setContact(prev => prev ? { ...prev, [field]: value } : null)
   }, [id])
 
+  /** Link a channel to this contact (upsert on outreach_log_id + channel) */
+  const linkChannel = useCallback(async (channel: string, identifier: string, name?: string) => {
+    if (!id) return
+    const { data, error } = await supabase
+      .from('contact_channels')
+      .upsert({
+        outreach_log_id: id,
+        channel,
+        channel_identifier: identifier,
+        channel_name: name ?? null,
+        verified: true,
+      }, { onConflict: 'outreach_log_id,channel' })
+      .select()
+      .single()
+    if (!error && data) {
+      setChannels(prev => {
+        const exists = prev.find(c => c.channel === channel)
+        if (exists) return prev.map(c => c.channel === channel ? data as ContactChannel : c)
+        return [...prev, data as ContactChannel]
+      })
+    }
+  }, [id])
+
   const saveNotes = async () => {
     setNotesSaving(true)
     await updateField('notes', notesDraft.trim() || null)
@@ -229,6 +351,7 @@ export default function PersonDetail() {
         type: newInterType,
         direction: 'outbound',
         notes: newInterNotes.trim() || null,
+        next_step: newInterNextStep.trim() || null,
         interaction_date: new Date().toISOString().split('T')[0],
       })
       .select().single()
@@ -239,6 +362,7 @@ export default function PersonDetail() {
       setContact(prev => prev ? { ...prev, last_interaction_at: now } : null)
     }
     setNewInterNotes('')
+    setNewInterNextStep('')
     setAddingInteraction(false)
   }
 
@@ -255,18 +379,14 @@ export default function PersonDetail() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full text-shuttle text-sm">
-        Loading...
-      </div>
-    )
+    return <div className="flex items-center justify-center h-full text-shuttle text-[13px]">Loading...</div>
   }
 
   if (!contact) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
-        <p className="text-shuttle">Contact not found.</p>
-        <Link to="/people" className="text-sm text-burnham underline">Back to People</Link>
+        <p className="text-shuttle text-[13px]">Contact not found.</p>
+        <Link to="/people" className="text-[12px] text-burnham underline">Back to People</Link>
       </div>
     )
   }
@@ -275,37 +395,39 @@ export default function PersonDetail() {
   const initials = contact.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
   const valueGiven = valueLogs.length
   const interactionCount = interactions.length
+  const activeOpps = opportunities.filter(o => o.stage === 'active' || o.stage === 'negotiating')
 
   return (
-    <div className="flex flex-col h-full bg-[#FAFAFA]">
-      {/* ── breadcrumb + nav ── */}
-      <div className="flex items-center gap-2 px-6 py-3 bg-white border-b border-mercury">
+    <div className="flex flex-col h-full bg-[#F7F7F5]">
+      {/* ── breadcrumb ── */}
+      <div className="flex items-center gap-2 px-5 py-2.5 bg-white border-b border-mercury shrink-0">
         <Link to="/people" className="text-shuttle hover:text-burnham transition-colors">
-          <ArrowLeft size={16} weight="bold" />
+          <ArrowLeft size={14} weight="bold" />
         </Link>
-        <span className="text-shuttle text-sm">People</span>
-        <CaretRight size={12} className="text-mercury" />
-        <span className="text-sm font-medium text-midnight truncate max-w-[300px]">{contact.name}</span>
-        <div className="ml-auto flex items-center gap-2">
-          <button onClick={() => navigate('/people')} className="text-shuttle hover:text-burnham p-1 rounded hover:bg-mercury transition-colors">
-            <X size={16} />
-          </button>
-        </div>
+        <span className="text-[12px] text-shuttle">People</span>
+        <CaretRight size={10} className="text-mercury" />
+        <span className="text-[12px] font-medium text-midnight truncate max-w-[300px]">{contact.name}</span>
       </div>
 
       {/* ── tabs ── */}
-      <div className="flex items-center gap-0 px-6 bg-white border-b border-mercury">
+      <div className="flex items-center gap-0 px-5 bg-white border-b border-mercury shrink-0">
         {(['overview', 'interactions', 'notes', 'opportunities'] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-2.5 text-sm capitalize border-b-2 transition-colors ${
+            className={`px-3 py-2 text-[12px] capitalize border-b-2 transition-colors ${
               tab === t
                 ? 'border-burnham text-burnham font-medium'
                 : 'border-transparent text-shuttle hover:text-midnight'
             }`}
           >
             {t}
+            {t === 'interactions' && interactionCount > 0 && (
+              <span className="ml-1 text-[10px] text-shuttle/50">({interactionCount})</span>
+            )}
+            {t === 'opportunities' && opportunities.length > 0 && (
+              <span className="ml-1 text-[10px] text-shuttle/50">({opportunities.length})</span>
+            )}
           </button>
         ))}
       </div>
@@ -313,117 +435,171 @@ export default function PersonDetail() {
       {/* ── main body ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* left: content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-5 py-4">
 
           {/* ── profile header ── */}
-          <div className="flex items-start gap-4 mb-6">
+          <div className="flex items-center gap-3 mb-4">
             {contact.profile_photo_url ? (
-              <img src={contact.profile_photo_url} alt={contact.name} className="w-14 h-14 rounded-full object-cover border border-mercury" />
+              <img
+                src={contact.profile_photo_url}
+                alt={contact.name}
+                className="w-10 h-10 rounded-full object-cover border border-mercury shrink-0"
+              />
             ) : (
-              <div className="w-14 h-14 rounded-full bg-gossip flex items-center justify-center text-burnham font-semibold text-lg border border-pastel">
+              <div className="w-10 h-10 rounded-full bg-gossip flex items-center justify-center text-burnham font-semibold text-sm border border-pastel shrink-0">
                 {initials}
               </div>
             )}
-            <div className="flex-1">
-              <h1 className="text-xl font-semibold text-midnight">{contact.name}</h1>
-              <p className="text-sm text-shuttle">{[contact.job_title, contact.company].filter(Boolean).join(' · ') || 'No title'}</p>
-              {contact.location && <p className="text-xs text-mercury mt-0.5">{contact.location}</p>}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-[15px] font-semibold text-midnight truncate">{contact.name}</h1>
+                {contact.tier && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${TIER_COLORS[contact.tier]}`}>
+                    {TIER_LABELS[contact.tier]}
+                  </span>
+                )}
+              </div>
+              <p className="text-[12px] text-shuttle truncate">
+                {[contact.job_title, contact.company].filter(Boolean).join(' · ') || 'No title'}
+              </p>
             </div>
-            {contact.tier && (
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TIER_COLORS[contact.tier]}`}>
-                {TIER_LABELS[contact.tier]}
-              </span>
+            {/* Channels quick row */}
+            <div className="flex items-center gap-1.5">
+              {channels.map(ch => (
+                <span key={ch.id} className="flex items-center" title={ch.channel_identifier}>
+                  {CHANNEL_ICONS[ch.channel]}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* ── stat row ── */}
+          <div className="flex items-center gap-4 mb-4 pb-3 border-b border-mercury">
+            <div className="flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${healthDotColor(lastDays)}`} />
+              <span className={`text-[12px] font-medium ${healthColor(lastDays)}`}>{healthLabel(lastDays)}</span>
+              <span className="text-[11px] text-shuttle/60">{formatAgo(lastDays)}</span>
+            </div>
+            <span className="text-mercury">·</span>
+            <StatPill value={String(interactionCount)} label="interactions" />
+            <span className="text-mercury">·</span>
+            <StatPill value={String(valueGiven)} label="value logs" color="text-burnham" />
+            {contact.status && (
+              <>
+                <span className="text-mercury">·</span>
+                <span className="text-[11px] text-shuttle/70">{contact.status}</span>
+              </>
             )}
           </div>
 
           {/* ── OVERVIEW tab ── */}
           {tab === 'overview' && (
-            <>
-              {/* highlights 2x3 grid */}
-              <div className="grid grid-cols-3 gap-3 mb-6">
-                <HighlightCard
-                  icon={<Heart size={14} />}
-                  label="Health"
-                  value={healthLabel(lastDays)}
-                  sub={formatAgo(lastDays)}
-                  color={healthColor(lastDays)}
-                />
-                <HighlightCard
-                  icon={<Lightning size={14} />}
-                  label="Interactions"
-                  value={String(interactionCount)}
-                  sub="total logged"
-                  color="text-shuttle"
-                />
-                <HighlightCard
-                  icon={<HandCoins size={14} />}
-                  label="Value Given"
-                  value={String(valueGiven)}
-                  sub="value logs"
-                  color="text-burnham"
-                />
-                <HighlightCard
-                  icon={<Buildings size={14} />}
-                  label="Company"
-                  value={contact.company || '—'}
-                  sub={contact.job_title ?? undefined}
-                  color="text-shuttle"
-                />
-                <HighlightCard
-                  icon={<UserCircle size={14} />}
-                  label="Status"
-                  value={contact.status}
-                  color="text-shuttle"
-                />
-                <HighlightCard
-                  icon={<ChatCircle size={14} />}
-                  label="Category"
-                  value={contact.category?.replace('_', ' ') ?? '—'}
-                  color="text-shuttle"
-                />
+            <div className="flex flex-col gap-4">
+              {/* personal_context — prominent block */}
+              {contact.personal_context && (
+                <div className="bg-gossip/20 border border-gossip/40 rounded-lg px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-burnham/60 mb-1.5">Context</p>
+                  <p className="text-[13px] text-midnight leading-relaxed whitespace-pre-wrap">{contact.personal_context}</p>
+                </div>
+              )}
+
+              {/* Active opportunity card */}
+              {activeOpps.length > 0 && (
+                <div className="bg-white border border-mercury rounded-lg px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">Active Opportunity</p>
+                  {activeOpps.map(opp => (
+                    <Link
+                      key={opp.id}
+                      to={`/people/opportunities/${opp.id}`}
+                      className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                    >
+                      <Target size={14} className="text-orange-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-midnight truncate">{opp.title}</p>
+                        <p className="text-[11px] text-shuttle">{opp.company?.name ?? 'No company'}</p>
+                      </div>
+                      <span className={`text-[11px] capitalize ${STAGE_COLORS[opp.stage] ?? 'text-shuttle'}`}>
+                        {opp.stage}
+                      </span>
+                      <CaretRight size={10} className="text-mercury" />
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              {/* Daisy chain: LinkedIn → referred_by → status */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {contact.linkedin_url && (
+                  <a
+                    href={contact.linkedin_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-blue-600 bg-blue-50 px-2 py-1 rounded-full hover:bg-blue-100 transition-colors"
+                  >
+                    <LinkedinLogo size={11} weight="fill" />
+                    LinkedIn
+                  </a>
+                )}
+                {contact.linkedin_url && contact.referred_by && (
+                  <span className="text-mercury text-[11px]">via</span>
+                )}
+                {contact.referred_by && (
+                  <span className="flex items-center gap-1 text-[11px] text-shuttle bg-mercury/50 px-2 py-1 rounded-full">
+                    <User size={11} />
+                    Referred
+                  </span>
+                )}
+                {contact.status && (
+                  <>
+                    {(contact.linkedin_url || contact.referred_by) && (
+                      <span className="text-mercury text-[11px]">→</span>
+                    )}
+                    <span className="text-[11px] text-shuttle bg-mercury/30 px-2 py-1 rounded-full">
+                      {contact.status}
+                    </span>
+                  </>
+                )}
               </div>
 
-              {/* Recent interactions */}
-              <div className="mb-6">
+              {/* Recent interactions — timeline preview */}
+              <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-shuttle">Recent Activity</h3>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50">Recent Activity</p>
                   <button
-                    onClick={() => { setAddingInteraction(true); setTab('interactions') }}
-                    className="flex items-center gap-1 text-xs text-burnham hover:underline"
+                    onClick={() => { setTab('interactions'); setAddingInteraction(true) }}
+                    className="flex items-center gap-1 text-[11px] text-burnham hover:underline"
                   >
-                    <Plus size={12} /> Log
+                    <Plus size={10} /> Log
                   </button>
                 </div>
-                {interactions.slice(0, 5).length === 0 ? (
-                  <p className="text-sm text-mercury italic">No interactions yet.</p>
+                {interactions.length === 0 ? (
+                  <p className="text-[12px] text-mercury italic">No interactions yet.</p>
                 ) : (
-                  <div className="flex flex-col gap-2">
-                    {interactions.slice(0, 5).map(i => (
-                      <div key={i.id} className="flex items-start gap-2 p-2 bg-white border border-mercury rounded-lg">
-                        <span className="text-base leading-none mt-0.5">{INTERACTION_ICONS[i.type] ?? '📝'}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium text-midnight capitalize">{i.type.replace('_', ' ')}</span>
-                            <span className="text-xs text-shuttle">{i.direction === 'inbound' ? '← inbound' : '→ outbound'}</span>
-                          </div>
-                          {i.notes && <p className="text-xs text-shuttle mt-0.5 truncate">{i.notes}</p>}
-                        </div>
-                        <span className="text-xs text-mercury whitespace-nowrap">{i.interaction_date}</span>
-                      </div>
+                  <div>
+                    {interactions.slice(0, 4).map(i => (
+                      <TimelineItem key={i.id} interaction={i} onDelete={() => deleteInteraction(i.id)} />
                     ))}
+                    {interactions.length > 4 && (
+                      <button
+                        onClick={() => setTab('interactions')}
+                        className="text-[11px] text-burnham hover:underline ml-5"
+                      >
+                        +{interactions.length - 4} more
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
 
               {/* Value logs */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-shuttle">Value Given</h3>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50">Value Given</p>
                   <button
                     onClick={() => setAddingValueLog(true)}
-                    className="flex items-center gap-1 text-xs text-burnham hover:underline"
+                    className="flex items-center gap-1 text-[11px] text-burnham hover:underline"
                   >
-                    <Plus size={12} /> Add
+                    <Plus size={10} /> Add
                   </button>
                 </div>
 
@@ -432,7 +608,7 @@ export default function PersonDetail() {
                     <select
                       value={newVLType}
                       onChange={e => setNewVLType(e.target.value as ValueLog['type'])}
-                      className="text-sm border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham"
+                      className="text-[12px] border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham"
                     >
                       {Object.entries(VALUE_TYPE_LABELS).map(([k, v]) => (
                         <option key={k} value={k}>{v}</option>
@@ -442,62 +618,62 @@ export default function PersonDetail() {
                       placeholder="Description (optional)"
                       value={newVLDesc}
                       onChange={e => setNewVLDesc(e.target.value)}
-                      className="text-sm border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham"
+                      className="text-[12px] border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham"
                     />
                     <div className="flex gap-2">
-                      <button onClick={submitValueLog} className="text-xs px-3 py-1 bg-burnham text-gossip rounded">Save</button>
-                      <button onClick={() => setAddingValueLog(false)} className="text-xs px-3 py-1 text-shuttle hover:text-burnham">Cancel</button>
+                      <button onClick={submitValueLog} className="text-[11px] px-3 py-1 bg-burnham text-gossip rounded">Save</button>
+                      <button onClick={() => setAddingValueLog(false)} className="text-[11px] px-3 py-1 text-shuttle hover:text-burnham">Cancel</button>
                     </div>
                   </div>
                 )}
 
                 {valueLogs.length === 0 && !addingValueLog ? (
-                  <p className="text-sm text-mercury italic">No value logs yet.</p>
+                  <p className="text-[12px] text-mercury italic">No value logs yet.</p>
                 ) : (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-1.5">
                     {valueLogs.map(vl => (
-                      <div key={vl.id} className="flex items-start gap-2 p-2 bg-white border border-mercury rounded-lg group">
-                        <span className="text-xs font-medium px-1.5 py-0.5 bg-gossip text-burnham rounded">
+                      <div key={vl.id} className="flex items-center gap-2 px-2 py-1.5 bg-white border border-mercury rounded-lg group">
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-gossip text-burnham rounded">
                           {VALUE_TYPE_LABELS[vl.type] ?? vl.type}
                         </span>
-                        <p className="text-xs text-shuttle flex-1">{vl.description || '—'}</p>
-                        <span className="text-xs text-mercury">{vl.date}</span>
+                        <p className="text-[12px] text-shuttle flex-1 truncate">{vl.description || '—'}</p>
+                        <span className="text-[10px] text-mercury">{vl.date}</span>
                         <button
                           onClick={() => removeValueLog(vl.id)}
                           className="opacity-0 group-hover:opacity-100 text-mercury hover:text-red-400 transition-opacity"
                         >
-                          <Trash size={12} />
+                          <Trash size={10} />
                         </button>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-            </>
+            </div>
           )}
 
           {/* ── INTERACTIONS tab ── */}
           {tab === 'interactions' && (
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-midnight">All Interactions ({interactions.length})</h3>
+                <p className="text-[13px] font-semibold text-midnight">All Interactions ({interactions.length})</p>
                 <button
                   onClick={() => setAddingInteraction(v => !v)}
-                  className="flex items-center gap-1 text-xs px-3 py-1.5 bg-burnham text-gossip rounded-lg"
+                  className="flex items-center gap-1 text-[11px] px-3 py-1.5 bg-burnham text-gossip rounded-lg"
                 >
-                  <Plus size={12} /> Log interaction
+                  <Plus size={11} /> Log
                 </button>
               </div>
 
               {addingInteraction && (
-                <div className="flex flex-col gap-2 mb-4 p-3 bg-white border border-mercury rounded-lg">
+                <div className="flex flex-col gap-2 mb-5 p-3 bg-white border border-mercury rounded-lg">
                   <select
                     value={newInterType}
                     onChange={e => setNewInterType(e.target.value as Interaction['type'])}
-                    className="text-sm border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham"
+                    className="text-[12px] border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham"
                   >
-                    {Object.entries(INTERACTION_ICONS).map(([k]) => (
-                      <option key={k} value={k}>{k.replace('_', ' ')}</option>
+                    {INTERACTION_TYPES.map(t => (
+                      <option key={t.key} value={t.key}>{t.label}</option>
                     ))}
                   </select>
                   <textarea
@@ -505,80 +681,58 @@ export default function PersonDetail() {
                     value={newInterNotes}
                     onChange={e => setNewInterNotes(e.target.value)}
                     rows={2}
-                    className="text-sm border border-mercury rounded px-2 py-1 resize-none focus:outline-none focus:border-burnham"
+                    className="text-[12px] border border-mercury rounded px-2 py-1 resize-none focus:outline-none focus:border-burnham"
+                  />
+                  <input
+                    placeholder="Next step (optional)"
+                    value={newInterNextStep}
+                    onChange={e => setNewInterNextStep(e.target.value)}
+                    className="text-[12px] border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham"
                   />
                   <div className="flex gap-2">
-                    <button onClick={logInteraction} className="text-xs px-3 py-1 bg-burnham text-gossip rounded">Save</button>
-                    <button onClick={() => setAddingInteraction(false)} className="text-xs px-3 py-1 text-shuttle hover:text-burnham">Cancel</button>
+                    <button onClick={logInteraction} className="text-[11px] px-3 py-1 bg-burnham text-gossip rounded">Save</button>
+                    <button onClick={() => setAddingInteraction(false)} className="text-[11px] px-3 py-1 text-shuttle hover:text-burnham">Cancel</button>
                   </div>
                 </div>
               )}
 
-              <div className="flex flex-col gap-2">
-                {interactions.map(i => (
-                  <div key={i.id} className="flex items-start gap-3 p-3 bg-white border border-mercury rounded-lg group">
-                    <span className="text-xl leading-none mt-0.5">{INTERACTION_ICONS[i.type] ?? '📝'}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-sm font-medium text-midnight capitalize">{i.type.replace(/_/g, ' ')}</span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded text-white ${i.direction === 'inbound' ? 'bg-shuttle' : 'bg-burnham'}`}>
-                          {i.direction}
-                        </span>
-                        {i.channel && (
-                          <span className="text-xs px-1.5 py-0.5 bg-mercury text-shuttle rounded">{i.channel}</span>
-                        )}
-                      </div>
-                      {i.notes && <p className="text-sm text-shuttle">{i.notes}</p>}
-                      {i.next_step && (
-                        <p className="text-xs text-burnham mt-1">
-                          Next: {i.next_step}
-                          {i.next_step_date && ` (by ${i.next_step_date})`}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <span className="text-xs text-shuttle">{i.interaction_date}</span>
-                      <button
-                        onClick={() => deleteInteraction(i.id)}
-                        className="opacity-0 group-hover:opacity-100 text-mercury hover:text-red-400 transition-opacity"
-                      >
-                        <Trash size={12} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {interactions.length === 0 && (
-                  <p className="text-sm text-mercury italic text-center py-8">No interactions logged yet.</p>
-                )}
-              </div>
+              {interactions.length === 0 ? (
+                <p className="text-[12px] text-mercury italic text-center py-8">No interactions logged yet.</p>
+              ) : (
+                <div className="mt-2">
+                  {interactions.map(i => (
+                    <TimelineItem key={i.id} interaction={i} onDelete={() => deleteInteraction(i.id)} />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {/* ── NOTES tab ── */}
           {tab === 'notes' && (
             <div className="flex flex-col gap-3">
-              <h3 className="text-sm font-semibold text-midnight">Personal Notes</h3>
+              <p className="text-[13px] font-semibold text-midnight">Personal Notes</p>
               <textarea
                 value={notesDraft}
                 onChange={e => setNotesDraft(e.target.value)}
                 placeholder="Add notes about this person — context, interests, follow-ups..."
                 rows={10}
-                className="w-full text-sm border border-mercury rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-burnham bg-white"
+                className="w-full text-[12px] border border-mercury rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-burnham bg-white"
               />
               <div className="flex items-center gap-2">
                 <button
                   onClick={saveNotes}
                   disabled={notesSaving}
-                  className="flex items-center gap-1 text-xs px-3 py-1.5 bg-burnham text-gossip rounded-lg disabled:opacity-50"
+                  className="flex items-center gap-1 text-[11px] px-3 py-1.5 bg-burnham text-gossip rounded-lg disabled:opacity-50"
                 >
-                  <Check size={12} /> {notesSaving ? 'Saving...' : 'Save'}
+                  <Check size={11} /> {notesSaving ? 'Saving...' : 'Save'}
                 </button>
               </div>
 
               {contact.personal_context && (
-                <div className="mt-4">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-shuttle mb-2">Personal Context</h4>
-                  <p className="text-sm text-midnight whitespace-pre-wrap">{contact.personal_context}</p>
+                <div className="mt-2 p-3 bg-gossip/20 border border-gossip/40 rounded-lg">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-burnham/60 mb-1">Personal Context</p>
+                  <p className="text-[12px] text-midnight whitespace-pre-wrap">{contact.personal_context}</p>
                 </div>
               )}
             </div>
@@ -587,33 +741,29 @@ export default function PersonDetail() {
           {/* ── OPPORTUNITIES tab ── */}
           {tab === 'opportunities' && (
             <div>
-              <h3 className="text-sm font-semibold text-midnight mb-4">Linked Opportunities ({opportunities.length})</h3>
+              <p className="text-[13px] font-semibold text-midnight mb-4">Linked Opportunities ({opportunities.length})</p>
               {opportunities.length === 0 ? (
                 <div className="text-center py-8">
-                  <Briefcase size={32} className="text-mercury mx-auto mb-2" />
-                  <p className="text-sm text-shuttle">No opportunities linked.</p>
-                  <Link to="/people/opportunities" className="text-xs text-burnham hover:underline mt-1 inline-block">
+                  <Briefcase size={28} className="text-mercury mx-auto mb-2" />
+                  <p className="text-[12px] text-shuttle">No opportunities linked.</p>
+                  <Link to="/people/opportunities" className="text-[11px] text-burnham hover:underline mt-1 inline-block">
                     Go to Opportunities →
                   </Link>
                 </div>
               ) : (
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
                   {opportunities.map(opp => (
                     <Link
                       key={opp.id}
                       to={`/people/opportunities/${opp.id}`}
                       className="flex items-center gap-3 p-3 bg-white border border-mercury rounded-lg hover:border-burnham transition-colors"
                     >
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-midnight">{opp.title}</p>
-                        <p className="text-xs text-shuttle">{opp.company?.name ?? 'No company'} · {opp.type}</p>
+                      <Target size={14} className="text-orange-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-midnight truncate">{opp.title}</p>
+                        <p className="text-[11px] text-shuttle">{opp.company?.name ?? 'No company'} · {opp.type}</p>
                       </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        opp.stage === 'won' ? 'bg-gossip text-burnham' :
-                        opp.stage === 'lost' ? 'bg-red-100 text-red-700' :
-                        opp.stage === 'negotiating' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-mercury text-shuttle'
-                      }`}>
+                      <span className={`text-[11px] capitalize ${STAGE_COLORS[opp.stage] ?? 'text-shuttle'}`}>
                         {opp.stage}
                       </span>
                     </Link>
@@ -625,130 +775,178 @@ export default function PersonDetail() {
         </div>
 
         {/* ── right sidebar ── */}
-        <aside className="w-[280px] flex-shrink-0 border-l border-mercury bg-white overflow-y-auto px-4 py-5">
+        <aside className="w-[260px] flex-shrink-0 border-l border-mercury bg-white overflow-y-auto px-4 py-4">
 
-          {/* Record Details */}
-          <div className="mb-6">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-shuttle mb-3">Record Details</h4>
-            <div className="flex flex-col gap-3">
-              <EditableField label="Full Name" value={contact.name} onSave={v => updateField('name', v ?? contact.name)} />
-              <EditableField label="Email" value={contact.email} onSave={v => updateField('email', v)} />
-              <EditableField label="Phone" value={contact.phone} onSave={v => updateField('phone', v)} />
-              <EditableField label="Job Title" value={contact.job_title} onSave={v => updateField('job_title', v)} />
-              <EditableField label="Company" value={contact.company} onSave={v => updateField('company', v)} />
-              <EditableField label="Location" value={contact.location} onSave={v => updateField('location', v)} />
+          <SidebarSection title="Record Details">
+            <EditableField
+              label="Full Name"
+              value={contact.name}
+              onSave={v => updateField('name', v ?? contact.name)}
+            />
+            <EditableField
+              label="Email"
+              value={contact.email}
+              onSave={v => updateField('email', v)}
+              placeholder="Add email"
+            />
+            <EditableField
+              label="Phone"
+              value={contact.phone}
+              onSave={async v => {
+                await updateField('phone', v)
+                if (v) await linkChannel('whatsapp', normalizePhone(v))
+              }}
+              placeholder="Add phone"
+            />
+            <EditableField label="Job Title" value={contact.job_title} onSave={v => updateField('job_title', v)} />
+            <EditableField label="Company" value={contact.company} onSave={v => updateField('company', v)} />
+            <EditableField label="Location" value={contact.location} onSave={v => updateField('location', v)} />
 
-              {/* Tier selector */}
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs text-shuttle uppercase tracking-wide">Tier</span>
-                <select
-                  value={contact.tier ?? ''}
-                  onChange={e => updateField('tier', e.target.value ? Number(e.target.value) : null)}
-                  className="text-sm border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham"
-                >
-                  <option value="">— Not set</option>
-                  <option value="1">T1 — Core</option>
-                  <option value="2">T2 — Strategic</option>
-                  <option value="3">T3 — Peripheral</option>
-                </select>
-              </div>
+            {/* LinkedIn URL — auto-links channel */}
+            <EditableField
+              label="LinkedIn"
+              value={contact.linkedin_url}
+              onSave={async v => {
+                await updateField('linkedin_url', v)
+                if (v) await linkChannel('linkedin', v, contact.name)
+              }}
+              placeholder="https://linkedin.com/in/..."
+            />
 
-              {/* Status selector */}
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs text-shuttle uppercase tracking-wide">Status</span>
-                <select
-                  value={contact.status}
-                  onChange={e => updateField('status', e.target.value)}
-                  className="text-sm border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham"
-                >
-                  {['PROSPECT','INTRO','CONNECTED','ENGAGED','NURTURING','RECONNECT','DORMANT'].map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-
-              <EditableField label="Birthday" value={contact.birthday ?? null} onSave={v => updateField('birthday', v)} />
-              <EditableField label="Interests" value={contact.interests ?? null} onSave={v => updateField('interests', v)} multiline />
-              <EditableField label="Looking For" value={contact.looking_for ?? null} onSave={v => updateField('looking_for', v)} multiline />
-              <EditableField label="Advisory Role" value={contact.advisory_role ?? null} onSave={v => updateField('advisory_role', v)} />
-              {contact.linkedin_url && (
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs text-shuttle uppercase tracking-wide">LinkedIn</span>
-                  <a href={contact.linkedin_url} target="_blank" rel="noreferrer" className="text-sm text-burnham hover:underline truncate">
-                    {contact.linkedin_url.replace('https://www.linkedin.com/in/', '@')}
-                  </a>
-                </div>
-              )}
+            {/* Tier */}
+            <div className="mb-2">
+              <SidebarLabel>Tier</SidebarLabel>
+              <select
+                value={contact.tier ?? ''}
+                onChange={e => updateField('tier', e.target.value ? Number(e.target.value) : null)}
+                className="mt-0.5 w-full text-[12px] border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham bg-white"
+              >
+                <option value="">— Not set</option>
+                <option value="1">T1 — Core</option>
+                <option value="2">T2 — Strategic</option>
+                <option value="3">T3 — Peripheral</option>
+              </select>
             </div>
-          </div>
+
+            {/* Status */}
+            <div className="mb-2">
+              <SidebarLabel>Status</SidebarLabel>
+              <select
+                value={contact.status}
+                onChange={e => updateField('status', e.target.value)}
+                className="mt-0.5 w-full text-[12px] border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham bg-white"
+              >
+                {['PROSPECT','INTRO','CONNECTED','ENGAGED','NURTURING','RECONNECT','DORMANT'].map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+
+            <EditableField label="Birthday" value={contact.birthday ?? null} onSave={v => updateField('birthday', v)} placeholder="YYYY-MM-DD" />
+            <EditableField label="Advisory Role" value={contact.advisory_role ?? null} onSave={v => updateField('advisory_role', v)} />
+          </SidebarSection>
+
+          <SidebarSection title="Context">
+            <EditableField
+              label="Interests"
+              value={contact.interests ?? null}
+              onSave={v => updateField('interests', v)}
+              multiline
+              placeholder="Add interests..."
+            />
+            <EditableField
+              label="Looking For"
+              value={contact.looking_for ?? null}
+              onSave={v => updateField('looking_for', v)}
+              multiline
+              placeholder="What are they seeking?"
+            />
+            <EditableField
+              label="Personal Context"
+              value={contact.personal_context ?? null}
+              onSave={v => updateField('personal_context', v)}
+              multiline
+              placeholder="Key context about this person..."
+            />
+          </SidebarSection>
 
           {/* Channels */}
-          <div className="mb-6">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-shuttle mb-3">Channels</h4>
+          <SidebarSection title="Channels">
             {channels.length === 0 ? (
-              <p className="text-xs text-mercury italic">No channels linked.</p>
+              <p className="text-[11px] text-mercury italic">No channels linked.</p>
             ) : (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5">
                 {channels.map(ch => (
-                  <div key={ch.id} className="flex items-center gap-2 p-2 bg-[#FAFAFA] border border-mercury rounded">
+                  <div key={ch.id} className="flex items-center gap-2 px-2 py-1.5 bg-[#F7F7F5] border border-mercury/60 rounded">
                     {CHANNEL_ICONS[ch.channel]}
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-midnight">{ch.channel_name || ch.channel_identifier}</p>
-                      <p className="text-xs text-shuttle truncate">{ch.channel_identifier}</p>
+                      <p className="text-[11px] font-medium text-midnight truncate">{ch.channel_name || ch.channel_identifier}</p>
+                      <p className="text-[10px] text-shuttle/60 truncate">{ch.channel_identifier}</p>
                     </div>
-                    {ch.verified && <Check size={12} className="text-pastel flex-shrink-0" />}
+                    {ch.verified && <Check size={10} className="text-pastel flex-shrink-0" />}
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </SidebarSection>
 
           {/* Lists */}
-          <div className="mb-6">
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-shuttle mb-3">Lists</h4>
-            <div className="flex flex-col gap-1">
-              {contact.status === 'ENGAGED' || contact.tier === 1 ? (
-                <span className="inline-flex items-center gap-1 text-xs px-2 py-1 bg-gossip text-burnham rounded font-medium">
-                  <Star size={10} weight="fill" /> Board of Directors
-                </span>
-              ) : (
-                <p className="text-xs text-mercury italic">Not in any lists.</p>
-              )}
-            </div>
-          </div>
+          <SidebarSection title="Lists">
+            {contact.tier === 1 ? (
+              <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 bg-gossip text-burnham rounded font-medium">
+                <Star size={9} weight="fill" /> Board of Directors
+              </span>
+            ) : (
+              <p className="text-[11px] text-mercury italic">Not in any lists.</p>
+            )}
+          </SidebarSection>
 
-          {/* Linked Opportunities (sidebar summary) */}
+          {/* Linked Opportunities */}
           {opportunities.length > 0 && (
-            <div>
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-shuttle mb-3">Opportunities</h4>
-              <div className="flex flex-col gap-1.5">
+            <SidebarSection title="Opportunities">
+              <div className="flex flex-col gap-1">
                 {opportunities.map(opp => (
                   <Link
                     key={opp.id}
                     to={`/people/opportunities/${opp.id}`}
-                    className="flex items-center justify-between p-2 bg-[#FAFAFA] border border-mercury rounded hover:border-burnham transition-colors"
+                    className="flex items-center justify-between px-2 py-1.5 bg-[#F7F7F5] border border-mercury/60 rounded hover:border-burnham transition-colors"
                   >
-                    <span className="text-xs text-midnight truncate">{opp.title}</span>
-                    <span className="text-xs text-shuttle ml-2 flex-shrink-0">{opp.stage}</span>
+                    <span className="text-[11px] text-midnight truncate">{opp.title}</span>
+                    <span className={`text-[10px] ml-2 flex-shrink-0 capitalize ${STAGE_COLORS[opp.stage] ?? 'text-shuttle'}`}>
+                      {opp.stage}
+                    </span>
                   </Link>
                 ))}
               </div>
-            </div>
+            </SidebarSection>
           )}
 
-          {/* Prev/Next nav */}
-          <div className="mt-6 pt-4 border-t border-mercury flex items-center justify-between">
-            <button className="flex items-center gap-1 text-xs text-shuttle hover:text-burnham" onClick={() => navigate(-1)}>
-              <ArrowLeft size={12} /> Back
-            </button>
-            <div className="flex gap-2">
-              <button className="p-1 text-shuttle hover:text-burnham">
-                <ArrowLeft size={14} />
-              </button>
-              <button className="p-1 text-shuttle hover:text-burnham">
-                <ArrowRight size={14} />
-              </button>
+          {/* Health indicators */}
+          <SidebarSection title="Health">
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <SidebarLabel>Last contact</SidebarLabel>
+                <SidebarValue>{formatAgo(lastDays)}</SidebarValue>
+              </div>
+              <div className="flex items-center justify-between">
+                <SidebarLabel>Interactions</SidebarLabel>
+                <SidebarValue>{interactionCount}</SidebarValue>
+              </div>
+              <div className="flex items-center justify-between">
+                <SidebarLabel>Value given</SidebarLabel>
+                <SidebarValue>{valueGiven}</SidebarValue>
+              </div>
             </div>
+          </SidebarSection>
+
+          {/* back nav */}
+          <div className="pt-2 border-t border-mercury">
+            <button
+              onClick={() => navigate('/people')}
+              className="flex items-center gap-1 text-[11px] text-shuttle hover:text-burnham"
+            >
+              <ArrowLeft size={11} /> Back to People
+            </button>
           </div>
         </aside>
       </div>

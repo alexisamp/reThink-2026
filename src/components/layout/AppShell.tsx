@@ -18,6 +18,9 @@ import type { Capture } from '@/types'
 const SIDEBAR_KEY = 'rethink-sidebar-collapsed'
 const CRM_KEY = 'rethink-crm-collapsed'
 const LISTS_KEY = 'rethink-lists-collapsed'
+const ZOOM_KEY = 'rethink-ui-zoom'
+const ZOOM_OPTIONS = [80, 90, 100] as const
+type ZoomLevel = typeof ZOOM_OPTIONS[number]
 
 interface AppShellProps {
   children: ReactNode
@@ -55,13 +58,16 @@ function NavItem({ path, icon, label, collapsed, onClick, indent, iconColor }: N
       <button
         onClick={handleClick}
         className={[
-          'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-sm transition-all duration-150',
+          'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-[12px] transition-all duration-150',
           indent && !collapsed ? 'pl-5' : '',
           isActive
             ? 'bg-gossip/70 text-burnham font-medium'
             : 'text-shuttle hover:bg-mercury/50 hover:text-burnham',
         ].join(' ')}
       >
+        {isActive && (
+          <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-burnham rounded-r" />
+        )}
         <span className={['shrink-0 flex items-center justify-center', iconColor ?? ''].join(' ')}>
           {icon}
         </span>
@@ -69,7 +75,7 @@ function NavItem({ path, icon, label, collapsed, onClick, indent, iconColor }: N
       </button>
       {/* Tooltip in collapsed mode */}
       {collapsed && (
-        <span className="pointer-events-none absolute left-12 top-1/2 -translate-y-1/2 z-50 bg-burnham text-white text-xs px-2 py-1 rounded-md whitespace-nowrap opacity-0 group-hover/item:opacity-100 transition-opacity shadow-md">
+        <span className="pointer-events-none absolute left-12 top-1/2 -translate-y-1/2 z-50 bg-burnham text-white text-[11px] px-2 py-1 rounded-md whitespace-nowrap opacity-0 group-hover/item:opacity-100 transition-opacity shadow-md">
           {label}
         </span>
       )}
@@ -112,6 +118,15 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [captureToOpen, setCaptureToOpen] = useState<Capture | null>(null)
+  const [zoom, setZoom] = useState<ZoomLevel>(() => {
+    const saved = parseInt(localStorage.getItem(ZOOM_KEY) ?? '100', 10)
+    return (ZOOM_OPTIONS.includes(saved as ZoomLevel) ? saved : 100) as ZoomLevel
+  })
+
+  const setZoomLevel = useCallback((level: ZoomLevel) => {
+    setZoom(level)
+    localStorage.setItem(ZOOM_KEY, String(level))
+  }, [])
   const handleOpenCapture = useCallback((capture: Capture) => {
     setCaptureToOpen(capture)
   }, [])
@@ -150,11 +165,11 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
   const contentMargin = collapsed ? 'ml-12' : 'ml-[200px]'
 
   return (
-    <div className="flex min-h-screen bg-white text-burnham font-sans">
+    <div className="flex min-h-screen bg-[#F7F7F5] text-burnham font-sans" style={{ zoom: zoom / 100 }}>
       {/* Left sidebar */}
       <aside
         className={[
-          'fixed top-0 left-0 h-screen z-30 flex flex-col bg-white border-r border-mercury/60',
+          'fixed top-0 left-0 h-screen z-30 flex flex-col bg-[#F7F7F5] border-r border-mercury/60',
           'transition-all duration-200 overflow-hidden',
           sidebarWidth,
         ].join(' ')}
@@ -300,6 +315,27 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
             <SignOut size={15} className="shrink-0" />
             {!collapsed && <span className="text-xs">Sign out</span>}
           </button>
+
+          {/* Zoom controls */}
+          {!collapsed && (
+            <div className="flex items-center gap-1 px-2 py-1">
+              <span className="text-[10px] text-shuttle/50 mr-1">Zoom</span>
+              {ZOOM_OPTIONS.map(level => (
+                <button
+                  key={level}
+                  onClick={() => setZoomLevel(level)}
+                  className={[
+                    'text-[10px] px-1.5 py-0.5 rounded transition-all',
+                    zoom === level
+                      ? 'bg-gossip text-burnham font-semibold'
+                      : 'text-shuttle/60 hover:bg-mercury/50 hover:text-burnham',
+                  ].join(' ')}
+                >
+                  {level}%
+                </button>
+              ))}
+            </div>
+          )}
 
           <SectionDivider collapsed={collapsed} />
 
