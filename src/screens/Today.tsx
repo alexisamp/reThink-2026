@@ -168,7 +168,7 @@ function SortableTodoRow({ todo, goal, milestone, isEditing, editingText, onEdit
         {isEditing ? (
           <input
             autoFocus
-            className="flex-1 text-sm font-medium text-burnham bg-transparent border-b border-burnham focus:outline-none"
+            className="flex-1 text-[13px] font-semibold text-shuttle/75 bg-transparent border-b border-burnham/30 focus:outline-none"
             value={editingText}
             onChange={e => onEditChange(e.target.value)}
             onBlur={onEditSave}
@@ -179,7 +179,7 @@ function SortableTodoRow({ todo, goal, milestone, isEditing, editingText, onEdit
           />
         ) : (
           <span
-            className="text-[15px] font-medium text-burnham truncate cursor-text flex-1 leading-snug"
+            className="text-[13px] font-semibold text-shuttle/75 truncate cursor-text flex-1 leading-snug"
             onClick={onEditStart}
           >
             {todo.text}
@@ -1609,13 +1609,16 @@ export default function Today() {
         }}
       >
 
-        {/* ── One Thing header ──────────────────────────────────────── */}
-        {onethingValue && (
-          <div className="px-8 pt-5 pb-3.5 flex items-baseline gap-3 border-b border-mercury/30 shrink-0 bg-white">
-            <span className="text-[10px] font-mono text-shuttle/40 uppercase tracking-[0.15em] whitespace-nowrap">one thing</span>
-            <span className="text-[15px] font-semibold text-burnham leading-snug">{onethingValue}</span>
-          </div>
-        )}
+        {/* ── Date + One Thing header ───────────────────────────────── */}
+        <div className="px-8 pt-5 pb-3.5 flex items-baseline gap-3 border-b border-mercury/30 shrink-0 bg-white">
+          <span className="text-[10px] font-mono text-shuttle/30 uppercase tracking-[0.15em] whitespace-nowrap shrink-0">{monthStr}</span>
+          {onethingValue && (
+            <>
+              <span className="text-mercury/60 text-[10px] shrink-0">·</span>
+              <span className="text-[13px] font-semibold text-burnham/80 leading-snug truncate">{onethingValue}</span>
+            </>
+          )}
+        </div>
 
 
         {dayState === 'COMPLETED' ? (
@@ -1658,22 +1661,7 @@ export default function Today() {
         ) : (
           /* ── Normal Today Content ───────────────────────────────── */
           <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className={`w-full ${!sidebarOpen ? 'max-w-2xl mx-auto' : ''} px-8 py-8 pt-10`}>
-
-              <p className="text-[11px] font-mono text-shuttle/40 mb-4">{monthStr}</p>
-
-              {/* ── Weekly Pulse — minimal 7-dot widget ──────────────── */}
-              {userId && (
-                <WeeklyPulse
-                  userId={userId}
-                  weekDates={Array.from({ length: 7 }, (_, i) => {
-                    const d = new Date(startOfWeek + 'T12:00:00')
-                    d.setDate(d.getDate() + i)
-                    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-                  })}
-                  onSettingsClick={() => setWeeklyGoalsOpen(true)}
-                />
-              )}
+            <div className={`w-full ${!sidebarOpen ? 'max-w-2xl mx-auto' : ''} px-8 py-6`}>
 
               {/* ── Habits section removed (v0.1.97) ────────────────── */}
               {false && (
@@ -1863,8 +1851,8 @@ export default function Today() {
               </section>
               )}
 
-              {/* ── Backlog (all past incomplete todos) ─────────────── */}
-              {yesterdayTodos.length > 0 && (
+              {/* ── Backlog moved below todos — see below ── */}
+              {false && yesterdayTodos.length > 0 && (
                 <section className="mb-8">
                   <h3 className="text-[9px] font-semibold text-shuttle/40 uppercase tracking-widest mb-3 flex items-center gap-2">
                     <span className="w-4 h-px bg-shuttle/20" />
@@ -2063,6 +2051,71 @@ export default function Today() {
                   </div>
                 )}
               </section>
+
+              {/* ── Backlog (past incomplete todos) ──────────────────────── */}
+              {yesterdayTodos.length > 0 && (
+                <section className="mb-4">
+                  <h3 className="text-[9px] font-semibold text-shuttle/30 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <span className="w-3 h-px bg-shuttle/15" />
+                    Backlog · {yesterdayTodos.length}
+                  </h3>
+                  <div className="space-y-0.5">
+                    {yesterdayTodos.map(todo => {
+                      const daysAgo = Math.round((new Date(today).getTime() - new Date(todo.date ?? today).getTime()) / 86400000)
+                      const ageLabel = daysAgo === 1 ? 'yesterday' : daysAgo <= 7 ? `${daysAgo}d ago` : `${todo.date}`
+                      return (
+                        <div key={todo.id} className="group flex items-center gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-mercury/20 transition-colors">
+                          <input
+                            type="checkbox"
+                            className="custom-checkbox shrink-0 opacity-40"
+                            checked={false}
+                            onChange={async () => {
+                              await supabase.from('todos').update({ completed: true }).eq('id', todo.id)
+                              setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                            }}
+                          />
+                          <span className="flex-1 text-[12px] text-shuttle/40 min-w-0 truncate">{todo.text}</span>
+                          <span className="text-[9px] font-mono text-shuttle/20 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">{ageLabel}</span>
+                          <button
+                            onClick={async () => {
+                              await supabase.from('todos').update({ date: today }).eq('id', todo.id)
+                              setTodos(prev => [...prev, { ...todo, date: today }])
+                              setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                            }}
+                            className="opacity-0 group-hover:opacity-100 text-[10px] text-shuttle/40 hover:text-burnham transition-all px-2 py-0.5 rounded border border-mercury/50 hover:border-burnham/30 shrink-0"
+                          >
+                            →today
+                          </button>
+                          <button
+                            onClick={async () => {
+                              await supabase.from('todos').delete().eq('id', todo.id)
+                              setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                            }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-red-400 p-0.5 rounded shrink-0"
+                          >
+                            <TrashSimple size={12} />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {/* ── Weekly Pulse — compact strip with manage + history ─── */}
+              {userId && (
+                <div className="mt-6 mb-2">
+                  <WeeklyPulse
+                    userId={userId}
+                    weekDates={Array.from({ length: 7 }, (_, i) => {
+                      const d = new Date(startOfWeek + 'T12:00:00')
+                      d.setDate(d.getDate() + i)
+                      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                    })}
+                    onSettingsClick={() => setWeeklyGoalsOpen(true)}
+                  />
+                </div>
+              )}
 
               {/* ── Suggestions — network + milestones ──────────────────── */}
               {userId && (

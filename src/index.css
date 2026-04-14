@@ -38,6 +38,16 @@
   }
 }
 
+/* Custom select — refined, matches design system */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23536471' opacity='0.35'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px !important;
+  cursor: pointer;
+}
+
 /* Confetti animation (used in WeeklyReview) */
 @keyframes confetti-fall {
   0% { top: -10%; opacity: 1; transform: rotate(0deg) scale(1); }

@@ -4,7 +4,8 @@
  * Reads from weekly_habits + weekly_habit_logs + integration sources.
  */
 import { useState, useEffect, useCallback } from 'react'
-import { GearSix } from '@phosphor-icons/react'
+import { useNavigate } from 'react-router-dom'
+import { GearSix, ArrowRight } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { WeeklyHabit, WeeklyHabitLog } from '@/types'
 
@@ -56,6 +57,7 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick }: WeeklyPulseP
   const [habits, setHabits] = useState<HabitData[]>([])
   const [loading, setLoading] = useState(true)
   const [logging, setLogging] = useState<string | null>(null) // habitId being logged
+  const navigate = useNavigate()
 
   const weekStart = weekDates[0]
   const weekEnd = weekDates[6]
@@ -128,11 +130,15 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick }: WeeklyPulseP
   if (loading) return <div className="h-[72px]" />
 
   if (habits.length === 0) return (
-    <div className="flex items-center gap-2 mb-6 text-[11px] text-shuttle/40">
-      <span>No weekly goals configured</span>
+    <div className="mb-4 py-3 px-3 border border-dashed border-mercury rounded-xl flex items-center justify-between">
+      <span className="text-[11px] text-shuttle/40">No weekly goals yet</span>
       {onSettingsClick && (
-        <button onClick={onSettingsClick} className="hover:text-burnham transition-colors">
+        <button
+          onClick={onSettingsClick}
+          className="flex items-center gap-1 text-[11px] text-shuttle/50 hover:text-burnham transition-colors font-medium"
+        >
           <GearSix size={12} />
+          Configure
         </button>
       )}
     </div>
@@ -144,14 +150,23 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick }: WeeklyPulseP
   })
 
   return (
-    <div className="mb-6">
+    <div className="mb-4">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[9px] font-medium text-shuttle/30 uppercase tracking-widest">This week</span>
-        {onSettingsClick && (
-          <button onClick={onSettingsClick} className="text-shuttle/20 hover:text-shuttle/40 transition-colors">
-            <GearSix size={10} />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/year?layer=weekly')}
+            className="flex items-center gap-0.5 text-[9px] text-shuttle/25 hover:text-shuttle/50 transition-colors font-mono"
+            title="View history"
+          >
+            history <ArrowRight size={9} />
           </button>
-        )}
+          {onSettingsClick && (
+            <button onClick={onSettingsClick} className="text-shuttle/20 hover:text-shuttle/50 transition-colors" title="Manage goals">
+              <GearSix size={11} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="space-y-1">
