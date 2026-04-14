@@ -163,9 +163,13 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
 
   const sidebarWidth = collapsed ? 'w-12' : 'w-[200px]'
   const contentMargin = collapsed ? 'ml-12' : 'ml-[200px]'
+  const sidebarPx = collapsed ? '48px' : '200px'
 
   return (
-    <div className="flex min-h-screen bg-[#F7F7F5] text-burnham font-sans" style={{ zoom: zoom / 100 }}>
+    <div
+      className="flex min-h-screen bg-[#F7F7F5] text-burnham font-sans"
+      style={{ '--sidebar-width': sidebarPx } as React.CSSProperties}
+    >
       {/* Left sidebar */}
       <aside
         className={[
@@ -216,21 +220,21 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
             <>
               <NavItem
                 path="/people"
-                icon={<span className="w-3.5 h-3.5 rounded-sm bg-pastel flex items-center justify-center"><Users size={9} weight="fill" className="text-white" /></span>}
+                icon={<span className="w-3.5 h-3.5 rounded-sm bg-[#1A1A1A] flex items-center justify-center"><Users size={9} weight="fill" className="text-white" /></span>}
                 label="People"
                 collapsed={collapsed}
                 indent
               />
               <NavItem
                 path="/people/companies"
-                icon={<span className="w-3.5 h-3.5 rounded-sm bg-blue-400 flex items-center justify-center"><Buildings size={9} weight="fill" className="text-white" /></span>}
+                icon={<span className="w-3.5 h-3.5 rounded-sm bg-shuttle flex items-center justify-center"><Buildings size={9} weight="fill" className="text-white" /></span>}
                 label="Companies"
                 collapsed={collapsed}
                 indent
               />
               <NavItem
                 path="/people/opportunities"
-                icon={<span className="w-3.5 h-3.5 rounded-sm bg-orange-400 flex items-center justify-center"><Target size={9} weight="fill" className="text-white" /></span>}
+                icon={<span className="w-3.5 h-3.5 rounded-sm bg-burnham flex items-center justify-center"><Target size={9} weight="fill" className="text-gossip" /></span>}
                 label="Opportunities"
                 collapsed={collapsed}
                 indent
@@ -316,27 +320,6 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
             {!collapsed && <span className="text-xs">Sign out</span>}
           </button>
 
-          {/* Zoom controls */}
-          {!collapsed && (
-            <div className="flex items-center gap-1 px-2 py-1">
-              <span className="text-[10px] text-shuttle/50 mr-1">Zoom</span>
-              {ZOOM_OPTIONS.map(level => (
-                <button
-                  key={level}
-                  onClick={() => setZoomLevel(level)}
-                  className={[
-                    'text-[10px] px-1.5 py-0.5 rounded transition-all',
-                    zoom === level
-                      ? 'bg-gossip text-burnham font-semibold'
-                      : 'text-shuttle/60 hover:bg-mercury/50 hover:text-burnham',
-                  ].join(' ')}
-                >
-                  {level}%
-                </button>
-              ))}
-            </div>
-          )}
-
           <SectionDivider collapsed={collapsed} />
 
           {/* Collapse toggle */}
@@ -362,7 +345,10 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
       </aside>
 
       {/* Main content */}
-      <main className={['flex-1 min-h-screen transition-all duration-200', contentMargin].join(' ')}>
+      <main
+        className={['flex-1 min-h-screen transition-all duration-200', contentMargin].join(' ')}
+        style={{ zoom: zoom / 100 }}
+      >
         {children}
       </main>
 
@@ -372,6 +358,8 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         updater={updater}
+        zoom={zoom}
+        onZoomChange={setZoomLevel}
       />
 
       <CaptureModal

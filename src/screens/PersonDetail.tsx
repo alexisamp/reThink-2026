@@ -275,11 +275,13 @@ export default function PersonDetail() {
   const [newVLDesc, setNewVLDesc] = useState('')
   const [notesDraft, setNotesDraft] = useState('')
   const [notesSaving, setNotesSaving] = useState(false)
-  const [linkedinModalOpen, setLinkedinModalOpen] = useState(false)
-  const [liAbout, setLiAbout] = useState('')
-  const [liFollowers, setLiFollowers] = useState('')
-  const [liConnections, setLiConnections] = useState('')
-  const [liSaving, setLiSaving] = useState(false)
+  const [linkedinFetching, setLinkedinFetching] = useState(false)
+  const [linkedinResult, setLinkedinResult] = useState<{
+    name?: string; job_title?: string; company?: string
+    about?: string; followers?: string; connections?: string; location?: string
+    error?: string; partial?: boolean
+  } | null>(null)
+  const [linkedinSaving, setLinkedinSaving] = useState(false)
 
   const { logs: valueLogs, add: addValueLog, remove: removeValueLog } = useValueLogs(user?.id ?? null, id)
 
@@ -346,20 +348,45 @@ export default function PersonDetail() {
     setNotesSaving(false)
   }
 
-  const saveLinkedInEnrich = async () => {
-    setLiSaving(true)
-    const parts: string[] = []
-    if (liFollowers.trim()) parts.push(`Followers: ${liFollowers.trim()}`)
-    if (liConnections.trim()) parts.push(`Connections: ${liConnections.trim()}`)
-    if (liAbout.trim()) parts.push(liAbout.trim())
-    if (parts.length > 0) {
-      await updateField('personal_context', parts.join('\n'))
+  const fetchLinkedIn = async () => {
+    if (!contact?.linkedin_url) return
+    setLinkedinFetching(true)
+    setLinkedinResult(null)
+    try {
+      const { data, error } = await supabase.functions.invoke('linkedin-fetch', {
+        body: { url: contact.linkedin_url },
+      })
+      if (error) {
+        setLinkedinResult({ error: error.message })
+      } else {
+        setLinkedinResult(data as typeof linkedinResult)
+      }
+    } catch (err) {
+      setLinkedinResult({ error: String(err) })
     }
-    setLiSaving(false)
-    setLinkedinModalOpen(false)
-    setLiAbout('')
-    setLiFollowers('')
-    setLiConnections('')
+    setLinkedinFetching(false)
+  }
+
+  const applyLinkedInData = async () => {
+    if (!linkedinResult) return
+    setLinkedinSaving(true)
+    const updates: Record<string, unknown> = {}
+    if (linkedinResult.job_title && !contact?.job_title) updates.job_title = linkedinResult.job_title
+    if (linkedinResult.company && !contact?.company) updates.company = linkedinResult.company
+    if (linkedinResult.location && !contact?.location) updates.location = linkedinResult.location
+
+    // Build personal_context from about + metrics
+    const parts: string[] = []
+    if (linkedinResult.followers) parts.push(`Followers: ${linkedinResult.followers}`)
+    if (linkedinResult.connections) parts.push(`Connections: ${linkedinResult.connections}`)
+    if (linkedinResult.about) parts.push(linkedinResult.about)
+    if (parts.length > 0) updates.personal_context = parts.join('\n')
+
+    for (const [field, value] of Object.entries(updates)) {
+      await updateField(field, value)
+    }
+    setLinkedinSaving(false)
+    setLinkedinResult(null)
   }
 
   const logInteraction = async () => {
@@ -845,69 +872,84 @@ export default function PersonDetail() {
                 </a>
                 <span className="text-mercury">·</span>
                 <button
-                  onClick={() => {
-                    setLiAbout(contact.personal_context ?? '')
-                    setLiFollowers('')
-                    setLiConnections('')
-                    setLinkedinModalOpen(true)
-                  }}
-                  className="flex items-center gap-1 text-[10px] text-burnham hover:underline"
+                  onClick={fetchLinkedIn}
+                  disabled={linkedinFetching}
+                  className="flex items-center gap-1 text-[10px] text-burnham hover:underline disabled:opacity-50"
                 >
-                  <LinkedinLogo size={10} /> Fetch profile
+                  <LinkedinLogo size={10} />
+                  {linkedinFetching ? 'Fetching...' : 'Fetch profile'}
                 </button>
               </div>
             )}
 
-            {/* LinkedIn enrich modal */}
-            {linkedinModalOpen && (
+            {/* LinkedIn fetch result */}
+            {linkedinResult && (
               <div className="mb-3 p-3 bg-gossip/10 border border-gossip/40 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-burnham/70">LinkedIn Profile</p>
-                  <button onClick={() => setLinkedinModalOpen(false)} className="text-shuttle hover:text-burnham">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-burnham/70">
+                    {linkedinResult.error ? 'Fetch failed' : 'Profile data'}
+                  </p>
+                  <button onClick={() => setLinkedinResult(null)} className="text-shuttle hover:text-burnham">
                     <X size={10} />
                   </button>
                 </div>
-                <p className="text-[10px] text-shuttle mb-2">Open the profile, copy data below:</p>
-                <div className="flex gap-1.5 mb-1.5">
-                  <div className="flex-1">
-                    <SidebarLabel>Followers</SidebarLabel>
-                    <input
-                      value={liFollowers}
-                      onChange={e => setLiFollowers(e.target.value)}
-                      placeholder="e.g. 2.4k"
-                      className="w-full text-[11px] border border-mercury rounded px-1.5 py-0.5 focus:outline-none focus:border-burnham bg-white"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <SidebarLabel>Connections</SidebarLabel>
-                    <input
-                      value={liConnections}
-                      onChange={e => setLiConnections(e.target.value)}
-                      placeholder="e.g. 500+"
-                      className="w-full text-[11px] border border-mercury rounded px-1.5 py-0.5 focus:outline-none focus:border-burnham bg-white"
-                    />
-                  </div>
-                </div>
-                <SidebarLabel>About / Bio</SidebarLabel>
-                <textarea
-                  value={liAbout}
-                  onChange={e => setLiAbout(e.target.value)}
-                  placeholder="Paste their About section..."
-                  rows={3}
-                  className="w-full text-[11px] border border-mercury rounded px-1.5 py-1 resize-none focus:outline-none focus:border-burnham bg-white mt-0.5 mb-1.5"
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={saveLinkedInEnrich}
-                    disabled={liSaving}
-                    className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-burnham text-gossip rounded disabled:opacity-50"
-                  >
-                    <Check size={8} /> {liSaving ? 'Saving...' : 'Save to profile'}
-                  </button>
-                  <button onClick={() => setLinkedinModalOpen(false)} className="text-[10px] text-shuttle hover:text-burnham">
-                    Cancel
-                  </button>
-                </div>
+
+                {linkedinResult.error ? (
+                  <p className="text-[11px] text-red-500">{linkedinResult.error}</p>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-1 mb-2">
+                      {linkedinResult.name && (
+                        <div className="flex items-center gap-1.5">
+                          <SidebarLabel>Name</SidebarLabel>
+                          <SidebarValue>{linkedinResult.name}</SidebarValue>
+                        </div>
+                      )}
+                      {linkedinResult.job_title && (
+                        <div className="flex items-center gap-1.5">
+                          <SidebarLabel>Role</SidebarLabel>
+                          <SidebarValue>{linkedinResult.job_title}</SidebarValue>
+                        </div>
+                      )}
+                      {linkedinResult.company && (
+                        <div className="flex items-center gap-1.5">
+                          <SidebarLabel>Company</SidebarLabel>
+                          <SidebarValue>{linkedinResult.company}</SidebarValue>
+                        </div>
+                      )}
+                      {linkedinResult.location && (
+                        <div className="flex items-center gap-1.5">
+                          <SidebarLabel>Location</SidebarLabel>
+                          <SidebarValue>{linkedinResult.location}</SidebarValue>
+                        </div>
+                      )}
+                      {linkedinResult.followers && (
+                        <div className="flex items-center gap-1.5">
+                          <SidebarLabel>Followers</SidebarLabel>
+                          <SidebarValue>{linkedinResult.followers}</SidebarValue>
+                        </div>
+                      )}
+                      {linkedinResult.connections && (
+                        <div className="flex items-center gap-1.5">
+                          <SidebarLabel>Connections</SidebarLabel>
+                          <SidebarValue>{linkedinResult.connections}</SidebarValue>
+                        </div>
+                      )}
+                      {linkedinResult.about && (
+                        <p className="text-[11px] text-shuttle mt-1 line-clamp-3 leading-relaxed">
+                          {linkedinResult.about}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={applyLinkedInData}
+                      disabled={linkedinSaving}
+                      className="flex items-center gap-1 text-[10px] px-2 py-1 bg-burnham text-gossip rounded disabled:opacity-50"
+                    >
+                      <Check size={8} /> {linkedinSaving ? 'Saving...' : 'Apply to profile'}
+                    </button>
+                  </>
+                )}
               </div>
             )}
 

@@ -1568,19 +1568,22 @@ export default function Today() {
   void Lightning
 
   return (
-    <div className="h-screen bg-white text-burnham font-sans">
+    <div className="h-screen bg-[#F7F7F5] text-burnham font-sans">
 
       {/* ─── Main content ──────────────────────────────────────────────── */}
       <main
-        className="fixed top-0 bottom-0 left-0 flex flex-col overflow-hidden transition-all duration-300"
-        style={{ right: sidebarOpen ? 'clamp(280px, 30%, 360px)' : '2.5rem' }}
+        className="fixed top-0 bottom-0 flex flex-col overflow-hidden transition-all duration-300"
+        style={{
+          left: 'var(--sidebar-width, 200px)',
+          right: sidebarOpen ? 'clamp(280px, 30%, 360px)' : '2.5rem',
+        }}
       >
 
         {/* ── One Thing header ──────────────────────────────────────── */}
         {onethingValue && (
-          <div className="px-10 pt-7 pb-4 flex items-baseline gap-4 border-b border-mercury/30 shrink-0 bg-white">
-            <span className="text-[9px] font-mono text-shuttle/30 uppercase tracking-[0.15em] whitespace-nowrap">one thing</span>
-            <span className="text-sm font-semibold text-burnham leading-snug">{onethingValue}</span>
+          <div className="px-8 pt-5 pb-3.5 flex items-baseline gap-3 border-b border-mercury/30 shrink-0 bg-white">
+            <span className="text-[10px] font-mono text-shuttle/40 uppercase tracking-[0.15em] whitespace-nowrap">one thing</span>
+            <span className="text-[15px] font-semibold text-burnham leading-snug">{onethingValue}</span>
           </div>
         )}
 
@@ -1627,7 +1630,7 @@ export default function Today() {
           <div className="flex-1 min-h-0 overflow-y-auto">
             <div className={`w-full ${!sidebarOpen ? 'max-w-2xl mx-auto' : ''} px-8 py-8 pt-10`}>
 
-              <p className="text-[10px] font-mono text-shuttle/40 mb-4">{monthStr}</p>
+              <p className="text-[11px] font-mono text-shuttle/40 mb-4">{monthStr}</p>
 
               {/* ── Three-Goal KPI Widget ────────────────────────────── */}
               {userId && (
@@ -1664,9 +1667,9 @@ export default function Today() {
               {/* ── Habits — horizontal chip strip ──────────────────── */}
               <section className="mb-8">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest flex items-center gap-2">
+                  <h3 className="text-[11px] font-semibold text-shuttle uppercase tracking-widest flex items-center gap-2">
                     Habits
-                    <span className="font-mono font-normal text-shuttle/40 normal-case">{doneHabits.length}/{scheduledHabits.length}</span>
+                    <span className="font-mono font-normal text-shuttle/40 normal-case text-[10px]">{doneHabits.length}/{scheduledHabits.length}</span>
                   </h3>
                   <span className="text-[9px] font-mono text-shuttle/25 border border-mercury/50 rounded px-1">⌘H</span>
                 </div>

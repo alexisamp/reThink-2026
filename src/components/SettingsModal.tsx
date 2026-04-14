@@ -20,12 +20,15 @@ interface SettingsModalProps {
     downloadAndInstall: () => Promise<void>
     restartApp: () => Promise<void>
   }
+  zoom?: number
+  onZoomChange?: (level: 80 | 90 | 100) => void
 }
 
-type Section = 'profile' | 'notifications' | 'focus' | 'performance' | 'integrations' | 'funnel' | 'updates'
+type Section = 'profile' | 'appearance' | 'notifications' | 'focus' | 'performance' | 'integrations' | 'funnel' | 'updates'
 
 const SECTIONS: { id: Section; label: string; description: string; Icon: React.ElementType }[] = [
   { id: 'profile',       label: 'Profile',              description: 'Your account info and sign out.',                  Icon: UserCircle },
+  { id: 'appearance',    label: 'Appearance',           description: 'UI density, zoom, and display preferences.',      Icon: Eye },
   { id: 'notifications', label: 'Notifications',         description: 'Configure when the app sends reminders.',         Icon: Bell },
   { id: 'focus',         label: 'Focus',                 description: 'Pomodoro defaults and ambient sound.',            Icon: Timer },
   { id: 'performance',   label: 'Performance',           description: 'Habit grading thresholds and adherence targets.',  Icon: ChartBar },
@@ -43,7 +46,7 @@ const FOCUS_DURATIONS = [
 const SHORT_BREAKS = [5, 10, 15]
 const LONG_BREAKS  = [15, 20, 30]
 
-export default function SettingsModal({ open, onClose, updater }: SettingsModalProps) {
+export default function SettingsModal({ open, onClose, updater, zoom = 100, onZoomChange }: SettingsModalProps) {
   const [section, setSection] = useState<Section>('profile')
   const [appVersion, setAppVersion] = useState<string>('')
 
@@ -269,6 +272,33 @@ export default function SettingsModal({ open, onClose, updater }: SettingsModalP
 
           {/* Scrollable content */}
           <div className="flex-1 overflow-y-auto px-9 py-7">
+
+            {/* ── APPEARANCE ── */}
+            {section === 'appearance' && (
+              <div className="space-y-5">
+                <SettingRow
+                  label="UI Zoom"
+                  description="Scale the interface for readability. 80% gives more density, 100% is the default."
+                >
+                  <div className="flex gap-2">
+                    {([80, 90, 100] as const).map(level => (
+                      <button
+                        key={level}
+                        onClick={() => onZoomChange?.(level)}
+                        className={[
+                          'px-4 py-1.5 rounded-lg text-sm font-medium transition-all border',
+                          zoom === level
+                            ? 'bg-burnham text-gossip border-burnham'
+                            : 'bg-white text-shuttle border-mercury hover:border-burnham hover:text-burnham',
+                        ].join(' ')}
+                      >
+                        {level}%
+                      </button>
+                    ))}
+                  </div>
+                </SettingRow>
+              </div>
+            )}
 
             {/* ── PROFILE ── */}
             {section === 'profile' && (
