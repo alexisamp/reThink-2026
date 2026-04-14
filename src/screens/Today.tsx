@@ -1598,7 +1598,7 @@ export default function Today() {
   void Lightning
 
   return (
-    <div className="h-screen bg-[#F7F7F5] text-burnham font-sans">
+    <div className="h-screen bg-white text-burnham font-sans">
 
       {/* ─── Main content ──────────────────────────────────────────────── */}
       <main
