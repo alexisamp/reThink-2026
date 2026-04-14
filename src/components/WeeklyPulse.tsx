@@ -144,17 +144,17 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick }: WeeklyPulseP
   })
 
   return (
-    <div className="mb-7">
-      <div className="flex items-center justify-between mb-2.5">
-        <span className="text-[10px] font-semibold text-shuttle/40 uppercase tracking-widest">This week</span>
+    <div className="mb-6">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[9px] font-medium text-shuttle/30 uppercase tracking-widest">This week</span>
         {onSettingsClick && (
-          <button onClick={onSettingsClick} className="text-shuttle/20 hover:text-shuttle/50 transition-colors">
-            <GearSix size={11} />
+          <button onClick={onSettingsClick} className="text-shuttle/20 hover:text-shuttle/40 transition-colors">
+            <GearSix size={10} />
           </button>
         )}
       </div>
 
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         {habits.map(hd => {
           const total = displayTotal(hd)
           const pct = Math.min(1, total / hd.habit.weekly_target)
@@ -162,29 +162,24 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick }: WeeklyPulseP
           const isAuto = hd.habit.integration_source !== 'manual'
 
           return (
-            <div key={hd.habit.id} className="flex items-center gap-3">
+            <div key={hd.habit.id} className="flex items-center gap-2.5">
               {/* Emoji + name */}
-              <div className="flex items-center gap-1.5 w-[130px] shrink-0">
+              <div className="flex items-center gap-1 w-[110px] shrink-0">
                 {hd.habit.emoji && (
-                  <span className="text-[13px] leading-none" style={{ filter: 'grayscale(0.3)' }}>
+                  <span className="text-[11px] leading-none" style={{ filter: 'grayscale(0.5)' }}>
                     {hd.habit.emoji}
                   </span>
                 )}
-                <span className={`text-[12px] font-medium truncate ${done ? 'text-burnham' : 'text-shuttle'}`}>
+                <span className="text-[11px] text-shuttle/50 truncate font-normal">
                   {hd.habit.name}
                 </span>
               </div>
 
               {/* 7 dots — Mon to Sun */}
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-[3px]">
                 {weekDates.map((dateStr, i) => {
                   const hasLog = hd.logs.some(l => l.log_date === dateStr)
-                  // For auto-sourced habits, we show dots based on integration data presence
-                  const hasAuto = isAuto && (() => {
-                    if (hd.habit.integration_source === 'interactions') return false // no per-day for auto
-                    return false
-                  })()
-                  const filled = hasLog || hasAuto
+                  const filled = hasLog
                   const isToday = dateStr === todayStr
                   const isFuture = todayStr && dateStr > todayStr
                   const isActive = logging === hd.habit.id + dateStr
@@ -194,15 +189,15 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick }: WeeklyPulseP
                       key={dateStr}
                       onClick={() => toggleDay(hd, dateStr)}
                       disabled={isAuto || isActive || !!isFuture}
-                      title={`${DAY_LABELS[i]} ${dateStr}${isAuto ? ' (auto)' : ''}`}
+                      title={`${DAY_LABELS[i]}${isAuto ? ' (auto)' : ''}`}
                       className={[
-                        'w-[18px] h-[18px] rounded-sm transition-all duration-150',
-                        isAuto ? 'cursor-default' : isFuture ? 'cursor-default' : 'hover:scale-110 cursor-pointer',
+                        'w-[11px] h-[11px] rounded-[2px] transition-all duration-150',
+                        isAuto ? 'cursor-default' : isFuture ? 'cursor-default' : 'hover:opacity-80 cursor-pointer',
                         filled
-                          ? done ? 'bg-burnham' : 'bg-pastel/80'
-                          : isFuture ? 'bg-mercury/30' : 'bg-mercury/60',
-                        isToday && !filled ? 'ring-1 ring-shuttle/30' : '',
-                        isActive ? 'opacity-50' : '',
+                          ? done ? 'bg-burnham/70' : 'bg-pastel/60'
+                          : isFuture ? 'bg-mercury/20' : 'bg-mercury/50',
+                        isToday && !filled ? 'ring-1 ring-shuttle/20' : '',
+                        isActive ? 'opacity-40' : '',
                       ].join(' ')}
                     />
                   )
@@ -210,11 +205,11 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick }: WeeklyPulseP
               </div>
 
               {/* Count / target */}
-              <div className="flex items-baseline gap-0.5 min-w-[52px]">
-                <span className={`text-[12px] font-semibold tabular-nums ${done ? 'text-burnham' : 'text-shuttle/70'}`}>
+              <div className="flex items-baseline gap-0.5">
+                <span className={`text-[11px] tabular-nums font-medium ${done ? 'text-shuttle/60' : 'text-shuttle/40'}`}>
                   {displayLabel(hd.habit, total)}
                 </span>
-                <span className="text-[10px] text-shuttle/30 font-mono">/{targetLabel(hd.habit)}</span>
+                <span className="text-[9px] text-shuttle/25 font-mono">/{targetLabel(hd.habit)}</span>
               </div>
             </div>
           )

@@ -52,23 +52,15 @@ export function SuggestionsPanel({ userId, today, onAddTodo, onSeeAllMilestones 
       return localDate(d)
     })()
 
-    const [nextStepsRes, staleRes, milestoneTodosRes] = await Promise.all([
+    const [nextStepsRes, milestoneTodosRes] = await Promise.all([
       supabase
         .from('interactions')
-        .select('contact_id, next_step, next_step_date, outreach_logs:outreach_log_id(name)')
+        .select('contact_id, next_step, next_step_date')
         .eq('user_id', userId)
         .eq('next_step_owner', 'me')
         .lte('next_step_date', today)
         .not('next_step', 'is', null)
         .order('next_step_date', { ascending: true })
-        .limit(5),
-      supabase
-        .from('outreach_logs')
-        .select('id, name, last_interaction_at')
-        .eq('user_id', userId)
-        .not('status', 'eq', 'DORMANT')
-        .or(`last_interaction_at.lte.${twoWeeksAgo},last_interaction_at.is.null`)
-        .order('last_interaction_at', { ascending: true, nullsFirst: true })
         .limit(5),
       supabase
         .from('milestone_todos')
@@ -84,37 +76,30 @@ export function SuggestionsPanel({ userId, today, onAddTodo, onSeeAllMilestones 
     const seen = new Set<string>()
     const network: NetworkSuggestion[] = []
 
-    ;(nextStepsRes.data ?? []).forEach((row: Record<string, unknown>) => {
-      const contactId = row.contact_id as string
-      if (seen.has(contactId)) return
-      seen.add(contactId)
-      const nextStepDate = row.next_step_date as string
-      const daysOverdue = Math.round((new Date(today).getTime() - new Date(nextStepDate).getTime()) / 86400000)
-      const nameObj = row.outreach_logs as Record<string, string> | null
-      network.push({
-        contactId,
-        name: nameObj?.name ?? 'Unknown',
-        reason: daysOverdue > 0 ? `${daysOverdue}d overdue` : 'due today',
-        nextStep: row.next_step as string | null,
-        daysOverdue,
-      })
-    })
+    const nextStepRows = nextStepsRes.data ?? []
+    if (nextStepRows.length > 0) {
+      const contactIds = [...new Set(nextStepRows.map((r: Record<string, unknown>) => r.contact_id as string))]
+      const { data: contactsData } = await supabase
+        .from('outreach_logs')
+        .select('id, name')
+        .in('id', contactIds)
+      const nameMap = new Map<string, string>((contactsData ?? []).map((c: Record<string, unknown>) => [c.id as string, c.name as string]))
 
-    ;(staleRes.data ?? []).forEach((c: Record<string, unknown>) => {
-      if (seen.has(c.id as string)) return
-      if (network.length >= 5) return
-      seen.add(c.id as string)
-      const lastAt = c.last_interaction_at as string | null
-      const days = lastAt
-        ? Math.round((Date.now() - new Date(lastAt).getTime()) / 86400000)
-        : null
-      network.push({
-        contactId: c.id as string,
-        name: c.name as string,
-        reason: days ? `${days}d since last contact` : 'never contacted',
-        nextStep: null,
+      nextStepRows.forEach((row: Record<string, unknown>) => {
+        const contactId = row.contact_id as string
+        if (seen.has(contactId)) return
+        seen.add(contactId)
+        const nextStepDate = row.next_step_date as string
+        const daysOverdue = Math.round((new Date(today).getTime() - new Date(nextStepDate).getTime()) / 86400000)
+        network.push({
+          contactId,
+          name: nameMap.get(contactId) ?? 'Unknown',
+          reason: daysOverdue > 0 ? `${daysOverdue}d overdue` : 'due today',
+          nextStep: row.next_step as string | null,
+          daysOverdue,
+        })
       })
-    })
+    }
 
     setNetworkSuggs(network.slice(0, 5))
 

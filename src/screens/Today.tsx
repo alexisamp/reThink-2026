@@ -34,6 +34,7 @@ import { openLink } from '@/lib/openLink'
 import { GoalKPIWidget } from '@/components/GoalKPIWidget'
 import { WeeklyPulse } from '@/components/WeeklyPulse'
 import { MilestoneCapture } from '@/components/MilestoneCapture'
+import { WeeklyGoalsModal } from '@/components/WeeklyGoalsModal'
 import { SuggestionsPanel } from '@/components/SuggestionsPanel'
 import OutreachPanel from '@/components/OutreachPanel'
 import { useGeminiScorer, hasGeminiKey } from '@/hooks/useGeminiScorer'
@@ -461,13 +462,10 @@ export default function Today() {
   const [shouldCreateAttioTask, setShouldCreateAttioTask] = useState(false)
 
   const [milestoneCaptureOpen, setMilestoneCaptureOpen] = useState(false)
+  const [weeklyGoalsOpen, setWeeklyGoalsOpen] = useState(false)
 
   const QA_COMMANDS = [
     { label: '/milestone', insert: '/milestone', sub: 'create a milestone' },
-    { label: '/am', insert: '/am ', sub: 'morning block' },
-    { label: '/pm', insert: '/pm ', sub: 'afternoon block' },
-    { label: '/deep', insert: '/deep ', sub: 'deep work' },
-    { label: '/url', insert: '/url ', sub: 'add link' },
   ]
 
   const computeQaDropdown = (text: string) => {
@@ -1673,10 +1671,12 @@ export default function Today() {
                     d.setDate(d.getDate() + i)
                     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
                   })}
+                  onSettingsClick={() => setWeeklyGoalsOpen(true)}
                 />
               )}
 
-              {/* ── Habits — horizontal chip strip ──────────────────── */}
+              {/* ── Habits section removed (v0.1.97) ────────────────── */}
+              {false && (
               <section className="mb-8">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-[11px] font-semibold text-shuttle uppercase tracking-widest flex items-center gap-2">
@@ -1861,9 +1861,7 @@ export default function Today() {
                   })}
                 </div>
               </section>
-
-              {/* ── Separator before todos ───────────────────────────── */}
-              <div className="h-px bg-mercury/40 mb-8" />
+              )}
 
               {/* ── Backlog (all past incomplete todos) ─────────────── */}
               {yesterdayTodos.length > 0 && (
@@ -2157,37 +2155,7 @@ export default function Today() {
                 </section>
               )}
 
-              {/* ── Outreach ─────────────────────────────────────────────── */}
-              <section className="mb-8">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[10px] font-semibold text-shuttle uppercase tracking-widest flex items-center gap-2">
-                    Outreach
-                    <span className="font-mono font-normal text-shuttle/40 normal-case">{todayOutreach.length}</span>
-                  </h3>
-                  <span className="text-[9px] font-mono text-shuttle/25 border border-mercury/50 rounded px-1">⌘O</span>
-                </div>
-                <div className="space-y-1">
-                  {todayOutreach.map(log => (
-                    <OutreachRow
-                      key={log.id}
-                      log={log}
-                      onEdit={() => { setEditingOutreachLog(log); setOutreachPanelOpen(true) }}
-                      onDelete={() => deleteContact(log.id)}
-                      onOpenDetail={() => { setSelectedContact(log); setDetailDrawerOpen(true) }}
-                    />
-                  ))}
-                </div>
-                <button
-                  onClick={() => { setEditingOutreachLog(null); setOutreachPanelOpen(true) }}
-                  className="mt-2 flex items-center gap-2 text-[11px] text-shuttle/40 hover:text-shuttle transition-colors w-full text-left py-1"
-                >
-                  <span className="text-base leading-none">+</span>
-                  <span>Log a contact</span>
-                </button>
-                {outreachSyncError && (
-                  <p className="mt-1 text-[10px] text-red-400">{outreachSyncError}</p>
-                )}
-              </section>
+              {/* Outreach section removed (v0.1.97) */}
 
               {pendingTodos.length === 0 && doneHabits.length > 0 && doneHabits.length === habits.length && habits.length > 0 && (
                 <div className="mt-10 text-center">
@@ -2705,18 +2673,7 @@ export default function Today() {
             </span>
           )}
         </button>
-        {unloggedIndicatorsCount > 0 && (
-          <button
-            onClick={() => setLiPanelOpen(true)}
-            className="flex items-center gap-2 bg-white border border-mercury rounded-full px-3 py-1.5 shadow-md text-[11px] text-shuttle hover:border-shuttle/40 transition-colors"
-          >
-            <ChartLine size={12} className="text-shuttle/60" />
-            <span>Indicators</span>
-            <span className="bg-burnham text-[#72eb7e] text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
-              {unloggedIndicatorsCount}
-            </span>
-          </button>
-        )}
+        {/* Indicators pill removed (v0.1.97) */}
         <NewsletterPill />
       </div>
 
@@ -2779,7 +2736,7 @@ export default function Today() {
                   if (e.key === 'Enter') { submitQuickAdd() }
                   if (e.key === 'Escape') { setQuickAddOpen(false); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked(null); setLinkedContactId(null); setShouldCreateAttioTask(false) }
                 }}
-                placeholder="What needs to get done? Use @ for goals, /am /pm /url..."
+                placeholder="What needs to get done? Type @ for goals, / for commands..."
                 className="flex-1 text-base text-burnham placeholder-shuttle/20 border-none outline-none bg-transparent pr-8"
               />
               {hasGeminiKey && (
@@ -2843,46 +2800,12 @@ export default function Today() {
               </div>
             )}
 
-            {/* Contact link picker (opt-in Attio task) */}
-            {allContacts.length > 0 && (
-              <div className="mt-3 flex flex-col gap-1.5">
-                <div className="flex items-center gap-2">
-                  <label className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono shrink-0">Link to person (optional)</label>
-                  <select
-                    value={linkedContactId ?? ''}
-                    onChange={e => {
-                      const val = e.target.value || null
-                      setLinkedContactId(val)
-                      if (!val) setShouldCreateAttioTask(false)
-                    }}
-                    className="flex-1 text-[10px] text-burnham border border-mercury/60 rounded px-2 py-1 bg-white focus:outline-none focus:border-shuttle transition-colors"
-                  >
-                    <option value="">— none —</option>
-                    {allContacts.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}{c.company ? ` · ${c.company}` : ''}</option>
-                    ))}
-                  </select>
-                </div>
-                {linkedContactId && allContacts.find(c => c.id === linkedContactId)?.attio_record_id && hasAttioKey() && (
-                  <label className="flex items-center gap-2 cursor-pointer self-start">
-                    <input
-                      type="checkbox"
-                      checked={shouldCreateAttioTask}
-                      onChange={e => setShouldCreateAttioTask(e.target.checked)}
-                      className="w-3 h-3 accent-burnham"
-                    />
-                    <span className="text-[10px] text-shuttle/60">Create task in Attio</span>
-                  </label>
-                )}
-              </div>
-            )}
-
             <div className="flex items-center justify-between mt-5 pt-4 border-t border-mercury">
               <span className="text-[9px] text-shuttle/25 font-mono flex items-center gap-3">
                 <span>↵ add</span>
                 <span>Esc close</span>
               </span>
-              <span className="text-[9px] text-shuttle/20 font-mono">@ goals · @m milestones · / commands</span>
+              <span className="text-[9px] text-shuttle/20 font-mono">@ goals · @m milestones · / milestone</span>
             </div>
           </div>
         </div>
@@ -3127,19 +3050,41 @@ export default function Today() {
         />
       )}
 
+      {/* ── Weekly Goals Modal ──────────────────────────────────────────── */}
+      {weeklyGoalsOpen && userId && (
+        <WeeklyGoalsModal
+          userId={userId}
+          onClose={() => setWeeklyGoalsOpen(false)}
+        />
+      )}
+
       {/* ── Milestone Capture Overlay ───────────────────────────────────── */}
       {milestoneCaptureOpen && userId && (
         <MilestoneCapture
           userId={userId}
+          today={today}
           goals={goals}
           onClose={() => setMilestoneCaptureOpen(false)}
-          onCreated={milestoneId => {
+          onCreated={async (milestoneId, todayTodoTexts) => {
             setMilestoneCaptureOpen(false)
-            // Refresh milestones list
+            // Add any "add to today" milestone todos as regular todos
+            for (const text of todayTodoTexts) {
+              await supabase.from('todos').insert({
+                user_id: userId,
+                text,
+                date: today,
+                completed: false,
+                milestone_id: milestoneId,
+              })
+            }
+            // Refresh milestones + todos
             supabase.from('milestones').select('*').eq('user_id', userId).eq('status', 'PENDING')
               .order('created_at', { ascending: false }).limit(10)
               .then(({ data }) => { if (data) setMilestones(data) })
-            void milestoneId
+            if (todayTodoTexts.length > 0) {
+              supabase.from('todos').select('*, milestones(text)').eq('user_id', userId).eq('date', today)
+                .order('created_at').then(({ data }) => { if (data) setTodos(data as typeof todos) })
+            }
           }}
         />
       )}

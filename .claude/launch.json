@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "dev",
-      "runtimeExecutable": "node_modules/.bin/vite",
-      "runtimeArgs": ["--port", "5173", "--host", "localhost"],
+      "runtimeExecutable": "/Users/alexi/.nvm/versions/node/v20.20.2/bin/npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5173"],
       "port": 5173
     }
   ]

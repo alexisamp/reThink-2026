@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /Users/alexi/Documents/reThink-2026/src/types* /Users/alexi/Documents/reThink-2026/src/lib/)"
+    ]
+  }
+}
