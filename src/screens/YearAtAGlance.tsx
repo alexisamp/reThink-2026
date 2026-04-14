@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { CaretLeft, CaretRight } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import type { HabitLog, Habit, Milestone, Review } from '@/types'
+import type { HabitLog, Habit, Milestone, Review, WeeklyHabit, WeeklyHabitLog } from '@/types'
 
 function getDaysInYear(year: number): Date[] {
   const days: Date[] = []
@@ -17,7 +17,7 @@ function toISO(d: Date): string {
   return d.toISOString().split('T')[0]
 }
 
-type Layer = 'habits' | 'energy'
+type Layer = 'habits' | 'energy' | 'weekly'
 
 export default function YearAtAGlance() {
   const { user } = useAuth()
@@ -28,7 +28,9 @@ export default function YearAtAGlance() {
   const [habitLogs, setHabitLogs] = useState<HabitLog[]>([])
   const [reviews, setReviews] = useState<Review[]>([])
   const [milestones, setMilestones] = useState<Milestone[]>([])
-  const [layer, setLayer] = useState<Layer>('habits')
+  const [weeklyHabits, setWeeklyHabits] = useState<WeeklyHabit[]>([])
+  const [weeklyLogs, setWeeklyLogs] = useState<WeeklyHabitLog[]>([])
+  const [layer, setLayer] = useState<Layer>('weekly')
   const [tooltip, setTooltip] = useState<{ date: string; x: number; y: number } | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -36,7 +38,7 @@ export default function YearAtAGlance() {
     if (!userId) return
     const load = async () => {
       setLoading(true)
-      const [habitsRes, logsRes, reviewsRes, milestonesRes] = await Promise.all([
+      const [habitsRes, logsRes, reviewsRes, milestonesRes, weeklyHabitsRes, weeklyLogsRes] = await Promise.all([
         supabase.from('habits').select('*').eq('user_id', userId).eq('is_active', true),
         supabase.from('habit_logs').select('*').eq('user_id', userId)
           .gte('log_date', `${year}-01-01`).lte('log_date', `${year}-12-31`),
@@ -44,11 +46,16 @@ export default function YearAtAGlance() {
           .gte('date', `${year}-01-01`).lte('date', `${year}-12-31`),
         supabase.from('milestones').select('*').eq('user_id', userId)
           .eq('status', 'COMPLETE').gte('target_date', `${year}-01-01`).lte('target_date', `${year}-12-31`),
+        supabase.from('weekly_habits').select('*').eq('user_id', userId).eq('is_active', true).order('position'),
+        supabase.from('weekly_habit_logs').select('*').eq('user_id', userId)
+          .gte('log_date', `${year}-01-01`).lte('log_date', `${year}-12-31`),
       ])
       setHabits(habitsRes.data ?? [])
       setHabitLogs(logsRes.data ?? [])
       setReviews((reviewsRes.data ?? []) as Review[])
       setMilestones(milestonesRes.data ?? [])
+      setWeeklyHabits((weeklyHabitsRes.data ?? []) as WeeklyHabit[])
+      setWeeklyLogs((weeklyLogsRes.data ?? []) as WeeklyHabitLog[])
       setLoading(false)
     }
     load()
@@ -148,8 +155,8 @@ export default function YearAtAGlance() {
           </div>
 
           {/* Layer toggle */}
-          <div className="flex gap-2">
-            {(['habits', 'energy'] as const).map(l => (
+          <div className="flex gap-2 flex-wrap">
+            {(['weekly', 'habits', 'energy'] as const).map(l => (
               <button
                 key={l}
                 onClick={() => setLayer(l)}
@@ -158,13 +165,96 @@ export default function YearAtAGlance() {
                   layer === l ? 'border-burnham text-burnham' : 'border-mercury text-shuttle hover:border-burnham/30',
                 ].join(' ')}
               >
-                {l === 'habits' ? 'Habit Layer' : 'Energy Layer'}
+                {l === 'habits' ? 'Habits' : l === 'energy' ? 'Energy' : 'Weekly Goals'}
               </button>
             ))}
           </div>
 
           {loading ? (
             <p className="text-sm text-shuttle">Loading...</p>
+          ) : layer === 'weekly' ? (
+            /* ── Weekly Goals — one row per habit, 52 weeks ── */
+            <div className="space-y-6">
+              {weeklyHabits.length === 0 ? (
+                <p className="text-[12px] text-shuttle/40">No weekly goals configured yet.</p>
+              ) : weeklyHabits.map(wh => {
+                // Build week-by-week totals for this habit
+                const logsByHabit = weeklyLogs.filter(l => l.habit_id === wh.id)
+                // Get all Monday dates for the year
+                const weeks: { weekStart: string; weekEnd: string; pct: number }[] = []
+                const jan1 = new Date(year, 0, 1)
+                // Find first Monday on or before Jan 1
+                const firstMon = new Date(jan1)
+                const dayOfWeek = jan1.getDay()
+                firstMon.setDate(jan1.getDate() - (dayOfWeek === 1 ? 0 : dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+
+                for (let w = 0; w < 54; w++) {
+                  const mon = new Date(firstMon)
+                  mon.setDate(firstMon.getDate() + w * 7)
+                  if (mon.getFullYear() > year && mon.getMonth() > 0) break
+                  const sun = new Date(mon)
+                  sun.setDate(mon.getDate() + 6)
+                  const wStart = toISO(mon)
+                  const wEnd = toISO(sun)
+                  const weekTotal = logsByHabit
+                    .filter(l => l.log_date >= wStart && l.log_date <= wEnd)
+                    .reduce((s, l) => s + l.quantity, 0)
+                  const pct = wh.weekly_target > 0 ? Math.min(1, weekTotal / wh.weekly_target) : 0
+                  weeks.push({ weekStart: wStart, weekEnd: wEnd, pct })
+                }
+                // Filter to weeks that fall in this year
+                const yearWeeks = weeks.filter(w => {
+                  const d = new Date(w.weekStart + 'T12:00:00')
+                  const d2 = new Date(w.weekEnd + 'T12:00:00')
+                  return d.getFullYear() === year || d2.getFullYear() === year
+                }).slice(0, 53)
+
+                const todayStr = toISO(new Date())
+                const totalLogged = logsByHabit.reduce((s, l) => s + l.quantity, 0)
+                const weeksHit = yearWeeks.filter(w => w.pct >= 1).length
+
+                return (
+                  <div key={wh.id}>
+                    <div className="flex items-center gap-3 mb-2">
+                      {wh.emoji && <span className="text-[14px] leading-none" style={{ filter: 'grayscale(0.2)' }}>{wh.emoji}</span>}
+                      <span className="text-[12px] font-medium text-burnham">{wh.name}</span>
+                      <span className="text-[10px] font-mono text-shuttle/40 ml-auto">
+                        {weeksHit} weeks hit · {wh.type === 'minutes' || wh.type === 'hours'
+                          ? `${Math.floor(totalLogged / 60)}h total`
+                          : `${totalLogged} total`}
+                      </span>
+                    </div>
+                    <div className="flex gap-[3px] flex-wrap">
+                      {yearWeeks.map((w, i) => {
+                        const isFuture = w.weekStart > todayStr
+                        const bg = isFuture ? 'bg-[#EBEDF0]'
+                          : w.pct === 0 ? 'bg-[#EBEDF0]'
+                          : w.pct < 0.5 ? 'bg-gossip/60'
+                          : w.pct < 0.8 ? 'bg-pastel/70'
+                          : w.pct < 1 ? 'bg-pastel'
+                          : 'bg-burnham'
+                        return (
+                          <div
+                            key={i}
+                            className={`w-3 h-3 rounded-sm cursor-default relative transition-opacity hover:opacity-80 ${bg}`}
+                            onMouseEnter={e => setTooltip({ date: `${w.weekStart}..${w.weekEnd}`, x: e.clientX, y: e.clientY })}
+                            onMouseLeave={() => setTooltip(null)}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+              {/* Legend */}
+              <div className="flex items-center gap-1.5 pt-2">
+                <span className="text-[10px] text-shuttle/40">0%</span>
+                {['bg-[#EBEDF0]', 'bg-gossip/60', 'bg-pastel/70', 'bg-pastel', 'bg-burnham'].map(c => (
+                  <div key={c} className={`w-3 h-3 rounded-sm ${c}`} />
+                ))}
+                <span className="text-[10px] text-shuttle/40">100%+</span>
+              </div>
+            </div>
           ) : (
             <div className="space-y-1 relative">
               {months.map(({ name, days: mDays }) => (

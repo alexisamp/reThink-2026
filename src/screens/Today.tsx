@@ -32,6 +32,9 @@ import MilestoneDetailModal from '@/components/MilestoneDetailModal'
 import HabitEditModal from '@/components/HabitEditModal'
 import { openLink } from '@/lib/openLink'
 import { GoalKPIWidget } from '@/components/GoalKPIWidget'
+import { WeeklyPulse } from '@/components/WeeklyPulse'
+import { MilestoneCapture } from '@/components/MilestoneCapture'
+import { SuggestionsPanel } from '@/components/SuggestionsPanel'
 import OutreachPanel from '@/components/OutreachPanel'
 import { useGeminiScorer, hasGeminiKey } from '@/hooks/useGeminiScorer'
 import { getSettings } from '@/lib/userSettings'
@@ -144,7 +147,7 @@ function SortableTodoRow({ todo, goal, milestone, isEditing, editingText, onEdit
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
 
   return (
-    <div ref={setNodeRef} style={style} className="relative group flex items-center gap-2 py-1.5 hover:bg-gray-50/50 px-2 -mx-2 rounded transition-colors">
+    <div ref={setNodeRef} style={style} className="relative group flex items-center gap-2 py-2.5 hover:bg-gossip/5 px-2 -mx-2 rounded-lg transition-colors">
       {/* Drag handle — absolute so it doesn't shift the checkbox */}
       <div
         {...attributes}
@@ -175,7 +178,7 @@ function SortableTodoRow({ todo, goal, milestone, isEditing, editingText, onEdit
           />
         ) : (
           <span
-            className="text-[13px] font-medium text-burnham truncate cursor-text flex-1"
+            className="text-[15px] font-medium text-burnham truncate cursor-text flex-1 leading-snug"
             onClick={onEditStart}
           >
             {todo.text}
@@ -457,7 +460,10 @@ export default function Today() {
   const [linkedContactId, setLinkedContactId] = useState<string | null>(null)
   const [shouldCreateAttioTask, setShouldCreateAttioTask] = useState(false)
 
+  const [milestoneCaptureOpen, setMilestoneCaptureOpen] = useState(false)
+
   const QA_COMMANDS = [
+    { label: '/milestone', insert: '/milestone', sub: 'create a milestone' },
     { label: '/am', insert: '/am ', sub: 'morning block' },
     { label: '/pm', insert: '/pm ', sub: 'afternoon block' },
     { label: '/deep', insert: '/deep ', sub: 'deep work' },
@@ -530,6 +536,14 @@ export default function Today() {
 
   const applyQaDropdownItem = (item: { label: string; insert: string; id?: string; goalId?: string; _isMilestone?: boolean }) => {
     if (qaDropdown?.type === 'command') {
+      // /milestone → open MilestoneCapture overlay
+      if (item.label === '/milestone') {
+        setQaDropdown(null)
+        setQuickAddOpen(false)
+        setQuickAddText('')
+        setMilestoneCaptureOpen(true)
+        return
+      }
       // Commands: insert text as before
       const newText = quickAddText.replace(/(@m?\S*|\/\S*)$/, item.insert)
       setQuickAddText(newText)
@@ -1425,6 +1439,24 @@ export default function Today() {
     setTodos(prev => prev.filter(t => t.id !== id))
   }
 
+  // Add a todo directly (used by SuggestionsPanel)
+  const addSuggestionTodo = useCallback(async (text: string, milestoneId?: string) => {
+    if (!userId || !text.trim()) return
+    const { data } = await supabase
+      .from('todos')
+      .insert({
+        user_id: userId,
+        text: text.trim(),
+        date: today,
+        milestone_id: milestoneId ?? null,
+        completed: false,
+        sort_order: todos.length,
+      })
+      .select()
+      .single()
+    if (data) setTodos(prev => [...prev, data as unknown as import('@/types').Todo])
+  }, [userId, today, todos.length])
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const reorderTodos = (event: DragEndEvent) => {
@@ -1632,36 +1664,16 @@ export default function Today() {
 
               <p className="text-[11px] font-mono text-shuttle/40 mb-4">{monthStr}</p>
 
-              {/* ── Three-Goal KPI Widget ────────────────────────────── */}
+              {/* ── Weekly Pulse — minimal 7-dot widget ──────────────── */}
               {userId && (
-                <GoalKPIWidget
+                <WeeklyPulse
                   userId={userId}
-                  weekStart={startOfWeek}
-                  habitsLog={[...logs, ...recentLogs]}
                   weekDates={Array.from({ length: 7 }, (_, i) => {
                     const d = new Date(startOfWeek + 'T12:00:00')
                     d.setDate(d.getDate() + i)
                     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
                   })}
                 />
-              )}
-
-              {/* Weekly context */}
-              {habits.length > 0 && (
-                <div className="flex items-center gap-3 text-[10px] text-shuttle/35 mb-4 font-mono">
-                  <span>W{(() => {
-                    const d = new Date()
-                    const startOfYear = new Date(d.getFullYear(), 0, 1)
-                    return Math.ceil(((d.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7)
-                  })()}</span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="inline-block w-16 h-0.5 rounded-full bg-mercury overflow-hidden align-middle">
-                      <span className="h-full bg-pastel/60 block" style={{ width: `${habitsProgress}%` }} />
-                    </span>
-                    {habitsProgress}% habits
-                  </span>
-                  {doneTodos.length > 0 && <span>{doneTodos.length} done today</span>}
-                </div>
               )}
 
               {/* ── Habits — horizontal chip strip ──────────────────── */}
@@ -1962,11 +1974,12 @@ export default function Today() {
                         />
                       ))}
                       <button
-                        className="flex items-center gap-2 py-2 px-2 -mx-2 opacity-30 hover:opacity-70 transition-opacity"
+                        className="flex items-center gap-2.5 py-2.5 px-2 -mx-2 opacity-25 hover:opacity-60 transition-opacity group"
                         onClick={() => setQuickAddOpen(true)}
                       >
-                        <div className="w-[1.15em] h-[1.15em] border border-dashed border-shuttle/60 rounded-[0.35em]" />
-                        <span className="text-xs text-shuttle font-mono">⌘N to add a task</span>
+                        <div className="w-[18px] h-[18px] border border-dashed border-shuttle/50 rounded-md shrink-0" />
+                        <span className="text-[13px] text-shuttle">Add a task</span>
+                        <span className="text-[10px] text-shuttle/50 font-mono ml-auto">⌘N</span>
                       </button>
                     </div>
                   </SortableContext>
@@ -2052,6 +2065,16 @@ export default function Today() {
                   </div>
                 )}
               </section>
+
+              {/* ── Suggestions — network + milestones ──────────────────── */}
+              {userId && (
+                <SuggestionsPanel
+                  userId={userId}
+                  today={today}
+                  onAddTodo={addSuggestionTodo}
+                  onSeeAllMilestones={() => window.location.href = '/milestone-plan'}
+                />
+              )}
 
               {/* ── Meetings Today (F08) ──────────────────────────────────── */}
               {meetingsToday.length > 0 && (
@@ -3100,6 +3123,23 @@ export default function Today() {
           onUpdate={updated => {
             setHabits(prev => prev.map(h => h.id === updated.id ? updated : h))
             setEditingHabit(null)
+          }}
+        />
+      )}
+
+      {/* ── Milestone Capture Overlay ───────────────────────────────────── */}
+      {milestoneCaptureOpen && userId && (
+        <MilestoneCapture
+          userId={userId}
+          goals={goals}
+          onClose={() => setMilestoneCaptureOpen(false)}
+          onCreated={milestoneId => {
+            setMilestoneCaptureOpen(false)
+            // Refresh milestones list
+            supabase.from('milestones').select('*').eq('user_id', userId).eq('status', 'PENDING')
+              .order('created_at', { ascending: false }).limit(10)
+              .then(({ data }) => { if (data) setMilestones(data) })
+            void milestoneId
           }}
         />
       )}

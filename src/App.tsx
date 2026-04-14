@@ -23,6 +23,7 @@ import CompanyDetail from '@/screens/CompanyDetail'
 import PeopleOpportunities from '@/screens/PeopleOpportunities'
 import OpportunityDetail from '@/screens/OpportunityDetail'
 import Plan from '@/screens/Plan'
+import MilestonePlan from '@/screens/MilestonePlan'
 import Playbook from '@/screens/Playbook'
 import ContactDetailDrawer from '@/components/ContactDetailDrawer'
 import { checkNotificationTriggers, formatNotificationMessage } from '@/lib/notifications'
@@ -213,6 +214,7 @@ export default function App() {
                   <Route path="/people/opportunities/:id" element={<OpportunityDetail />} />
                   <Route path="/people/:id" element={<PersonDetail />} />
                   <Route path="/plan" element={<Plan />} />
+                  <Route path="/milestone-plan" element={<MilestonePlan />} />
                   <Route path="/playbook" element={<Playbook />} />
                   <Route path="*" element={<Navigate to="/today" replace />} />
                 </Routes>

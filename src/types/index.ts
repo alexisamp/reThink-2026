@@ -437,3 +437,48 @@ export interface WeeklyKpi {
   english_minutes: number
   created_at: string
 }
+
+export interface WeeklyHabit {
+  id: string
+  user_id: string
+  name: string
+  emoji: string | null
+  type: 'count' | 'hours' | 'minutes'
+  weekly_target: number
+  unit: string | null
+  integration_source: 'manual' | 'interactions' | 'english_sessions' | 'cowork' | 'networkhub'
+  color: string | null
+  position: number
+  is_active: boolean
+  created_at: string
+}
+
+export interface WeeklyHabitLog {
+  id: string
+  user_id: string
+  habit_id: string
+  log_date: string
+  quantity: number
+  note: string | null
+  person_id: string | null
+  created_at: string
+}
+
+export interface MilestoneTodo {
+  id: string
+  user_id: string
+  milestone_id: string
+  text: string
+  completed: boolean
+  position: number
+  date: string | null
+  created_at: string
+}
+
+export interface MilestoneContact {
+  id: string
+  milestone_id: string
+  person_id: string
+  user_id: string
+  created_at: string
+}
