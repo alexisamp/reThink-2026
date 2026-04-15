@@ -490,7 +490,7 @@ export default function Today() {
   const [qaDropdown, setQaDropdown] = useState<{
     type: 'goal' | 'milestone' | 'command' | 'person'
     query: string
-    items: Array<{ label: string; insert: string; sub?: string; id?: string; goalId?: string; _isPerson?: boolean }>
+    items: Array<{ label: string; insert: string; sub?: string; id?: string; goalId?: string; _isPerson?: boolean; _isMilestone?: boolean; _type?: 'milestone' | 'goal' | 'person' | 'command' }>
     selectedIdx: number
   } | null>(null)
 
@@ -546,7 +546,7 @@ export default function Today() {
         .slice(0, 8)
         .map(m => {
           const g = goals.find(g => g.id === m.goal_id)
-          return { label: m.text, insert: '', sub: g?.alias ?? g?.text?.slice(0, 20) ?? '', id: m.id, goalId: m.goal_id ?? undefined }
+          return { label: m.text, insert: '', sub: g?.alias ?? g?.text?.slice(0, 20) ?? '', id: m.id, goalId: m.goal_id ?? undefined, _isMilestone: true, _type: 'milestone' as const }
         })
       setQaDropdown({ type: 'milestone', query: q, items, selectedIdx: 0 })
       return
@@ -558,31 +558,29 @@ export default function Today() {
       const items = goals
         .filter(g => g.text.toLowerCase().includes(q) || (g.alias ?? '').toLowerCase().includes(q))
         .slice(0, 6)
-        .map(g => ({ label: g.alias ?? g.text.slice(0, 24), insert: '', sub: g.text.slice(0, 32), id: g.id }))
+        .map(g => ({ label: g.alias ?? g.text.slice(0, 24), insert: '', sub: g.text.slice(0, 32), id: g.id, _type: 'goal' as const }))
       setQaDropdown({ type: 'goal', query: q, items, selectedIdx: 0 })
       return
     }
-    // bare @ — milestones first, then goals, then people
-    const atMatch = text.match(/@(\S*)$/)
+    // bare @ or / — milestones, goals, people grouped
+    const atMatch = text.match(/(?:^|\s)(@\S*)$/)
     if (atMatch) {
-      const q = atMatch[1].toLowerCase()
+      const q = atMatch[1].slice(1).toLowerCase() // strip leading @
       const msItems = milestones
         .filter(m => m.status !== 'COMPLETE' && (q === '' || m.text.toLowerCase().includes(q)))
-        .slice(0, 4)
+        .slice(0, 5)
         .map(m => {
           const g = goals.find(g => g.id === m.goal_id)
-          return { label: m.text, insert: '', sub: g?.alias ?? '', id: m.id, goalId: m.goal_id ?? undefined, _isMilestone: true }
+          return { label: m.text, insert: '', sub: g?.alias ?? '', id: m.id, goalId: m.goal_id ?? undefined, _isMilestone: true, _type: 'milestone' as const }
         })
       const gItems = goals
         .filter(g => q === '' || g.text.toLowerCase().includes(q) || (g.alias ?? '').toLowerCase().includes(q))
-        .slice(0, 2)
-        .map(g => ({ label: g.alias ?? g.text.slice(0, 24), insert: '', sub: g.text.slice(0, 32), id: g.id, _isMilestone: false }))
-      const pItems = q.length >= 1
-        ? allContacts
-            .filter(c => c.name.toLowerCase().includes(q))
-            .slice(0, 4)
-            .map(c => ({ label: c.name, insert: c.name, sub: (c as any).company ?? (c as any).role ?? '', id: c.id, _isPerson: true }))
-        : []
+        .slice(0, 3)
+        .map(g => ({ label: g.alias ?? g.text.slice(0, 24), insert: '', sub: g.text.slice(0, 32), id: g.id, _type: 'goal' as const }))
+      const pItems = allContacts
+        .filter(c => q === '' ? true : c.name.toLowerCase().includes(q))
+        .slice(0, 5)
+        .map(c => ({ label: c.name, insert: c.name, sub: (c as any).company ?? (c as any).role ?? '', id: c.id, _isPerson: true, _type: 'person' as const }))
       const combined = [...msItems, ...gItems, ...pItems]
       if (combined.length > 0) {
         setQaDropdown({ type: 'milestone', query: q, items: combined as any, selectedIdx: 0 })
@@ -1257,8 +1255,9 @@ export default function Today() {
     const t = todos.find(t => t.id === id)
     if (!t) return
     const newVal = !t.completed
-    await supabase.from('todos').update({ completed: newVal }).eq('id', id).eq('user_id', userId)
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, completed: newVal } : t))
+    const completedAt = newVal ? new Date().toISOString() : null
+    await supabase.from('todos').update({ completed: newVal, completed_at: completedAt }).eq('id', id).eq('user_id', userId)
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, completed: newVal, completed_at: completedAt } : t))
     // Fire-and-forget Attio task completion
     if (newVal && t.attio_task_id) {
       completeAttioTask(t.attio_task_id)
@@ -1376,10 +1375,11 @@ export default function Today() {
   }
 
   // Core todo submission (used by inline input and quick-add overlay)
-  const submitTodo = async (rawText: string, blockOverride?: 'AM' | 'PM' | null, frictionBypass = false) => {
+  // forceMilestoneId / forceGoalId: when IDs are already known (chip selection), bypass text parsing
+  const submitTodo = async (rawText: string, blockOverride?: 'AM' | 'PM' | null, frictionBypass = false, forceMilestoneId?: string | null, forceGoalId?: string | null) => {
     if (!rawText.trim() || !userId) return
     let text = rawText.trim()
-    let goalId = selectedGoalId
+    let goalId: string | null = forceGoalId ?? selectedGoalId
     let block: 'AM' | 'PM' | null = blockOverride !== undefined ? blockOverride : todoBlock
 
     // Extract URL — supports /url https://... or bare paste
@@ -1404,6 +1404,7 @@ export default function Today() {
       text = text.replace(blockMatch[0], '').trim()
     }
 
+    // Only parse text-based @goal if no forced goalId
     if (!goalId) {
       const goalMatch = text.match(/@(\S+)/)
       if (goalMatch) {
@@ -1412,16 +1413,24 @@ export default function Today() {
       }
     }
 
-    // Parse @m<milestone> mention
-    let milestoneId: string | null = null
-    const milestoneMatch = text.match(/@m([^\s@/]+)/i)
-    if (milestoneMatch) {
-      const mMatch = milestones.find(m => m.text.toLowerCase().includes(milestoneMatch[1].toLowerCase()))
-      if (mMatch) {
-        milestoneId = mMatch.id
-        if (!goalId && mMatch.goal_id) goalId = mMatch.goal_id
+    // Parse @m<milestone> mention — only if no forced milestone ID
+    let milestoneId: string | null = forceMilestoneId ?? null
+    if (!milestoneId) {
+      const milestoneMatch = text.match(/@m([^\s@/]+)/i)
+      if (milestoneMatch) {
+        const mMatch = milestones.find(m => m.text.toLowerCase().includes(milestoneMatch[1].toLowerCase()))
+        if (mMatch) {
+          milestoneId = mMatch.id
+          if (!goalId && mMatch.goal_id) goalId = mMatch.goal_id
+        }
+        text = text.replace(milestoneMatch[0], '').replace(/\s+/g, ' ').trim()
       }
-      text = text.replace(milestoneMatch[0], '').replace(/\s+/g, ' ').trim()
+    }
+
+    // Auto-fill goalId from milestone if still missing
+    if (!goalId && milestoneId) {
+      const ms = milestones.find(m => m.id === milestoneId)
+      if (ms?.goal_id) goalId = ms.goal_id
     }
 
     text = text.replace(/@\S+/g, '').replace(/\s+/g, ' ').trim()
@@ -1453,23 +1462,17 @@ export default function Today() {
     setSelectedGoalId(null)
   }
 
-  // Quick-add from overlay
+  // Quick-add from overlay (inline add + ⌘N modal)
   const submitQuickAdd = async () => {
     if (!quickAddText.trim()) return
-    let text = quickAddText
-    // If a chip link is set, inject milestone/goal into text for submitTodo to parse
-    if (quickAddLinked?.milestoneId) {
-      const ms = milestones.find(m => m.id === quickAddLinked.milestoneId)
-      if (ms) text = `${text} @m${ms.text.split(' ')[0]}`
-    } else if (quickAddLinked?.goalId) {
-      const g = goals.find(g => g.id === quickAddLinked.goalId)
-      if (g) text = `${text} @${g.alias ?? g.text.split(' ')[0]}`
-    }
+    // Pass linked milestone/goal IDs directly — no text roundabout
+    const forcedMilestoneId = quickAddLinked?.milestoneId ?? null
+    const forcedGoalId = quickAddLinked?.goalId ?? null
     // Capture state before clearing
     const capturedLinkedContactId = linkedContactId
     const capturedShouldCreate = shouldCreateAttioTask
-    const capturedTodoText = text
-    await submitTodo(text, null)
+    const capturedTodoText = quickAddText
+    await submitTodo(quickAddText, null, false, forcedMilestoneId, forcedGoalId)
     // If Attio task creation was requested, fire it after todo is saved
     if (capturedShouldCreate && capturedLinkedContactId) {
       const contact = allContacts.find(c => c.id === capturedLinkedContactId)
@@ -2152,6 +2155,11 @@ export default function Today() {
                             <div key={todo.id} className="group flex items-center gap-2 py-1.5 px-2 -mx-2 opacity-50 hover:opacity-70 transition-opacity">
                               <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleTodo(todo.id)} />
                               <span className="text-[13px] text-shuttle line-through decoration-pastel flex-1 truncate">{todo.text}</span>
+                              {todo.completed_at && (
+                                <span className="text-[9px] font-mono text-pastel/70 shrink-0">
+                                  {new Date(todo.completed_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                                </span>
+                              )}
                               {doneMilestone && (
                                 <span className="bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 leading-none opacity-50">
                                   {doneMilestone.text.length > 18 ? doneMilestone.text.slice(0, 18) + '…' : doneMilestone.text}
@@ -2858,30 +2866,61 @@ export default function Today() {
         (() => {
           const el = inlineAddOpen ? inlineAddRef.current : activeEditElRef.current
           const rect = el!.getBoundingClientRect()
+          const isCommand = qaDropdown.type === 'command'
+          // Group items by _type for non-command dropdowns
+          const grouped: { type: string; label: string; items: typeof qaDropdown.items }[] = []
+          if (isCommand) {
+            grouped.push({ type: 'command', label: 'Commands', items: qaDropdown.items })
+          } else {
+            const msItems = qaDropdown.items.filter(x => x._type === 'milestone')
+            const gItems = qaDropdown.items.filter(x => x._type === 'goal')
+            const pItems = qaDropdown.items.filter(x => x._type === 'person')
+            const otherItems = qaDropdown.items.filter(x => !x._type)
+            if (msItems.length) grouped.push({ type: 'milestone', label: 'Milestones', items: msItems })
+            if (gItems.length) grouped.push({ type: 'goal', label: 'Goals', items: gItems })
+            if (pItems.length) grouped.push({ type: 'person', label: 'People', items: pItems })
+            if (otherItems.length) grouped.push({ type: 'other', label: 'Link to…', items: otherItems })
+          }
           return (
             <div
-              style={{ position: 'fixed', top: rect.bottom + 6, left: rect.left, width: Math.max(280, rect.width), zIndex: 9999 }}
-              className="bg-white border border-mercury rounded-xl shadow-xl"
+              style={{ position: 'fixed', top: rect.bottom + 6, left: rect.left, width: Math.max(300, rect.width), zIndex: 9999 }}
+              className="bg-white border border-mercury rounded-xl shadow-xl overflow-hidden"
             >
-              <div className="px-3 py-1.5 border-b border-mercury/40">
-                <span className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono">
-                  {qaDropdown.type === 'command' ? 'Commands' : 'Link to…'}
-                </span>
+              <div className="max-h-72 overflow-y-auto">
+                {grouped.map((group, gi) => {
+                  // Track flat index for selectedIdx highlighting
+                  const groupStart = grouped.slice(0, gi).reduce((s, g) => s + g.items.length, 0)
+                  return (
+                    <div key={group.type}>
+                      {(grouped.length > 1 || group.type === 'command') && (
+                        <div className={`px-3 py-1.5 ${gi > 0 ? 'border-t border-mercury/30' : ''}`}>
+                          <span className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono">{group.label}</span>
+                        </div>
+                      )}
+                      {group.items.map((item, j) => {
+                        const flatIdx = groupStart + j
+                        return (
+                          <button
+                            key={j}
+                            onMouseDown={e => { e.preventDefault(); applyQaDropdownItem(item) }}
+                            className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${flatIdx === qaDropdown.selectedIdx ? 'bg-gossip/40 text-burnham' : 'text-burnham hover:bg-mercury/20'}`}
+                          >
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <span className="text-shuttle/30 shrink-0 text-[10px]">
+                                {item._type === 'milestone' ? '◎' : item._type === 'goal' ? '★' : item._type === 'person' ? '·' : '→'}
+                              </span>
+                              <span className="text-[12px] font-medium truncate">{item.label}</span>
+                            </div>
+                            {item.sub && <span className="text-[10px] text-shuttle/40 ml-2 shrink-0 truncate max-w-[110px]">{item.sub}</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
               </div>
-              <div className="max-h-48 overflow-y-auto">
-                {qaDropdown.items.map((item, i) => (
-                  <button
-                    key={i}
-                    onMouseDown={e => { e.preventDefault(); applyQaDropdownItem(item) }}
-                    className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${i === qaDropdown.selectedIdx ? 'bg-gossip/30 text-burnham' : 'text-burnham hover:bg-mercury/20'}`}
-                  >
-                    <span className="text-[12px] font-medium truncate flex-1">{item.label}</span>
-                    {item.sub && <span className="text-[10px] text-shuttle/40 ml-2 shrink-0 truncate max-w-[120px]">{item.sub}</span>}
-                  </button>
-                ))}
-              </div>
-              <div className="px-3 py-1 border-t border-mercury/40">
-                <span className="text-[9px] text-shuttle/25 font-mono">↑↓ navigate · Tab select · Esc close</span>
+              <div className="px-3 py-1 border-t border-mercury/30">
+                <span className="text-[9px] text-shuttle/25 font-mono">↑↓ navegar · Tab seleccionar · Esc cerrar</span>
               </div>
             </div>
           )
@@ -2986,31 +3025,62 @@ export default function Today() {
               </div>
             )}
 
-            {/* Autocomplete dropdown */}
-            {qaDropdown && qaDropdown.items.length > 0 && (
-              <div className="absolute left-6 right-6 top-full mt-2 bg-white border border-mercury rounded-xl shadow-lg z-10">
-                <div className="px-3 py-1.5 border-b border-mercury/40">
-                  <span className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono">
-                    {qaDropdown.type === 'command' ? 'Commands' : qaDropdown.type === 'person' ? 'People' : qaDropdown.type === 'milestone' ? 'Milestones & Goals' : 'Goals'}
-                  </span>
+            {/* Autocomplete dropdown — grouped by type */}
+            {qaDropdown && qaDropdown.items.length > 0 && (() => {
+              const isCmd = qaDropdown.type === 'command'
+              const qaGrouped: { type: string; label: string; items: typeof qaDropdown.items }[] = []
+              if (isCmd) {
+                qaGrouped.push({ type: 'command', label: 'Commands', items: qaDropdown.items })
+              } else {
+                const ms2 = qaDropdown.items.filter(x => x._type === 'milestone')
+                const g2 = qaDropdown.items.filter(x => x._type === 'goal')
+                const p2 = qaDropdown.items.filter(x => x._type === 'person')
+                const other2 = qaDropdown.items.filter(x => !x._type)
+                if (ms2.length) qaGrouped.push({ type: 'milestone', label: 'Milestones', items: ms2 })
+                if (g2.length) qaGrouped.push({ type: 'goal', label: 'Goals', items: g2 })
+                if (p2.length) qaGrouped.push({ type: 'person', label: 'People', items: p2 })
+                if (other2.length) qaGrouped.push({ type: 'other', label: 'Link to…', items: other2 })
+              }
+              return (
+                <div className="absolute left-6 right-6 top-full mt-2 bg-white border border-mercury rounded-xl shadow-lg z-10 overflow-hidden">
+                  <div className="max-h-52 overflow-y-auto">
+                    {qaGrouped.map((group, gi) => {
+                      const groupStart = qaGrouped.slice(0, gi).reduce((s, g) => s + g.items.length, 0)
+                      return (
+                        <div key={group.type}>
+                          {(qaGrouped.length > 1 || group.type === 'command') && (
+                            <div className={`px-4 py-1.5 ${gi > 0 ? 'border-t border-mercury/30' : ''}`}>
+                              <span className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono">{group.label}</span>
+                            </div>
+                          )}
+                          {group.items.map((item, j) => {
+                            const flatIdx = groupStart + j
+                            return (
+                              <button
+                                key={j}
+                                onMouseDown={e => { e.preventDefault(); applyQaDropdownItem(item) }}
+                                className={`w-full flex items-center justify-between px-4 py-2 text-left transition-colors ${flatIdx === qaDropdown.selectedIdx ? 'bg-gossip/40 text-burnham' : 'text-burnham hover:bg-mercury/20'}`}
+                              >
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <span className="text-shuttle/30 shrink-0 text-[10px]">
+                                    {item._type === 'milestone' ? '◎' : item._type === 'goal' ? '★' : item._type === 'person' ? '·' : '→'}
+                                  </span>
+                                  <span className="text-[13px] font-medium truncate">{item.label}</span>
+                                </div>
+                                {item.sub && <span className="text-[10px] text-shuttle/40 ml-3 shrink-0 truncate max-w-[160px]">{item.sub}</span>}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="px-3 py-1 border-t border-mercury/30">
+                    <span className="text-[9px] text-shuttle/25 font-mono">↑↓ navegar · Tab seleccionar · Esc cerrar</span>
+                  </div>
                 </div>
-                <div className="max-h-44 overflow-y-auto">
-                  {qaDropdown.items.map((item, i) => (
-                    <button
-                      key={i}
-                      onMouseDown={e => { e.preventDefault(); applyQaDropdownItem(item) }}
-                      className={`w-full flex items-center justify-between px-4 py-2 text-left transition-colors ${i === qaDropdown.selectedIdx ? 'bg-gossip/30 text-burnham' : 'text-burnham hover:bg-mercury/20'}`}
-                    >
-                      <span className="text-[13px] font-medium">{item.label}</span>
-                      {item.sub && <span className="text-[10px] text-shuttle/40 ml-3 truncate max-w-[160px]">{item.sub}</span>}
-                    </button>
-                  ))}
-                </div>
-                <div className="px-3 py-1 border-t border-mercury/40">
-                  <span className="text-[9px] text-shuttle/25 font-mono">↑↓ navigate · Tab select · Esc close</span>
-                </div>
-              </div>
-            )}
+              )
+            })()}
 
             <div className="flex items-center justify-between mt-5 pt-4 border-t border-mercury">
               <span className="text-[9px] text-shuttle/25 font-mono flex items-center gap-3">
