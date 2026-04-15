@@ -144,9 +144,13 @@ interface SortableTodoRowProps {
   onDelete: () => void
   onMarkWaiting?: () => void
   onMilestoneClick?: (milestone: Pick<Milestone, 'id' | 'text'>) => void
+  editRef?: (el: HTMLInputElement | null) => void
+  editKeyDownDropdown?: (e: React.KeyboardEvent<HTMLInputElement>) => boolean
+  editingLinked?: { name: string; type: 'milestone' | 'goal' } | null
+  onClearEditingLinked?: () => void
 }
 
-function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting, onMilestoneClick }: SortableTodoRowProps) {
+function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting, onMilestoneClick, editRef, editKeyDownDropdown, editingLinked, onClearEditingLinked }: SortableTodoRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: todo.id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
   const isTopThree = index < 3
@@ -178,17 +182,34 @@ function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText,
       />
       <div className="flex-1 min-w-0 flex items-center gap-2">
         {isEditing ? (
-          <input
-            autoFocus
-            className="flex-1 text-[13px] font-normal text-burnham/70 bg-transparent border-b border-burnham/30 focus:outline-none"
-            value={editingText}
-            onChange={e => onEditChange(e.target.value)}
-            onBlur={onEditSave}
-            onKeyDown={e => {
-              if (e.key === 'Enter') onEditSave()
-              if (e.key === 'Escape') onEditCancel()
-            }}
-          />
+          <div className="flex-1 min-w-0 flex flex-col gap-1">
+            <input
+              ref={editRef}
+              autoFocus
+              className="flex-1 text-[13px] font-normal text-burnham/70 bg-transparent border-b border-burnham/30 focus:outline-none w-full"
+              value={editingText}
+              onChange={e => onEditChange(e.target.value)}
+              onBlur={e => {
+                // Delay save so portal dropdown mouseDown can fire first
+                setTimeout(() => onEditSave(), 120)
+              }}
+              onKeyDown={e => {
+                if (editKeyDownDropdown?.(e)) return
+                if (e.key === 'Enter') { e.preventDefault(); onEditSave() }
+                if (e.key === 'Escape') onEditCancel()
+              }}
+            />
+            {editingLinked && (
+              <div className="flex items-center gap-1">
+                <span className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[10px] text-burnham">
+                  <span className="truncate max-w-[140px]">{editingLinked.name}</span>
+                  <button onMouseDown={e => { e.preventDefault(); onClearEditingLinked?.() }} className="text-shuttle/40 hover:text-burnham ml-0.5">
+                    <X size={9} />
+                  </button>
+                </span>
+              </div>
+            )}
+          </div>
         ) : (
           <span
             className="text-[13px] font-normal text-burnham/70 truncate cursor-text flex-1 leading-snug"
@@ -481,6 +502,16 @@ export default function Today() {
     type: 'milestone' | 'goal'
   } | null>(null)
 
+  // Linked entity chip for edit-mode (@mention selection)
+  const [editingLinked, setEditingLinked] = useState<{
+    milestoneId: string | null
+    goalId: string | null
+    name: string
+    type: 'milestone' | 'goal'
+  } | null>(null)
+  // Ref to the currently focused input (inline-add OR edit) — used to position portal dropdown
+  const activeEditElRef = useRef<HTMLInputElement | null>(null)
+
   // Attio task creation in quick-add
   const [linkedContactId, setLinkedContactId] = useState<string | null>(null)
   const [shouldCreateAttioTask, setShouldCreateAttioTask] = useState(false)
@@ -562,48 +593,47 @@ export default function Today() {
   }
 
   const applyQaDropdownItem = (item: { label: string; insert: string; id?: string; goalId?: string; _isMilestone?: boolean; _isPerson?: boolean }) => {
+    const isEditMode = !!editingTodoId
+
+    // Helper: which text/setter to use
+    const getText = () => isEditMode ? editingTodoText : quickAddText
+    const setText = (t: string) => isEditMode ? setEditingTodoText(t) : setQuickAddText(t)
+    const setLinked = (v: typeof quickAddLinked) => isEditMode ? setEditingLinked(v) : setQuickAddLinked(v)
+    const refocus = () => activeEditElRef.current?.focus() ?? inlineAddRef.current?.focus() ?? quickAddRef.current?.focus()
+
     if (qaDropdown?.type === 'command') {
-      // /milestone → open MilestoneCapture overlay
       if (item.label === '/milestone') {
         setQaDropdown(null)
-        setQuickAddOpen(false)
-        setQuickAddText('')
+        if (!isEditMode) { setQuickAddOpen(false); setQuickAddText('') }
         setMilestoneCaptureOpen(true)
         return
       }
-      // Commands: insert text as before
-      const newText = quickAddText.replace(/(@m?\S*|\/\S*)$/, item.insert)
-      setQuickAddText(newText)
+      setText(getText().replace(/(@m?\S*|\/\S*)$/, item.insert))
     } else if (item._isPerson) {
-      // Person: insert @Name into text (no chip, no FK)
-      setQuickAddText(prev => prev.replace(/(@m?\S*|@g?\S*|@\S*)$/, '').trimEnd() + ` @${item.label}`)
+      // Person: insert @Name into text (no FK — just text tag)
+      setText(getText().replace(/(@m?\S*|@g?\S*|@\S*)$/, '').trimEnd() + ` @${item.label}`)
       setQaDropdown(null)
-      quickAddRef.current?.focus()
-      inlineAddRef.current?.focus()
+      refocus()
       return
     } else if (item.id) {
-      // Milestone or goal: store as chip, clear @... from input
-      const isMilestone = !!(item as any)._isMilestone || !!(item.goalId) || qaDropdown?.type === 'milestone'
-      if (isMilestone && item.goalId !== undefined) {
-        // It's a milestone
-        setQuickAddLinked({ milestoneId: item.id, goalId: item.goalId ?? null, name: item.label, type: 'milestone' })
-      } else if (isMilestone && !item.goalId) {
-        // Could be milestone without goal or a goal — check by id presence in milestones
+      // Milestone or goal → store as chip, clear @... trigger from text
+      const isMilestone = !!(item as any)._isMilestone || item.goalId !== undefined
+      if (isMilestone) {
         const ms = milestones.find(m => m.id === item.id)
         if (ms) {
-          setQuickAddLinked({ milestoneId: item.id, goalId: ms.goal_id ?? null, name: item.label, type: 'milestone' })
+          setLinked({ milestoneId: item.id, goalId: ms.goal_id ?? null, name: item.label, type: 'milestone' })
+        } else if (item.goalId !== undefined) {
+          setLinked({ milestoneId: item.id, goalId: item.goalId ?? null, name: item.label, type: 'milestone' })
         } else {
-          setQuickAddLinked({ milestoneId: null, goalId: item.id, name: item.label, type: 'goal' })
+          setLinked({ milestoneId: null, goalId: item.id, name: item.label, type: 'goal' })
         }
       } else {
-        // Goal
-        setQuickAddLinked({ milestoneId: null, goalId: item.id, name: item.label, type: 'goal' })
+        setLinked({ milestoneId: null, goalId: item.id, name: item.label, type: 'goal' })
       }
-      // Remove @... trigger from text
-      setQuickAddText(prev => prev.replace(/(@m?\S*|@g?\S*|@\S*)$/, '').trimEnd())
+      setText(getText().replace(/(@m?\S*|@g?\S*|@\S*)$/, '').trimEnd())
     }
     setQaDropdown(null)
-    quickAddRef.current?.focus()
+    refocus()
   }
 
   // Friction modal for >5 todos
@@ -1465,10 +1495,17 @@ export default function Today() {
   }
 
   const saveTodoText = async (id: string) => {
-    if (!editingTodoText.trim()) { setEditingTodoId(null); return }
-    await supabase.from('todos').update({ text: editingTodoText.trim() }).eq('id', id)
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, text: editingTodoText.trim() } : t))
+    if (!editingTodoText.trim()) { setEditingTodoId(null); setEditingLinked(null); setQaDropdown(null); return }
+    const updates: Record<string, unknown> = { text: editingTodoText.trim() }
+    if (editingLinked) {
+      if (editingLinked.milestoneId) updates.milestone_id = editingLinked.milestoneId
+      if (editingLinked.goalId) updates.goal_id = editingLinked.goalId
+    }
+    await supabase.from('todos').update(updates).eq('id', id)
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
     setEditingTodoId(null)
+    setEditingLinked(null)
+    setQaDropdown(null)
   }
 
   const deleteTodo = async (id: string) => {
@@ -1987,10 +2024,21 @@ export default function Today() {
                           milestone={todo.milestone_id ? milestones.find(m => m.id === todo.milestone_id) : null}
                           isEditing={editingTodoId === todo.id}
                           editingText={editingTodoText}
-                          onEditStart={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text) }}
-                          onEditChange={setEditingTodoText}
+                          onEditStart={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text); setEditingLinked(null); setQaDropdown(null) }}
+                          onEditChange={text => { setEditingTodoText(text); computeQaDropdown(text) }}
                           onEditSave={() => saveTodoText(todo.id)}
-                          onEditCancel={() => setEditingTodoId(null)}
+                          onEditCancel={() => { setEditingTodoId(null); setEditingLinked(null); setQaDropdown(null) }}
+                          editRef={el => { activeEditElRef.current = el }}
+                          editKeyDownDropdown={e => {
+                            if (!qaDropdown || qaDropdown.items.length === 0) return false
+                            if (e.key === 'ArrowDown') { e.preventDefault(); setQaDropdown(d => d ? { ...d, selectedIdx: Math.min(d.selectedIdx + 1, d.items.length - 1) } : d); return true }
+                            if (e.key === 'ArrowUp') { e.preventDefault(); setQaDropdown(d => d ? { ...d, selectedIdx: Math.max(d.selectedIdx - 1, 0) } : d); return true }
+                            if (e.key === 'Tab' || e.key === 'Enter') { e.preventDefault(); applyQaDropdownItem(qaDropdown.items[qaDropdown.selectedIdx]); return true }
+                            if (e.key === 'Escape') { setQaDropdown(null); return true }
+                            return false
+                          }}
+                          editingLinked={editingTodoId === todo.id ? editingLinked : null}
+                          onClearEditingLinked={() => setEditingLinked(null)}
                           onToggle={() => toggleTodo(todo.id)}
                           onDelete={() => deleteTodo(todo.id)}
                           onMarkWaiting={async () => {
@@ -2008,7 +2056,7 @@ export default function Today() {
                           <span className="w-3 shrink-0" />
                           <div className="w-[18px] h-[18px] border border-dashed border-shuttle/40 rounded-md shrink-0 opacity-40" />
                           <input
-                            ref={inlineAddRef}
+                            ref={el => { (inlineAddRef as React.MutableRefObject<HTMLInputElement | null>).current = el; activeEditElRef.current = el }}
                             autoFocus
                             value={quickAddText}
                             onChange={e => { setQuickAddText(e.target.value); computeQaDropdown(e.target.value) }}
@@ -2805,10 +2853,11 @@ export default function Today() {
       {/* Bottom-right floating pill removed (v0.1.101) — now in bottom bar */}
       <NewsletterPill />
 
-      {/* ─── Inline-add @ dropdown — portal to escape overflow clipping ── */}
-      {inlineAddOpen && qaDropdown && qaDropdown.items.length > 0 && inlineAddRef.current && createPortal(
+      {/* ─── @ dropdown portal — works for inline-add AND todo edit ───── */}
+      {(inlineAddOpen || !!editingTodoId) && qaDropdown && qaDropdown.items.length > 0 && (inlineAddRef.current || activeEditElRef.current) && createPortal(
         (() => {
-          const rect = inlineAddRef.current!.getBoundingClientRect()
+          const el = inlineAddOpen ? inlineAddRef.current : activeEditElRef.current
+          const rect = el!.getBoundingClientRect()
           return (
             <div
               style={{ position: 'fixed', top: rect.bottom + 6, left: rect.left, width: Math.max(280, rect.width), zIndex: 9999 }}

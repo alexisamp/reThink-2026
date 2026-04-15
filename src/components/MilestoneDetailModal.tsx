@@ -177,14 +177,15 @@ export default function MilestoneDetailModal({
     onTodoDelete(todoId)
   }
 
-  const handleAddTodo = async () => {
+  const handleAddTodo = async (forToday = false) => {
     if (!newTodoText.trim() || !userId) return
+    const date = forToday ? today : (newTodoDate || null)
     const { data } = await supabase.from('todos').insert({
       text: newTodoText.trim(),
       user_id: userId,
       milestone_id: milestone.id,
       goal_id: goal?.id ?? null,
-      date: newTodoDate || null,
+      date,
       effort: 'NORMAL',
       sort_order: todos.length,
       completed: false,
@@ -280,19 +281,60 @@ export default function MilestoneDetailModal({
 
           <div className="px-4 py-3 border-t border-mercury/50 shrink-0">
             {addingTodo ? (
-              <div className="flex items-center gap-2">
-                <input autoFocus value={newTodoText} onChange={e => setNewTodoText(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleAddTodo(); if (e.key === 'Escape') { setAddingTodo(false); setNewTodoText('') } }}
-                  placeholder="Step description…"
-                  className="flex-1 text-xs text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors" />
-                <input type="date" value={newTodoDate} onChange={e => setNewTodoDate(e.target.value)}
-                  className="text-[10px] text-shuttle border border-mercury rounded-lg px-2 py-2 focus:outline-none focus:border-shuttle font-mono" />
-                <button onClick={handleAddTodo} className="px-3 py-2 bg-burnham text-white text-[10px] font-semibold rounded-lg hover:bg-burnham/80 transition-colors">ok</button>
-                <button onClick={() => { setAddingTodo(false); setNewTodoText('') }} className="text-shuttle/40 hover:text-shuttle"><X size={14} /></button>
+              <div className="space-y-2">
+                <input
+                  autoFocus
+                  value={newTodoText}
+                  onChange={e => setNewTodoText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleAddTodo(true)   // Enter = add to today
+                    if (e.key === 'Escape') { setAddingTodo(false); setNewTodoText(''); setNewTodoDate('') }
+                  }}
+                  placeholder="Describe the step…"
+                  className="w-full text-[13px] text-burnham bg-transparent border-none outline-none placeholder-shuttle/25"
+                />
+                <div className="flex items-center gap-2">
+                  {/* Primary action: add to today */}
+                  <button
+                    onClick={() => handleAddTodo(true)}
+                    disabled={!newTodoText.trim()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-burnham text-gossip text-[11px] font-semibold rounded-lg hover:bg-burnham/80 transition-colors disabled:opacity-30"
+                  >
+                    <Plus size={11} />
+                    Add to today
+                  </button>
+                  {/* Secondary: pick a date (future step) */}
+                  <input
+                    type="date"
+                    value={newTodoDate}
+                    onChange={e => setNewTodoDate(e.target.value)}
+                    className="text-[10px] text-shuttle/50 border border-mercury/60 rounded px-2 py-1.5 focus:outline-none focus:border-shuttle font-mono"
+                    title="Or schedule for a future date"
+                  />
+                  {newTodoDate && (
+                    <button
+                      onClick={() => handleAddTodo(false)}
+                      disabled={!newTodoText.trim()}
+                      className="text-[10px] font-mono text-shuttle/50 hover:text-burnham transition-colors px-2 py-1.5 rounded border border-mercury/60 hover:border-burnham/30 disabled:opacity-30"
+                    >
+                      add on date
+                    </button>
+                  )}
+                  <div className="flex-1" />
+                  <button
+                    onClick={() => { setAddingTodo(false); setNewTodoText(''); setNewTodoDate('') }}
+                    className="text-shuttle/30 hover:text-shuttle transition-colors"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+                <p className="text-[9px] text-shuttle/25 font-mono">↵ add to today · Esc cancel</p>
               </div>
             ) : (
-              <button onClick={() => setAddingTodo(true)}
-                className="flex items-center gap-2 text-[10px] text-shuttle/40 hover:text-shuttle transition-colors font-mono">
+              <button
+                onClick={() => setAddingTodo(true)}
+                className="flex items-center gap-2 text-[11px] text-shuttle/35 hover:text-shuttle transition-colors"
+              >
                 <Plus size={12} />
                 <span>Add step</span>
               </button>
