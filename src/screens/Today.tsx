@@ -129,6 +129,7 @@ function getUrlChip(url: string): { icon: string; label: string; color: string }
 }
 
 interface SortableTodoRowProps {
+  index: number
   todo: Todo
   goal: Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'> | null | undefined
   milestone: Pick<Milestone, 'id' | 'text'> | null | undefined
@@ -143,21 +144,30 @@ interface SortableTodoRowProps {
   onMarkWaiting?: () => void
 }
 
-function SortableTodoRow({ todo, goal, milestone, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting }: SortableTodoRowProps) {
+function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting }: SortableTodoRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: todo.id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
+  const isTopThree = index < 3
 
   return (
     <div ref={setNodeRef} style={style} className="relative group flex items-center gap-2 py-2.5 hover:bg-gossip/5 px-2 -mx-2 rounded-lg transition-colors">
-      {/* Drag handle — absolute so it doesn't shift the checkbox */}
+      {/* Drag handle — always visible at low opacity, brighter on hover */}
       <div
         {...attributes}
         {...listeners}
-        className="absolute -left-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-25 hover:!opacity-60 cursor-grab active:cursor-grabbing text-shuttle transition-opacity touch-none"
+        className="absolute -left-5 top-1/2 -translate-y-1/2 opacity-[0.18] hover:!opacity-50 cursor-grab active:cursor-grabbing text-shuttle transition-opacity touch-none"
         title="Drag to reorder"
       >
-        <DotsSixVertical size={13} />
+        <DotsSixVertical size={12} weight="bold" />
       </div>
+      {/* Priority number — top 3 only */}
+      {isTopThree ? (
+        <span className="w-3 text-right text-[9px] font-mono text-shuttle/30 shrink-0 leading-none select-none">
+          {index + 1}
+        </span>
+      ) : (
+        <span className="w-3 shrink-0" />
+      )}
       <input
         type="checkbox"
         className="custom-checkbox shrink-0"
@@ -1950,9 +1960,10 @@ export default function Today() {
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorderTodos}>
                   <SortableContext items={pendingTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
                     <div className="space-y-0.5 mb-6">
-                      {pendingTodos.map(todo => (
+                      {pendingTodos.map((todo, i) => (
                         <SortableTodoRow
                           key={todo.id}
+                          index={i}
                           todo={todo}
                           goal={todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null}
                           milestone={todo.milestone_id ? milestones.find(m => m.id === todo.milestone_id) : null}
