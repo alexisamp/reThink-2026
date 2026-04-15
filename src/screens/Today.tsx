@@ -3157,7 +3157,7 @@ export default function Today() {
             right: sidebarOpen ? 'calc(clamp(280px, 30%, 360px) + 0.75rem)' : '3.5rem',
           }}
         >
-          <div className="bg-white border border-mercury/60 rounded-xl shadow-sm px-3 pt-2 pb-2.5 w-[256px]">
+          <div className="bg-white border border-mercury/50 rounded-xl shadow-sm px-3.5 pt-2.5 pb-3 w-[220px]">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[9px] font-mono uppercase tracking-[0.12em] text-shuttle/25">This week</span>
               <button

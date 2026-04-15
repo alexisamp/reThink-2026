@@ -177,17 +177,55 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact }: Wee
         </div>
       )}
 
-      <div className={compact ? 'space-y-1.5' : 'space-y-1'}>
+      <div className={compact ? 'space-y-3' : 'space-y-1'}>
         {habits.map(hd => {
           const total = displayTotal(hd)
           const pct = Math.min(1, total / hd.habit.weekly_target)
           const done = pct >= 1
           const isAuto = hd.habit.integration_source !== 'manual'
 
+          if (compact) {
+            /* ── Compact widget mode: 2-line layout, progress bar, no dots ── */
+            return (
+              <div key={hd.habit.id} className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {hd.habit.emoji && (
+                      <span className="text-[12px] leading-none shrink-0">
+                        {hd.habit.emoji}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-shuttle/55 font-normal leading-none">
+                      {hd.habit.name}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-[2px] shrink-0">
+                    <span className={`text-[11px] tabular-nums font-medium leading-none ${done ? 'text-burnham/60' : 'text-shuttle/50'}`}>
+                      {displayLabel(hd.habit, total)}
+                    </span>
+                    <span className="text-[9px] text-shuttle/25 font-mono">/{targetLabel(hd.habit)}</span>
+                  </div>
+                </div>
+                {/* Thin progress bar */}
+                <div className="w-full h-[3px] bg-mercury/40 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.max(pct * 100, pct > 0 ? 4 : 0)}%`,
+                      backgroundColor: done ? '#003720' : '#79D65E',
+                      opacity: done ? 0.7 : 0.8,
+                    }}
+                  />
+                </div>
+              </div>
+            )
+          }
+
+          /* ── Normal strip mode: dots layout ── */
           return (
             <div key={hd.habit.id} className="flex items-center gap-2.5">
               {/* Emoji + name */}
-              <div className={`flex items-center gap-1 shrink-0 ${compact ? 'w-[80px]' : 'w-[110px]'}`}>
+              <div className="flex items-center gap-1 w-[110px] shrink-0">
                 {hd.habit.emoji && (
                   <span className="text-[11px] leading-none" style={{ filter: 'grayscale(0.5)' }}>
                     {hd.habit.emoji}
