@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Lightning, Check, Play, Pause, Stop,
   Timer, CalendarBlank, SidebarSimple,
@@ -142,9 +143,10 @@ interface SortableTodoRowProps {
   onToggle: () => void
   onDelete: () => void
   onMarkWaiting?: () => void
+  onMilestoneClick?: (milestone: Pick<Milestone, 'id' | 'text'>) => void
 }
 
-function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting }: SortableTodoRowProps) {
+function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting, onMilestoneClick }: SortableTodoRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: todo.id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
   const isTopThree = index < 3
@@ -196,10 +198,13 @@ function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText,
           </span>
         )}
         {milestone && (
-          <span className="bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 leading-none">
+          <button
+            onClick={e => { e.stopPropagation(); onMilestoneClick?.(milestone) }}
+            className="bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 leading-none hover:bg-burnham/10 hover:text-burnham/60 transition-colors"
+          >
             {milestone.text.length > 18 ? milestone.text.slice(0, 18) + '…' : milestone.text}
             {goal ? ` · ${goal.alias ?? goal.text?.slice(0, 6) ?? ''}` : ''}
-          </span>
+          </button>
         )}
         {todo.url && (() => {
           const chip = getUrlChip(todo.url)
@@ -1992,10 +1997,14 @@ export default function Today() {
                             await supabase.from('todos').update({ waiting: true } as any).eq('id', todo.id)
                             setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, waiting: true } : t))
                           }}
+                          onMilestoneClick={ms => {
+                            const full = milestones.find(m => m.id === ms.id)
+                            if (full) setSelectedMilestoneDetail(full)
+                          }}
                         />
                       ))}
                       {inlineAddOpen ? (
-                        <div className="relative flex items-center gap-2 py-2.5 px-2 -mx-2">
+                        <div className="flex items-center gap-2 py-2.5 px-2 -mx-2">
                           <span className="w-3 shrink-0" />
                           <div className="w-[18px] h-[18px] border border-dashed border-shuttle/40 rounded-md shrink-0 opacity-40" />
                           <input
@@ -2023,23 +2032,6 @@ export default function Today() {
                                 <X size={9} />
                               </button>
                             </span>
-                          )}
-                          {/* Inline @mention dropdown */}
-                          {qaDropdown && qaDropdown.items.length > 0 && (
-                            <div className="absolute left-8 right-0 top-full mt-1 bg-white border border-mercury rounded-xl shadow-lg z-50">
-                              <div className="max-h-44 overflow-y-auto">
-                                {qaDropdown.items.map((item, i) => (
-                                  <button
-                                    key={i}
-                                    onMouseDown={e => { e.preventDefault(); applyQaDropdownItem(item) }}
-                                    className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${i === qaDropdown.selectedIdx ? 'bg-gossip/30 text-burnham' : 'text-burnham hover:bg-mercury/20'}`}
-                                  >
-                                    <span className="text-[12px] font-medium">{item.label}</span>
-                                    {item.sub && <span className="text-[10px] text-shuttle/40 ml-2 truncate max-w-[120px]">{item.sub}</span>}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
                           )}
                         </div>
                       ) : (
@@ -2812,6 +2804,41 @@ export default function Today() {
 
       {/* Bottom-right floating pill removed (v0.1.101) — now in bottom bar */}
       <NewsletterPill />
+
+      {/* ─── Inline-add @ dropdown — portal to escape overflow clipping ── */}
+      {inlineAddOpen && qaDropdown && qaDropdown.items.length > 0 && inlineAddRef.current && createPortal(
+        (() => {
+          const rect = inlineAddRef.current!.getBoundingClientRect()
+          return (
+            <div
+              style={{ position: 'fixed', top: rect.bottom + 6, left: rect.left, width: Math.max(280, rect.width), zIndex: 9999 }}
+              className="bg-white border border-mercury rounded-xl shadow-xl"
+            >
+              <div className="px-3 py-1.5 border-b border-mercury/40">
+                <span className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono">
+                  {qaDropdown.type === 'command' ? 'Commands' : 'Link to…'}
+                </span>
+              </div>
+              <div className="max-h-48 overflow-y-auto">
+                {qaDropdown.items.map((item, i) => (
+                  <button
+                    key={i}
+                    onMouseDown={e => { e.preventDefault(); applyQaDropdownItem(item) }}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${i === qaDropdown.selectedIdx ? 'bg-gossip/30 text-burnham' : 'text-burnham hover:bg-mercury/20'}`}
+                  >
+                    <span className="text-[12px] font-medium truncate flex-1">{item.label}</span>
+                    {item.sub && <span className="text-[10px] text-shuttle/40 ml-2 shrink-0 truncate max-w-[120px]">{item.sub}</span>}
+                  </button>
+                ))}
+              </div>
+              <div className="px-3 py-1 border-t border-mercury/40">
+                <span className="text-[9px] text-shuttle/25 font-mono">↑↓ navigate · Tab select · Esc close</span>
+              </div>
+            </div>
+          )
+        })(),
+        document.body
+      )}
 
       {/* ─── Friction modal (>5 todos) ───────────────────────────────── */}
       {frictionPendingTodo && (

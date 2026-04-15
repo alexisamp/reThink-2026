@@ -25,13 +25,17 @@ interface MilestoneDetailModalProps {
 function TimelineTodoRow({
   todo,
   pendingIds,
+  today,
   onToggle,
   onDelete,
+  onScheduleToday,
 }: {
   todo: Todo
   pendingIds: string[]
+  today: string
   onToggle: () => void
   onDelete: () => void
+  onScheduleToday?: () => void
 }) {
   const isPending = pendingIds.includes(todo.id)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -77,8 +81,20 @@ function TimelineTodoRow({
           </span>
 
           <div className="flex items-center gap-2 shrink-0">
-            {todo.date && (
+            {todo.date && todo.date !== today && (
               <span className="text-[9px] text-shuttle/30 font-mono">{todo.date}</span>
+            )}
+            {todo.date === today && (
+              <span className="text-[9px] text-pastel/70 font-mono">today</span>
+            )}
+            {!todo.completed && todo.date !== today && onScheduleToday && (
+              <button
+                onClick={onScheduleToday}
+                className="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-shuttle/40 hover:text-burnham px-1.5 py-0.5 rounded border border-transparent hover:border-mercury"
+                title="Schedule for today"
+              >
+                →today
+              </button>
             )}
             <button onClick={onDelete}
               className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-red-400">
@@ -105,22 +121,30 @@ export default function MilestoneDetailModal({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const fetchTodos = useCallback(async () => {
-    if (!milestone) return
+    if (!milestone || !userId) return
     setLoading(true)
     const { data } = await supabase
       .from('todos')
       .select('*')
       .eq('milestone_id', milestone.id)
+      .eq('user_id', userId)
       .order('sort_order', { ascending: true })
     setTodos(data ?? [])
     setLoading(false)
-  }, [milestone?.id])
+  }, [milestone?.id, userId])
 
   useEffect(() => {
     if (!milestone) return
     setDescription((milestone as any).description ?? '')
     fetchTodos()
   }, [milestone?.id])
+
+  // Auto-open "Add step" when milestone has no todos yet
+  useEffect(() => {
+    if (!loading && todos.length === 0 && milestone) {
+      setAddingTodo(true)
+    }
+  }, [loading, todos.length, milestone?.id])
 
   if (!milestone) return null
 
@@ -237,8 +261,15 @@ export default function MilestoneDetailModal({
                         key={todo.id}
                         todo={todo}
                         pendingIds={pendingIds}
+                        today={today}
                         onToggle={() => handleToggleTodo(todo)}
                         onDelete={() => handleDeleteTodo(todo.id)}
+                        onScheduleToday={async () => {
+                          await supabase.from('todos').update({ date: today }).eq('id', todo.id)
+                          const updated = { ...todo, date: today }
+                          setTodos(prev => prev.map(t => t.id === todo.id ? updated : t))
+                          onTodoUpdate(updated)
+                        }}
                       />
                     ))}
                   </SortableContext>
