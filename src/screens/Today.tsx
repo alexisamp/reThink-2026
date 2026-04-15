@@ -168,7 +168,7 @@ function SortableTodoRow({ todo, goal, milestone, isEditing, editingText, onEdit
         {isEditing ? (
           <input
             autoFocus
-            className="flex-1 text-[13px] font-semibold text-shuttle/75 bg-transparent border-b border-burnham/30 focus:outline-none"
+            className="flex-1 text-[13px] font-normal text-burnham/70 bg-transparent border-b border-burnham/30 focus:outline-none"
             value={editingText}
             onChange={e => onEditChange(e.target.value)}
             onBlur={onEditSave}
@@ -179,7 +179,7 @@ function SortableTodoRow({ todo, goal, milestone, isEditing, editingText, onEdit
           />
         ) : (
           <span
-            className="text-[13px] font-semibold text-shuttle/75 truncate cursor-text flex-1 leading-snug"
+            className="text-[13px] font-normal text-burnham/70 truncate cursor-text flex-1 leading-snug"
             onClick={onEditStart}
           >
             {todo.text}
@@ -2119,15 +2119,25 @@ export default function Today() {
                 </section>
               )}
 
-              {/* ── Suggestions — collapsible, toggled via ⌘S or bottom bar ── */}
-              {userId && suggestionsOpen && (
-                <div className="mt-2 mb-4">
-                  <SuggestionsPanel
-                    userId={userId}
-                    today={today}
-                    onAddTodo={addSuggestionTodo}
-                    onSeeAllMilestones={() => window.location.href = '/milestone-plan'}
-                  />
+              {/* ── Suggestions — always visible header, content collapses ── */}
+              {userId && (
+                <div className="mt-4">
+                  <button
+                    onClick={() => setSuggestionsOpen(v => !v)}
+                    className="flex items-center gap-1.5 w-full text-[9px] font-mono uppercase tracking-[0.15em] text-shuttle/30 hover:text-shuttle/50 transition-colors mb-2"
+                  >
+                    <span>{suggestionsOpen ? '▾' : '▸'}</span>
+                    <span>Suggestions</span>
+                    <span className="ml-auto text-[8px] text-shuttle/20">⌘S</span>
+                  </button>
+                  {suggestionsOpen && (
+                    <SuggestionsPanel
+                      userId={userId}
+                      today={today}
+                      onAddTodo={addSuggestionTodo}
+                      onSeeAllMilestones={() => window.location.href = '/milestone-plan'}
+                    />
+                  )}
                 </div>
               )}
 
@@ -2709,30 +2719,8 @@ export default function Today() {
         </>
       )}
 
-      {/* ─── Bottom-right floating pills ───────────────────────────────── */}
-      <div className="fixed bottom-6 right-6 z-30 flex flex-col gap-2 items-end">
-        <button
-          onClick={() => setMilestonesOpen(v => !v)}
-          className="flex items-center gap-2 bg-white border border-mercury rounded-full px-3 py-1.5 shadow-md text-[11px] text-shuttle hover:border-shuttle/40 transition-colors"
-          title="⌘⇧M"
-        >
-          <Flag size={12} className="text-shuttle/60" />
-          <span>Milestones</span>
-          {urgentMilestone && (
-            <span className={`text-[9px] font-bold rounded-full px-1.5 py-0.5 leading-none ${
-              urgentMilestone.daysLeft < 0
-                ? 'bg-burnham/10 text-burnham'
-                : urgentMilestone.daysLeft <= 3
-                ? 'bg-burnham text-[#72eb7e]'
-                : 'bg-mercury text-shuttle'
-            }`}>
-              {urgentMilestone.daysLeft < 0 ? 'overdue' : `${urgentMilestone.daysLeft}d`}
-            </span>
-          )}
-        </button>
-        {/* Indicators pill removed (v0.1.97) */}
-        <NewsletterPill />
-      </div>
+      {/* Bottom-right floating pill removed (v0.1.101) — now in bottom bar */}
+      <NewsletterPill />
 
       {/* ─── Friction modal (>5 todos) ───────────────────────────────── */}
       {frictionPendingTodo && (
@@ -3169,7 +3157,7 @@ export default function Today() {
             right: sidebarOpen ? 'calc(clamp(280px, 30%, 360px) + 0.75rem)' : '3.5rem',
           }}
         >
-          <div className="bg-white border border-mercury/60 rounded-xl shadow-sm px-3 pt-2 pb-2.5 w-[196px]">
+          <div className="bg-white border border-mercury/60 rounded-xl shadow-sm px-3 pt-2 pb-2.5 w-[256px]">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[9px] font-mono uppercase tracking-[0.12em] text-shuttle/25">This week</span>
               <button

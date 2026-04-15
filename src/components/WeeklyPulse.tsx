@@ -187,7 +187,7 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact }: Wee
           return (
             <div key={hd.habit.id} className="flex items-center gap-2.5">
               {/* Emoji + name */}
-              <div className="flex items-center gap-1 w-[110px] shrink-0">
+              <div className={`flex items-center gap-1 shrink-0 ${compact ? 'w-[80px]' : 'w-[110px]'}`}>
                 {hd.habit.emoji && (
                   <span className="text-[11px] leading-none" style={{ filter: 'grayscale(0.5)' }}>
                     {hd.habit.emoji}
