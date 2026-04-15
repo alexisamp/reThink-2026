@@ -330,6 +330,12 @@ export default function Today() {
     return localDate(monday)
   })()
 
+  const weekDates = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(startOfWeek + 'T12:00:00')
+    d.setDate(d.getDate() + i)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })
+
   // Data
   const [todos, setTodos] = useState<Todo[]>([])
   const [yesterdayTodos, setYesterdayTodos] = useState<Todo[]>([])
@@ -463,6 +469,8 @@ export default function Today() {
 
   const [milestoneCaptureOpen, setMilestoneCaptureOpen] = useState(false)
   const [weeklyGoalsOpen, setWeeklyGoalsOpen] = useState(false)
+  const [doneTodosOpen, setDoneTodosOpen] = useState(false)
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false)
 
   const QA_COMMANDS = [
     { label: '/milestone', insert: '/milestone', sub: 'create a milestone' },
@@ -659,6 +667,7 @@ export default function Today() {
     'cmd+n': () => setQuickAddOpen(true),
     'cmd+e': () => setShowEndOfDay(true),
     'cmd+h': () => setHabitDrawerOpen(v => !v),
+    'cmd+s': () => setSuggestionsOpen(v => !v),
     'cmd+o': () => { setEditingOutreachLog(null); setOutreachPanelOpen(p => !p) },
     'cmd+l': () => {
       const drafts: Record<string, string> = {}
@@ -1661,7 +1670,7 @@ export default function Today() {
         ) : (
           /* ── Normal Today Content ───────────────────────────────── */
           <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className={`w-full ${!sidebarOpen ? 'max-w-2xl mx-auto' : ''} px-8 py-6`}>
+            <div className={`w-full ${!sidebarOpen ? 'max-w-2xl mx-auto' : ''} px-8 py-6 pb-14`}>
 
               {/* ── Habits section removed (v0.1.97) ────────────────── */}
               {false && (
@@ -2009,45 +2018,53 @@ export default function Today() {
                 )}
 
                 {doneTodos.length > 0 && (
-                  <div className="pt-5 border-t border-dashed border-mercury">
-                    <h4 className="text-[10px] font-semibold text-shuttle/60 uppercase tracking-widest mb-3">Done</h4>
-                    <div className="space-y-1">
-                      {doneTodos.map(todo => {
-                        const goal = todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null
-                        const doneMilestone = todo.milestone_id ? milestones.find(m => m.id === todo.milestone_id) : null
-                        return (
-                          <div key={todo.id} className="group flex items-center gap-2 py-1.5 px-2 -mx-2 opacity-50 hover:opacity-70 transition-opacity">
-                            <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleTodo(todo.id)} />
-                            <span className="text-[13px] text-shuttle line-through decoration-pastel flex-1 truncate">{todo.text}</span>
-                            {doneMilestone && (
-                              <span className="bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 leading-none opacity-50">
-                                {doneMilestone.text.length > 18 ? doneMilestone.text.slice(0, 18) + '…' : doneMilestone.text}
-                                {goal ? ` · ${goal.alias ?? goal.text?.slice(0, 6) ?? ''}` : ''}
-                              </span>
-                            )}
-                            {todo.url && (() => {
-                              const chip = getUrlChip(todo.url)
-                              return (
-                                <button
-                                  onClick={e => { e.stopPropagation(); openLink(todo.url!) }}
-                                  className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full border shrink-0 hover:opacity-80 transition-opacity leading-none"
-                                  style={{ color: chip.color, borderColor: `${chip.color}40`, backgroundColor: `${chip.color}10` }}
-                                >
-                                  <span>{chip.icon}</span>
-                                  <span className="font-medium ml-0.5">{chip.label}</span>
-                                </button>
-                              )
-                            })()}
-                            <button
-                              onClick={() => deleteTodo(todo.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
-                            >
-                              <TrashSimple size={12} />
-                            </button>
-                          </div>
-                        )
-                      })}
-                    </div>
+                  <div className="pt-4 border-t border-dashed border-mercury/50">
+                    <button
+                      onClick={() => setDoneTodosOpen(v => !v)}
+                      className="flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-widest text-shuttle/30 hover:text-shuttle/50 transition-colors mb-2 w-full"
+                    >
+                      <span>{doneTodosOpen ? '▾' : '▸'}</span>
+                      <span>Done · {doneTodos.length}</span>
+                    </button>
+                    {doneTodosOpen && (
+                      <div className="space-y-1">
+                        {doneTodos.map(todo => {
+                          const goal = todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null
+                          const doneMilestone = todo.milestone_id ? milestones.find(m => m.id === todo.milestone_id) : null
+                          return (
+                            <div key={todo.id} className="group flex items-center gap-2 py-1.5 px-2 -mx-2 opacity-50 hover:opacity-70 transition-opacity">
+                              <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleTodo(todo.id)} />
+                              <span className="text-[13px] text-shuttle line-through decoration-pastel flex-1 truncate">{todo.text}</span>
+                              {doneMilestone && (
+                                <span className="bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 leading-none opacity-50">
+                                  {doneMilestone.text.length > 18 ? doneMilestone.text.slice(0, 18) + '…' : doneMilestone.text}
+                                  {goal ? ` · ${goal.alias ?? goal.text?.slice(0, 6) ?? ''}` : ''}
+                                </span>
+                              )}
+                              {todo.url && (() => {
+                                const chip = getUrlChip(todo.url)
+                                return (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); openLink(todo.url!) }}
+                                    className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full border shrink-0 hover:opacity-80 transition-opacity leading-none"
+                                    style={{ color: chip.color, borderColor: `${chip.color}40`, backgroundColor: `${chip.color}10` }}
+                                  >
+                                    <span>{chip.icon}</span>
+                                    <span className="font-medium ml-0.5">{chip.label}</span>
+                                  </button>
+                                )
+                              })()}
+                              <button
+                                onClick={() => deleteTodo(todo.id)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
+                              >
+                                <TrashSimple size={12} />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </section>
@@ -2074,7 +2091,7 @@ export default function Today() {
                               setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
                             }}
                           />
-                          <span className="flex-1 text-[12px] text-shuttle/40 min-w-0 truncate">{todo.text}</span>
+                          <span className="flex-1 text-[13px] text-shuttle/35 min-w-0 truncate">{todo.text}</span>
                           <span className="text-[9px] font-mono text-shuttle/20 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">{ageLabel}</span>
                           <button
                             onClick={async () => {
@@ -2102,29 +2119,16 @@ export default function Today() {
                 </section>
               )}
 
-              {/* ── Weekly Pulse — compact strip with manage + history ─── */}
-              {userId && (
-                <div className="mt-6 mb-2">
-                  <WeeklyPulse
+              {/* ── Suggestions — collapsible, toggled via ⌘S or bottom bar ── */}
+              {userId && suggestionsOpen && (
+                <div className="mt-2 mb-4">
+                  <SuggestionsPanel
                     userId={userId}
-                    weekDates={Array.from({ length: 7 }, (_, i) => {
-                      const d = new Date(startOfWeek + 'T12:00:00')
-                      d.setDate(d.getDate() + i)
-                      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-                    })}
-                    onSettingsClick={() => setWeeklyGoalsOpen(true)}
+                    today={today}
+                    onAddTodo={addSuggestionTodo}
+                    onSeeAllMilestones={() => window.location.href = '/milestone-plan'}
                   />
                 </div>
-              )}
-
-              {/* ── Suggestions — network + milestones ──────────────────── */}
-              {userId && (
-                <SuggestionsPanel
-                  userId={userId}
-                  today={today}
-                  onAddTodo={addSuggestionTodo}
-                  onSeeAllMilestones={() => window.location.href = '/milestone-plan'}
-                />
               )}
 
               {/* ── Meetings Today (F08) ──────────────────────────────────── */}
@@ -3109,6 +3113,80 @@ export default function Today() {
           userId={userId}
           onClose={() => setWeeklyGoalsOpen(false)}
         />
+      )}
+
+      {/* ── Bottom status bar ──────────────────────────────────────────── */}
+      <div
+        className="fixed bottom-0 z-30 h-9 border-t border-mercury/40 bg-white/95 backdrop-blur-sm flex items-center px-5 gap-4 transition-all duration-300"
+        style={{
+          left: 'var(--sidebar-width, 200px)',
+          right: sidebarOpen ? 'clamp(280px, 30%, 360px)' : '2.5rem',
+        }}
+      >
+        {/* Next milestone */}
+        {(() => {
+          const upcoming = milestones
+            .filter(m => m.status !== 'COMPLETE' && m.target_date)
+            .sort((a, b) => new Date(a.target_date! + 'T12:00:00').getTime() - new Date(b.target_date! + 'T12:00:00').getTime())[0]
+          if (!upcoming) return (
+            <span className="text-[10px] text-shuttle/25 font-mono">no upcoming milestones</span>
+          )
+          const daysLeft = Math.ceil((new Date(upcoming.target_date! + 'T12:00:00').getTime() - Date.now()) / 86400000)
+          return (
+            <button
+              onClick={() => setMilestoneCaptureOpen(true)}
+              className="flex items-center gap-2 text-shuttle/40 hover:text-burnham transition-colors group"
+            >
+              <span className="text-[10px] font-mono text-shuttle/25 group-hover:text-shuttle/50 transition-colors">◎</span>
+              <span className="text-[11px] truncate max-w-[200px]">
+                {upcoming.text.length > 32 ? upcoming.text.slice(0, 32) + '…' : upcoming.text}
+              </span>
+              <span className="text-[10px] font-mono text-shuttle/30 shrink-0">
+                {daysLeft > 0 ? `${daysLeft}d` : daysLeft === 0 ? 'today' : 'overdue'}
+              </span>
+            </button>
+          )
+        })()}
+
+        <div className="flex-1" />
+
+        {/* Suggestions toggle */}
+        <button
+          onClick={() => setSuggestionsOpen(v => !v)}
+          className={`flex items-center gap-1.5 text-[11px] transition-colors ${suggestionsOpen ? 'text-burnham/70' : 'text-shuttle/30 hover:text-shuttle/60'}`}
+        >
+          <span className="text-[9px]">{suggestionsOpen ? '▾' : '▸'}</span>
+          <span>Suggestions</span>
+          <span className="text-[9px] font-mono text-shuttle/20 ml-0.5">⌘S</span>
+        </button>
+      </div>
+
+      {/* ── Goals widget — fixed bottom-right ──────────────────────────── */}
+      {userId && (
+        <div
+          className="fixed z-30 bottom-11 transition-all duration-300"
+          style={{
+            right: sidebarOpen ? 'calc(clamp(280px, 30%, 360px) + 0.75rem)' : '3.5rem',
+          }}
+        >
+          <div className="bg-white border border-mercury/60 rounded-xl shadow-sm px-3 pt-2 pb-2.5 w-[196px]">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[9px] font-mono uppercase tracking-[0.12em] text-shuttle/25">This week</span>
+              <button
+                onClick={() => setWeeklyGoalsOpen(true)}
+                className="text-shuttle/20 hover:text-shuttle/50 transition-colors"
+                title="Manage goals"
+              >
+                <GearSix size={10} />
+              </button>
+            </div>
+            <WeeklyPulse
+              userId={userId}
+              weekDates={weekDates}
+              compact
+            />
+          </div>
+        </div>
       )}
 
       {/* ── Milestone Capture Overlay ───────────────────────────────────── */}

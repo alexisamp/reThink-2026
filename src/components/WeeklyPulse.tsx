@@ -13,6 +13,7 @@ interface WeeklyPulseProps {
   userId: string
   weekDates: string[]   // 7 dates Mon–Sun YYYY-MM-DD
   onSettingsClick?: () => void
+  compact?: boolean     // strip header/history, render inline
 }
 
 interface HabitData {
@@ -53,7 +54,7 @@ function targetLabel(habit: WeeklyHabit): string {
   return String(habit.weekly_target)
 }
 
-export function WeeklyPulse({ userId, weekDates, onSettingsClick }: WeeklyPulseProps) {
+export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact }: WeeklyPulseProps) {
   const [habits, setHabits] = useState<HabitData[]>([])
   const [loading, setLoading] = useState(true)
   const [logging, setLogging] = useState<string | null>(null) // habitId being logged
@@ -127,22 +128,27 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick }: WeeklyPulseP
     load()
   }
 
-  if (loading) return <div className="h-[72px]" />
+  if (loading) return <div className={compact ? 'h-10' : 'h-[72px]'} />
 
-  if (habits.length === 0) return (
-    <div className="mb-4 py-3 px-3 border border-dashed border-mercury rounded-xl flex items-center justify-between">
-      <span className="text-[11px] text-shuttle/40">No weekly goals yet</span>
-      {onSettingsClick && (
-        <button
-          onClick={onSettingsClick}
-          className="flex items-center gap-1 text-[11px] text-shuttle/50 hover:text-burnham transition-colors font-medium"
-        >
-          <GearSix size={12} />
-          Configure
-        </button>
-      )}
-    </div>
-  )
+  if (habits.length === 0) {
+    if (compact) return (
+      <span className="text-[10px] text-shuttle/30">No goals yet</span>
+    )
+    return (
+      <div className="mb-4 py-3 px-3 border border-dashed border-mercury rounded-xl flex items-center justify-between">
+        <span className="text-[11px] text-shuttle/40">No weekly goals yet</span>
+        {onSettingsClick && (
+          <button
+            onClick={onSettingsClick}
+            className="flex items-center gap-1 text-[11px] text-shuttle/50 hover:text-burnham transition-colors font-medium"
+          >
+            <GearSix size={12} />
+            Configure
+          </button>
+        )}
+      </div>
+    )
+  }
 
   const todayStr = weekDates.find(d => {
     const now = new Date()
@@ -150,26 +156,28 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick }: WeeklyPulseP
   })
 
   return (
-    <div className="mb-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[9px] font-medium text-shuttle/30 uppercase tracking-widest">This week</span>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate('/year?layer=weekly')}
-            className="flex items-center gap-0.5 text-[9px] text-shuttle/25 hover:text-shuttle/50 transition-colors font-mono"
-            title="View history"
-          >
-            history <ArrowRight size={9} />
-          </button>
-          {onSettingsClick && (
-            <button onClick={onSettingsClick} className="text-shuttle/20 hover:text-shuttle/50 transition-colors" title="Manage goals">
-              <GearSix size={11} />
+    <div className={compact ? '' : 'mb-4'}>
+      {!compact && (
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[9px] font-medium text-shuttle/30 uppercase tracking-widest">This week</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/year?layer=weekly')}
+              className="flex items-center gap-0.5 text-[9px] text-shuttle/25 hover:text-shuttle/50 transition-colors font-mono"
+              title="View history"
+            >
+              history <ArrowRight size={9} />
             </button>
-          )}
+            {onSettingsClick && (
+              <button onClick={onSettingsClick} className="text-shuttle/20 hover:text-shuttle/50 transition-colors" title="Manage goals">
+                <GearSix size={11} />
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="space-y-1">
+      <div className={compact ? 'space-y-1.5' : 'space-y-1'}>
         {habits.map(hd => {
           const total = displayTotal(hd)
           const pct = Math.min(1, total / hd.habit.weekly_target)
