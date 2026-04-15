@@ -471,6 +471,7 @@ export default function Today() {
   const [weeklyGoalsOpen, setWeeklyGoalsOpen] = useState(false)
   const [doneTodosOpen, setDoneTodosOpen] = useState(false)
   const [suggestionsOpen, setSuggestionsOpen] = useState(false)
+  const [goalsWidgetOpen, setGoalsWidgetOpen] = useState(true)
 
   const QA_COMMANDS = [
     { label: '/milestone', insert: '/milestone', sub: 'create a milestone' },
@@ -668,6 +669,7 @@ export default function Today() {
     'cmd+e': () => setShowEndOfDay(true),
     'cmd+h': () => setHabitDrawerOpen(v => !v),
     'cmd+s': () => setSuggestionsOpen(v => !v),
+    'cmd+g': () => setGoalsWidgetOpen(v => !v),
     'cmd+o': () => { setEditingOutreachLog(null); setOutreachPanelOpen(p => !p) },
     'cmd+l': () => {
       const drafts: Record<string, string> = {}
@@ -2119,25 +2121,15 @@ export default function Today() {
                 </section>
               )}
 
-              {/* ── Suggestions — always visible header, content collapses ── */}
-              {userId && (
-                <div className="mt-4">
-                  <button
-                    onClick={() => setSuggestionsOpen(v => !v)}
-                    className="flex items-center gap-1.5 w-full text-[9px] font-mono uppercase tracking-[0.15em] text-shuttle/30 hover:text-shuttle/50 transition-colors mb-2"
-                  >
-                    <span>{suggestionsOpen ? '▾' : '▸'}</span>
-                    <span>Suggestions</span>
-                    <span className="ml-auto text-[8px] text-shuttle/20">⌘S</span>
-                  </button>
-                  {suggestionsOpen && (
-                    <SuggestionsPanel
-                      userId={userId}
-                      today={today}
-                      onAddTodo={addSuggestionTodo}
-                      onSeeAllMilestones={() => window.location.href = '/milestone-plan'}
-                    />
-                  )}
+              {/* ── Suggestions — flat list, shown when ⌘S toggled ────────── */}
+              {userId && suggestionsOpen && (
+                <div className="mt-2 mb-4">
+                  <SuggestionsPanel
+                    userId={userId}
+                    today={today}
+                    onAddTodo={addSuggestionTodo}
+                    onSeeAllMilestones={() => window.location.href = '/milestone-plan'}
+                  />
                 </div>
               )}
 
@@ -3141,11 +3133,11 @@ export default function Today() {
         {/* Suggestions toggle */}
         <button
           onClick={() => setSuggestionsOpen(v => !v)}
-          className={`flex items-center gap-1.5 text-[11px] transition-colors ${suggestionsOpen ? 'text-burnham/70' : 'text-shuttle/30 hover:text-shuttle/60'}`}
+          className={`flex items-center gap-1.5 text-[11px] transition-colors ${suggestionsOpen ? 'text-burnham/60' : 'text-shuttle/28 hover:text-shuttle/55'}`}
         >
-          <span className="text-[9px]">{suggestionsOpen ? '▾' : '▸'}</span>
+          <span className="text-[8px]">{suggestionsOpen ? '▾' : '▸'}</span>
           <span>Suggestions</span>
-          <span className="text-[9px] font-mono text-shuttle/20 ml-0.5">⌘S</span>
+          <span className="text-[9px] font-mono text-shuttle/18 ml-0.5">⌘S</span>
         </button>
       </div>
 
@@ -3157,23 +3149,41 @@ export default function Today() {
             right: sidebarOpen ? 'calc(clamp(280px, 30%, 360px) + 0.75rem)' : '3.5rem',
           }}
         >
-          <div className="bg-white border border-mercury/50 rounded-xl shadow-sm px-3.5 pt-2.5 pb-3 w-[220px]">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[9px] font-mono uppercase tracking-[0.12em] text-shuttle/25">This week</span>
-              <button
-                onClick={() => setWeeklyGoalsOpen(true)}
-                className="text-shuttle/20 hover:text-shuttle/50 transition-colors"
-                title="Manage goals"
-              >
-                <GearSix size={10} />
-              </button>
+          {goalsWidgetOpen ? (
+            <div className="bg-white border border-mercury/50 rounded-xl shadow-sm px-3.5 pt-2.5 pb-3 w-[236px]">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[9px] font-mono uppercase tracking-[0.12em] text-shuttle/25">This week</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setGoalsWidgetOpen(false)}
+                    className="text-shuttle/18 hover:text-shuttle/45 transition-colors text-[10px] font-mono leading-none"
+                    title="Minimize ⌘G"
+                  >—</button>
+                  <button
+                    onClick={() => setWeeklyGoalsOpen(true)}
+                    className="text-shuttle/20 hover:text-shuttle/50 transition-colors"
+                    title="Manage goals"
+                  >
+                    <GearSix size={10} />
+                  </button>
+                </div>
+              </div>
+              <WeeklyPulse
+                userId={userId}
+                weekDates={weekDates}
+                today={today}
+                compact
+              />
             </div>
-            <WeeklyPulse
-              userId={userId}
-              weekDates={weekDates}
-              compact
-            />
-          </div>
+          ) : (
+            <button
+              onClick={() => setGoalsWidgetOpen(true)}
+              className="bg-white border border-mercury/40 rounded-lg px-2.5 py-1.5 shadow-sm text-[9px] font-mono text-shuttle/30 hover:text-shuttle/55 hover:border-mercury/60 transition-all"
+              title="Show goals ⌘G"
+            >
+              goals ⌘G
+            </button>
+          )}
         </div>
       )}
 
