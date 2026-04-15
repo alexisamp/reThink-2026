@@ -145,7 +145,7 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
     setLogging(null); load()
   }
 
-  // Compact mode: quick-log today
+  // Compact mode: quick-log today (with value input)
   const handleQuickLog = async (hd: HabitData) => {
     const qty = parseInt(logInput, 10)
     if (!qty || qty <= 0 || !today) return
@@ -153,6 +153,15 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
       user_id: userId, habit_id: hd.habit.id, log_date: today, quantity: qty,
     }, { onConflict: 'habit_id,log_date' })
     setLoggingGoalId(null); setLogInput(''); load()
+  }
+
+  // Compact mode: instant log 1 for count-type habits (binary — did it or didn't)
+  const handleQuickLogOne = async (hd: HabitData) => {
+    if (!today) return
+    await supabase.from('weekly_habit_logs').upsert({
+      user_id: userId, habit_id: hd.habit.id, log_date: today, quantity: 1,
+    }, { onConflict: 'habit_id,log_date' })
+    load()
   }
 
   if (loading) return <div className={compact ? 'h-12' : 'h-[72px]'} />
@@ -240,11 +249,14 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
                   </div>
                 )}
 
-                {/* Log + button */}
+                {/* Log + button — count type logs 1 immediately, time type shows input */}
                 {!isLogging && today && (
                   <button
-                    onClick={() => { setLoggingGoalId(hd.habit.id); setLogInput('') }}
-                    title={`Log ${isMinutes ? 'minutes' : 'count'} for today`}
+                    onClick={() => {
+                      if (isMinutes) { setLoggingGoalId(hd.habit.id); setLogInput('') }
+                      else handleQuickLogOne(hd)
+                    }}
+                    title={isMinutes ? 'Log minutes for today' : 'Log +1 for today'}
                     className="text-[11px] font-mono text-shuttle/22 hover:text-shuttle/60 transition-colors shrink-0 leading-none w-3 text-center">
                     +
                   </button>

@@ -457,11 +457,14 @@ export default function Today() {
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [quickAddText, setQuickAddText] = useState('')
   const quickAddRef = useRef<HTMLInputElement>(null)
+  // Inline add (click "Add a task" in the list)
+  const [inlineAddOpen, setInlineAddOpen] = useState(false)
+  const inlineAddRef = useRef<HTMLInputElement>(null)
   // Autocomplete state for @ and / triggers
   const [qaDropdown, setQaDropdown] = useState<{
-    type: 'goal' | 'milestone' | 'command'
+    type: 'goal' | 'milestone' | 'command' | 'person'
     query: string
-    items: Array<{ label: string; insert: string; sub?: string; id?: string; goalId?: string }>
+    items: Array<{ label: string; insert: string; sub?: string; id?: string; goalId?: string; _isPerson?: boolean }>
     selectedIdx: number
   } | null>(null)
 
@@ -523,27 +526,29 @@ export default function Today() {
       setQaDropdown({ type: 'goal', query: q, items, selectedIdx: 0 })
       return
     }
-    // bare @ — milestones first, then goals
+    // bare @ — milestones first, then goals, then people
     const atMatch = text.match(/@(\S*)$/)
     if (atMatch) {
       const q = atMatch[1].toLowerCase()
       const msItems = milestones
         .filter(m => m.status !== 'COMPLETE' && (q === '' || m.text.toLowerCase().includes(q)))
-        .slice(0, 5)
+        .slice(0, 4)
         .map(m => {
           const g = goals.find(g => g.id === m.goal_id)
-          return { label: m.text, insert: '', sub: g?.alias ?? '', id: m.id, goalId: m.goal_id ?? undefined }
+          return { label: m.text, insert: '', sub: g?.alias ?? '', id: m.id, goalId: m.goal_id ?? undefined, _isMilestone: true }
         })
       const gItems = goals
         .filter(g => q === '' || g.text.toLowerCase().includes(q) || (g.alias ?? '').toLowerCase().includes(q))
-        .slice(0, 3)
-        .map(g => ({ label: g.alias ?? g.text.slice(0, 24), insert: '', sub: g.text.slice(0, 32), id: g.id }))
-      const combined = [
-        ...msItems.map(i => ({ ...i, _isMilestone: true })),
-        ...gItems.map(i => ({ ...i, _isMilestone: false })),
-      ]
+        .slice(0, 2)
+        .map(g => ({ label: g.alias ?? g.text.slice(0, 24), insert: '', sub: g.text.slice(0, 32), id: g.id, _isMilestone: false }))
+      const pItems = q.length >= 1
+        ? allContacts
+            .filter(c => c.name.toLowerCase().includes(q))
+            .slice(0, 4)
+            .map(c => ({ label: c.name, insert: c.name, sub: (c as any).company ?? (c as any).role ?? '', id: c.id, _isPerson: true }))
+        : []
+      const combined = [...msItems, ...gItems, ...pItems]
       if (combined.length > 0) {
-        // Store milestone vs goal info in the type field — use 'milestone' since milestones are first
         setQaDropdown({ type: 'milestone', query: q, items: combined as any, selectedIdx: 0 })
         return
       }
@@ -551,7 +556,7 @@ export default function Today() {
     setQaDropdown(null)
   }
 
-  const applyQaDropdownItem = (item: { label: string; insert: string; id?: string; goalId?: string; _isMilestone?: boolean }) => {
+  const applyQaDropdownItem = (item: { label: string; insert: string; id?: string; goalId?: string; _isMilestone?: boolean; _isPerson?: boolean }) => {
     if (qaDropdown?.type === 'command') {
       // /milestone → open MilestoneCapture overlay
       if (item.label === '/milestone') {
@@ -564,6 +569,13 @@ export default function Today() {
       // Commands: insert text as before
       const newText = quickAddText.replace(/(@m?\S*|\/\S*)$/, item.insert)
       setQuickAddText(newText)
+    } else if (item._isPerson) {
+      // Person: insert @Name into text (no chip, no FK)
+      setQuickAddText(prev => prev.replace(/(@m?\S*|@g?\S*|@\S*)$/, '').trimEnd() + ` @${item.label}`)
+      setQaDropdown(null)
+      quickAddRef.current?.focus()
+      inlineAddRef.current?.focus()
+      return
     } else if (item.id) {
       // Milestone or goal: store as chip, clear @... from input
       const isMilestone = !!(item as any)._isMilestone || !!(item.goalId) || qaDropdown?.type === 'milestone'
@@ -1444,6 +1456,7 @@ export default function Today() {
     setLinkedContactId(null)
     setShouldCreateAttioTask(false)
     setQuickAddOpen(false)
+    setInlineAddOpen(false)
   }
 
   const saveTodoText = async (id: string) => {
@@ -1981,14 +1994,65 @@ export default function Today() {
                           }}
                         />
                       ))}
-                      <button
-                        className="flex items-center gap-2.5 py-2.5 px-2 -mx-2 opacity-25 hover:opacity-60 transition-opacity group"
-                        onClick={() => setQuickAddOpen(true)}
-                      >
-                        <div className="w-[18px] h-[18px] border border-dashed border-shuttle/50 rounded-md shrink-0" />
-                        <span className="text-[13px] text-shuttle">Add a task</span>
-                        <span className="text-[10px] text-shuttle/50 font-mono ml-auto">⌘N</span>
-                      </button>
+                      {inlineAddOpen ? (
+                        <div className="relative flex items-center gap-2 py-2.5 px-2 -mx-2">
+                          <span className="w-3 shrink-0" />
+                          <div className="w-[18px] h-[18px] border border-dashed border-shuttle/40 rounded-md shrink-0 opacity-40" />
+                          <input
+                            ref={inlineAddRef}
+                            autoFocus
+                            value={quickAddText}
+                            onChange={e => { setQuickAddText(e.target.value); computeQaDropdown(e.target.value) }}
+                            onKeyDown={e => {
+                              if (qaDropdown && qaDropdown.items.length > 0) {
+                                if (e.key === 'ArrowDown') { e.preventDefault(); setQaDropdown(d => d ? { ...d, selectedIdx: Math.min(d.selectedIdx + 1, d.items.length - 1) } : d); return }
+                                if (e.key === 'ArrowUp') { e.preventDefault(); setQaDropdown(d => d ? { ...d, selectedIdx: Math.max(d.selectedIdx - 1, 0) } : d); return }
+                                if (e.key === 'Tab' || (e.key === 'Enter' && qaDropdown)) { e.preventDefault(); applyQaDropdownItem(qaDropdown.items[qaDropdown.selectedIdx]); return }
+                                if (e.key === 'Escape') { setQaDropdown(null); return }
+                              }
+                              if (e.key === 'Enter') submitQuickAdd()
+                              if (e.key === 'Escape') { setInlineAddOpen(false); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked(null) }
+                            }}
+                            placeholder="What needs to get done? @ to link..."
+                            className="flex-1 text-[13px] font-normal text-burnham/70 placeholder-shuttle/20 border-none outline-none bg-transparent"
+                          />
+                          {quickAddLinked && (
+                            <span className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[10px] text-burnham shrink-0">
+                              <span className="truncate max-w-[100px]">{quickAddLinked.name}</span>
+                              <button onClick={() => setQuickAddLinked(null)} className="text-shuttle/40 hover:text-burnham ml-0.5">
+                                <X size={9} />
+                              </button>
+                            </span>
+                          )}
+                          {/* Inline @mention dropdown */}
+                          {qaDropdown && qaDropdown.items.length > 0 && (
+                            <div className="absolute left-8 right-0 top-full mt-1 bg-white border border-mercury rounded-xl shadow-lg z-50">
+                              <div className="max-h-44 overflow-y-auto">
+                                {qaDropdown.items.map((item, i) => (
+                                  <button
+                                    key={i}
+                                    onMouseDown={e => { e.preventDefault(); applyQaDropdownItem(item) }}
+                                    className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${i === qaDropdown.selectedIdx ? 'bg-gossip/30 text-burnham' : 'text-burnham hover:bg-mercury/20'}`}
+                                  >
+                                    <span className="text-[12px] font-medium">{item.label}</span>
+                                    {item.sub && <span className="text-[10px] text-shuttle/40 ml-2 truncate max-w-[120px]">{item.sub}</span>}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          className="flex items-center gap-2.5 py-2.5 px-2 -mx-2 opacity-25 hover:opacity-60 transition-opacity group"
+                          onClick={() => { setInlineAddOpen(true); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked(null) }}
+                        >
+                          <span className="w-3 shrink-0" />
+                          <div className="w-[18px] h-[18px] border border-dashed border-shuttle/50 rounded-md shrink-0" />
+                          <span className="text-[13px] text-shuttle">Add a task</span>
+                          <span className="text-[10px] text-shuttle/50 font-mono ml-auto">⌘N</span>
+                        </button>
+                      )}
                     </div>
                   </SortableContext>
                 </DndContext>
@@ -2660,53 +2724,77 @@ export default function Today() {
         </>
       )}
 
-      {/* ─── Milestones — right sidebar ────────────────────────────────── */}
+      {/* ─── Milestones — bottom slide-up panel ────────────────────────── */}
       {milestonesOpen && (
         <>
           {/* Backdrop */}
           <div className="fixed inset-0 z-[189]" onClick={() => setMilestonesOpen(false)} />
-          {/* Sidebar */}
+          {/* Slide-up panel */}
           <div
-            className="fixed right-0 top-0 bottom-0 z-[190] w-80 bg-white border-l border-mercury shadow-2xl flex flex-col"
+            className="fixed bottom-0 z-[190] bg-white border-t border-mercury shadow-2xl flex flex-col animate-slide-up"
+            style={{
+              left: 'var(--sidebar-width, 200px)',
+              right: sidebarOpen ? 'clamp(280px, 30%, 360px)' : '2.5rem',
+              maxHeight: '52vh',
+            }}
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Escape') setMilestonesOpen(false) }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-mercury">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-mercury shrink-0">
               <span className="text-xs font-semibold text-burnham uppercase tracking-wide">Milestones</span>
-              <button onClick={() => setMilestonesOpen(false)} className="text-shuttle hover:text-burnham p-1">
-                <X size={14} />
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { setMilestonesOpen(false); setMilestoneCaptureOpen(true) }}
+                  className="text-[10px] font-mono text-shuttle/40 hover:text-burnham transition-colors px-2 py-0.5 rounded border border-mercury hover:border-burnham/30"
+                >
+                  + New
+                </button>
+                <button onClick={() => setMilestonesOpen(false)} className="text-shuttle hover:text-burnham p-1">
+                  <X size={14} />
+                </button>
+              </div>
             </div>
-            {/* Body — scrollable */}
-            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
-              {/* Group by goal */}
+            {/* Body — goal sections with milestone chips */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
               {goals.map(goal => {
-                const goalMilestones = milestones.filter(m => m.goal_id === goal.id && m.status !== 'COMPLETE')
+                const goalMilestones = milestones
+                  .filter(m => m.goal_id === goal.id && m.status !== 'COMPLETE')
+                  .sort((a, b) => {
+                    if (!a.target_date) return 1
+                    if (!b.target_date) return -1
+                    return a.target_date.localeCompare(b.target_date)
+                  })
                 if (!goalMilestones.length) return null
                 return (
                   <div key={goal.id}>
-                    <div className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono px-1 mb-1">
+                    <div className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono mb-2.5">
                       {goal.emoji} {goal.alias || goal.text}
                     </div>
-                    {goalMilestones.map(ms => (
-                      <button
-                        key={ms.id}
-                        onClick={() => { setSelectedMilestoneDetail(ms); setMilestonesOpen(false) }}
-                        className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-mercury/30 transition-colors group cursor-pointer"
-                      >
-                        <div className="flex items-start gap-2">
-                          <Circle size={8} weight="fill" className="mt-1 text-mercury flex-shrink-0" />
-                          <span className="text-[11px] text-burnham leading-snug flex-1">{ms.text}</span>
-                          <CaretRight size={10} className="mt-0.5 text-shuttle/30 flex-shrink-0" />
-                        </div>
-                        {ms.target_date && (
-                          <span className="text-[10px] font-mono text-shuttle/40 ml-4">
-                            {formatMilestoneDate(ms.target_date)}
-                          </span>
-                        )}
-                      </button>
-                    ))}
+                    <div className="flex flex-wrap gap-2">
+                      {goalMilestones.map(ms => {
+                        const daysLeft = ms.target_date
+                          ? Math.ceil((new Date(ms.target_date + 'T12:00:00').getTime() - Date.now()) / 86400000)
+                          : null
+                        return (
+                          <button
+                            key={ms.id}
+                            onClick={() => { setSelectedMilestoneDetail(ms); setMilestonesOpen(false) }}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-mercury/60 hover:border-burnham/30 hover:bg-gossip/10 transition-colors text-left"
+                          >
+                            <Circle size={6} weight="fill" className="text-mercury shrink-0" />
+                            <span className="text-[12px] text-burnham leading-snug">
+                              {ms.text.length > 40 ? ms.text.slice(0, 40) + '…' : ms.text}
+                            </span>
+                            {daysLeft !== null && (
+                              <span className={`text-[9px] font-mono shrink-0 ${daysLeft < 0 ? 'text-red-400/60' : daysLeft <= 7 ? 'text-amber-500/60' : 'text-shuttle/30'}`}>
+                                {daysLeft < 0 ? `${Math.abs(daysLeft)}d over` : daysLeft === 0 ? 'today' : `${daysLeft}d`}
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 )
               })}
@@ -2714,9 +2802,9 @@ export default function Today() {
                 <p className="text-xs text-shuttle/40 text-center py-6">No pending milestones</p>
               )}
             </div>
-            {/* Shortcut hint */}
-            <div className="px-4 py-2 border-t border-mercury">
-              <span className="text-[9px] font-mono text-shuttle/30">⌘⇧M to toggle · Esc to close</span>
+            {/* Footer hint */}
+            <div className="px-5 py-2 border-t border-mercury/40 shrink-0">
+              <span className="text-[9px] font-mono text-shuttle/25">M / ⌘⇧M to toggle · Esc to close · click milestone to open</span>
             </div>
           </div>
         </>
@@ -2827,7 +2915,7 @@ export default function Today() {
               <div className="absolute left-6 right-6 top-full mt-2 bg-white border border-mercury rounded-xl shadow-lg z-10">
                 <div className="px-3 py-1.5 border-b border-mercury/40">
                   <span className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono">
-                    {qaDropdown.type === 'command' ? 'Commands' : qaDropdown.type === 'milestone' ? 'Milestones' : 'Goals'}
+                    {qaDropdown.type === 'command' ? 'Commands' : qaDropdown.type === 'person' ? 'People' : qaDropdown.type === 'milestone' ? 'Milestones & Goals' : 'Goals'}
                   </span>
                 </div>
                 <div className="max-h-44 overflow-y-auto">
@@ -2853,7 +2941,7 @@ export default function Today() {
                 <span>↵ add</span>
                 <span>Esc close</span>
               </span>
-              <span className="text-[9px] text-shuttle/20 font-mono">@ goals · @m milestones · / milestone</span>
+              <span className="text-[9px] text-shuttle/20 font-mono">@ milestones · @m milestones · @p people · / milestone</span>
             </div>
           </div>
         </div>
@@ -3125,7 +3213,7 @@ export default function Today() {
           const daysLeft = Math.ceil((new Date(upcoming.target_date! + 'T12:00:00').getTime() - Date.now()) / 86400000)
           return (
             <button
-              onClick={() => setMilestoneCaptureOpen(true)}
+              onClick={() => setMilestonesOpen(true)}
               className="flex items-center gap-2 text-shuttle/40 hover:text-burnham transition-colors group"
             >
               <span className="text-[10px] font-mono text-shuttle/25 group-hover:text-shuttle/50 transition-colors">◎</span>
