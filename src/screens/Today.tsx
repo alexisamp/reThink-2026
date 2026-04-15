@@ -537,35 +537,11 @@ export default function Today() {
         return
       }
     }
-    // @m — milestones only
-    const milestoneMatch = text.match(/@m(\S*)$/)
-    if (milestoneMatch) {
-      const q = milestoneMatch[1].toLowerCase()
-      const items = milestones
-        .filter(m => m.status !== 'COMPLETE' && m.text.toLowerCase().includes(q))
-        .slice(0, 8)
-        .map(m => {
-          const g = goals.find(g => g.id === m.goal_id)
-          return { label: m.text, insert: '', sub: g?.alias ?? g?.text?.slice(0, 20) ?? '', id: m.id, goalId: m.goal_id ?? undefined, _isMilestone: true, _type: 'milestone' as const }
-        })
-      setQaDropdown({ type: 'milestone', query: q, items, selectedIdx: 0 })
-      return
-    }
-    // @g — goals only
-    const goalTagMatch = text.match(/@g(\S*)$/)
-    if (goalTagMatch) {
-      const q = goalTagMatch[1].toLowerCase()
-      const items = goals
-        .filter(g => g.text.toLowerCase().includes(q) || (g.alias ?? '').toLowerCase().includes(q))
-        .slice(0, 6)
-        .map(g => ({ label: g.alias ?? g.text.slice(0, 24), insert: '', sub: g.text.slice(0, 32), id: g.id, _type: 'goal' as const }))
-      setQaDropdown({ type: 'goal', query: q, items, selectedIdx: 0 })
-      return
-    }
-    // bare @ or / — milestones, goals, people grouped
-    const atMatch = text.match(/(?:^|\s)(@\S*)$/)
+    // @ — unified search: milestones, goals, people grouped
+    // Note: no @m/@g prefixes — they'd greedily intercept person names starting with M/G
+    const atMatch = text.match(/@(\S*)$/)
     if (atMatch) {
-      const q = atMatch[1].slice(1).toLowerCase() // strip leading @
+      const q = atMatch[1].toLowerCase()
       const msItems = milestones
         .filter(m => m.status !== 'COMPLETE' && (q === '' || m.text.toLowerCase().includes(q)))
         .slice(0, 5)
@@ -579,7 +555,7 @@ export default function Today() {
         .map(g => ({ label: g.alias ?? g.text.slice(0, 24), insert: '', sub: g.text.slice(0, 32), id: g.id, _type: 'goal' as const }))
       const pItems = allContacts
         .filter(c => q === '' ? true : c.name.toLowerCase().includes(q))
-        .slice(0, 5)
+        .slice(0, 6)
         .map(c => ({ label: c.name, insert: c.name, sub: (c as any).company ?? (c as any).role ?? '', id: c.id, _isPerson: true, _type: 'person' as const }))
       const combined = [...msItems, ...gItems, ...pItems]
       if (combined.length > 0) {
