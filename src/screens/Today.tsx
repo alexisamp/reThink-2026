@@ -131,6 +131,10 @@ function getUrlChip(url: string): { icon: string; label: string; color: string }
   catch { return { icon: '🔗', label: 'Link', color: '#536471' } }
 }
 
+// Linked entity — a todo can be connected to milestone, goal, person, company, or opportunity
+export type LinkedEntityType = 'milestone' | 'goal' | 'person' | 'company' | 'opportunity'
+export type LinkedEntity = { id: string; name: string; type: LinkedEntityType }
+
 interface SortableTodoRowProps {
   index: number
   todo: Todo
@@ -148,8 +152,8 @@ interface SortableTodoRowProps {
   onMilestoneClick?: (milestone: Pick<Milestone, 'id' | 'text'>) => void
   editRef?: (el: HTMLInputElement | null) => void
   editKeyDownDropdown?: (e: React.KeyboardEvent<HTMLInputElement>) => boolean
-  editingLinked?: { name: string; type: 'milestone' | 'goal' } | null
-  onClearEditingLinked?: () => void
+  editingLinked?: LinkedEntity[]
+  onClearEditingLinked?: (id: string) => void
 }
 
 function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting, onMilestoneClick, editRef, editKeyDownDropdown, editingLinked, onClearEditingLinked }: SortableTodoRowProps) {
@@ -201,14 +205,16 @@ function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText,
                 if (e.key === 'Escape') onEditCancel()
               }}
             />
-            {editingLinked && (
-              <div className="flex items-center gap-1">
-                <span className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[10px] text-burnham">
-                  <span className="truncate max-w-[140px]">{editingLinked.name}</span>
-                  <button onMouseDown={e => { e.preventDefault(); onClearEditingLinked?.() }} className="text-shuttle/40 hover:text-burnham ml-0.5">
-                    <X size={9} />
-                  </button>
-                </span>
+            {editingLinked && editingLinked.length > 0 && (
+              <div className="flex items-center gap-1 flex-wrap">
+                {editingLinked.map(e => (
+                  <span key={e.id} className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[10px] text-burnham">
+                    <span className="truncate max-w-[120px]">{e.name}</span>
+                    <button onMouseDown={ev => { ev.preventDefault(); onClearEditingLinked?.(e.id) }} className="text-shuttle/40 hover:text-burnham ml-0.5">
+                      <X size={9} />
+                    </button>
+                  </span>
+                ))}
               </div>
             )}
           </div>
@@ -496,21 +502,9 @@ export default function Today() {
     selectedIdx: number
   } | null>(null)
 
-  // Linked entity chip for quick-add (@mention selection)
-  const [quickAddLinked, setQuickAddLinked] = useState<{
-    milestoneId: string | null
-    goalId: string | null
-    name: string
-    type: 'milestone' | 'goal'
-  } | null>(null)
-
-  // Linked entity chip for edit-mode (@mention selection)
-  const [editingLinked, setEditingLinked] = useState<{
-    milestoneId: string | null
-    goalId: string | null
-    name: string
-    type: 'milestone' | 'goal'
-  } | null>(null)
+  // Linked entities for quick-add and edit-mode (@mention selection) — array, multiple types
+  const [quickAddLinked, setQuickAddLinked] = useState<LinkedEntity[]>([])
+  const [editingLinked, setEditingLinked] = useState<LinkedEntity[]>([])
   // Ref to the currently focused input (inline-add OR edit) — used to position portal dropdown
   const activeEditElRef = useRef<HTMLInputElement | null>(null)
 
@@ -575,13 +569,24 @@ export default function Today() {
     setQaDropdown(null)
   }
 
-  const applyQaDropdownItem = (item: { label: string; insert: string; id?: string; goalId?: string; _isMilestone?: boolean; _isPerson?: boolean }) => {
+  const applyQaDropdownItem = (item: { label: string; insert: string; id?: string; goalId?: string; _isMilestone?: boolean; _isPerson?: boolean; _type?: LinkedEntityType | 'command' }) => {
     const isEditMode = !!editingTodoId
 
-    // Helper: which text/setter to use
     const getText = () => isEditMode ? editingTodoText : quickAddText
     const setText = (t: string) => isEditMode ? setEditingTodoText(t) : setQuickAddText(t)
-    const setLinked = (v: typeof quickAddLinked) => isEditMode ? setEditingLinked(v) : setQuickAddLinked(v)
+    // Add (or replace same type) in linked array
+    const addLinked = (entity: LinkedEntity) => {
+      const updater = (prev: LinkedEntity[]) => {
+        // milestone and goal are singular — replace if same type; others accumulate
+        if (entity.type === 'milestone' || entity.type === 'goal') {
+          return [...prev.filter(e => e.type !== entity.type), entity]
+        }
+        // dedupe by id
+        return prev.some(e => e.id === entity.id) ? prev : [...prev, entity]
+      }
+      if (isEditMode) setEditingLinked(updater)
+      else setQuickAddLinked(updater)
+    }
     const refocus = () => activeEditElRef.current?.focus() ?? inlineAddRef.current?.focus() ?? quickAddRef.current?.focus()
 
     if (qaDropdown?.type === 'command') {
@@ -592,28 +597,21 @@ export default function Today() {
         return
       }
       setText(getText().replace(/(@m?\S*|\/\S*)$/, item.insert))
-    } else if (item._isPerson || (item as any)._type === 'company' || (item as any)._type === 'opportunity') {
-      // Person / Company / Opportunity: insert @Name as text tag (no FK on todos yet)
-      setText(getText().replace(/@\S*$/, '').trimEnd() + ` @${item.label}`)
-      setQaDropdown(null)
-      refocus()
-      return
-    } else if (item.id) {
-      // Milestone or goal → store as chip, clear @... trigger from text
-      const isMilestone = !!(item as any)._isMilestone || item.goalId !== undefined
-      if (isMilestone) {
+    } else if (item.id && item._type) {
+      // All typed entities — add as chip and strip @trigger from text
+      if (item._type === 'milestone') {
         const ms = milestones.find(m => m.id === item.id)
-        if (ms) {
-          setLinked({ milestoneId: item.id, goalId: ms.goal_id ?? null, name: item.label, type: 'milestone' })
-        } else if (item.goalId !== undefined) {
-          setLinked({ milestoneId: item.id, goalId: item.goalId ?? null, name: item.label, type: 'milestone' })
-        } else {
-          setLinked({ milestoneId: null, goalId: item.id, name: item.label, type: 'goal' })
+        addLinked({ id: item.id, name: item.label, type: 'milestone' })
+        // auto-link goal too
+        const goalId = ms?.goal_id ?? item.goalId
+        if (goalId) {
+          const g = goals.find(g => g.id === goalId)
+          if (g) addLinked({ id: goalId, name: g.alias ?? g.text.slice(0, 24), type: 'goal' })
         }
       } else {
-        setLinked({ milestoneId: null, goalId: item.id, name: item.label, type: 'goal' })
+        addLinked({ id: item.id, name: item.label, type: item._type as LinkedEntityType })
       }
-      setText(getText().replace(/(@m?\S*|@g?\S*|@\S*)$/, '').trimEnd())
+      setText(getText().replace(/@\S*$/, '').trimEnd())
     }
     setQaDropdown(null)
     refocus()
@@ -1363,8 +1361,16 @@ export default function Today() {
   }
 
   // Core todo submission (used by inline input and quick-add overlay)
-  // forceMilestoneId / forceGoalId: when IDs are already known (chip selection), bypass text parsing
-  const submitTodo = async (rawText: string, blockOverride?: 'AM' | 'PM' | null, frictionBypass = false, forceMilestoneId?: string | null, forceGoalId?: string | null) => {
+  const submitTodo = async (
+    rawText: string,
+    blockOverride?: 'AM' | 'PM' | null,
+    frictionBypass = false,
+    forceMilestoneId?: string | null,
+    forceGoalId?: string | null,
+    forceContactId?: string | null,
+    forceCompanyId?: string | null,
+    forceOpportunityId?: string | null,
+  ) => {
     if (!rawText.trim() || !userId) return
     let text = rawText.trim()
     let goalId: string | null = forceGoalId ?? selectedGoalId
@@ -1437,7 +1443,14 @@ export default function Today() {
     const finalMilestoneId = milestoneId
 
     const { data } = await supabase.from('todos')
-      .insert({ text: finalText, user_id: userId, effort: 'NORMAL', date: today, block: finalBlock, goal_id: finalGoalId, milestone_id: finalMilestoneId, sort_order: pendingTodos.length, url: extractedUrl ?? null })
+      .insert({
+        text: finalText, user_id: userId, effort: 'NORMAL', date: today, block: finalBlock,
+        goal_id: finalGoalId, milestone_id: finalMilestoneId,
+        contact_id: forceContactId ?? null,
+        company_id: forceCompanyId ?? null,
+        opportunity_id: forceOpportunityId ?? null,
+        sort_order: pendingTodos.length, url: extractedUrl ?? null,
+      })
       .select().single()
     if (data) setTodos(prev => [...prev, data])
   }
@@ -1453,14 +1466,17 @@ export default function Today() {
   // Quick-add from overlay (inline add + ⌘N modal)
   const submitQuickAdd = async () => {
     if (!quickAddText.trim()) return
-    // Pass linked milestone/goal IDs directly — no text roundabout
-    const forcedMilestoneId = quickAddLinked?.milestoneId ?? null
-    const forcedGoalId = quickAddLinked?.goalId ?? null
+    // Extract IDs directly from linked entities array
+    const forcedMilestoneId   = quickAddLinked.find(e => e.type === 'milestone')?.id ?? null
+    const forcedGoalId        = quickAddLinked.find(e => e.type === 'goal')?.id ?? null
+    const forcedContactId     = quickAddLinked.find(e => e.type === 'person')?.id ?? null
+    const forcedCompanyId     = quickAddLinked.find(e => e.type === 'company')?.id ?? null
+    const forcedOpportunityId = quickAddLinked.find(e => e.type === 'opportunity')?.id ?? null
     // Capture state before clearing
     const capturedLinkedContactId = linkedContactId
     const capturedShouldCreate = shouldCreateAttioTask
     const capturedTodoText = quickAddText
-    await submitTodo(quickAddText, null, false, forcedMilestoneId, forcedGoalId)
+    await submitTodo(quickAddText, null, false, forcedMilestoneId, forcedGoalId, forcedContactId, forcedCompanyId, forcedOpportunityId)
     // If Attio task creation was requested, fire it after todo is saved
     if (capturedShouldCreate && capturedLinkedContactId) {
       const contact = allContacts.find(c => c.id === capturedLinkedContactId)
@@ -1478,7 +1494,7 @@ export default function Today() {
       }
     }
     setQuickAddText('')
-    setQuickAddLinked(null)
+    setQuickAddLinked([])
     setLinkedContactId(null)
     setShouldCreateAttioTask(false)
     setQuickAddOpen(false)
@@ -1486,16 +1502,24 @@ export default function Today() {
   }
 
   const saveTodoText = async (id: string) => {
-    if (!editingTodoText.trim()) { setEditingTodoId(null); setEditingLinked(null); setQaDropdown(null); return }
+    if (!editingTodoText.trim()) { setEditingTodoId(null); setEditingLinked([]); setQaDropdown(null); return }
     const updates: Record<string, unknown> = { text: editingTodoText.trim() }
-    if (editingLinked) {
-      if (editingLinked.milestoneId) updates.milestone_id = editingLinked.milestoneId
-      if (editingLinked.goalId) updates.goal_id = editingLinked.goalId
+    if (editingLinked.length > 0) {
+      const ms = editingLinked.find(e => e.type === 'milestone')
+      const g  = editingLinked.find(e => e.type === 'goal')
+      const p  = editingLinked.find(e => e.type === 'person')
+      const co = editingLinked.find(e => e.type === 'company')
+      const op = editingLinked.find(e => e.type === 'opportunity')
+      if (ms) updates.milestone_id   = ms.id
+      if (g)  updates.goal_id        = g.id
+      if (p)  updates.contact_id     = p.id
+      if (co) updates.company_id     = co.id
+      if (op) updates.opportunity_id = op.id
     }
     await supabase.from('todos').update(updates).eq('id', id)
     setTodos(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
     setEditingTodoId(null)
-    setEditingLinked(null)
+    setEditingLinked([])
     setQaDropdown(null)
   }
 
@@ -2015,10 +2039,10 @@ export default function Today() {
                           milestone={todo.milestone_id ? milestones.find(m => m.id === todo.milestone_id) : null}
                           isEditing={editingTodoId === todo.id}
                           editingText={editingTodoText}
-                          onEditStart={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text); setEditingLinked(null); setQaDropdown(null) }}
+                          onEditStart={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text); setEditingLinked([]); setQaDropdown(null) }}
                           onEditChange={text => { setEditingTodoText(text); computeQaDropdown(text) }}
                           onEditSave={() => saveTodoText(todo.id)}
-                          onEditCancel={() => { setEditingTodoId(null); setEditingLinked(null); setQaDropdown(null) }}
+                          onEditCancel={() => { setEditingTodoId(null); setEditingLinked([]); setQaDropdown(null) }}
                           editRef={el => { activeEditElRef.current = el }}
                           editKeyDownDropdown={e => {
                             if (!qaDropdown || qaDropdown.items.length === 0) return false
@@ -2028,8 +2052,8 @@ export default function Today() {
                             if (e.key === 'Escape') { setQaDropdown(null); return true }
                             return false
                           }}
-                          editingLinked={editingTodoId === todo.id ? editingLinked : null}
-                          onClearEditingLinked={() => setEditingLinked(null)}
+                          editingLinked={editingTodoId === todo.id ? editingLinked : []}
+                          onClearEditingLinked={(id) => setEditingLinked(prev => prev.filter(e => e.id !== id))}
                           onToggle={() => toggleTodo(todo.id)}
                           onDelete={() => deleteTodo(todo.id)}
                           onMarkWaiting={async () => {
@@ -2059,24 +2083,28 @@ export default function Today() {
                                 if (e.key === 'Escape') { setQaDropdown(null); return }
                               }
                               if (e.key === 'Enter') submitQuickAdd()
-                              if (e.key === 'Escape') { setInlineAddOpen(false); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked(null) }
+                              if (e.key === 'Escape') { setInlineAddOpen(false); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked([]) }
                             }}
                             placeholder="What needs to get done? @ to link..."
                             className="flex-1 text-[13px] font-normal text-burnham/70 placeholder-shuttle/20 border-none outline-none bg-transparent"
                           />
-                          {quickAddLinked && (
-                            <span className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[10px] text-burnham shrink-0">
-                              <span className="truncate max-w-[100px]">{quickAddLinked.name}</span>
-                              <button onClick={() => setQuickAddLinked(null)} className="text-shuttle/40 hover:text-burnham ml-0.5">
-                                <X size={9} />
-                              </button>
-                            </span>
+                          {quickAddLinked.length > 0 && (
+                            <div className="flex items-center gap-1 flex-wrap shrink-0">
+                              {quickAddLinked.map(e => (
+                                <span key={e.id} className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[10px] text-burnham">
+                                  <span className="truncate max-w-[80px]">{e.name}</span>
+                                  <button onClick={() => setQuickAddLinked(prev => prev.filter(x => x.id !== e.id))} className="text-shuttle/40 hover:text-burnham ml-0.5">
+                                    <X size={9} />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
                           )}
                         </div>
                       ) : (
                         <button
                           className="flex items-center gap-2.5 py-2.5 px-2 -mx-2 opacity-25 hover:opacity-60 transition-opacity group"
-                          onClick={() => { setInlineAddOpen(true); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked(null) }}
+                          onClick={() => { setInlineAddOpen(true); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked([]) }}
                         >
                           <span className="w-3 shrink-0" />
                           <div className="w-[18px] h-[18px] border border-dashed border-shuttle/50 rounded-md shrink-0" />
@@ -2952,7 +2980,7 @@ export default function Today() {
       {quickAddOpen && (
         <div
           className="fixed inset-0 z-[200] flex items-start justify-center pt-40 bg-black/10 backdrop-blur-[2px]"
-          onClick={e => { if (e.target === e.currentTarget) { setQuickAddOpen(false); setQaDropdown(null); setQuickAddLinked(null); setLinkedContactId(null); setShouldCreateAttioTask(false) } }}
+          onClick={e => { if (e.target === e.currentTarget) { setQuickAddOpen(false); setQaDropdown(null); setQuickAddLinked([]); setLinkedContactId(null); setShouldCreateAttioTask(false) } }}
         >
           <div className="bg-white rounded-2xl shadow-2xl border border-mercury p-6 w-full max-w-lg mx-4 relative">
             <p className="text-[9px] uppercase tracking-[0.15em] text-shuttle/30 mb-4 font-mono">Quick Add · ⌘N</p>
@@ -2977,7 +3005,7 @@ export default function Today() {
                     if (e.key === 'Escape') { setQaDropdown(null); return }
                   }
                   if (e.key === 'Enter') { submitQuickAdd() }
-                  if (e.key === 'Escape') { setQuickAddOpen(false); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked(null); setLinkedContactId(null); setShouldCreateAttioTask(false) }
+                  if (e.key === 'Escape') { setQuickAddOpen(false); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked([]); setLinkedContactId(null); setShouldCreateAttioTask(false) }
                 }}
                 placeholder="What needs to get done? Type @ for goals, / for commands..."
                 className="flex-1 text-base text-burnham placeholder-shuttle/20 border-none outline-none bg-transparent pr-8"
@@ -2993,16 +3021,18 @@ export default function Today() {
                 </button>
               )}
             </div>
-            {/* @mention linked chip */}
-            {quickAddLinked && (
-              <div className="flex items-center gap-1 mt-1.5">
+            {/* @mention linked chips */}
+            {quickAddLinked.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                 <span className="text-[10px] text-shuttle/40">linked to</span>
-                <span className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[10px] text-burnham font-medium max-w-[200px]">
-                  <span className="truncate">{quickAddLinked.name}</span>
-                  <button onClick={() => setQuickAddLinked(null)} className="text-shuttle/40 hover:text-burnham ml-0.5 flex-shrink-0">
-                    <X size={9} />
-                  </button>
-                </span>
+                {quickAddLinked.map(e => (
+                  <span key={e.id} className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[10px] text-burnham font-medium">
+                    <span className="truncate max-w-[160px]">{e.name}</span>
+                    <button onClick={() => setQuickAddLinked(prev => prev.filter(x => x.id !== e.id))} className="text-shuttle/40 hover:text-burnham ml-0.5 flex-shrink-0">
+                      <X size={9} />
+                    </button>
+                  </span>
+                ))}
               </div>
             )}
             {gemini.loading && (

@@ -143,6 +143,9 @@ export interface Todo {
   id: string
   goal_id: string | null
   milestone_id: string | null
+  contact_id: string | null
+  company_id: string | null
+  opportunity_id: string | null
   user_id: string
   text: string
   effort: string | null
