@@ -118,21 +118,24 @@ export function MilestoneCapture({ userId, today, goals, onClose, onCreated }: M
 
       if (error || !ms) throw error
 
-      const filteredTodos = todos.map(t => t).filter(t => t.text.trim().length > 0)
+      // Save ALL non-empty todos directly into the `todos` table (linked to this milestone)
+      const filteredTodos = todos.filter(t => t.text.trim().length > 0)
       if (filteredTodos.length > 0) {
-        await supabase.from('milestone_todos').insert(
+        await supabase.from('todos').insert(
           filteredTodos.map((t, i) => ({
             user_id: userId,
             milestone_id: ms.id,
             text: t.text.trim(),
-            position: i,
+            sort_order: i,
             date: t.addToday ? today : null,
+            effort: 'NORMAL',
+            completed: false,
           }))
         )
       }
 
-      const todayTexts = filteredTodos.filter(t => t.addToday).map(t => t.text.trim())
-      onCreated(ms.id, todayTexts)
+      // Pass empty array — todos already saved above; Today.tsx just refreshes
+      onCreated(ms.id, [])
     } catch {
       setSaving(false)
     }

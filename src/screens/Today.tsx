@@ -210,32 +210,18 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
       />
       <div className="flex-1 min-w-0 flex items-center gap-2">
         {isEditing ? (
+          /* Edit mode: chips row first → text input after, so typing flows naturally after chips */
           <div className="flex-1 min-w-0 flex flex-col gap-1">
-            <input
-              ref={editRef}
-              autoFocus
-              className="flex-1 text-[12px] font-normal text-burnham/70 bg-transparent border-b border-burnham/30 focus:outline-none w-full"
-              value={editingText}
-              onChange={e => onEditChange(e.target.value)}
-              onBlur={_e => {
-                // Delay save so portal dropdown mouseDown can fire first
-                setTimeout(() => onEditSave(), 120)
-              }}
-              onKeyDown={e => {
-                if (editKeyDownDropdown?.(e)) return
-                if (e.key === 'Enter') { e.preventDefault(); onEditSave() }
-                if (e.key === 'Escape') onEditCancel()
-              }}
-            />
-            {/* Show all attached entities during edit — milestone + person + company + opportunity */}
             <div className="flex items-center gap-1 flex-wrap">
+              {/* Saved milestone chip */}
               {milestone && (
-                <span className="inline-flex items-center bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono leading-none">
-                  {milestone.text.length > 18 ? milestone.text.slice(0, 18) + '…' : milestone.text}
+                <span className="inline-flex items-center bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono leading-none shrink-0">
+                  {milestone.text}
                 </span>
               )}
+              {/* Saved person chip */}
               {linkedContact && (
-                <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md leading-none font-medium">
+                <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md leading-none font-medium shrink-0">
                   <span className="w-3 h-3 rounded-full overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
                     {linkedContact.profile_photo_url
                       ? <img src={linkedContact.profile_photo_url} className="w-full h-full object-cover" alt="" />
@@ -244,34 +230,53 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
                   {linkedContact.name.split(' ')[0]}
                 </span>
               )}
+              {/* Saved company chip */}
               {linkedCompany && (
-                <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md leading-none font-medium">
+                <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md leading-none font-medium shrink-0">
                   <span className="w-3 h-3 rounded-sm overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
                     {linkedCompany.logo_url
                       ? <img src={linkedCompany.logo_url} className="w-full h-full object-cover" alt="" />
                       : linkedCompany.name.charAt(0).toUpperCase()}
                   </span>
-                  {linkedCompany.name.length > 14 ? linkedCompany.name.slice(0, 14) + '…' : linkedCompany.name}
+                  {linkedCompany.name}
                 </span>
               )}
+              {/* Saved opportunity chip (company logo) */}
               {linkedOpportunity && (
-                <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md leading-none font-medium">
+                <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md leading-none font-medium shrink-0">
                   <span className="w-3 h-3 rounded-sm overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
                     {linkedOpportunity.company?.logo_url
                       ? <img src={linkedOpportunity.company.logo_url} className="w-full h-full object-cover" alt="" />
                       : (linkedOpportunity.company?.name?.charAt(0)?.toUpperCase() ?? '◈')}
                   </span>
-                  {linkedOpportunity.title.length > 18 ? linkedOpportunity.title.slice(0, 18) + '…' : linkedOpportunity.title}
+                  {linkedOpportunity.title}
                 </span>
               )}
+              {/* Newly-added @mention chips (removable) */}
               {editingLinked && editingLinked.map(e => (
-                <span key={e.id} className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[9px] text-burnham">
-                  <span className="truncate max-w-[120px]">{e.name}</span>
+                <span key={e.id} className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[9px] text-burnham shrink-0">
+                  <span>{e.name}</span>
                   <button onMouseDown={ev => { ev.preventDefault(); onClearEditingLinked?.(e.id) }} className="text-shuttle/40 hover:text-burnham ml-0.5">
                     <X size={9} />
                   </button>
                 </span>
               ))}
+              {/* Text input — sits after chips so typing flows naturally after them */}
+              <input
+                ref={editRef}
+                autoFocus
+                className="flex-1 min-w-[80px] text-[12px] font-normal text-burnham/70 bg-transparent border-b border-burnham/20 focus:border-burnham/40 focus:outline-none transition-colors"
+                value={editingText}
+                onChange={e => onEditChange(e.target.value)}
+                onBlur={_e => {
+                  setTimeout(() => onEditSave(), 120)
+                }}
+                onKeyDown={e => {
+                  if (editKeyDownDropdown?.(e)) return
+                  if (e.key === 'Enter') { e.preventDefault(); onEditSave() }
+                  if (e.key === 'Escape') onEditCancel()
+                }}
+              />
             </div>
           </div>
         ) : (
@@ -283,17 +288,17 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
             <span className="text-[12px] font-normal text-burnham/70 leading-snug">
               {todo.text}
             </span>
-            {/* Milestone — stays as subtle mono chip */}
+            {/* Milestone — mono chip, full text (no truncation) */}
             {milestone && (
               <button
                 onClick={e => { e.stopPropagation(); onMilestoneClick?.(milestone) }}
                 className="inline-flex items-center bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 leading-none hover:bg-burnham/10 hover:text-burnham/60 transition-colors"
               >
-                {milestone.text.length > 16 ? milestone.text.slice(0, 16) + '…' : milestone.text}
+                {milestone.text}
                 {goal ? ` · ${goal.alias ?? goal.text?.slice(0, 6) ?? ''}` : ''}
               </button>
             )}
-            {/* Person chip — inline avatar + first name */}
+            {/* Person chip — avatar + first name */}
             {linkedContact && (() => {
               const photo = linkedContact.profile_photo_url
               return (
@@ -305,7 +310,7 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
                 </span>
               )
             })()}
-            {/* Company chip — inline logo + name */}
+            {/* Company chip — logo + full name */}
             {linkedCompany && (() => {
               const logo = linkedCompany.logo_url
               return (
@@ -313,11 +318,11 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
                   <span className="w-3.5 h-3.5 rounded-sm overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
                     {logo ? <img src={logo} className="w-full h-full object-cover" alt="" /> : linkedCompany.name.charAt(0).toUpperCase()}
                   </span>
-                  {linkedCompany.name.length > 14 ? linkedCompany.name.slice(0, 14) + '…' : linkedCompany.name}
+                  {linkedCompany.name}
                 </span>
               )
             })()}
-            {/* Opportunity chip — company logo (if any) + title */}
+            {/* Opportunity chip — company logo + full title */}
             {linkedOpportunity && (() => {
               const co = linkedOpportunity.company
               const logo = co?.logo_url ?? null
@@ -327,7 +332,7 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
                   <span className="w-3.5 h-3.5 rounded-sm overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
                     {logo ? <img src={logo} className="w-full h-full object-cover" alt="" /> : coInitial}
                   </span>
-                  {linkedOpportunity.title.length > 18 ? linkedOpportunity.title.slice(0, 18) + '…' : linkedOpportunity.title}
+                  {linkedOpportunity.title}
                 </span>
               )
             })()}
@@ -2412,7 +2417,7 @@ export default function Today() {
                                     setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
                                   }}
                                 />
-                                <span className="flex-1 text-[13px] text-shuttle/35 min-w-0 truncate">{todo.text}</span>
+                                <span className="flex-1 text-[12px] text-shuttle/35 min-w-0 truncate">{todo.text}</span>
                                 <span className="text-[9px] font-mono text-shuttle/20 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">{ageLabel}</span>
                                 <button
                                   onClick={async () => {
@@ -3651,26 +3656,15 @@ export default function Today() {
           today={today}
           goals={goals}
           onClose={() => setMilestoneCaptureOpen(false)}
-          onCreated={async (milestoneId, todayTodoTexts) => {
+          onCreated={async (milestoneId, _todayTodoTexts) => {
             setMilestoneCaptureOpen(false)
-            // Add any "add to today" milestone todos as regular todos
-            for (const text of todayTodoTexts) {
-              await supabase.from('todos').insert({
-                user_id: userId,
-                text,
-                date: today,
-                completed: false,
-                milestone_id: milestoneId,
-              })
-            }
-            // Refresh milestones + todos
+            // MilestoneCapture already saved all todos to `todos` table — just refresh
             supabase.from('milestones').select('*').eq('user_id', userId).eq('status', 'PENDING')
               .order('created_at', { ascending: false }).limit(10)
               .then(({ data }) => { if (data) setMilestones(data) })
-            if (todayTodoTexts.length > 0) {
-              supabase.from('todos').select('*, milestones(text)').eq('user_id', userId).eq('date', today)
-                .order('created_at').then(({ data }) => { if (data) setTodos(data as typeof todos) })
-            }
+            supabase.from('todos').select('*, milestones(text)').eq('user_id', userId).eq('date', today)
+              .order('sort_order', { ascending: true }).order('created_at', { ascending: true })
+              .then(({ data }) => { if (data) setTodos(data as typeof todos) })
           }}
         />
       )}
