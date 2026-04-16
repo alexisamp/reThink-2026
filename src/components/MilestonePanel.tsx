@@ -298,14 +298,25 @@ export default function MilestonePanel({
   }
 
   const handleToggleTodo = async (todo: Todo) => {
+    const markingComplete = !todo.completed
     const patch = {
-      completed: !todo.completed,
-      completed_at: !todo.completed ? new Date().toISOString() : null,
+      completed: markingComplete,
+      completed_at: markingComplete ? new Date().toISOString() : null,
     }
     const updated = { ...todo, ...patch }
-    setTodos(prev => prev.map(t => (t.id === todo.id ? updated : t)))
+    const newTodos = todos.map(t => (t.id === todo.id ? updated : t))
+    setTodos(newTodos)
     await supabase.from('todos').update(patch).eq('id', todo.id)
     onTodoUpdate(updated)
+
+    // Auto-complete milestone when all steps are done
+    if (markingComplete && milestone.status !== 'COMPLETE') {
+      const allDone = newTodos.every(t => t.completed)
+      if (allDone) {
+        await supabase.from('milestones').update({ status: 'COMPLETE' }).eq('id', milestone.id)
+        onMilestoneUpdate({ ...milestone, status: 'COMPLETE' } as any)
+      }
+    }
   }
 
   const handleDeleteTodo = async (todoId: string) => {
