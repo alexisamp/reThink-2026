@@ -31,7 +31,7 @@ import { useHabitNotifications } from '@/hooks/useHabitNotifications'
 import StreakCelebration from '@/components/StreakCelebration'
 import EndOfDayDrawer from '@/components/EndOfDayDrawer'
 import NewsletterPill from '@/components/NewsletterPill'
-import MilestoneDetailModal from '@/components/MilestoneDetailModal'
+import MilestonePanel from '@/components/MilestonePanel'
 import HabitEditModal from '@/components/HabitEditModal'
 import { openLink } from '@/lib/openLink'
 import { GoalKPIWidget } from '@/components/GoalKPIWidget'
@@ -196,7 +196,7 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
       </div>
       {/* Priority number — top 3 only */}
       {isTopThree ? (
-        <span className="w-3 text-right text-[9px] font-mono text-shuttle/30 shrink-0 leading-none select-none">
+        <span className="w-3 text-right text-[8px] font-mono text-shuttle/25 shrink-0 leading-none select-none">
           {index + 1}
         </span>
       ) : (
@@ -214,10 +214,10 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
             <input
               ref={editRef}
               autoFocus
-              className="flex-1 text-[13px] font-normal text-burnham/70 bg-transparent border-b border-burnham/30 focus:outline-none w-full"
+              className="flex-1 text-[12px] font-normal text-burnham/70 bg-transparent border-b border-burnham/30 focus:outline-none w-full"
               value={editingText}
               onChange={e => onEditChange(e.target.value)}
-              onBlur={e => {
+              onBlur={_e => {
                 // Delay save so portal dropdown mouseDown can fire first
                 setTimeout(() => onEditSave(), 120)
               }}
@@ -227,18 +227,52 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
                 if (e.key === 'Escape') onEditCancel()
               }}
             />
-            {editingLinked && editingLinked.length > 0 && (
-              <div className="flex items-center gap-1 flex-wrap">
-                {editingLinked.map(e => (
-                  <span key={e.id} className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[10px] text-burnham">
-                    <span className="truncate max-w-[120px]">{e.name}</span>
-                    <button onMouseDown={ev => { ev.preventDefault(); onClearEditingLinked?.(e.id) }} className="text-shuttle/40 hover:text-burnham ml-0.5">
-                      <X size={9} />
-                    </button>
+            {/* Show all attached entities during edit — milestone + person + company + opportunity */}
+            <div className="flex items-center gap-1 flex-wrap">
+              {milestone && (
+                <span className="inline-flex items-center bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono leading-none">
+                  {milestone.text.length > 18 ? milestone.text.slice(0, 18) + '…' : milestone.text}
+                </span>
+              )}
+              {linkedContact && (
+                <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md leading-none font-medium">
+                  <span className="w-3 h-3 rounded-full overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
+                    {linkedContact.profile_photo_url
+                      ? <img src={linkedContact.profile_photo_url} className="w-full h-full object-cover" alt="" />
+                      : linkedContact.name.charAt(0).toUpperCase()}
                   </span>
-                ))}
-              </div>
-            )}
+                  {linkedContact.name.split(' ')[0]}
+                </span>
+              )}
+              {linkedCompany && (
+                <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md leading-none font-medium">
+                  <span className="w-3 h-3 rounded-sm overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
+                    {linkedCompany.logo_url
+                      ? <img src={linkedCompany.logo_url} className="w-full h-full object-cover" alt="" />
+                      : linkedCompany.name.charAt(0).toUpperCase()}
+                  </span>
+                  {linkedCompany.name.length > 14 ? linkedCompany.name.slice(0, 14) + '…' : linkedCompany.name}
+                </span>
+              )}
+              {linkedOpportunity && (
+                <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md leading-none font-medium">
+                  <span className="w-3 h-3 rounded-sm overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
+                    {linkedOpportunity.company?.logo_url
+                      ? <img src={linkedOpportunity.company.logo_url} className="w-full h-full object-cover" alt="" />
+                      : (linkedOpportunity.company?.name?.charAt(0)?.toUpperCase() ?? '◈')}
+                  </span>
+                  {linkedOpportunity.title.length > 18 ? linkedOpportunity.title.slice(0, 18) + '…' : linkedOpportunity.title}
+                </span>
+              )}
+              {editingLinked && editingLinked.map(e => (
+                <span key={e.id} className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[9px] text-burnham">
+                  <span className="truncate max-w-[120px]">{e.name}</span>
+                  <button onMouseDown={ev => { ev.preventDefault(); onClearEditingLinked?.(e.id) }} className="text-shuttle/40 hover:text-burnham ml-0.5">
+                    <X size={9} />
+                  </button>
+                </span>
+              ))}
+            </div>
           </div>
         ) : (
           /* ── Text + inline entity mentions — all flow together ──── */
@@ -246,7 +280,7 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
             className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 cursor-text"
             onClick={onEditStart}
           >
-            <span className="text-[13px] font-normal text-burnham/70 leading-snug">
+            <span className="text-[12px] font-normal text-burnham/70 leading-snug">
               {todo.text}
             </span>
             {/* Milestone — stays as subtle mono chip */}
@@ -2231,7 +2265,7 @@ export default function Today() {
                               if (e.key === 'Escape') { setInlineAddOpen(false); setQuickAddText(''); setQaDropdown(null); setQuickAddLinked([]) }
                             }}
                             placeholder="What needs to get done? @ to link..."
-                            className="flex-1 text-[13px] font-normal text-burnham/70 placeholder-shuttle/20 border-none outline-none bg-transparent"
+                            className="flex-1 text-[12px] font-normal text-burnham/70 placeholder-shuttle/20 border-none outline-none bg-transparent"
                           />
                           {quickAddLinked.length > 0 && (
                             <div className="flex items-center gap-1 flex-wrap shrink-0">
@@ -3480,9 +3514,9 @@ export default function Today() {
         onDelete={handleCaptureDelete}
       />
 
-      {/* ── Milestone Detail Modal (Phase 5) ───────────────────────────── */}
+      {/* ── Milestone Panel (right slide-in) ───────────────────────────── */}
       {selectedMilestoneDetail && userId && (
-        <MilestoneDetailModal
+        <MilestonePanel
           milestone={selectedMilestoneDetail}
           goal={goals.find(g => g.id === selectedMilestoneDetail.goal_id) ?? null}
           userId={userId}
