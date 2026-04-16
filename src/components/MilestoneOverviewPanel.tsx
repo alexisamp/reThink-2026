@@ -218,7 +218,7 @@ export default function MilestoneOverviewPanel({
                 <div key={goal.id}>
                   <div className="flex items-center gap-2 mb-3">
                     {goal.emoji && <span className="text-[13px] leading-none">{goal.emoji}</span>}
-                    <span className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono">
+                    <span className="text-[9px] uppercase tracking-widest font-medium text-burnham/50 font-mono">
                       {goal.alias ?? goal.text.slice(0, 28)}
                     </span>
                     <span className="text-[9px] font-mono text-shuttle/20 ml-auto">{items.length}</span>
@@ -234,14 +234,17 @@ export default function MilestoneOverviewPanel({
                       const isConfirming = confirmDeleteId === ms.id
                       const isDeleting = deletingId === ms.id
                       return (
-                        <div key={ms.id} className={`flex gap-3 group/ms ${idx < visible.length - 1 || hiddenCount > 0 ? 'mb-2' : ''}`}>
+                        <div key={ms.id} className={`flex gap-2 group/ms ${idx < visible.length - 1 || hiddenCount > 0 ? 'mb-2' : ''}`}>
                           <div className="shrink-0 flex flex-col items-center pt-1">
                             <div className={`w-2.5 h-2.5 rounded-full border-[1.5px] z-10 transition-all ${isDone ? 'bg-pastel border-pastel' : 'bg-white border-mercury group-hover/ms:border-burnham/40'}`} />
                           </div>
                           <div className="flex-1 min-w-0 pb-1">
                             <div className="flex items-start gap-2">
                               <button className="flex-1 min-w-0 text-left group/inner" onClick={() => { setConfirmDeleteId(null); onSelectMilestone(ms) }}>
-                                <span className={`text-[12.5px] leading-snug block transition-colors ${isDone ? 'line-through text-shuttle/35' : 'text-burnham/80 group-hover/inner:text-burnham'}`}>{ms.text}</span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`text-[12.5px] leading-snug transition-colors ${isDone ? 'line-through text-shuttle/35' : 'text-burnham/80 group-hover/inner:text-burnham'}`}>{ms.text}</span>
+                                  {isDone && <span className="text-[8px] font-mono text-pastel/70 bg-gossip/60 px-1 py-px rounded shrink-0">done</span>}
+                                </div>
                                 {ms.target_date && (
                                   <div className="flex items-center gap-2 mt-0.5">
                                     <span className="text-[9px] font-mono text-shuttle/30">{ms.target_date}</span>
@@ -270,15 +273,15 @@ export default function MilestoneOverviewPanel({
 
                     {/* ver más */}
                     {hiddenCount > 0 && (
-                      <div className="flex gap-3 mt-1">
-                        <div className="w-[21px] shrink-0 flex items-center justify-center">
+                      <div className="flex gap-2 mt-1">
+                        <div className="w-[18px] shrink-0 flex items-center justify-center">
                           <div className="w-px h-4 bg-mercury/40" />
                         </div>
                         <button
                           onClick={() => setDrilldownGoalId(goal.id)}
-                          className="text-[10px] font-mono text-shuttle/35 hover:text-burnham transition-colors pb-1"
+                          className="text-[10px] font-mono text-burnham/40 hover:text-burnham transition-colors pb-1 flex items-center gap-1"
                         >
-                          + {hiddenCount} more — ver todo →
+                          → {hiddenCount} más
                         </button>
                       </div>
                     )}

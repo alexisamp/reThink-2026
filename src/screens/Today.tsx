@@ -134,7 +134,7 @@ function getUrlChip(url: string): { icon: string; label: string; color: string }
 
 // Linked entity — a todo can be connected to milestone, goal, person, company, or opportunity
 export type LinkedEntityType = 'milestone' | 'goal' | 'person' | 'company' | 'opportunity'
-export type LinkedEntity = { id: string; name: string; type: LinkedEntityType }
+export type LinkedEntity = { id: string; name: string; type: LinkedEntityType; imageUrl?: string }
 
 // ── BacklogDropZone — droppable target that sits below the todo list ──────────
 function BacklogDropZone({ children, hasItems }: { children: React.ReactNode; hasItems: boolean }) {
@@ -166,7 +166,7 @@ interface SortableTodoRowProps {
   editingText: string
   onEditStart: () => void
   onEditChange: (text: string) => void
-  onEditSave: () => void
+  onEditSave: (textOverride?: string) => void
   onEditCancel: () => void
   onToggle: () => void
   onDelete: () => void
@@ -254,8 +254,13 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
             )}
             {/* New @mention chips (removable) */}
             {editingLinked && editingLinked.map(e => (
-              <span key={e.id} className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.06] border border-[#1a1a1a]/[0.09] rounded-md px-1.5 py-0.5 text-[9px] text-burnham/70 font-medium shrink-0">
-                <span>{e.name}</span>
+              <span key={e.id} className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.06] border border-[#1a1a1a]/[0.09] rounded-md px-1 py-0.5 text-[9px] text-burnham/70 font-medium shrink-0">
+                {e.imageUrl && (
+                  <span className={`w-3 h-3 rounded-${e.type === 'person' ? 'full' : 'sm'} overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0`}>
+                    <img src={e.imageUrl} className="w-full h-full object-cover" alt="" />
+                  </span>
+                )}
+                <span>{e.name.split(' ')[0]}</span>
                 <button onMouseDown={ev => { ev.preventDefault(); onClearEditingLinked?.(e.id) }} className="text-shuttle/35 hover:text-burnham ml-0.5">
                   <X size={8} />
                 </button>
@@ -269,11 +274,12 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
               value={editingText}
               onChange={e => onEditChange(e.target.value)}
               onBlur={_e => {
-                setTimeout(() => onEditSave(), 120)
+                const val = (_e.target as HTMLInputElement).value
+                setTimeout(() => onEditSave(val), 120)
               }}
               onKeyDown={e => {
                 if (editKeyDownDropdown?.(e)) return
-                if (e.key === 'Enter') { e.preventDefault(); onEditSave() }
+                if (e.key === 'Enter') { e.preventDefault(); onEditSave((e.target as HTMLInputElement).value) }
                 if (e.key === 'Escape') onEditCancel()
               }}
             />
@@ -721,7 +727,19 @@ export default function Today() {
           if (g) addLinked({ id: goalId, name: g.alias ?? g.text.slice(0, 24), type: 'goal' })
         }
       } else {
-        addLinked({ id: item.id, name: item.label, type: item._type as LinkedEntityType })
+        // Look up image for entity
+        let imageUrl: string | undefined
+        if (item._type === 'person') {
+          const contact = allContacts.find(c => c.id === item.id)
+          imageUrl = contact?.profile_photo_url ?? undefined
+        } else if (item._type === 'company') {
+          const company = companies.find(c => c.id === item.id)
+          imageUrl = company?.logo_url ?? undefined
+        } else if (item._type === 'opportunity') {
+          const opp = opportunities.find(o => o.id === item.id)
+          imageUrl = opp?.company?.logo_url ?? undefined
+        }
+        addLinked({ id: item.id, name: item.label, type: item._type as LinkedEntityType, imageUrl })
       }
       setText(getText().replace(/@\S*$/, '').trimEnd())
     }
@@ -1642,9 +1660,10 @@ export default function Today() {
     setQuickAddLinked([])
   }
 
-  const saveTodoText = async (id: string) => {
-    if (!editingTodoText.trim()) { setEditingTodoId(null); setEditingLinked([]); setQaDropdown(null); return }
-    const updates: Record<string, unknown> = { text: editingTodoText.trim() }
+  const saveTodoText = async (id: string, textOverride?: string) => {
+    const text = (textOverride ?? editingTodoText).trim()
+    if (!text) { setEditingTodoId(null); setEditingLinked([]); setQaDropdown(null); return }
+    const updates: Record<string, unknown> = { text }
     if (editingLinked.length > 0) {
       const ms = editingLinked.find(e => e.type === 'milestone')
       const g  = editingLinked.find(e => e.type === 'goal')
@@ -2233,7 +2252,7 @@ export default function Today() {
                           editingText={editingTodoText}
                           onEditStart={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text); setEditingLinked([]); setQaDropdown(null) }}
                           onEditChange={text => { setEditingTodoText(text); computeQaDropdown(text) }}
-                          onEditSave={() => saveTodoText(todo.id)}
+                          onEditSave={(t) => saveTodoText(todo.id, t)}
                           onEditCancel={() => { setEditingTodoId(null); setEditingLinked([]); setQaDropdown(null) }}
                           editRef={el => { activeEditElRef.current = el }}
                           editKeyDownDropdown={e => {
@@ -2283,7 +2302,7 @@ export default function Today() {
                               editingText={editingTodoText}
                               onEditStart={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text); setEditingLinked([]); setQaDropdown(null) }}
                               onEditChange={text => { setEditingTodoText(text); computeQaDropdown(text) }}
-                              onEditSave={() => saveTodoText(todo.id)}
+                              onEditSave={(t) => saveTodoText(todo.id, t)}
                               onEditCancel={() => { setEditingTodoId(null); setEditingLinked([]); setQaDropdown(null) }}
                               editRef={el => { activeEditElRef.current = el }}
                               editKeyDownDropdown={e => {
@@ -2318,8 +2337,13 @@ export default function Today() {
                           <div className="w-[18px] h-[18px] border border-dashed border-shuttle/40 rounded-md shrink-0 opacity-40" />
                           {/* Inline chips — appear between checkbox and text input */}
                           {quickAddLinked.map(e => (
-                            <span key={e.id} className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.06] border border-[#1a1a1a]/[0.09] rounded-md px-1.5 py-0.5 text-[9px] text-burnham/70 font-medium shrink-0">
-                              <span>{e.name}</span>
+                            <span key={e.id} className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.06] border border-[#1a1a1a]/[0.09] rounded-md px-1 py-0.5 text-[9px] text-burnham/70 font-medium shrink-0">
+                              {e.imageUrl && (
+                                <span className={`w-3 h-3 rounded-${e.type === 'person' ? 'full' : 'sm'} overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0`}>
+                                  <img src={e.imageUrl} className="w-full h-full object-cover" alt="" />
+                                </span>
+                              )}
+                              <span>{e.name.split(' ')[0]}</span>
                               <button onMouseDown={ev => { ev.preventDefault(); setQuickAddLinked(prev => prev.filter(x => x.id !== e.id)) }} className="text-shuttle/35 hover:text-burnham ml-0.5">
                                 <X size={8} />
                               </button>
@@ -2641,46 +2665,9 @@ export default function Today() {
 
         {sidebarOpen && (
           <>
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+            <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col min-h-0">
 
-              {/* PULSE */}
-              <div>
-                <h3 className="text-[10px] font-semibold text-shuttle/70 uppercase tracking-widest mb-3">Pulse</h3>
-                <div className="space-y-3 mb-4">
-                  {[
-                    { label: 'To-Dos',  val: `${doneTodos.length}/${todos.length}`,       pct: todosProgress },
-                    { label: 'Habits',  val: `${doneHabits.length}/${habits.length}`,     pct: habitsProgress },
-                  ].map(item => (
-                    <div key={item.label}>
-                      <div className="flex justify-between text-[10px] mb-1">
-                        <span className="text-burnham font-medium">{item.label}</span>
-                        <span className="text-shuttle font-mono">{item.val}</span>
-                      </div>
-                      <div className="w-full bg-mercury rounded-full h-1">
-                        <div className="h-1 rounded-full bg-pastel transition-all" style={{ width: `${item.pct}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                  {/* Next milestone — motivating, not anxious */}
-                  {(() => {
-                    const upcoming = milestones
-                      .filter(m => m.status !== 'COMPLETE' && m.target_date)
-                      .sort((a, b) => new Date(a.target_date! + 'T12:00:00').getTime() - new Date(b.target_date! + 'T12:00:00').getTime())[0]
-                    if (!upcoming) return null
-                    const daysLeft = Math.ceil((new Date(upcoming.target_date! + 'T12:00:00').getTime() - Date.now()) / 86400000)
-                    return (
-                      <div className="flex items-center justify-between text-[10px] text-shuttle/60 py-0.5">
-                        <span className="truncate flex-1 text-shuttle/70">{upcoming.text.length > 28 ? upcoming.text.slice(0, 28) + '…' : upcoming.text}</span>
-                        <span className="shrink-0 ml-2 font-mono text-[9px] text-shuttle/40">
-                          {daysLeft > 0 ? `${daysLeft}d` : daysLeft === 0 ? 'today' : 'past'}
-                        </span>
-                      </div>
-                    )
-                  })()}
-                </div>
-              </div>
-
-              {/* JOURNALING — inline rich editor with capture pills */}
+              {/* JOURNAL */}
               <div className="flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-[10px] font-semibold text-shuttle/70 uppercase tracking-widest flex items-center gap-1.5">
@@ -3225,6 +3212,11 @@ export default function Today() {
                 <span className="text-[10px] text-shuttle/40">linked to</span>
                 {quickAddLinked.map(e => (
                   <span key={e.id} className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[10px] text-burnham font-medium">
+                    {e.imageUrl && (
+                      <span className={`w-3.5 h-3.5 rounded-${e.type === 'person' ? 'full' : 'sm'} overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0`}>
+                        <img src={e.imageUrl} className="w-full h-full object-cover" alt="" />
+                      </span>
+                    )}
                     <span className="truncate max-w-[160px]">{e.name}</span>
                     <button onClick={() => setQuickAddLinked(prev => prev.filter(x => x.id !== e.id))} className="text-shuttle/40 hover:text-burnham ml-0.5 flex-shrink-0">
                       <X size={9} />

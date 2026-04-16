@@ -78,105 +78,94 @@ function StepRow({
   })()
 
   return (
-    <div ref={setNodeRef} style={style} className="flex gap-0 group/step mb-2">
-      {/* Timeline spine node */}
-      <div className="flex flex-col items-center shrink-0 w-7">
-        <div className={`w-2 h-2 rounded-full border-[1.5px] mt-3.5 z-10 transition-colors ${
-          isDone
-            ? 'bg-pastel border-pastel'
-            : isWaiting
-            ? 'bg-mercury border-shuttle/25'
-            : 'bg-white border-mercury'
+    <div ref={setNodeRef} style={style} className="flex gap-0 group/step mb-1">
+      {/* Spine node */}
+      <div className="flex flex-col items-center shrink-0 w-6">
+        <div className={`w-1.5 h-1.5 rounded-full border-[1.5px] mt-3.5 z-10 transition-all ${
+          isDone ? 'bg-pastel border-pastel' : 'bg-white border-mercury/80 group-hover/step:border-shuttle/30'
         }`} />
       </div>
 
-      {/* Card */}
-      <div className={`flex-1 rounded-xl border px-3 py-2 transition-all ${
-        isDone
-          ? 'border-mercury/20 opacity-40'
-          : 'border-mercury bg-white hover:border-burnham/15'
+      {/* Row content */}
+      <div className={`flex-1 flex items-center gap-2 px-2 py-2.5 rounded-lg transition-colors ${
+        isDone ? 'opacity-40' : 'hover:bg-gossip/[0.07]'
       }`}>
-        <div className="flex items-start gap-2">
-          {/* Drag handle */}
-          {isPending && (
-            <div
-              {...attributes}
-              {...listeners}
-              className="opacity-0 group-hover/step:opacity-20 cursor-grab active:cursor-grabbing text-shuttle shrink-0 touch-none transition-opacity mt-0.5"
+        {/* Drag handle */}
+        {isPending && (
+          <div
+            {...attributes}
+            {...listeners}
+            className="opacity-0 group-hover/step:opacity-30 cursor-grab active:cursor-grabbing text-shuttle shrink-0 touch-none transition-opacity"
+          >
+            <DotsSixVertical size={10} />
+          </div>
+        )}
+
+        {/* Checkbox */}
+        <button onClick={onToggle} className="shrink-0 hover:opacity-70 transition-opacity">
+          {isDone
+            ? <Check size={11} className="text-pastel" weight="bold" />
+            : isWaiting
+            ? <HourglassMedium size={11} className="text-shuttle/30" />
+            : <Circle size={11} className="text-mercury/80" />}
+        </button>
+
+        {/* Text */}
+        <span className={`flex-1 text-[12px] leading-snug min-w-0 ${
+          isDone ? 'line-through text-shuttle/35' : 'text-burnham/75'
+        }`}>
+          {todo.text}
+        </span>
+
+        {/* Date + delete - right side, hover */}
+        <div className="flex items-center gap-1 opacity-0 group-hover/step:opacity-100 transition-opacity shrink-0">
+          {editingDate ? (
+            <input
+              type="date"
+              autoFocus
+              defaultValue={todo.date ?? ''}
+              className="text-[9px] font-mono border border-burnham/20 rounded px-1 py-0.5 focus:outline-none focus:border-burnham/40 bg-white w-24"
+              onChange={e => {
+                onDateChange(e.target.value || null)
+                setEditingDate(false)
+              }}
+              onBlur={() => setEditingDate(false)}
+              onKeyDown={e => { if (e.key === 'Escape') setEditingDate(false) }}
+            />
+          ) : (
+            <button
+              onClick={() => setEditingDate(true)}
+              className={`text-[9px] font-mono px-1.5 py-0.5 rounded hover:bg-mercury/30 transition-colors ${
+                dateLabel === 'today' ? 'text-pastel/80' : 'text-shuttle/30 hover:text-shuttle/60'
+              }`}
             >
-              <DotsSixVertical size={10} />
-            </div>
+              {dateLabel ?? '—'}
+            </button>
           )}
 
-          {/* Checkbox */}
-          <button onClick={onToggle} className="shrink-0 hover:opacity-70 transition-opacity mt-0.5">
-            {isDone
-              ? <Check size={12} className="text-pastel" weight="bold" />
-              : isWaiting
-              ? <HourglassMedium size={12} className="text-shuttle/30" />
-              : <Circle size={12} className="text-mercury" />}
-          </button>
-
-          {/* Text */}
-          <span className={`flex-1 text-[12px] leading-snug min-w-0 ${
-            isDone ? 'line-through text-shuttle/30' : 'text-burnham/80'
-          }`}>
-            {todo.text}
-          </span>
-
-          {/* Date + actions */}
-          <div className="shrink-0 flex items-center gap-1 ml-1">
-            {/* Date badge / editor */}
-            {editingDate ? (
-              <input
-                type="date"
-                autoFocus
-                defaultValue={todo.date ?? ''}
-                className="text-[9px] font-mono border border-burnham/20 rounded px-1 py-0.5 focus:outline-none focus:border-burnham/40 bg-white w-24"
-                onChange={e => {
-                  onDateChange(e.target.value || null)
-                  setEditingDate(false)
-                }}
-                onBlur={() => setEditingDate(false)}
-                onKeyDown={e => { if (e.key === 'Escape') setEditingDate(false) }}
-              />
-            ) : (
+          {confirmDelete ? (
+            <div className="flex items-center gap-0.5">
               <button
-                onClick={() => setEditingDate(true)}
-                className={`text-[9px] font-mono transition-colors opacity-0 group-hover/step:opacity-100 hover:text-burnham px-1 py-0.5 rounded hover:bg-mercury/30 ${
-                  dateLabel === 'today' ? 'text-pastel/70 !opacity-100' : 'text-shuttle/30'
-                }`}
-                title="Change date"
+                onClick={onDelete}
+                className="text-[8px] font-mono text-red-400 px-1 py-0.5 rounded border border-red-200/70"
               >
-                {dateLabel ?? <CalendarBlank size={9} />}
+                del
               </button>
-            )}
-
-            {/* Delete — with confirm */}
-            {confirmDelete ? (
-              <div className="flex items-center gap-0.5">
-                <button
-                  onClick={onDelete}
-                  className="text-[8px] font-mono text-red-400 px-1 py-0.5 rounded border border-red-200 hover:border-red-400"
-                >
-                  del
-                </button>
-                <button
-                  onClick={() => setConfirmDelete(false)}
-                  className="text-shuttle/25 hover:text-shuttle p-0.5"
-                >
-                  <X size={8} />
-                </button>
-              </div>
-            ) : (
               <button
-                onClick={() => setConfirmDelete(true)}
-                className="opacity-0 group-hover/step:opacity-100 transition-opacity text-shuttle/20 hover:text-red-400 p-0.5"
+                onClick={() => setConfirmDelete(false)}
+                className="text-shuttle/25 p-0.5"
               >
-                <Trash size={10} />
+                <X size={8} />
               </button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-shuttle/15 hover:text-red-400 p-0.5 transition-colors"
+            >
+              <Trash size={9} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -235,8 +224,15 @@ export default function MilestonePanel({
       .eq('user_id', userId)
       .order('sort_order', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true })
-    setTodos(data ?? [])
+    const loaded = data ?? []
+    setTodos(loaded)
     setLoading(false)
+
+    // Auto-complete milestone if all todos are already done (catches previously-completed sets)
+    if (loaded.length > 0 && loaded.every(t => t.completed) && milestone.status !== 'COMPLETE') {
+      await supabase.from('milestones').update({ status: 'COMPLETE' }).eq('id', milestone.id)
+      onMilestoneUpdate({ ...milestone, status: 'COMPLETE' } as any)
+    }
   }, [milestone?.id, userId])
 
   useEffect(() => {
@@ -527,7 +523,7 @@ export default function MilestonePanel({
           ) : (
             <div className="relative">
               {/* Vertical spine */}
-              <div className="absolute left-[10px] top-0 bottom-0 w-px bg-mercury/40" />
+              <div className="absolute left-[8px] top-0 bottom-0 w-px bg-mercury/40" />
 
               <DndContext
                 sensors={sensors}
