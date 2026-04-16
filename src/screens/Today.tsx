@@ -10,14 +10,14 @@ import {
 } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
-  type DragEndEvent,
+  type DragEndEvent, useDroppable,
 } from '@dnd-kit/core'
 import {
   SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
-import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog, Capture, Contact, ContactStatus, ContactMilestone } from '@/types'
+import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog, Capture, Contact, ContactStatus, ContactMilestone, Company, Opportunity } from '@/types'
 import { useContacts, type ContactInput } from '@/hooks/useContacts'
 import { useCompanies } from '@/hooks/useCompanies'
 import { useOpportunities } from '@/hooks/useOpportunities'
@@ -135,11 +135,32 @@ function getUrlChip(url: string): { icon: string; label: string; color: string }
 export type LinkedEntityType = 'milestone' | 'goal' | 'person' | 'company' | 'opportunity'
 export type LinkedEntity = { id: string; name: string; type: LinkedEntityType }
 
+// ── BacklogDropZone — droppable target that sits below the todo list ──────────
+function BacklogDropZone({ children, hasItems }: { children: React.ReactNode; hasItems: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id: 'backlog-zone' })
+  return (
+    <div ref={setNodeRef}>
+      {isOver && !hasItems && (
+        <div className="mb-2 rounded-lg border-2 border-dashed border-shuttle/20 bg-mercury/10 py-3 px-4 text-[10px] font-mono text-shuttle/40 text-center transition-colors">
+          drop to send to backlog
+        </div>
+      )}
+      {isOver && hasItems && (
+        <div className="mb-1 h-0.5 rounded-full bg-shuttle/20 transition-all" />
+      )}
+      {children}
+    </div>
+  )
+}
+
 interface SortableTodoRowProps {
   index: number
   todo: Todo
   goal: Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'> | null | undefined
   milestone: Pick<Milestone, 'id' | 'text'> | null | undefined
+  linkedContact?: Pick<Contact, 'id' | 'name' | 'profile_photo_url'> | null
+  linkedCompany?: Pick<Company, 'id' | 'name' | 'logo_url'> | null
+  linkedOpportunity?: Pick<Opportunity, 'id' | 'title'> | null
   isEditing: boolean
   editingText: string
   onEditStart: () => void
@@ -157,7 +178,7 @@ interface SortableTodoRowProps {
   onToggleFeatured?: () => void
 }
 
-function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting, onMilestoneClick, editRef, editKeyDownDropdown, editingLinked, onClearEditingLinked, onToggleFeatured }: SortableTodoRowProps) {
+function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCompany, linkedOpportunity, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting, onMilestoneClick, editRef, editKeyDownDropdown, editingLinked, onClearEditingLinked, onToggleFeatured }: SortableTodoRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: todo.id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
   const isTopThree = index < 3
@@ -235,6 +256,33 @@ function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText,
             {milestone.text.length > 18 ? milestone.text.slice(0, 18) + '…' : milestone.text}
             {goal ? ` · ${goal.alias ?? goal.text?.slice(0, 6) ?? ''}` : ''}
           </button>
+        )}
+        {/* Linked entity chips — person / company / opportunity */}
+        {linkedContact && (
+          <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.06] border border-[#1a1a1a]/[0.09] text-[#1a1a1a]/60 text-[9px] px-1.5 py-0.5 rounded-full shrink-0 leading-none">
+            <span className="w-3.5 h-3.5 rounded-full overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-semibold text-shuttle/70">
+              {linkedContact.profile_photo_url
+                ? <img src={linkedContact.profile_photo_url} className="w-full h-full object-cover" alt="" />
+                : linkedContact.name.charAt(0).toUpperCase()}
+            </span>
+            <span className="max-w-[56px] truncate">{linkedContact.name.split(' ')[0]}</span>
+          </span>
+        )}
+        {linkedCompany && (
+          <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.06] border border-[#1a1a1a]/[0.09] text-[#1a1a1a]/60 text-[9px] px-1.5 py-0.5 rounded-full shrink-0 leading-none">
+            <span className="w-3.5 h-3.5 rounded overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-semibold text-shuttle/70">
+              {linkedCompany.logo_url
+                ? <img src={linkedCompany.logo_url} className="w-full h-full object-cover" alt="" />
+                : linkedCompany.name.charAt(0).toUpperCase()}
+            </span>
+            <span className="max-w-[56px] truncate">{linkedCompany.name}</span>
+          </span>
+        )}
+        {linkedOpportunity && (
+          <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.06] border border-[#1a1a1a]/[0.09] text-[#1a1a1a]/60 text-[9px] px-1.5 py-0.5 rounded-full shrink-0 leading-none">
+            <span className="w-3.5 h-3.5 rounded-full bg-burnham/10 flex items-center justify-center shrink-0 text-[7px] text-burnham/50">◈</span>
+            <span className="max-w-[72px] truncate">{linkedOpportunity.title}</span>
+          </span>
         )}
         {todo.url && (() => {
           const chip = getUrlChip(todo.url)
@@ -1535,6 +1583,8 @@ export default function Today() {
     setShouldCreateAttioTask(false)
     setQuickAddOpen(false)
     setInlineAddOpen(false)
+    setQuickAddText('')
+    setQuickAddLinked([])
   }
 
   const saveTodoText = async (id: string) => {
@@ -1584,9 +1634,22 @@ export default function Today() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
-  const reorderTodos = (event: DragEndEvent) => {
+  const handleTodoDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
-    if (!over || active.id === over.id) return
+    if (!over) return
+
+    // Drop on backlog zone — move todo to yesterday
+    if (over.id === 'backlog-zone') {
+      const todoId = active.id as string
+      const todo = todos.find(t => t.id === todoId)
+      if (!todo) return
+      await supabase.from('todos').update({ date: yesterdayStr }).eq('id', todoId)
+      setTodos(prev => prev.filter(t => t.id !== todoId))
+      setYesterdayTodos(prev => [{ ...todo, date: yesterdayStr }, ...prev])
+      return
+    }
+
+    if (active.id === over.id) return
     setTodos(prev => {
       const pending = prev.filter(t => !t.completed)
       const done = prev.filter(t => t.completed)
@@ -2090,7 +2153,7 @@ export default function Today() {
                   </div>
                 </div>
 
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={reorderTodos}>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTodoDragEnd}>
                   <SortableContext items={pendingTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
                     <div className="space-y-0.5 mb-6">
                       {pendingTodos.map((todo, i) => (
@@ -2100,6 +2163,9 @@ export default function Today() {
                           todo={todo}
                           goal={todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null}
                           milestone={todo.milestone_id ? milestones.find(m => m.id === todo.milestone_id) : null}
+                          linkedContact={todo.contact_id ? allContacts.find(c => c.id === todo.contact_id) ?? null : null}
+                          linkedCompany={todo.company_id ? companies.find(c => c.id === todo.company_id) ?? null : null}
+                          linkedOpportunity={todo.opportunity_id ? opportunities.find(o => o.id === todo.opportunity_id) ?? null : null}
                           isEditing={editingTodoId === todo.id}
                           editingText={editingTodoText}
                           onEditStart={() => { setEditingTodoId(todo.id); setEditingTodoText(todo.text); setEditingLinked([]); setQaDropdown(null) }}
@@ -2178,151 +2244,158 @@ export default function Today() {
                       )}
                     </div>
                   </SortableContext>
-                </DndContext>
-                {waitingTodos.length > 0 && (
-                  <div className="pt-4 mb-4">
-                    <h4 className="text-[10px] font-semibold text-shuttle/40 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                      <HourglassMedium size={10} className="text-shuttle/30" /> Waiting · {waitingTodos.length}
-                    </h4>
-                    <div className="space-y-0.5">
-                      {waitingTodos.map(todo => {
-                        const goal = todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null
-                        return (
-                          <div key={todo.id} className="group flex items-center gap-2 py-1.5 px-2 -mx-2 opacity-60 hover:opacity-90 transition-opacity rounded">
-                            <HourglassMedium size={13} className="text-shuttle/30 shrink-0" />
-                            <span className="text-[13px] text-shuttle flex-1 truncate italic">{todo.text}</span>
-                            {goal && (
-                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 leading-none"
-                                style={{ backgroundColor: goal.color ? `${goal.color}20` : '#E5F9BD', color: goal.color ?? '#003720' }}>
-                                {goal.alias ?? goal.text.slice(0, 6)}
-                              </span>
-                            )}
-                            <button
-                              onClick={async () => {
-                                await supabase.from('todos').update({ waiting: false }).eq('id', todo.id)
-                                setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, waiting: false } : t))
-                              }}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] text-shuttle/40 hover:text-burnham font-mono"
-                            >unblock</button>
-                            <button onClick={async () => {
-                              await supabase.from('todos').delete().eq('id', todo.id)
-                              setTodos(prev => prev.filter(t => t.id !== todo.id))
-                            }} className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded">
-                              <TrashSimple size={12} />
-                            </button>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
 
-                {doneTodos.length > 0 && (
-                  <div className="pt-4 border-t border-dashed border-mercury/50">
-                    <button
-                      onClick={() => setDoneTodosOpen(v => !v)}
-                      className="flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-widest text-shuttle/30 hover:text-shuttle/50 transition-colors mb-2 w-full"
-                    >
-                      <span>{doneTodosOpen ? '▾' : '▸'}</span>
-                      <span>Done · {doneTodos.length}</span>
-                    </button>
-                    {doneTodosOpen && (
-                      <div className="space-y-1">
-                        {doneTodos.map(todo => {
+                  {waitingTodos.length > 0 && (
+                    <div className="pt-4 mb-4">
+                      <h4 className="text-[10px] font-semibold text-shuttle/40 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                        <HourglassMedium size={10} className="text-shuttle/30" /> Waiting · {waitingTodos.length}
+                      </h4>
+                      <div className="space-y-0.5">
+                        {waitingTodos.map(todo => {
                           const goal = todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null
-                          const doneMilestone = todo.milestone_id ? milestones.find(m => m.id === todo.milestone_id) : null
                           return (
-                            <div key={todo.id} className="group flex items-center gap-2 py-1.5 px-2 -mx-2 opacity-50 hover:opacity-70 transition-opacity">
-                              <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleTodo(todo.id)} />
-                              <span className="text-[13px] text-shuttle line-through decoration-pastel flex-1 truncate">{todo.text}</span>
-                              {todo.completed_at && (
-                                <span className="text-[9px] font-mono text-pastel/70 shrink-0">
-                                  {new Date(todo.completed_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                            <div key={todo.id} className="group flex items-center gap-2 py-1.5 px-2 -mx-2 opacity-60 hover:opacity-90 transition-opacity rounded">
+                              <HourglassMedium size={13} className="text-shuttle/30 shrink-0" />
+                              <span className="text-[13px] text-shuttle flex-1 truncate italic">{todo.text}</span>
+                              {goal && (
+                                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 leading-none"
+                                  style={{ backgroundColor: goal.color ? `${goal.color}20` : '#E5F9BD', color: goal.color ?? '#003720' }}>
+                                  {goal.alias ?? goal.text.slice(0, 6)}
                                 </span>
                               )}
-                              {doneMilestone && (
-                                <span className="bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 leading-none opacity-50">
-                                  {doneMilestone.text.length > 18 ? doneMilestone.text.slice(0, 18) + '…' : doneMilestone.text}
-                                  {goal ? ` · ${goal.alias ?? goal.text?.slice(0, 6) ?? ''}` : ''}
-                                </span>
-                              )}
-                              {todo.url && (() => {
-                                const chip = getUrlChip(todo.url)
-                                return (
-                                  <button
-                                    onClick={e => { e.stopPropagation(); openLink(todo.url!) }}
-                                    className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full border shrink-0 hover:opacity-80 transition-opacity leading-none"
-                                    style={{ color: chip.color, borderColor: `${chip.color}40`, backgroundColor: `${chip.color}10` }}
-                                  >
-                                    <span>{chip.icon}</span>
-                                    <span className="font-medium ml-0.5">{chip.label}</span>
-                                  </button>
-                                )
-                              })()}
                               <button
-                                onClick={() => deleteTodo(todo.id)}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
-                              >
+                                onClick={async () => {
+                                  await supabase.from('todos').update({ waiting: false }).eq('id', todo.id)
+                                  setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, waiting: false } : t))
+                                }}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] text-shuttle/40 hover:text-burnham font-mono"
+                              >unblock</button>
+                              <button onClick={async () => {
+                                await supabase.from('todos').delete().eq('id', todo.id)
+                                setTodos(prev => prev.filter(t => t.id !== todo.id))
+                              }} className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded">
                                 <TrashSimple size={12} />
                               </button>
                             </div>
                           )
                         })}
                       </div>
-                    )}
-                  </div>
-                )}
-              </section>
+                    </div>
+                  )}
 
-              {/* ── Backlog (past incomplete todos) ──────────────────────── */}
-              {yesterdayTodos.length > 0 && (
-                <section className="mb-4">
-                  <h3 className="text-[9px] font-semibold text-shuttle/30 uppercase tracking-widest mb-2 flex items-center gap-2">
-                    <span className="w-3 h-px bg-shuttle/15" />
-                    Backlog · {yesterdayTodos.length}
-                  </h3>
-                  <div className="space-y-0.5">
-                    {yesterdayTodos.map(todo => {
-                      const daysAgo = Math.round((new Date(today).getTime() - new Date(todo.date ?? today).getTime()) / 86400000)
-                      const ageLabel = daysAgo === 1 ? 'yesterday' : daysAgo <= 7 ? `${daysAgo}d ago` : `${todo.date}`
-                      return (
-                        <div key={todo.id} className="group flex items-center gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-mercury/20 transition-colors">
-                          <input
-                            type="checkbox"
-                            className="custom-checkbox shrink-0 opacity-40"
-                            checked={false}
-                            onChange={async () => {
-                              await supabase.from('todos').update({ completed: true }).eq('id', todo.id)
-                              setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
-                            }}
-                          />
-                          <span className="flex-1 text-[13px] text-shuttle/35 min-w-0 truncate">{todo.text}</span>
-                          <span className="text-[9px] font-mono text-shuttle/20 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">{ageLabel}</span>
-                          <button
-                            onClick={async () => {
-                              await supabase.from('todos').update({ date: today }).eq('id', todo.id)
-                              setTodos(prev => [...prev, { ...todo, date: today }])
-                              setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
-                            }}
-                            className="opacity-0 group-hover:opacity-100 text-[10px] text-shuttle/40 hover:text-burnham transition-all px-2 py-0.5 rounded border border-mercury/50 hover:border-burnham/30 shrink-0"
-                          >
-                            →today
-                          </button>
-                          <button
-                            onClick={async () => {
-                              await supabase.from('todos').delete().eq('id', todo.id)
-                              setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
-                            }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-red-400 p-0.5 rounded shrink-0"
-                          >
-                            <TrashSimple size={12} />
-                          </button>
+                  {doneTodos.length > 0 && (
+                    <div className="pt-4 border-t border-dashed border-mercury/50">
+                      <button
+                        onClick={() => setDoneTodosOpen(v => !v)}
+                        className="flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-widest text-shuttle/30 hover:text-shuttle/50 transition-colors mb-2 w-full"
+                      >
+                        <span>{doneTodosOpen ? '▾' : '▸'}</span>
+                        <span>Done · {doneTodos.length}</span>
+                      </button>
+                      {doneTodosOpen && (
+                        <div className="space-y-1">
+                          {doneTodos.map(todo => {
+                            const goal = todo.goal_id ? goals.find(g => g.id === todo.goal_id) : null
+                            const doneMilestone = todo.milestone_id ? milestones.find(m => m.id === todo.milestone_id) : null
+                            return (
+                              <div key={todo.id} className="group flex items-center gap-2 py-1.5 px-2 -mx-2 opacity-50 hover:opacity-70 transition-opacity">
+                                <input type="checkbox" className="custom-checkbox shrink-0" checked onChange={() => toggleTodo(todo.id)} />
+                                <span className="text-[13px] text-shuttle line-through decoration-pastel flex-1 truncate">{todo.text}</span>
+                                {todo.completed_at && (
+                                  <span className="text-[9px] font-mono text-pastel/70 shrink-0">
+                                    {new Date(todo.completed_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                                  </span>
+                                )}
+                                {doneMilestone && (
+                                  <span className="bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 leading-none opacity-50">
+                                    {doneMilestone.text.length > 18 ? doneMilestone.text.slice(0, 18) + '…' : doneMilestone.text}
+                                    {goal ? ` · ${goal.alias ?? goal.text?.slice(0, 6) ?? ''}` : ''}
+                                  </span>
+                                )}
+                                {todo.url && (() => {
+                                  const chip = getUrlChip(todo.url)
+                                  return (
+                                    <button
+                                      onClick={e => { e.stopPropagation(); openLink(todo.url!) }}
+                                      className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full border shrink-0 hover:opacity-80 transition-opacity leading-none"
+                                      style={{ color: chip.color, borderColor: `${chip.color}40`, backgroundColor: `${chip.color}10` }}
+                                    >
+                                      <span>{chip.icon}</span>
+                                      <span className="font-medium ml-0.5">{chip.label}</span>
+                                    </button>
+                                  )
+                                })()}
+                                <button
+                                  onClick={() => deleteTodo(todo.id)}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle hover:text-red-400 p-0.5 rounded shrink-0"
+                                >
+                                  <TrashSimple size={12} />
+                                </button>
+                              </div>
+                            )
+                          })}
                         </div>
-                      )
-                    })}
-                  </div>
-                </section>
-              )}
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Backlog drop zone — drag a todo here to defer it ─── */}
+                  <BacklogDropZone hasItems={yesterdayTodos.length > 0}>
+                    {yesterdayTodos.length > 0 && (
+                      <section className="mt-6 mb-4">
+                        <h3 className="text-[9px] font-semibold text-shuttle/30 uppercase tracking-widest mb-2 flex items-center gap-2">
+                          <span className="w-3 h-px bg-shuttle/15" />
+                          Backlog · {yesterdayTodos.length}
+                          <span className="font-mono font-normal text-shuttle/20 normal-case text-[8px]">drag here to defer</span>
+                        </h3>
+                        <div className="space-y-0.5">
+                          {yesterdayTodos.map(todo => {
+                            const daysAgo = Math.round((new Date(today).getTime() - new Date(todo.date ?? today).getTime()) / 86400000)
+                            const ageLabel = daysAgo === 1 ? 'yesterday' : daysAgo <= 7 ? `${daysAgo}d ago` : `${todo.date}`
+                            return (
+                              <div key={todo.id} className="group flex items-center gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-mercury/20 transition-colors">
+                                <input
+                                  type="checkbox"
+                                  className="custom-checkbox shrink-0 opacity-40"
+                                  checked={false}
+                                  onChange={async () => {
+                                    await supabase.from('todos').update({ completed: true }).eq('id', todo.id)
+                                    setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                                  }}
+                                />
+                                <span className="flex-1 text-[13px] text-shuttle/35 min-w-0 truncate">{todo.text}</span>
+                                <span className="text-[9px] font-mono text-shuttle/20 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">{ageLabel}</span>
+                                <button
+                                  onClick={async () => {
+                                    await supabase.from('todos').update({ date: today }).eq('id', todo.id)
+                                    setTodos(prev => [...prev, { ...todo, date: today }])
+                                    setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 text-[10px] text-shuttle/40 hover:text-burnham transition-all px-2 py-0.5 rounded border border-mercury/50 hover:border-burnham/30 shrink-0"
+                                >
+                                  →today
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    await supabase.from('todos').delete().eq('id', todo.id)
+                                    setYesterdayTodos(prev => prev.filter(t => t.id !== todo.id))
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-red-400 p-0.5 rounded shrink-0"
+                                >
+                                  <TrashSimple size={12} />
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </section>
+                    )}
+                    {yesterdayTodos.length === 0 && (
+                      <div className="mt-4 py-2 px-2 -mx-2 rounded-lg border border-dashed border-transparent group-data-[drag]:border-mercury/50 min-h-[2rem]" />
+                    )}
+                  </BacklogDropZone>
+                </DndContext>
+              </section>
 
               {/* ── Suggestions — flat list, shown when ⌘S toggled ────────── */}
               {userId && suggestionsOpen && (
