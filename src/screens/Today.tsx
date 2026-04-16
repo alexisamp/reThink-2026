@@ -19,6 +19,8 @@ import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
 import type { Todo, Habit, HabitLog, Review, Milestone, Goal, LeadingIndicator, IndicatorDailyLog, Capture, Contact, ContactStatus, ContactMilestone } from '@/types'
 import { useContacts, type ContactInput } from '@/hooks/useContacts'
+import { useCompanies } from '@/hooks/useCompanies'
+import { useOpportunities } from '@/hooks/useOpportunities'
 import { createAttioTask, completeAttioTask, hasAttioKey } from '@/lib/attio'
 import ContactDetailDrawer from '@/components/ContactDetailDrawer'
 import { parseJournalCaptures } from '@/lib/captureParser'
@@ -490,7 +492,7 @@ export default function Today() {
   const [qaDropdown, setQaDropdown] = useState<{
     type: 'goal' | 'milestone' | 'command' | 'person'
     query: string
-    items: Array<{ label: string; insert: string; sub?: string; id?: string; goalId?: string; _isPerson?: boolean; _isMilestone?: boolean; _type?: 'milestone' | 'goal' | 'person' | 'command' }>
+    items: Array<{ label: string; insert: string; sub?: string; id?: string; goalId?: string; _isPerson?: boolean; _isMilestone?: boolean; _type?: 'milestone' | 'goal' | 'person' | 'company' | 'opportunity' | 'command' }>
     selectedIdx: number
   } | null>(null)
 
@@ -537,14 +539,13 @@ export default function Today() {
         return
       }
     }
-    // @ — unified search: milestones, goals, people grouped
-    // Note: no @m/@g prefixes — they'd greedily intercept person names starting with M/G
+    // @ — unified search: milestones, goals, people, companies, opportunities
     const atMatch = text.match(/@(\S*)$/)
     if (atMatch) {
       const q = atMatch[1].toLowerCase()
       const msItems = milestones
         .filter(m => m.status !== 'COMPLETE' && (q === '' || m.text.toLowerCase().includes(q)))
-        .slice(0, 5)
+        .slice(0, 4)
         .map(m => {
           const g = goals.find(g => g.id === m.goal_id)
           return { label: m.text, insert: '', sub: g?.alias ?? '', id: m.id, goalId: m.goal_id ?? undefined, _isMilestone: true, _type: 'milestone' as const }
@@ -555,9 +556,17 @@ export default function Today() {
         .map(g => ({ label: g.alias ?? g.text.slice(0, 24), insert: '', sub: g.text.slice(0, 32), id: g.id, _type: 'goal' as const }))
       const pItems = allContacts
         .filter(c => q === '' ? true : c.name.toLowerCase().includes(q))
-        .slice(0, 6)
+        .slice(0, 5)
         .map(c => ({ label: c.name, insert: c.name, sub: (c as any).company ?? (c as any).role ?? '', id: c.id, _isPerson: true, _type: 'person' as const }))
-      const combined = [...msItems, ...gItems, ...pItems]
+      const coItems = companies
+        .filter(co => q === '' ? true : co.name.toLowerCase().includes(q))
+        .slice(0, 4)
+        .map(co => ({ label: co.name, insert: co.name, sub: co.sector ?? co.domain ?? '', id: co.id, _type: 'company' as const }))
+      const oppItems = opportunities
+        .filter(op => op.stage !== 'won' && op.stage !== 'lost' && (q === '' ? true : op.title.toLowerCase().includes(q)))
+        .slice(0, 4)
+        .map(op => ({ label: op.title, insert: op.title, sub: op.company?.name ?? op.stage, id: op.id, _type: 'opportunity' as const }))
+      const combined = [...msItems, ...gItems, ...pItems, ...coItems, ...oppItems]
       if (combined.length > 0) {
         setQaDropdown({ type: 'milestone', query: q, items: combined as any, selectedIdx: 0 })
         return
@@ -583,9 +592,9 @@ export default function Today() {
         return
       }
       setText(getText().replace(/(@m?\S*|\/\S*)$/, item.insert))
-    } else if (item._isPerson) {
-      // Person: insert @Name into text (no FK — just text tag)
-      setText(getText().replace(/(@m?\S*|@g?\S*|@\S*)$/, '').trimEnd() + ` @${item.label}`)
+    } else if (item._isPerson || (item as any)._type === 'company' || (item as any)._type === 'opportunity') {
+      // Person / Company / Opportunity: insert @Name as text tag (no FK on todos yet)
+      setText(getText().replace(/@\S*$/, '').trimEnd() + ` @${item.label}`)
       setQaDropdown(null)
       refocus()
       return
@@ -692,6 +701,9 @@ export default function Today() {
     syncCompany,
     syncAll,
   } = useContacts(userId ?? undefined, habits, upsertHabitCountLocal)
+
+  const { companies } = useCompanies(userId ?? null)
+  const { opportunities } = useOpportunities(userId ?? null)
 
   useKeyboardShortcuts({
     'cmd+b': () => setSidebarOpen(p => !p),
@@ -2851,10 +2863,14 @@ export default function Today() {
             const msItems = qaDropdown.items.filter(x => x._type === 'milestone')
             const gItems = qaDropdown.items.filter(x => x._type === 'goal')
             const pItems = qaDropdown.items.filter(x => x._type === 'person')
+            const coItems = qaDropdown.items.filter(x => x._type === 'company')
+            const oppItems = qaDropdown.items.filter(x => x._type === 'opportunity')
             const otherItems = qaDropdown.items.filter(x => !x._type)
             if (msItems.length) grouped.push({ type: 'milestone', label: 'Milestones', items: msItems })
             if (gItems.length) grouped.push({ type: 'goal', label: 'Goals', items: gItems })
             if (pItems.length) grouped.push({ type: 'person', label: 'People', items: pItems })
+            if (coItems.length) grouped.push({ type: 'company', label: 'Companies', items: coItems })
+            if (oppItems.length) grouped.push({ type: 'opportunity', label: 'Opportunities', items: oppItems })
             if (otherItems.length) grouped.push({ type: 'other', label: 'Link to…', items: otherItems })
           }
           return (
@@ -2883,7 +2899,7 @@ export default function Today() {
                           >
                             <div className="flex items-center gap-2 flex-1 min-w-0">
                               <span className="text-shuttle/30 shrink-0 text-[10px]">
-                                {item._type === 'milestone' ? '◎' : item._type === 'goal' ? '★' : item._type === 'person' ? '·' : '→'}
+                                {item._type === 'milestone' ? '◎' : item._type === 'goal' ? '★' : item._type === 'person' ? '·' : item._type === 'company' ? '⬡' : item._type === 'opportunity' ? '◈' : '→'}
                               </span>
                               <span className="text-[12px] font-medium truncate">{item.label}</span>
                             </div>
@@ -3011,10 +3027,14 @@ export default function Today() {
                 const ms2 = qaDropdown.items.filter(x => x._type === 'milestone')
                 const g2 = qaDropdown.items.filter(x => x._type === 'goal')
                 const p2 = qaDropdown.items.filter(x => x._type === 'person')
+                const co2 = qaDropdown.items.filter(x => x._type === 'company')
+                const opp2 = qaDropdown.items.filter(x => x._type === 'opportunity')
                 const other2 = qaDropdown.items.filter(x => !x._type)
                 if (ms2.length) qaGrouped.push({ type: 'milestone', label: 'Milestones', items: ms2 })
                 if (g2.length) qaGrouped.push({ type: 'goal', label: 'Goals', items: g2 })
                 if (p2.length) qaGrouped.push({ type: 'person', label: 'People', items: p2 })
+                if (co2.length) qaGrouped.push({ type: 'company', label: 'Companies', items: co2 })
+                if (opp2.length) qaGrouped.push({ type: 'opportunity', label: 'Opportunities', items: opp2 })
                 if (other2.length) qaGrouped.push({ type: 'other', label: 'Link to…', items: other2 })
               }
               return (
