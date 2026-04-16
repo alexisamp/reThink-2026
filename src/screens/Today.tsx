@@ -6,7 +6,7 @@ import {
   Flame, TrashSimple, NotePencil, GearSix,
   DotsSixVertical,
   X, Flag, ChartLine, HourglassMedium, MagicWand, Pencil, ArrowsOut, ArrowsIn, Circle,
-  ArrowSquareOut, CaretRight,
+  ArrowSquareOut, CaretRight, Star, LockSimple, LockSimpleOpen,
 } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -154,15 +154,16 @@ interface SortableTodoRowProps {
   editKeyDownDropdown?: (e: React.KeyboardEvent<HTMLInputElement>) => boolean
   editingLinked?: LinkedEntity[]
   onClearEditingLinked?: (id: string) => void
+  onToggleFeatured?: () => void
 }
 
-function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting, onMilestoneClick, editRef, editKeyDownDropdown, editingLinked, onClearEditingLinked }: SortableTodoRowProps) {
+function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText, onEditStart, onEditChange, onEditSave, onEditCancel, onToggle, onDelete, onMarkWaiting, onMilestoneClick, editRef, editKeyDownDropdown, editingLinked, onClearEditingLinked, onToggleFeatured }: SortableTodoRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: todo.id })
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }
   const isTopThree = index < 3
 
   return (
-    <div ref={setNodeRef} style={style} className="relative group flex items-center gap-2 py-2.5 hover:bg-gossip/5 px-2 -mx-2 rounded-lg transition-colors">
+    <div ref={setNodeRef} style={style} className={`relative group flex items-center gap-2 py-2.5 px-2 -mx-2 rounded-lg transition-colors ${todo.is_featured ? 'bg-gossip/10 hover:bg-gossip/15' : 'hover:bg-gossip/5'}`}>
       {/* Drag handle — always visible at low opacity, brighter on hover */}
       <div
         {...attributes}
@@ -260,6 +261,15 @@ function SortableTodoRow({ index, todo, goal, milestone, isEditing, editingText,
             title="Mark as waiting"
           >
             <HourglassMedium size={12} />
+          </button>
+        )}
+        {onToggleFeatured && (
+          <button
+            onClick={onToggleFeatured}
+            className={`transition-opacity p-0.5 rounded ${todo.is_featured ? 'opacity-100 text-amber-400' : 'opacity-0 group-hover:opacity-60 text-shuttle/30 hover:text-amber-400'}`}
+            title={todo.is_featured ? 'Unstar' : 'Star as priority'}
+          >
+            <Star size={12} weight={todo.is_featured ? 'fill' : 'regular'} />
           </button>
         )}
         <button
@@ -1098,6 +1108,16 @@ export default function Today() {
   const pendingTodos = todos.filter(t => !t.completed && !t.waiting)
   const waitingTodos = todos.filter(t => !t.completed && t.waiting)
   const doneTodos = todos.filter(t => t.completed)
+  // Featured / starred todos — for day lock progress tracking
+  const featuredTodos = todos.filter(t => t.is_featured && (t.date === today || t.date === null))
+  const featuredDone = featuredTodos.filter(t => t.completed)
+  const isDayLocked = !!review?.day_locked_at
+  const featuredProgress = featuredTodos.length > 0
+    ? featuredDone.length / featuredTodos.length
+    : doneTodos.length > 0 && todos.filter(t => t.date === today || t.date === null).length > 0
+      ? doneTodos.filter(t => t.date === today || t.date === null).length / todos.filter(t => t.date === today || t.date === null).length
+      : 0
+  const allFeaturedDone = featuredTodos.length > 0 && featuredDone.length === featuredTodos.length
   const pendingMilestones = milestones.filter(m => m.status !== 'COMPLETE')
   const doneMilestones = milestones.filter(m => m.status === 'COMPLETE')
 
@@ -1248,6 +1268,22 @@ export default function Today() {
     if (newVal && t.attio_task_id) {
       completeAttioTask(t.attio_task_id)
     }
+  }
+
+  const toggleFeatured = async (id: string) => {
+    if (!userId) return
+    const t = todos.find(t => t.id === id)
+    if (!t) return
+    const newVal = !t.is_featured
+    await supabase.from('todos').update({ is_featured: newVal } as any).eq('id', id).eq('user_id', userId)
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, is_featured: newVal } : t))
+  }
+
+  const lockDay = async () => {
+    if (!userId || !review) return
+    const newLockedAt = review.day_locked_at ? null : new Date().toISOString()
+    await supabase.from('reviews').update({ day_locked_at: newLockedAt } as any).eq('id', review.id).eq('user_id', userId)
+    setReview(prev => prev ? { ...prev, day_locked_at: newLockedAt } : prev)
   }
 
   const toggleMilestone = async (id: string) => {
@@ -1701,13 +1737,40 @@ export default function Today() {
       >
 
         {/* ── Date + One Thing header ───────────────────────────────── */}
-        <div className="px-8 pt-5 pb-3.5 flex items-baseline gap-3 border-b border-mercury/30 shrink-0 bg-white">
-          <span className="text-[10px] font-mono text-shuttle/30 uppercase tracking-[0.15em] whitespace-nowrap shrink-0">{monthStr}</span>
-          {onethingValue && (
-            <>
-              <span className="text-mercury/60 text-[10px] shrink-0">·</span>
-              <span className="text-[13px] font-semibold text-burnham/80 leading-snug truncate">{onethingValue}</span>
-            </>
+        <div className="shrink-0 bg-white border-b border-mercury/30">
+          <div className="px-8 pt-5 pb-3.5 flex items-center gap-3">
+            <span className={`text-[10px] font-mono uppercase tracking-[0.15em] whitespace-nowrap shrink-0 transition-colors ${isDayLocked && allFeaturedDone ? 'text-pastel' : 'text-shuttle/30'}`}>
+              {isDayLocked && allFeaturedDone ? '★ ' : ''}{monthStr}
+            </span>
+            {onethingValue && (
+              <>
+                <span className="text-mercury/60 text-[10px] shrink-0">·</span>
+                <span className="text-[13px] font-semibold text-burnham/80 leading-snug truncate flex-1 min-w-0">{onethingValue}</span>
+              </>
+            )}
+            <div className="flex-1" />
+            {review && (
+              <button
+                onClick={lockDay}
+                title={isDayLocked ? 'Unlock day' : 'Lock day plan'}
+                className={`shrink-0 flex items-center gap-1 text-[9px] font-mono px-2 py-1 rounded transition-all ${isDayLocked ? 'text-pastel bg-gossip/20 hover:bg-gossip/30' : 'text-shuttle/30 hover:text-shuttle/60 hover:bg-mercury/30'}`}
+              >
+                {isDayLocked
+                  ? <LockSimple size={11} weight="fill" />
+                  : <LockSimpleOpen size={11} />
+                }
+                <span className="hidden sm:inline">{isDayLocked ? 'locked' : 'lock'}</span>
+              </button>
+            )}
+          </div>
+          {/* Progress bar — only when day is locked */}
+          {isDayLocked && (
+            <div className="h-0.5 w-full bg-mercury/30">
+              <div
+                className="h-full bg-pastel transition-all duration-500"
+                style={{ width: `${Math.round(featuredProgress * 100)}%` }}
+              />
+            </div>
           )}
         </div>
 
@@ -2055,6 +2118,7 @@ export default function Today() {
                           editingLinked={editingTodoId === todo.id ? editingLinked : []}
                           onClearEditingLinked={(id) => setEditingLinked(prev => prev.filter(e => e.id !== id))}
                           onToggle={() => toggleTodo(todo.id)}
+                          onToggleFeatured={() => toggleFeatured(todo.id)}
                           onDelete={() => deleteTodo(todo.id)}
                           onMarkWaiting={async () => {
                             await supabase.from('todos').update({ waiting: true } as any).eq('id', todo.id)

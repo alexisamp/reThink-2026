@@ -158,6 +158,7 @@ export interface Todo {
   url: string | null
   outreach_log_id: string | null
   attio_task_id: string | null
+  is_featured: boolean
   created_at: string
 }
 
@@ -174,6 +175,7 @@ export interface Review {
   inbox_zero: boolean
   time_logs_updated: boolean
   tomorrow_reviewed: boolean
+  day_locked_at: string | null
   created_at: string
   updated_at: string
 }
