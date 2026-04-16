@@ -160,7 +160,7 @@ interface SortableTodoRowProps {
   milestone: Pick<Milestone, 'id' | 'text'> | null | undefined
   linkedContact?: Pick<Contact, 'id' | 'name' | 'profile_photo_url'> | null
   linkedCompany?: Pick<Company, 'id' | 'name' | 'logo_url'> | null
-  linkedOpportunity?: Pick<Opportunity, 'id' | 'title'> | null
+  linkedOpportunity?: Opportunity | null
   isEditing: boolean
   editingText: string
   onEditStart: () => void
@@ -241,48 +241,63 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
             )}
           </div>
         ) : (
-          <span
-            className="text-[13px] font-normal text-burnham/70 truncate cursor-text flex-1 leading-snug"
+          /* ── Text + inline entity mentions — all flow together ──── */
+          <div
+            className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 cursor-text"
             onClick={onEditStart}
           >
-            {todo.text}
-          </span>
-        )}
-        {milestone && (
-          <button
-            onClick={e => { e.stopPropagation(); onMilestoneClick?.(milestone) }}
-            className="bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 leading-none hover:bg-burnham/10 hover:text-burnham/60 transition-colors"
-          >
-            {milestone.text.length > 18 ? milestone.text.slice(0, 18) + '…' : milestone.text}
-            {goal ? ` · ${goal.alias ?? goal.text?.slice(0, 6) ?? ''}` : ''}
-          </button>
-        )}
-        {/* Linked entity chips — person / company / opportunity */}
-        {linkedContact && (
-          <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.06] border border-[#1a1a1a]/[0.09] text-[#1a1a1a]/60 text-[9px] px-1.5 py-0.5 rounded-full shrink-0 leading-none">
-            <span className="w-3.5 h-3.5 rounded-full overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-semibold text-shuttle/70">
-              {linkedContact.profile_photo_url
-                ? <img src={linkedContact.profile_photo_url} className="w-full h-full object-cover" alt="" />
-                : linkedContact.name.charAt(0).toUpperCase()}
+            <span className="text-[13px] font-normal text-burnham/70 leading-snug">
+              {todo.text}
             </span>
-            <span className="max-w-[56px] truncate">{linkedContact.name.split(' ')[0]}</span>
-          </span>
-        )}
-        {linkedCompany && (
-          <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.06] border border-[#1a1a1a]/[0.09] text-[#1a1a1a]/60 text-[9px] px-1.5 py-0.5 rounded-full shrink-0 leading-none">
-            <span className="w-3.5 h-3.5 rounded overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-semibold text-shuttle/70">
-              {linkedCompany.logo_url
-                ? <img src={linkedCompany.logo_url} className="w-full h-full object-cover" alt="" />
-                : linkedCompany.name.charAt(0).toUpperCase()}
-            </span>
-            <span className="max-w-[56px] truncate">{linkedCompany.name}</span>
-          </span>
-        )}
-        {linkedOpportunity && (
-          <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.06] border border-[#1a1a1a]/[0.09] text-[#1a1a1a]/60 text-[9px] px-1.5 py-0.5 rounded-full shrink-0 leading-none">
-            <span className="w-3.5 h-3.5 rounded-full bg-burnham/10 flex items-center justify-center shrink-0 text-[7px] text-burnham/50">◈</span>
-            <span className="max-w-[72px] truncate">{linkedOpportunity.title}</span>
-          </span>
+            {/* Milestone — stays as subtle mono chip */}
+            {milestone && (
+              <button
+                onClick={e => { e.stopPropagation(); onMilestoneClick?.(milestone) }}
+                className="inline-flex items-center bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 leading-none hover:bg-burnham/10 hover:text-burnham/60 transition-colors"
+              >
+                {milestone.text.length > 16 ? milestone.text.slice(0, 16) + '…' : milestone.text}
+                {goal ? ` · ${goal.alias ?? goal.text?.slice(0, 6) ?? ''}` : ''}
+              </button>
+            )}
+            {/* Person chip — inline avatar + first name */}
+            {linkedContact && (() => {
+              const photo = linkedContact.profile_photo_url
+              return (
+                <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md shrink-0 leading-none font-medium">
+                  <span className="w-3.5 h-3.5 rounded-full overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
+                    {photo ? <img src={photo} className="w-full h-full object-cover" alt="" /> : linkedContact.name.charAt(0).toUpperCase()}
+                  </span>
+                  {linkedContact.name.split(' ')[0]}
+                </span>
+              )
+            })()}
+            {/* Company chip — inline logo + name */}
+            {linkedCompany && (() => {
+              const logo = linkedCompany.logo_url
+              return (
+                <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md shrink-0 leading-none font-medium">
+                  <span className="w-3.5 h-3.5 rounded-sm overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
+                    {logo ? <img src={logo} className="w-full h-full object-cover" alt="" /> : linkedCompany.name.charAt(0).toUpperCase()}
+                  </span>
+                  {linkedCompany.name.length > 14 ? linkedCompany.name.slice(0, 14) + '…' : linkedCompany.name}
+                </span>
+              )
+            })()}
+            {/* Opportunity chip — company logo (if any) + title */}
+            {linkedOpportunity && (() => {
+              const co = linkedOpportunity.company
+              const logo = co?.logo_url ?? null
+              const coInitial = co?.name?.charAt(0)?.toUpperCase() ?? '◈'
+              return (
+                <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md shrink-0 leading-none font-medium">
+                  <span className="w-3.5 h-3.5 rounded-sm overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
+                    {logo ? <img src={logo} className="w-full h-full object-cover" alt="" /> : coInitial}
+                  </span>
+                  {linkedOpportunity.title.length > 18 ? linkedOpportunity.title.slice(0, 18) + '…' : linkedOpportunity.title}
+                </span>
+              )
+            })()}
+          </div>
         )}
         {todo.url && (() => {
           const chip = getUrlChip(todo.url)
