@@ -32,6 +32,7 @@ import StreakCelebration from '@/components/StreakCelebration'
 import EndOfDayDrawer from '@/components/EndOfDayDrawer'
 import NewsletterPill from '@/components/NewsletterPill'
 import MilestonePanel from '@/components/MilestonePanel'
+import MilestoneOverviewPanel from '@/components/MilestoneOverviewPanel'
 import HabitEditModal from '@/components/HabitEditModal'
 import { openLink } from '@/lib/openLink'
 import { GoalKPIWidget } from '@/components/GoalKPIWidget'
@@ -210,16 +211,30 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
       />
       <div className="flex-1 min-w-0 flex items-center gap-2">
         {isEditing ? (
-          /* Edit mode: chips row first → text input after, so typing flows naturally after chips */
-          <div className="flex-1 min-w-0 flex flex-col gap-1">
+          /* Edit mode: text input first (flex-1), chips after — matching view mode left→right order */
+          <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+            <input
+              ref={editRef}
+              autoFocus
+              className="w-full text-[12px] font-normal text-burnham/70 bg-transparent border-b border-burnham/20 focus:border-burnham/40 focus:outline-none transition-colors"
+              value={editingText}
+              onChange={e => onEditChange(e.target.value)}
+              onBlur={_e => {
+                setTimeout(() => onEditSave(), 120)
+              }}
+              onKeyDown={e => {
+                if (editKeyDownDropdown?.(e)) return
+                if (e.key === 'Enter') { e.preventDefault(); onEditSave() }
+                if (e.key === 'Escape') onEditCancel()
+              }}
+            />
+            {/* Chips row — visible below text during edit, same entities as view mode */}
             <div className="flex items-center gap-1 flex-wrap">
-              {/* Saved milestone chip */}
               {milestone && (
                 <span className="inline-flex items-center bg-mercury/40 text-shuttle/50 text-[9px] px-1.5 py-0.5 rounded font-mono leading-none shrink-0">
                   {milestone.text}
                 </span>
               )}
-              {/* Saved person chip */}
               {linkedContact && (
                 <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md leading-none font-medium shrink-0">
                   <span className="w-3 h-3 rounded-full overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
@@ -230,7 +245,6 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
                   {linkedContact.name.split(' ')[0]}
                 </span>
               )}
-              {/* Saved company chip */}
               {linkedCompany && (
                 <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md leading-none font-medium shrink-0">
                   <span className="w-3 h-3 rounded-sm overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
@@ -241,7 +255,6 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
                   {linkedCompany.name}
                 </span>
               )}
-              {/* Saved opportunity chip (company logo) */}
               {linkedOpportunity && (
                 <span className="inline-flex items-center gap-1 bg-[#1a1a1a]/[0.055] border border-[#1a1a1a]/[0.08] text-[#1a1a1a]/65 text-[9px] px-1 py-px rounded-md leading-none font-medium shrink-0">
                   <span className="w-3 h-3 rounded-sm overflow-hidden bg-mercury/60 flex items-center justify-center shrink-0 text-[7px] font-bold text-shuttle/60">
@@ -252,7 +265,6 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
                   {linkedOpportunity.title}
                 </span>
               )}
-              {/* Newly-added @mention chips (removable) */}
               {editingLinked && editingLinked.map(e => (
                 <span key={e.id} className="inline-flex items-center gap-1 bg-burnham/5 border border-burnham/15 rounded px-1.5 py-0.5 text-[9px] text-burnham shrink-0">
                   <span>{e.name}</span>
@@ -261,22 +273,6 @@ function SortableTodoRow({ index, todo, goal, milestone, linkedContact, linkedCo
                   </button>
                 </span>
               ))}
-              {/* Text input — sits after chips so typing flows naturally after them */}
-              <input
-                ref={editRef}
-                autoFocus
-                className="flex-1 min-w-[80px] text-[12px] font-normal text-burnham/70 bg-transparent border-b border-burnham/20 focus:border-burnham/40 focus:outline-none transition-colors"
-                value={editingText}
-                onChange={e => onEditChange(e.target.value)}
-                onBlur={_e => {
-                  setTimeout(() => onEditSave(), 120)
-                }}
-                onKeyDown={e => {
-                  if (editKeyDownDropdown?.(e)) return
-                  if (e.key === 'Enter') { e.preventDefault(); onEditSave() }
-                  if (e.key === 'Escape') onEditCancel()
-                }}
-              />
             </div>
           </div>
         ) : (
@@ -2980,90 +2976,30 @@ export default function Today() {
       )}
 
       {/* ─── Milestones — bottom slide-up panel ────────────────────────── */}
-      {milestonesOpen && (
-        <>
-          {/* Backdrop */}
-          <div className="fixed inset-0 z-[189]" onClick={() => setMilestonesOpen(false)} />
-          {/* Slide-up panel */}
-          <div
-            className="fixed bottom-0 z-[190] bg-white border-t border-mercury shadow-2xl flex flex-col animate-slide-up"
-            style={{
-              left: 'var(--sidebar-width, 200px)',
-              right: sidebarOpen ? 'clamp(280px, 30%, 360px)' : '2.5rem',
-              maxHeight: '52vh',
-            }}
-            tabIndex={0}
-            onKeyDown={(e) => { if (e.key === 'Escape') setMilestonesOpen(false) }}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-mercury shrink-0">
-              <span className="text-xs font-semibold text-burnham uppercase tracking-wide">Milestones</span>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => { setMilestonesOpen(false); setMilestoneCaptureOpen(true) }}
-                  className="text-[10px] font-mono text-shuttle/40 hover:text-burnham transition-colors px-2 py-0.5 rounded border border-mercury hover:border-burnham/30"
-                >
-                  + New
-                </button>
-                <button onClick={() => setMilestonesOpen(false)} className="text-shuttle hover:text-burnham p-1">
-                  <X size={14} />
-                </button>
-              </div>
-            </div>
-            {/* Body — goal sections with milestone chips */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-              {goals.map(goal => {
-                const goalMilestones = milestones
-                  .filter(m => m.goal_id === goal.id && m.status !== 'COMPLETE')
-                  .sort((a, b) => {
-                    if (!a.target_date) return 1
-                    if (!b.target_date) return -1
-                    return a.target_date.localeCompare(b.target_date)
-                  })
-                if (!goalMilestones.length) return null
-                return (
-                  <div key={goal.id}>
-                    <div className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono mb-2.5">
-                      {goal.emoji} {goal.alias || goal.text}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {goalMilestones.map(ms => {
-                        const daysLeft = ms.target_date
-                          ? Math.ceil((new Date(ms.target_date + 'T12:00:00').getTime() - Date.now()) / 86400000)
-                          : null
-                        return (
-                          <button
-                            key={ms.id}
-                            onClick={() => { setSelectedMilestoneDetail(ms); setMilestonesOpen(false) }}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-mercury/60 hover:border-burnham/30 hover:bg-gossip/10 transition-colors text-left"
-                          >
-                            <Circle size={6} weight="fill" className="text-mercury shrink-0" />
-                            <span className="text-[12px] text-burnham leading-snug">
-                              {ms.text.length > 40 ? ms.text.slice(0, 40) + '…' : ms.text}
-                            </span>
-                            {daysLeft !== null && (
-                              <span className={`text-[9px] font-mono shrink-0 ${daysLeft < 0 ? 'text-red-400/60' : daysLeft <= 7 ? 'text-amber-500/60' : 'text-shuttle/30'}`}>
-                                {daysLeft < 0 ? `${Math.abs(daysLeft)}d over` : daysLeft === 0 ? 'today' : `${daysLeft}d`}
-                              </span>
-                            )}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-              {pendingMilestones.length === 0 && (
-                <p className="text-xs text-shuttle/40 text-center py-6">No pending milestones</p>
-              )}
-            </div>
-            {/* Footer hint */}
-            <div className="px-5 py-2 border-t border-mercury/40 shrink-0">
-              <span className="text-[9px] font-mono text-shuttle/25">M / ⌘⇧M to toggle · Esc to close · click milestone to open</span>
-            </div>
-          </div>
-        </>
-      )}
+      {/* ── Milestone Overview Panel (replaces old slide-up popup) ──── */}
+      <MilestoneOverviewPanel
+        open={milestonesOpen}
+        milestones={milestones}
+        goals={goals}
+        onClose={() => setMilestonesOpen(false)}
+        onSelectMilestone={ms => {
+          setSelectedMilestoneDetail(ms)
+          setMilestonesOpen(false)
+        }}
+        onNewMilestone={() => {
+          setMilestonesOpen(false)
+          setMilestoneCaptureOpen(true)
+        }}
+        onMilestoneDeleted={id => {
+          setMilestones(prev => prev.filter(m => m.id !== id))
+          setTodos(prev => prev.filter(t => t.milestone_id !== id))
+        }}
+        onMilestoneStatusToggle={async ms => {
+          const newStatus = ms.status === 'COMPLETE' ? 'PENDING' : 'COMPLETE'
+          await supabase.from('milestones').update({ status: newStatus }).eq('id', ms.id)
+          setMilestones(prev => prev.map(m => m.id === ms.id ? { ...m, status: newStatus } : m))
+        }}
+      />
 
       {/* Bottom-right floating pill removed (v0.1.101) — now in bottom bar */}
       <NewsletterPill />
@@ -3519,7 +3455,7 @@ export default function Today() {
         onDelete={handleCaptureDelete}
       />
 
-      {/* ── Milestone Panel (right slide-in) ───────────────────────────── */}
+      {/* ── Milestone Panel (right slide-in detail) ────────────────────── */}
       {selectedMilestoneDetail && userId && (
         <MilestonePanel
           milestone={selectedMilestoneDetail}
@@ -3529,6 +3465,11 @@ export default function Today() {
           onClose={() => setSelectedMilestoneDetail(null)}
           onMilestoneUpdate={updated => {
             setMilestones(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated } : m))
+          }}
+          onMilestoneDelete={id => {
+            setMilestones(prev => prev.filter(m => m.id !== id))
+            setTodos(prev => prev.filter(t => t.milestone_id !== id))
+            setSelectedMilestoneDetail(null)
           }}
           onTodoCreate={todo => setTodos(prev => [...prev, todo])}
           onTodoUpdate={todo => setTodos(prev => prev.map(t => t.id === todo.id ? todo : t))}
@@ -3565,27 +3506,33 @@ export default function Today() {
           right: sidebarOpen ? 'clamp(280px, 30%, 360px)' : '2.5rem',
         }}
       >
-        {/* Next milestone */}
+        {/* Milestones button — always says "Milestones" + next target date */}
         {(() => {
           const upcoming = milestones
             .filter(m => m.status !== 'COMPLETE' && m.target_date)
             .sort((a, b) => new Date(a.target_date! + 'T12:00:00').getTime() - new Date(b.target_date! + 'T12:00:00').getTime())[0]
-          if (!upcoming) return (
-            <span className="text-[10px] text-shuttle/25 font-mono">no upcoming milestones</span>
-          )
-          const daysLeft = Math.ceil((new Date(upcoming.target_date! + 'T12:00:00').getTime() - Date.now()) / 86400000)
+          const daysLeft = upcoming
+            ? Math.ceil((new Date(upcoming.target_date! + 'T12:00:00').getTime() - Date.now()) / 86400000)
+            : null
           return (
             <button
               onClick={() => setMilestonesOpen(true)}
               className="flex items-center gap-2 text-shuttle/40 hover:text-burnham transition-colors group"
             >
               <span className="text-[10px] font-mono text-shuttle/25 group-hover:text-shuttle/50 transition-colors">◎</span>
-              <span className="text-[11px] truncate max-w-[200px]">
-                {upcoming.text.length > 32 ? upcoming.text.slice(0, 32) + '…' : upcoming.text}
-              </span>
-              <span className="text-[10px] font-mono text-shuttle/30 shrink-0">
-                {daysLeft > 0 ? `${daysLeft}d` : daysLeft === 0 ? 'today' : 'overdue'}
-              </span>
+              <span className="text-[11px] font-medium">Milestones</span>
+              {milestones.filter(m => m.status !== 'COMPLETE').length > 0 && (
+                <span className="text-[9px] font-mono text-shuttle/25">
+                  {milestones.filter(m => m.status !== 'COMPLETE').length}
+                </span>
+              )}
+              {daysLeft !== null && (
+                <span className={`text-[10px] font-mono shrink-0 ${
+                  daysLeft < 0 ? 'text-red-400/50' : daysLeft <= 7 ? 'text-amber-500/50' : 'text-shuttle/25'
+                }`}>
+                  · next {daysLeft < 0 ? 'overdue' : daysLeft === 0 ? 'today' : `${daysLeft}d`}
+                </span>
+              )}
             </button>
           )
         })()}
