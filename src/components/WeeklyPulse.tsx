@@ -86,13 +86,29 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
       setHabits([]); setLoading(false); return
     }
 
-    const [logsRes, interactionsRes, englishRes] = await Promise.all([
+    // 60 days before weekStart (for reactivation gap check)
+    const weekStartDate = new Date(weekStart + 'T00:00:00')
+    const sixtyDaysBefore = new Date(weekStartDate); sixtyDaysBefore.setDate(sixtyDaysBefore.getDate() - 60)
+    const sixtyDaysBeforeStr = sixtyDaysBefore.toISOString().split('T')[0]
+    const dayBefore = new Date(weekStartDate); dayBefore.setDate(dayBefore.getDate() - 1)
+    const dayBeforeStr = dayBefore.toISOString().split('T')[0]
+    const weekEndEnd = weekEnd + 'T23:59:59.999Z'
+
+    const [logsRes, interactionsRes, englishRes, contactsRes, histInteractionsRes] = await Promise.all([
       supabase.from('weekly_habit_logs').select('*').eq('user_id', userId)
         .gte('log_date', weekStart).lte('log_date', weekEnd),
       supabase.from('interactions').select('id, interaction_date').eq('user_id', userId)
         .gte('interaction_date', weekStart).lte('interaction_date', weekEnd),
       supabase.from('english_sessions').select('minutes, date').eq('user_id', userId)
         .gte('date', weekStart).lte('date', weekEnd),
+      supabase.from('outreach_logs')
+        .select('id, tier, referred_by, created_at')
+        .eq('user_id', userId),
+      supabase.from('interactions')
+        .select('contact_id, interaction_date')
+        .eq('user_id', userId)
+        .gte('interaction_date', sixtyDaysBeforeStr)
+        .lte('interaction_date', weekEnd),
     ])
 
     const allLogs = (logsRes.data ?? []) as WeeklyHabitLog[]
@@ -110,14 +126,66 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
       .filter(r => r.date === today)
       .reduce((s, r) => s + (r.minutes ?? 0), 0)
 
+    // ── networkhub metrics ──────────────────────────────────────────────────
+    const tierById = new Map<string, number | null>()
+    const contactRows = (contactsRes.data ?? []) as Array<{ id: string; tier: number | null; referred_by: string | null; created_at: string }>
+    for (const c of contactRows) tierById.set(c.id, c.tier)
+
+    // Tier 1/2 touches: distinct Tier 1/2 contacts with any interaction this week
+    const tier12ThisWeek = new Set<string>()
+    const tier12Today = new Set<string>()
+    // Per-contact dates for reactivation gap analysis
+    const datesByContact = new Map<string, string[]>()
+    for (const i of (histInteractionsRes.data ?? []) as Array<{ contact_id: string; interaction_date: string }>) {
+      const t = tierById.get(i.contact_id)
+      if (!datesByContact.has(i.contact_id)) datesByContact.set(i.contact_id, [])
+      datesByContact.get(i.contact_id)!.push(i.interaction_date)
+      if (t !== 1 && t !== 2) continue
+      if (i.interaction_date >= weekStart && i.interaction_date <= weekEnd) {
+        tier12ThisWeek.add(i.contact_id)
+        if (today && i.interaction_date === today) tier12Today.add(i.contact_id)
+      }
+    }
+    const tierTouchesTotal = tier12ThisWeek.size
+    const tierTouchesToday = tier12Today.size
+
+    // Pipeline expansion: (new contacts with referred_by created this week) + (Tier 1/2 reactivations)
+    const newReferredThisWeek = contactRows.filter(c =>
+      c.referred_by &&
+      c.created_at >= weekStart &&
+      c.created_at <= weekEndEnd
+    )
+    const newReferredCount = newReferredThisWeek.length
+    const newReferredTodayCount = today
+      ? newReferredThisWeek.filter(c => c.created_at.startsWith(today)).length
+      : 0
+
+    // Reactivations: Tier 1/2 contact, touched this week, with no interactions in [weekStart-60d, weekStart-1d]
+    let reactivationsCount = 0
+    let reactivationsTodayCount = 0
+    for (const contactId of tier12ThisWeek) {
+      const dates = datesByContact.get(contactId) ?? []
+      const hadRecentContact = dates.some(d => d >= sixtyDaysBeforeStr && d <= dayBeforeStr)
+      if (hadRecentContact) continue
+      reactivationsCount++
+      if (today && dates.includes(today)) reactivationsTodayCount++
+    }
+
+    const expansionTotal = newReferredCount + reactivationsCount
+    const expansionToday = newReferredTodayCount + reactivationsTodayCount
+
     setHabits(habitsData.map(h => ({
       habit: h as WeeklyHabit,
       logs:  allLogs.filter(l => l.habit_id === h.id),
-      autoTotal: h.integration_source === 'interactions'    ? totalInteractions
-               : h.integration_source === 'english_sessions'? totalEnglishMin
+      autoTotal: h.integration_source === 'interactions'              ? totalInteractions
+               : h.integration_source === 'english_sessions'          ? totalEnglishMin
+               : h.integration_source === 'networkhub_tier_touches'   ? tierTouchesTotal
+               : h.integration_source === 'networkhub_expansion'      ? expansionTotal
                : 0,
-      todayAutoTotal: h.integration_source === 'interactions'    ? todayInteractions
-                    : h.integration_source === 'english_sessions'? todayEnglishMin
+      todayAutoTotal: h.integration_source === 'interactions'            ? todayInteractions
+                    : h.integration_source === 'english_sessions'        ? todayEnglishMin
+                    : h.integration_source === 'networkhub_tier_touches' ? tierTouchesToday
+                    : h.integration_source === 'networkhub_expansion'    ? expansionToday
                     : 0,
     })))
     setLoading(false)

@@ -16,6 +16,8 @@ const SOURCE_OPTIONS = [
   { value: 'manual', label: 'Manual (tap dots to log)' },
   { value: 'interactions', label: 'Auto — Conversations (interactions table)' },
   { value: 'english_sessions', label: 'Auto — English (english_sessions table)' },
+  { value: 'networkhub_tier_touches', label: 'Auto — Tier 1/2 touches (networkhub)' },
+  { value: 'networkhub_expansion', label: 'Auto — Pipeline expansion (networkhub)' },
 ]
 
 const TYPE_OPTIONS = [

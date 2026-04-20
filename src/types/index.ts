@@ -451,7 +451,7 @@ export interface WeeklyHabit {
   type: 'count' | 'hours' | 'minutes'
   weekly_target: number
   unit: string | null
-  integration_source: 'manual' | 'interactions' | 'english_sessions' | 'cowork' | 'networkhub'
+  integration_source: 'manual' | 'interactions' | 'english_sessions' | 'cowork' | 'networkhub_tier_touches' | 'networkhub_expansion'
   color: string | null
   position: number
   is_active: boolean

@@ -179,6 +179,7 @@ export default function ContactDetailDrawer({
   // ── local editable state ─────────────────────────────────────────────────
   const [localStatus, setLocalStatus] = useState<ContactStatus | null>(null)
   const [localCategory, setLocalCategory] = useState<ContactCategory | null>(null)
+  const [localTier, setLocalTier] = useState<1 | 2 | 3 | null>(null)
   const [personalContext, setPersonalContext] = useState('')
   const [notes, setNotes] = useState('')
   const [skillsInput, setSkillsInput] = useState('')
@@ -279,6 +280,7 @@ export default function ContactDetailDrawer({
     if (!contact) return
     setLocalStatus(contact.status)
     setLocalCategory(contact.category ?? null)
+    setLocalTier(contact.tier ?? null)
     setPersonalContext(contact.personal_context ?? '')
     setNotes(contact.notes ?? '')
     setSkillsList(
@@ -397,6 +399,13 @@ export default function ContactDetailDrawer({
     if (!contact) return
     setLocalCategory(category)
     onUpdate(contact.id, { category })
+  }
+
+  // ── tier change (Airport Test — Jacob Warwick framework) ──────────────────
+  function handleTierChange(tier: 1 | 2 | 3 | null) {
+    if (!contact) return
+    setLocalTier(tier)
+    onUpdate(contact.id, { tier })
   }
 
   // ── log interaction ───────────────────────────────────────────────────────
@@ -1005,7 +1014,7 @@ export default function ContactDetailDrawer({
               </div>
 
               {/* Status selector (funnel pill) */}
-              <div className="mb-1">
+              <div className="mb-3">
                 <div className={sectionLabel}>Status</div>
                 <div className="flex gap-1.5 flex-wrap">
                   {FUNNEL_STAGE_ORDER.filter(s => config[s]).map(s => (
@@ -1021,6 +1030,40 @@ export default function ContactDetailDrawer({
                       {config[s]?.label ?? s}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Tier selector (Jacob Warwick's Airport Test) */}
+              <div className="mb-1">
+                <div className={sectionLabel}>Tier</div>
+                <div className="flex gap-1.5 flex-wrap">
+                  {([
+                    { val: 1, label: 'T1', title: 'Airport pickup — close trust, genuine care. Launch pad of your daisy chain.' },
+                    { val: 2, label: 'T2', title: 'Shared identity — ex-colleagues, same school/company/industry. Foundation, not deep.' },
+                    { val: 3, label: 'T3', title: 'Loose — friends of friends, met once or twice. Come last.' },
+                  ] as const).map(({ val, label, title }) => (
+                    <button
+                      key={val}
+                      onClick={() => handleTierChange((localTier ?? contact.tier) === val ? null : val)}
+                      title={title}
+                      className={`text-[10px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
+                        (localTier ?? contact.tier) === val
+                          ? 'bg-burnham text-white border-burnham'
+                          : 'bg-white text-shuttle border-mercury hover:border-shuttle/40'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  {(localTier ?? contact.tier) != null && (
+                    <button
+                      onClick={() => handleTierChange(null)}
+                      className="text-[10px] text-shuttle/50 hover:text-shuttle px-1 py-0.5 transition-colors"
+                      title="Clear tier"
+                    >
+                      clear
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

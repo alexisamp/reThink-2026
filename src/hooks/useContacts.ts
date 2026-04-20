@@ -28,6 +28,8 @@ export interface ContactInput {
   skills?: string | null
   personal_context?: string | null
   existing_attio_record_id?: string | null
+  tier?: 1 | 2 | 3 | null
+  referred_by?: string | null
 }
 
 export function useContacts(
@@ -162,7 +164,7 @@ export function useContacts(
                     'company','location','connections_count','followers_count','email','phone',
                     'website','about','skills','personal_context',
                     'company_domain','ai_enriched_at','profile_photo_url',
-                    'birthday','links'] as const
+                    'birthday','links','tier','referred_by'] as const
     for (const f of fields) {
       if (f in updates) patch[f] = (updates as Record<string, unknown>)[f] ?? null
     }
