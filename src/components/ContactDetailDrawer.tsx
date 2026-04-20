@@ -20,6 +20,7 @@ import type {
 import { openLink } from '@/lib/openLink'
 import { supabase } from '@/lib/supabase'
 import { syncGmailInteractions } from '@/lib/gmail'
+import { TierInfoHelper } from '@/components/TierInfoHelper'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -1035,7 +1036,10 @@ export default function ContactDetailDrawer({
 
               {/* Tier selector (Jacob Warwick's Airport Test) */}
               <div className="mb-1">
-                <div className={sectionLabel}>Tier</div>
+                <div className={`${sectionLabel} flex items-center gap-1.5`}>
+                  <span>Tier</span>
+                  <TierInfoHelper />
+                </div>
                 <div className="flex gap-1.5 flex-wrap">
                   {([
                     { val: 1, label: 'T1', title: 'Airport pickup — close trust, genuine care. Launch pad of your daisy chain.' },

@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import type { Contact, ContactStatus } from '@/types'
 import { useContacts } from '@/hooks/useContacts'
 import OutreachPanel from '@/components/OutreachPanel'
+import { TierInfoHelper } from '@/components/TierInfoHelper'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core'
@@ -402,7 +403,10 @@ export default function People() {
             {selectedIds.size} selected
           </span>
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] uppercase tracking-wide text-shuttle/60 mr-1">Tag as:</span>
+            <span className="text-[10px] uppercase tracking-wide text-shuttle/60 mr-1 flex items-center gap-1">
+              Tag as:
+              <TierInfoHelper />
+            </span>
             {([1, 2, 3] as const).map(t => (
               <button
                 key={t}
