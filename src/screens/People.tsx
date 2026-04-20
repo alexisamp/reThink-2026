@@ -108,10 +108,12 @@ function TagPill({ tag }: { tag: string }) {
 interface TableRowProps {
   contact: Contact
   channels: Array<{ outreach_log_id: string; channel: string }>
+  selected: boolean
+  onToggleSelect: (id: string, checked: boolean) => void
   onRowClick: (c: Contact) => void
 }
 
-function TableRow({ contact, channels, onRowClick }: TableRowProps) {
+function TableRow({ contact, channels, selected, onToggleSelect, onRowClick }: TableRowProps) {
   const myChannels = channels.filter(ch => ch.outreach_log_id === contact.id)
   const days = daysSince(contact.last_interaction_at)
   const health = healthIndicator(days)
@@ -121,11 +123,22 @@ function TableRow({ contact, channels, onRowClick }: TableRowProps) {
 
   return (
     <tr
-      className="group border-b border-mercury/30 hover:bg-gossip/10 cursor-pointer transition-colors"
+      className={`group border-b border-mercury/30 hover:bg-gossip/10 cursor-pointer transition-colors ${selected ? 'bg-gossip/20' : ''}`}
       onClick={() => onRowClick(contact)}
     >
+      {/* Select checkbox */}
+      <td className="py-2 pl-4 pr-1 w-8" onClick={e => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={e => onToggleSelect(contact.id, e.target.checked)}
+          className="h-3.5 w-3.5 accent-burnham cursor-pointer"
+          aria-label={`Select ${contact.name}`}
+        />
+      </td>
+
       {/* Name + avatar */}
-      <td className="py-2 pl-4 pr-3">
+      <td className="py-2 pl-1 pr-3">
         <div className="flex items-center gap-2.5">
           <ContactAvatar name={contact.name} photoUrl={contact.profile_photo_url} size={26} />
           <span className="text-[13px] font-medium text-burnham truncate max-w-[160px]">{contact.name}</span>
@@ -219,6 +232,8 @@ export default function People() {
   const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [outreachPanelOpen, setOutreachPanelOpen] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkTagging, setBulkTagging] = useState(false)
 
   // Contact channels (loaded separately)
   const [channels, setChannels] = useState<Array<{ outreach_log_id: string; channel: string }>>([])
@@ -269,6 +284,35 @@ export default function People() {
   const handleRowClick = useCallback((c: Contact) => {
     navigate(`/people/${c.id}`)
   }, [navigate])
+
+  // ── Bulk selection ─────────────────────────────────────────────────────────
+  const handleToggleSelect = useCallback((id: string, checked: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (checked) next.add(id); else next.delete(id)
+      return next
+    })
+  }, [])
+
+  const handleSelectAllVisible = useCallback((checked: boolean) => {
+    if (checked) setSelectedIds(new Set(filtered.map(c => c.id)))
+    else setSelectedIds(new Set())
+  }, [filtered])
+
+  const handleBulkTier = useCallback(async (tier: 1 | 2 | 3 | null) => {
+    if (selectedIds.size === 0) return
+    setBulkTagging(true)
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map(id => updateContact(id, { tier }))
+      )
+      setSelectedIds(new Set())
+    } finally {
+      setBulkTagging(false)
+    }
+  }, [selectedIds, updateContact])
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), [])
 
   const handleNewPerson = () => {
     setEditingContact(null)
@@ -351,6 +395,46 @@ export default function People() {
         </div>
       </div>
 
+      {/* ── Bulk action bar (shows when ≥1 selected) ──────────────────────── */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-6 py-2 border-b border-mercury/50 bg-gossip/20 shrink-0">
+          <span className="text-[11px] font-semibold text-burnham">
+            {selectedIds.size} selected
+          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] uppercase tracking-wide text-shuttle/60 mr-1">Tag as:</span>
+            {([1, 2, 3] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => handleBulkTier(t)}
+                disabled={bulkTagging}
+                title={
+                  t === 1 ? 'Tier 1 — Airport pickup (close trust, daisy chain launch pad)'
+                  : t === 2 ? 'Tier 2 — Shared identity (ex-colleagues, same school/industry)'
+                  : 'Tier 3 — Loose connections'
+                }
+                className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-mercury hover:border-burnham/40 bg-white text-shuttle hover:text-burnham disabled:opacity-40 transition-colors"
+              >
+                T{t}
+              </button>
+            ))}
+            <button
+              onClick={() => handleBulkTier(null)}
+              disabled={bulkTagging}
+              className="text-[10px] text-shuttle/50 hover:text-shuttle px-2 py-0.5 disabled:opacity-40 transition-colors"
+            >
+              clear
+            </button>
+          </div>
+          <button
+            onClick={clearSelection}
+            className="ml-auto text-[10px] text-shuttle/50 hover:text-shuttle transition-colors"
+          >
+            Deselect all
+          </button>
+        </div>
+      )}
+
       {/* ── Content ────────────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {loading ? (
@@ -362,8 +446,24 @@ export default function People() {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-mercury/50 bg-white sticky top-0 z-10">
+                <th className="py-2 pl-4 pr-1 w-8">
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every(c => selectedIds.has(c.id))}
+                    ref={el => {
+                      if (el) {
+                        const some = filtered.some(c => selectedIds.has(c.id))
+                        const all = filtered.every(c => selectedIds.has(c.id))
+                        el.indeterminate = some && !all
+                      }
+                    }}
+                    onChange={e => handleSelectAllVisible(e.target.checked)}
+                    className="h-3.5 w-3.5 accent-burnham cursor-pointer"
+                    aria-label="Select all visible"
+                  />
+                </th>
                 {['Name', 'Company', 'Role', 'Tier', 'Last Contact', 'Health', 'Tags', 'Channels'].map(h => (
-                  <th key={h} className="py-2 px-3 first:pl-4 last:pr-4 text-[10px] font-semibold text-shuttle/50 uppercase tracking-wider whitespace-nowrap">
+                  <th key={h} className="py-2 px-3 last:pr-4 text-[10px] font-semibold text-shuttle/50 uppercase tracking-wider whitespace-nowrap">
                     {h}
                   </th>
                 ))}
@@ -372,7 +472,7 @@ export default function People() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center text-sm text-shuttle/40">
+                  <td colSpan={9} className="py-16 text-center text-sm text-shuttle/40">
                     {search ? 'No results for this search' : 'No contacts yet — add your first person'}
                   </td>
                 </tr>
@@ -381,6 +481,8 @@ export default function People() {
                   key={contact.id}
                   contact={contact}
                   channels={channels}
+                  selected={selectedIds.has(contact.id)}
+                  onToggleSelect={handleToggleSelect}
                   onRowClick={handleRowClick}
                 />
               ))}
@@ -388,7 +490,7 @@ export default function People() {
             {/* Footer count */}
             <tfoot>
               <tr className="border-t border-mercury/40">
-                <td colSpan={8} className="py-2 pl-4 text-[10px] font-mono text-shuttle/40">
+                <td colSpan={9} className="py-2 pl-4 text-[10px] font-mono text-shuttle/40">
                   {filtered.length} {filtered.length === 1 ? 'person' : 'people'}
                 </td>
               </tr>
