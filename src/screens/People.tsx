@@ -235,6 +235,9 @@ export default function People() {
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkTagging, setBulkTagging] = useState(false)
+  const [tierFilter, setTierFilter] = useState<'all' | 'untagged' | 1 | 2 | 3>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | ContactStatus>('all')
+  const [healthFilter, setHealthFilter] = useState<'all' | 'active' | 'warm' | 'cold' | 'never'>('all')
 
   // Contact channels (loaded separately)
   const [channels, setChannels] = useState<Array<{ outreach_log_id: string; channel: string }>>([])
@@ -269,18 +272,40 @@ export default function People() {
   }, [userId])
 
   const filtered = contacts.filter(c => {
-    if (!search.trim()) return true
-    const q = search.trim().toLowerCase()
-    return (
-      c.name.toLowerCase().includes(q) ||
-      (c.company ?? '').toLowerCase().includes(q) ||
-      (c.job_title ?? '').toLowerCase().includes(q)
-    )
+    // Search
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      const hit = (
+        c.name.toLowerCase().includes(q) ||
+        (c.company ?? '').toLowerCase().includes(q) ||
+        (c.job_title ?? '').toLowerCase().includes(q)
+      )
+      if (!hit) return false
+    }
+    // Tier filter
+    if (tierFilter === 'untagged' && c.tier != null) return false
+    if (typeof tierFilter === 'number' && c.tier !== tierFilter) return false
+    // Status filter
+    if (statusFilter !== 'all' && c.status !== statusFilter) return false
+    // Health filter
+    if (healthFilter !== 'all') {
+      const d = daysSince(c.last_interaction_at)
+      const bucket = d === null ? 'never' : d <= 14 ? 'active' : d <= 30 ? 'warm' : 'cold'
+      if (bucket !== healthFilter) return false
+    }
+    return true
   }).sort((a, b) => {
     const aDate = a.last_interaction_at ?? a.created_at
     const bDate = b.last_interaction_at ?? b.created_at
     return bDate.localeCompare(aDate)
   })
+
+  const activeFilterCount =
+    (tierFilter !== 'all' ? 1 : 0) +
+    (statusFilter !== 'all' ? 1 : 0) +
+    (healthFilter !== 'all' ? 1 : 0)
+
+  const clearFilters = () => { setTierFilter('all'); setStatusFilter('all'); setHealthFilter('all') }
 
   const handleRowClick = useCallback((c: Contact) => {
     navigate(`/people/${c.id}`)
@@ -374,7 +399,7 @@ export default function People() {
       </header>
 
       {/* ── Filter bar ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-6 py-2.5 border-b border-mercury/30 shrink-0">
+      <div className="flex items-center gap-3 px-6 py-2.5 border-b border-mercury/30 shrink-0 flex-wrap">
         <div className="relative">
           <MagnifyingGlass size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-shuttle/40" />
           <input
@@ -390,7 +415,64 @@ export default function People() {
             </button>
           )}
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-shuttle/50">
+
+        {/* Tier pill filter — primary filter for bulk tagging workflow */}
+        <div className="flex items-center gap-1 bg-mercury/20 rounded-lg p-0.5">
+          {([
+            { val: 'all', label: 'All' },
+            { val: 'untagged', label: 'Untagged' },
+            { val: 1, label: 'T1' },
+            { val: 2, label: 'T2' },
+            { val: 3, label: 'T3' },
+          ] as const).map(({ val, label }) => (
+            <button
+              key={String(val)}
+              onClick={() => setTierFilter(val)}
+              className={`text-[10px] font-medium px-2 py-0.5 rounded-md transition-colors ${
+                tierFilter === val
+                  ? 'bg-white shadow-sm text-burnham'
+                  : 'text-shuttle/60 hover:text-shuttle'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Status filter */}
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value as 'all' | ContactStatus)}
+          className="text-[11px] text-shuttle border border-mercury rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-burnham/30"
+        >
+          <option value="all">All statuses</option>
+          {STATUS_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+
+        {/* Health filter */}
+        <select
+          value={healthFilter}
+          onChange={e => setHealthFilter(e.target.value as 'all' | 'active' | 'warm' | 'cold' | 'never')}
+          className="text-[11px] text-shuttle border border-mercury rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-burnham/30"
+        >
+          <option value="all">Any health</option>
+          <option value="active">Active (≤14d)</option>
+          <option value="warm">Warm (15–30d)</option>
+          <option value="cold">Cold (&gt;30d)</option>
+          <option value="never">Never contacted</option>
+        </select>
+
+        {activeFilterCount > 0 && (
+          <button
+            onClick={clearFilters}
+            className="flex items-center gap-1 text-[10px] text-shuttle/50 hover:text-burnham transition-colors"
+          >
+            <X size={10} />
+            Clear {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''}
+          </button>
+        )}
+
+        <div className="flex items-center gap-1.5 text-[11px] text-shuttle/50 ml-auto">
           <Funnel size={11} />
           <span>Sorted by last contact</span>
         </div>
