@@ -4,6 +4,9 @@ import { searchAttioPersons, hasAttioKey, type AttioPersonResult } from '@/lib/a
 import type { Contact, ContactCategory, ContactStatus, Goal } from '@/types'
 import type { ContactInput } from '@/hooks/useContacts'
 import { CATEGORY_LABELS } from '@/lib/funnelDefaults'
+import { supabase } from '@/lib/supabase'
+
+type ReferrerResult = { id: string; name: string; company: string | null; profile_photo_url: string | null }
 
 interface OutreachPanelProps {
   open: boolean
@@ -53,6 +56,13 @@ export default function OutreachPanel({
   const [spawnTodo, setSpawnTodo] = useState(false)
   const [spawnTodoText, setSpawnTodoText] = useState('')
 
+  // Introduced-by picker (daisy chain — Jacob Warwick framework)
+  const [referredBy, setReferredBy] = useState<ReferrerResult | null>(null)
+  const [referrerQuery, setReferrerQuery] = useState('')
+  const [referrerResults, setReferrerResults] = useState<ReferrerResult[]>([])
+  const [referrerSearching, setReferrerSearching] = useState(false)
+  const referrerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Attio search
   const [attioSearchResults, setAttioSearchResults] = useState<AttioPersonResult[]>([])
   const [attioSearching, setAttioSearching] = useState(false)
@@ -79,6 +89,19 @@ export default function OutreachPanel({
     setSpawnTodoText('')
     setAttioSearchResults([])
     setAttioSearching(false)
+    setReferrerQuery('')
+    setReferrerResults([])
+    setReferrerSearching(false)
+    // Hydrate referrer if editing and contact already has one
+    if (editingLog?.referred_by) {
+      supabase.from('outreach_logs')
+        .select('id, name, company, profile_photo_url')
+        .eq('id', editingLog.referred_by)
+        .maybeSingle()
+        .then(({ data }) => { if (data) setReferredBy(data as ReferrerResult) })
+    } else {
+      setReferredBy(null)
+    }
     setSelectedAttioRecord(
       editingLog?.attio_record_id
         ? { record_id: editingLog.attio_record_id, full_name: editingLog.name }
@@ -86,6 +109,29 @@ export default function OutreachPanel({
     )
     setTimeout(() => nameInputRef.current?.focus(), 50)
   }, [open, editingLog])
+
+  // Live search for the Introduced-by picker (skip if already selected)
+  useEffect(() => {
+    if (!open || referredBy) return
+    const q = referrerQuery.trim()
+    if (q.length < 2) { setReferrerResults([]); return }
+    if (referrerDebounceRef.current) clearTimeout(referrerDebounceRef.current)
+    setReferrerSearching(true)
+    referrerDebounceRef.current = setTimeout(async () => {
+      const { data } = await supabase.auth.getUser()
+      const userId = data.user?.id
+      if (!userId) { setReferrerSearching(false); return }
+      const { data: rows } = await supabase
+        .from('outreach_logs')
+        .select('id, name, company, profile_photo_url')
+        .eq('user_id', userId)
+        .ilike('name', `%${q}%`)
+        .limit(6)
+      setReferrerResults((rows ?? []) as ReferrerResult[])
+      setReferrerSearching(false)
+    }, 220)
+    return () => { if (referrerDebounceRef.current) clearTimeout(referrerDebounceRef.current) }
+  }, [open, referrerQuery, referredBy])
 
   // Escape key
   useEffect(() => {
@@ -152,6 +198,7 @@ export default function OutreachPanel({
         job_title: jobTitle.trim() || null,
         company: company.trim() || null,
         location: location.trim() || null,
+        referred_by: referredBy?.id ?? null,
       })
       if (spawnTodo && spawnTodoText.trim()) {
         onSpawnTodo(spawnTodoText.trim(), linkedinUrl.trim() || null, goalId || null)
@@ -337,6 +384,74 @@ export default function OutreachPanel({
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
+          </div>
+
+          {/* Introduced by (daisy chain — feeds Pipeline expansion KPI) */}
+          <div>
+            <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">
+              Introduced by <span className="text-shuttle/40 normal-case tracking-normal">(optional — daisy chain)</span>
+            </label>
+            {referredBy ? (
+              <div className="flex items-center gap-2 px-2 py-1.5 bg-gossip/30 border border-mercury rounded-full">
+                {referredBy.profile_photo_url ? (
+                  <img src={referredBy.profile_photo_url} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-burnham/10 flex items-center justify-center shrink-0">
+                    <span className="text-[9px] font-semibold text-burnham">{referredBy.name.charAt(0).toUpperCase()}</span>
+                  </div>
+                )}
+                <span className="text-[12px] font-medium text-burnham truncate flex-1">{referredBy.name}</span>
+                <button
+                  type="button"
+                  onClick={() => { setReferredBy(null); setReferrerQuery('') }}
+                  className="text-shuttle/40 hover:text-burnham transition-colors"
+                  aria-label="Remove referrer"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <input
+                  type="text"
+                  value={referrerQuery}
+                  onChange={e => setReferrerQuery(e.target.value)}
+                  placeholder="Who introduced you?"
+                  className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-burnham transition-colors"
+                />
+                {referrerSearching && (
+                  <p className="text-[10px] text-shuttle/40 mt-1">Searching…</p>
+                )}
+                {!referrerSearching && referrerQuery.trim().length >= 2 && referrerResults.length === 0 && (
+                  <p className="text-[10px] text-shuttle/40 mt-1">No matches.</p>
+                )}
+                {referrerResults.length > 0 && (
+                  <ul className="mt-1 border border-mercury rounded-lg bg-white shadow-sm max-h-48 overflow-y-auto">
+                    {referrerResults.map(r => (
+                      <li key={r.id}>
+                        <button
+                          type="button"
+                          onClick={() => { setReferredBy(r); setReferrerResults([]); setReferrerQuery('') }}
+                          className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-gossip/20 transition-colors text-left"
+                        >
+                          {r.profile_photo_url ? (
+                            <img src={r.profile_photo_url} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" />
+                          ) : (
+                            <div className="w-6 h-6 rounded-full bg-burnham/10 flex items-center justify-center shrink-0">
+                              <span className="text-[10px] font-semibold text-burnham">{r.name.charAt(0).toUpperCase()}</span>
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12px] font-medium text-burnham truncate">{r.name}</p>
+                            {r.company && <p className="text-[10px] text-shuttle/60 truncate">{r.company}</p>}
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Goal */}
