@@ -10,6 +10,7 @@ import type { Contact, ContactStatus } from '@/types'
 import { useContacts } from '@/hooks/useContacts'
 import OutreachPanel from '@/components/OutreachPanel'
 import { TierInfoHelper } from '@/components/TierInfoHelper'
+import MergeContactsModal from '@/components/MergeContactsModal'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core'
@@ -265,6 +266,7 @@ export default function People() {
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkTagging, setBulkTagging] = useState(false)
+  const [mergeModalOpen, setMergeModalOpen] = useState(false)
   const [tierFilter, setTierFilter] = useState<'all' | 'untagged' | 1 | 2 | 3>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | ContactStatus>('all')
   const [healthFilter, setHealthFilter] = useState<'all' | 'active' | 'warm' | 'cold' | 'never'>('all')
@@ -287,7 +289,7 @@ export default function People() {
       .then(({ data }) => setChannels(data ?? []))
   }, [userId])
 
-  const { contacts, loading, addContact, updateContact, deleteContact } = useContacts(
+  const { contacts, loading, addContact, updateContact, deleteContact, mergeContacts } = useContacts(
     userId ?? undefined,
     [],
     async () => {},
@@ -542,6 +544,16 @@ export default function People() {
               clear
             </button>
           </div>
+          {selectedIds.size === 2 && (
+            <button
+              onClick={() => setMergeModalOpen(true)}
+              disabled={bulkTagging}
+              className="text-[10px] font-medium text-burnham border border-burnham/30 hover:border-burnham hover:bg-burnham hover:text-white px-2.5 py-0.5 rounded-full transition-colors disabled:opacity-40"
+            >
+              Merge these two…
+            </button>
+          )}
+
           <button
             onClick={clearSelection}
             className="ml-auto text-[10px] text-shuttle/50 hover:text-shuttle transition-colors"
@@ -550,6 +562,26 @@ export default function People() {
           </button>
         </div>
       )}
+
+      {/* Merge modal */}
+      {mergeModalOpen && selectedIds.size === 2 && (() => {
+        const [idA, idB] = Array.from(selectedIds)
+        const a = contacts.find(c => c.id === idA)
+        const b = contacts.find(c => c.id === idB)
+        if (!a || !b) return null
+        return (
+          <MergeContactsModal
+            contactA={a}
+            contactB={b}
+            onClose={() => setMergeModalOpen(false)}
+            onMerge={async (survivorId, duplicateId) => {
+              const r = await mergeContacts(survivorId, duplicateId)
+              if (r.ok) setSelectedIds(new Set())
+              return r
+            }}
+          />
+        )
+      })()}
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 overflow-y-auto">

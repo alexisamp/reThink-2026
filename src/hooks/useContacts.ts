@@ -200,6 +200,30 @@ export function useContacts(
     await incrementProspectingHabit(updatedContacts)
   }, [userId, contacts, incrementProspectingHabit])
 
+  /**
+   * Merges `duplicateId` into `survivorId`. Survivor keeps its non-null
+   * fields; null fields get filled from duplicate. All FK references
+   * (interactions, channels, milestones, todos, value_logs, etc.) get
+   * repointed to survivor before duplicate is deleted. Atomic via the
+   * `merge_contacts` RPC.
+   *
+   * Refetches contacts on success — easier than splicing local state
+   * correctly and guarantees UI reflects the post-merge truth.
+   */
+  const mergeContacts = useCallback(async (
+    survivorId: string,
+    duplicateId: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
+    if (!userId) return { ok: false, error: 'not signed in' }
+    const { error } = await supabase.rpc('merge_contacts', {
+      survivor_id: survivorId,
+      duplicate_id: duplicateId,
+    })
+    if (error) return { ok: false, error: error.message }
+    await fetchContacts()
+    return { ok: true }
+  }, [userId, fetchContacts])
+
   const syncContactToAttio = useCallback(async (id: string): Promise<void> => {
     const contact = contacts.find(c => c.id === id)
     if (!contact || !hasAttioKey()) return
@@ -321,6 +345,7 @@ export function useContacts(
     addContact,
     updateContact,
     deleteContact,
+    mergeContacts,
     fetchContacts,
     syncContactToAttio,
     syncCompany: syncCompanyToAttioHook,
