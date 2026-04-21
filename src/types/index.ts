@@ -348,11 +348,22 @@ export interface Company {
   name: string
   domain: string | null
   sector: string | null
-  size: string | null
+  size: string | null              // bucket text ("11-50 employees")
   notes: string | null
   key_insight: string | null
   logo_url: string | null
   created_at: string
+  // LI-enriched fields (populated by the Conversations company deep-scrape)
+  headline: string | null
+  description: string | null
+  website_url: string | null
+  linkedin_url: string | null
+  employees_count: number | null   // canonical — real if associated members captured, else bucket ceiling
+  members_on_linkedin: number | null  // raw "N associated members" from LI
+  followers_count: number | null   // external followers of the company page
+  founded_year: number | null
+  hq_location: string | null
+  last_enriched_at: string | null
 }
 
 export type OpportunityType = 'job' | 'consulting' | 'business' | 'partnership' | 'other'

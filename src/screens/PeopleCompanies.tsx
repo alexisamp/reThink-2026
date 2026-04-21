@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MagnifyingGlass, Plus, Buildings, CaretUpDown } from '@phosphor-icons/react'
+import { MagnifyingGlass, Plus, Buildings, CaretUpDown, Users, UsersThree, MapPin } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import type { Company } from '@/types'
@@ -23,6 +23,13 @@ function formatAgo(days: number | null): string {
   if (days < 30) return `${Math.floor(days / 7)}w ago`
   if (days < 365) return `${Math.floor(days / 30)}mo ago`
   return `${Math.floor(days / 365)}y ago`
+}
+
+function formatNumber(n: number | null | undefined): string {
+  if (n === null || n === undefined) return '—'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return n.toString()
 }
 
 function CompanyAvatar({ company, size = 8 }: { company: Company; size?: number }) {
@@ -202,24 +209,32 @@ export default function PeopleCompanies() {
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="border-b border-mercury bg-white sticky top-0 z-10">
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle w-[240px]">
+              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle w-[280px]">
                 <div className="flex items-center gap-1">Company <CaretUpDown size={10} /></div>
               </th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Sector</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Industry</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">
+                <div className="flex items-center gap-1"><Users size={11} />Employees</div>
+              </th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">
+                <div className="flex items-center gap-1"><UsersThree size={11} />Followers</div>
+              </th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">
+                <div className="flex items-center gap-1"><MapPin size={11} />HQ</div>
+              </th>
               <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">People</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Active Opps</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Last Interaction</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Key Insight</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Opps</th>
+              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Last Contact</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-shuttle">Loading...</td>
+                <td colSpan={8} className="text-center py-12 text-shuttle">Loading...</td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-12">
+                <td colSpan={8} className="text-center py-12">
                   <Buildings size={32} className="text-mercury mx-auto mb-2" />
                   <p className="text-shuttle text-sm">
                     {search ? 'No companies match your search.' : 'No companies yet. Add your first company above.'}
@@ -227,18 +242,22 @@ export default function PeopleCompanies() {
                 </td>
               </tr>
             ) : (
-              filtered.map(row => (
+              filtered.map(row => {
+                const employees = row.employees_count ?? row.members_on_linkedin
+                return (
                 <tr
                   key={row.id}
                   onClick={() => navigate(`/people/companies/${row.id}`)}
                   className="border-b border-mercury hover:bg-gossip/20 cursor-pointer transition-colors"
                 >
                   <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <CompanyAvatar company={row} />
-                      <div>
-                        <p className="font-medium text-midnight">{row.name}</p>
-                        {row.domain && <p className="text-xs text-shuttle">{row.domain}</p>}
+                    <div className="flex items-center gap-2.5">
+                      <CompanyAvatar company={row} size={10} />
+                      <div className="min-w-0">
+                        <p className="font-medium text-midnight truncate">{row.name}</p>
+                        {row.headline
+                          ? <p className="text-[11px] text-shuttle truncate">{row.headline}</p>
+                          : row.domain && <p className="text-[11px] text-shuttle">{row.domain}</p>}
                       </div>
                     </div>
                   </td>
@@ -246,6 +265,21 @@ export default function PeopleCompanies() {
                     {row.sector ? (
                       <span className="px-2 py-0.5 bg-mercury text-midnight rounded text-xs">{row.sector}</span>
                     ) : '—'}
+                  </td>
+                  <td className="px-4 py-2.5 text-shuttle text-xs">
+                    {employees != null ? (
+                      <span className="text-midnight font-medium">{formatNumber(employees)}</span>
+                    ) : row.size ? (
+                      <span className="text-shuttle">{row.size}</span>
+                    ) : '—'}
+                  </td>
+                  <td className="px-4 py-2.5 text-shuttle text-xs">
+                    {row.followers_count != null
+                      ? <span className="text-midnight font-medium">{formatNumber(row.followers_count)}</span>
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-2.5 text-shuttle text-xs max-w-[200px] truncate" title={row.hq_location ?? undefined}>
+                    {row.hq_location || '—'}
                   </td>
                   <td className="px-4 py-2.5">
                     <span className={`font-medium ${row.people_count > 0 ? 'text-midnight' : 'text-mercury'}`}>
@@ -255,7 +289,7 @@ export default function PeopleCompanies() {
                   <td className="px-4 py-2.5">
                     {row.active_opps > 0 ? (
                       <span className="px-2 py-0.5 bg-gossip text-burnham rounded-full text-xs font-medium">
-                        {row.active_opps} active
+                        {row.active_opps}
                       </span>
                     ) : (
                       <span className="text-mercury">—</span>
@@ -264,11 +298,9 @@ export default function PeopleCompanies() {
                   <td className="px-4 py-2.5 text-shuttle text-xs">
                     {formatAgo(daysSince(row.last_interaction_at))}
                   </td>
-                  <td className="px-4 py-2.5 text-shuttle text-xs max-w-[200px] truncate">
-                    {row.key_insight || '—'}
-                  </td>
                 </tr>
-              ))
+                )
+              })
             )}
           </tbody>
         </table>
