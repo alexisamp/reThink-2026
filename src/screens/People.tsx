@@ -77,15 +77,45 @@ function ContactAvatar({ name, photoUrl, size = 28 }: { name: string; photoUrl?:
 }
 
 // ── Channel icons ─────────────────────────────────────────────────────────────
+// Dedupe by channel type: contact_channels can have multiple rows per (contact,
+// channel) — the same WA phone with and without "+", the same person's LID
+// AND waname fallback AND a phone, plus residual rows from the deprecated
+// extension's content-script. Show ONE icon per distinct channel type with a
+// count badge when there's more than one underlying row.
 function ChannelIcons({ channels }: { channels: Array<{ channel: string }> }) {
+  const counts = channels.reduce<Record<string, number>>((acc, c) => {
+    acc[c.channel] = (acc[c.channel] ?? 0) + 1
+    return acc
+  }, {})
+
+  const renderIcon = (channel: string) => {
+    if (channel === 'whatsapp') return <WhatsappLogo size={11} className="text-green-500" />
+    if (channel === 'linkedin') return <LinkedinLogo size={11} className="text-blue-500" />
+    if (channel === 'x') return <TwitterLogo size={11} className="text-shuttle" />
+    if (channel === 'exit5') return <span className="text-[9px] font-bold text-shuttle/60">E5</span>
+    return null
+  }
+
+  // Stable display order
+  const ORDER = ['whatsapp', 'linkedin', 'x', 'exit5'] as const
+  const entries = ORDER.filter(k => counts[k] > 0)
+
   return (
     <div className="flex items-center gap-1">
-      {channels.map(c => {
-        if (c.channel === 'whatsapp') return <WhatsappLogo key="wa" size={11} className="text-green-500" />
-        if (c.channel === 'linkedin') return <LinkedinLogo key="li" size={11} className="text-blue-500" />
-        if (c.channel === 'x') return <TwitterLogo key="x" size={11} className="text-shuttle" />
-        if (c.channel === 'exit5') return <span key="e5" className="text-[9px] font-bold text-shuttle/60">E5</span>
-        return null
+      {entries.map(channel => {
+        const count = counts[channel]
+        return (
+          <span
+            key={channel}
+            className="inline-flex items-center gap-0.5"
+            title={count > 1 ? `${count} ${channel} channels` : channel}
+          >
+            {renderIcon(channel)}
+            {count > 1 && (
+              <span className="text-[8px] font-mono text-shuttle/50">×{count}</span>
+            )}
+          </span>
+        )
       })}
     </div>
   )
