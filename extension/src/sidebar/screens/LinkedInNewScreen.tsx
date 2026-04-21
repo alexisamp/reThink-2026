@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { User } from '@supabase/supabase-js'
 import type { LinkedInProfile } from '../App'
 import { SidebarHeader } from '../App'
-import { Avatar } from './WhatsAppMappedScreen'
+import { Avatar } from '../components/Avatar'
 import { CategoryPicker } from '../components/CategoryPicker'
 import { supabase } from '../../lib/supabase'
 

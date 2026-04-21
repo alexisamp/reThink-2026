@@ -26,17 +26,6 @@ async function buildExtension() {
     format: 'esm',
   })
 
-  // Build WhatsApp content script
-  console.log('  📦 Building WhatsApp content script...')
-  await build({
-    entryPoints: ['src/content-scripts/whatsapp.ts'],
-    bundle: true,
-    outfile: 'dist/src/content-scripts/whatsapp.js',
-    platform: 'browser',
-    target: 'es2020',
-    format: 'esm',
-  })
-
   // Build floating trigger content script
   console.log('  📦 Building floating trigger content script...')
   await build({

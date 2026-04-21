@@ -1,5 +1,6 @@
 // Floating trigger button — Phase 4
-// Injects the reThink People trigger button on LinkedIn profiles and WhatsApp Web
+// Injects the reThink People trigger button on LinkedIn profiles.
+// (WhatsApp capture moved to the Conversations desktop app.)
 export {}
 
 const BUTTON_ID = 'rethink-people-trigger'
@@ -15,7 +16,6 @@ function keepSWAlive() {
 }
 keepSWAlive()
 
-function isWhatsApp() { return window.location.hostname === 'web.whatsapp.com' }
 function isLinkedInProfile() { return /linkedin\.com\/in\/[^/?#]+/.test(window.location.href) }
 
 function cleanLinkedInUrl(url: string): string | null {
@@ -126,14 +126,3 @@ if (isLinkedInProfile()) {
   navObserver.observe(document.body, { childList: true, subtree: true })
 }
 
-// Init for WhatsApp
-if (isWhatsApp()) {
-  setTimeout(() => {
-    chrome.runtime.sendMessage(
-      { type: 'GET_WHATSAPP_CONTACT_STATUS' },
-      (response: { isMapped?: boolean } | undefined) => {
-        injectTrigger(response?.isMapped ?? false)
-      }
-    )
-  }, 2000)
-}

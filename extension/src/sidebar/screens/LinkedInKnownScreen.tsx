@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import type { User } from '@supabase/supabase-js'
 import type { CurrentContact } from '../App'
 import { SidebarHeader } from '../App'
-import { AvatarWithDot } from './WhatsAppMappedScreen'
+import { AvatarWithDot } from '../components/Avatar'
 import { DailyProgress } from '../components/DailyProgress'
 import { supabase } from '../../lib/supabase'
 

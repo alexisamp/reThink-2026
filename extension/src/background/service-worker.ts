@@ -21,15 +21,14 @@ chrome.runtime.onInstalled.addListener(async () => {
     const tabs = await chrome.tabs.query({})
     for (const tab of tabs) {
       if (!tab.id || !tab.url) continue
-      const isWA = tab.url.includes('web.whatsapp.com')
-      const isLI = tab.url.includes('linkedin.com')
-      if (!isWA && !isLI) continue
+      if (!tab.url.includes('linkedin.com')) continue
 
       // Inject content scripts manually
-      const scripts: string[] = []
-      if (isWA) scripts.push('src/content-scripts/whatsapp.js', 'src/content-scripts/floating-trigger.js')
-      if (isLI) scripts.push('src/content-scripts/linkedin-profile.js', 'src/content-scripts/floating-trigger.js', 'src/content-scripts/linkedin-dm.js')
-
+      const scripts = [
+        'src/content-scripts/linkedin-profile.js',
+        'src/content-scripts/floating-trigger.js',
+        'src/content-scripts/linkedin-dm.js',
+      ]
       for (const file of scripts) {
         try {
           await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: [file] })
@@ -48,27 +47,12 @@ chrome.runtime.onInstalled.addListener(async () => {
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id) return
   await chrome.sidePanel.open({ tabId: tab.id })
-  if (tab.url?.includes('web.whatsapp.com')) {
-    await updateWhatsAppContactInfo(tab.id)
-  }
 })
 
 // ===== TAB EVENTS — Update context only (no enable/disable — panel always available) =====
 
-let lastWhatsAppUrl: string | null = null
-
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (!changeInfo.url) return
-
-  const isWhatsApp = changeInfo.url.includes('web.whatsapp.com')
-
-  // WhatsApp conversation change
-  if (isWhatsApp && tab.url !== lastWhatsAppUrl) {
-    lastWhatsAppUrl = tab.url ?? null
-    setTimeout(async () => {
-      await updateWhatsAppContactInfo(tabId)
-    }, 1000)
-  }
 
   // LinkedIn profile navigation (URL changed within LinkedIn)
   if (changeInfo.url.includes('linkedin.com/in/')) {
@@ -81,7 +65,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         if (results?.[0]?.result?.linkedinUrl) {
           await chrome.storage.local.set({
             currentLinkedInProfile: results[0].result,
-            currentWhatsAppContact: null,
           })
         }
       } catch {
@@ -102,8 +85,7 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
     if (!tab.url) return
 
     if (tab.url.includes('linkedin.com/in/')) {
-      // Switched to a LinkedIn profile tab — clear WhatsApp, extract LinkedIn
-      await chrome.storage.local.set({ currentWhatsAppContact: null })
+      // Switched to a LinkedIn profile tab — extract LinkedIn
       setTimeout(async () => {
         try {
           const results = await chrome.scripting.executeScript({
@@ -113,136 +95,18 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
           if (results?.[0]?.result?.linkedinUrl) {
             await chrome.storage.local.set({
               currentLinkedInProfile: results[0].result,
-              currentWhatsAppContact: null,
             })
           }
         } catch {}
       }, 600)
-    } else if (tab.url.includes('web.whatsapp.com')) {
-      // Switched to WhatsApp — clear LinkedIn, extract WhatsApp contact
-      await chrome.storage.local.set({ currentLinkedInProfile: null })
-      setTimeout(async () => {
-        await updateWhatsAppContactInfo(tabId)
-      }, 600)
     } else if (!tab.url.includes('linkedin.com')) {
-      // Switched to an unrelated tab — clear both
-      await chrome.storage.local.set({ currentWhatsAppContact: null, currentLinkedInProfile: null })
+      // Switched to an unrelated tab — clear LinkedIn context
+      await chrome.storage.local.set({ currentLinkedInProfile: null })
     }
   } catch {
     // Tab may not be accessible
   }
 })
-
-// ===== WHATSAPP CONTACT INFO EXTRACTION =====
-
-async function updateWhatsAppContactInfo(tabId: number, attempt = 1) {
-  try {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: extractWhatsAppContactInfo,
-    })
-
-    if (results && results[0]?.result) {
-      const contactInfo = results[0].result
-      if (contactInfo.phone) {
-        // Add '+' prefix if not present (WhatsApp data-id has full intl number without +)
-        if (!contactInfo.phone.startsWith('+')) {
-          contactInfo.phone = '+' + contactInfo.phone
-        }
-        // Phone found — update storage to trigger onChanged → determineState()
-        await chrome.storage.local.set({
-          currentWhatsAppContact: contactInfo,
-          currentLinkedInProfile: null,
-        })
-      } else {
-        // Phone not found yet — could be new chat that hasn't loaded messages
-        if (contactInfo.name) {
-          // Write partial data (name only) so sidebar shows something
-          await chrome.storage.local.set({
-            currentWhatsAppContact: { ...contactInfo, phone: null },
-            currentLinkedInProfile: null,
-          })
-        }
-        if (attempt < 4) {
-          // Retry after messages load
-          setTimeout(() => updateWhatsAppContactInfo(tabId, attempt + 1), 1200)
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Failed to extract WhatsApp contact info:', error)
-  }
-}
-
-// Injected into WhatsApp Web page — must be self-contained
-function extractWhatsAppContactInfo() {
-  try {
-    let contactName = null
-
-    // Try specific span selectors first (most reliable)
-    const nameSelectors = [
-      'header [data-testid="conversation-info-header"] span[title]',
-      'header span[data-testid="conversation-info-header-chat-title"]',
-      '[data-testid="conversation-header"] span[title]',
-      'header [data-testid="conversation-info-header"] span[dir]',
-    ]
-    for (const sel of nameSelectors) {
-      const el = document.querySelector(sel) as HTMLElement | null
-      if (el) {
-        const text = (el.getAttribute('title') || el.innerText)?.trim()
-        if (text && text.length >= 2 && text.length < 100) {
-          contactName = text
-          break
-        }
-      }
-    }
-
-    // Fallback: first span innerText in conversation header
-    if (!contactName) {
-      const header = document.querySelector('header [data-testid="conversation-info-header"]') as HTMLElement | null
-      if (header) {
-        const firstSpan = header.querySelector('span') as HTMLElement | null
-        if (firstSpan) {
-          const text = firstSpan.innerText?.trim()
-          if (text && text.length >= 2 && text.length < 100) contactName = text
-        }
-      }
-    }
-
-    // Fallback: full header innerText first line
-    if (!contactName) {
-      const header = document.querySelector('header [data-testid="conversation-info-header"]') as HTMLElement | null
-      if (header) {
-        const text = header.innerText?.trim()
-        if (text) {
-          const firstLine = text.split('\n')[0]?.trim()
-          if (firstLine && firstLine.length >= 2 && firstLine.length < 100) {
-            contactName = firstLine
-          }
-        }
-      }
-    }
-
-    let phone = null
-    const messages = document.querySelectorAll('[data-id]')
-    for (const msg of Array.from(messages).reverse()) {
-      const dataId = msg.getAttribute('data-id')
-      if (dataId?.includes('@c.us')) {
-        const match = dataId.match(/(?:true|false)_(.+?)@c\.us/)
-        if (match?.[1]) {
-          // WhatsApp data-id has full international number — just add +
-          const raw = match[1]
-          phone = raw.startsWith('+') ? raw : '+' + raw
-          break
-        }
-      }
-    }
-
-    return { name: contactName, phone, url: window.location.href }
-  } catch {
-    return null
-  }
-}
 
 // Injected into LinkedIn profile pages — must be self-contained (no imports)
 function extractLinkedInProfileBasicInfo() {
@@ -345,11 +209,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabUrl = sender.tab?.url ?? ''
     if (tabId) {
       chrome.sidePanel.open({ tabId }).catch(err => console.warn('sidePanel.open error:', err))
-      // Async: extract contact info so panel has fresh data (storage.onChanged re-triggers determineState)
-      if (tabUrl.includes('web.whatsapp.com')) {
-        updateWhatsAppContactInfo(tabId)  // intentionally not awaited
-      }
     }
+    void tabUrl
     sendResponse({ success: true })
     return false
   }
@@ -357,58 +218,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   ;(async () => {
     try {
       switch (message.type) {
-        case 'WHATSAPP_CONVERSATION_CHANGED': {
-          const tabId = sender.tab?.id
-          if (tabId) {
-            if (message.phone) {
-              await chrome.storage.local.set({
-                currentWhatsAppContact: { phone: message.phone, name: null },
-                currentLinkedInProfile: null,
-              })
-              // Auto-backfill after 2s so messages have time to render in DOM
-              setTimeout(() => autoBackfillWhatsApp(tabId, message.phone), 2000)
-            } else {
-              await chrome.storage.local.remove('currentWhatsAppContact')
-            }
-            updateWhatsAppContactInfo(tabId)
-          }
-          sendResponse({ success: true })
-          break
-        }
-
-        case 'whatsapp_message':
-          await handleWhatsAppMessage(message)
-          sendResponse({ success: true })
-          break
-
         case 'linkedin_message':
           await handleLinkedInMessage(message)
           sendResponse({ success: true })
           break
-
-        case 'get_whatsapp_contact': {
-          const tabId = sender.tab?.id ?? (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id
-          if (tabId) {
-            const tab = await chrome.tabs.get(tabId)
-            if (tab.url?.includes('web.whatsapp.com')) {
-              const results = await chrome.scripting.executeScript({
-                target: { tabId },
-                func: extractWhatsAppContactInfo,
-              })
-              if (results?.[0]?.result) {
-                await chrome.storage.local.set({ currentWhatsAppContact: results[0].result })
-                sendResponse({ success: true, contactInfo: results[0].result })
-              } else {
-                sendResponse({ success: false, error: 'No contact info found' })
-              }
-            } else {
-              sendResponse({ success: false, error: 'Not on WhatsApp Web' })
-            }
-          } else {
-            sendResponse({ success: false, error: 'Not on WhatsApp Web' })
-          }
-          break
-        }
 
         case 'CHECK_CONTACT_LINKEDIN': {
           const userId = await getCurrentUserId()
@@ -420,73 +233,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             .eq('linkedin_url', message.linkedinUrl)
             .maybeSingle()
           sendResponse({ exists: !!data })
-          break
-        }
-
-        // F01: Look up contact by phone, with Attio fallback auto-import
-        case 'LOAD_CONTACT_BY_PHONE': {
-          const userId = await getCurrentUserId()
-          if (!userId) { sendResponse({ contact: null }); break }
-          const phone: string = message.phone
-          const contact = await findContactByPhone(userId, phone)
-          if (contact) {
-            const { data: full } = await supabase
-              .from('outreach_logs')
-              .select('id, name, health_score, status, last_interaction_at, personal_context, category, job_title, company, profile_photo_url, birthday, links, email')
-              .eq('id', contact.id)
-              .single()
-            sendResponse({ contact: full, source: 'local' })
-            break
-          }
-          // Not found locally — try Attio by phone number
-          const attioKey = await getStoredAttioKey()
-          if (attioKey && phone) {
-            try {
-              const searchRes = await fetch('https://api.attio.com/v2/objects/people/records/query', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${attioKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  filter: { phone_numbers: { "$any_of": [{ "$eq": phone }] } },
-                  limit: 1
-                })
-              })
-              if (searchRes.ok) {
-                const attioData = await searchRes.json()
-                const person = attioData?.data?.[0]
-                if (person) {
-                  const name = person.values?.name?.[0]?.full_name ??
-                               `${person.values?.first_name?.[0]?.value ?? ''} ${person.values?.last_name?.[0]?.value ?? ''}`.trim()
-                  const email = person.values?.email_addresses?.[0]?.email_address ?? null
-                  const linkedin = person.values?.linkedin?.[0]?.value ?? null
-                  const title = person.values?.job_title?.[0]?.value ?? null
-                  if (name) {
-                    const { data: newContact } = await supabase
-                      .from('outreach_logs')
-                      .insert({
-                        user_id: userId,
-                        name,
-                        phone,
-                        email,
-                        linkedin_url: linkedin,
-                        job_title: title,
-                        attio_record_id: person.id?.record_id ?? null,
-                        status: 'PROSPECT',
-                        health_score: 0,
-                      })
-                      .select()
-                      .single()
-                    if (newContact) {
-                      sendResponse({ contact: newContact, source: 'attio_auto_import' })
-                      break
-                    }
-                  }
-                }
-              }
-            } catch (e) {
-              console.error('Attio auto-resolve error (phone):', e)
-            }
-          }
-          sendResponse({ contact: null, source: 'not_found' })
           break
         }
 
@@ -556,16 +302,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           break
         }
 
-        case 'GET_WHATSAPP_CONTACT_STATUS': {
-          const stored = await chrome.storage.local.get('currentWhatsAppContact')
-          if (!stored.currentWhatsAppContact?.phone) { sendResponse({ isMapped: false }); break }
-          const userId = await getCurrentUserId()
-          if (!userId) { sendResponse({ isMapped: false }); break }
-          const contact = await findContactByPhone(userId, stored.currentWhatsAppContact.phone)
-          sendResponse({ isMapped: !!contact })
-          break
-        }
-
         case 'UPDATE_PROSPECTING_HABIT': {
           const userId = await getCurrentUserId()
           if (userId) {
@@ -589,7 +325,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
           await chrome.storage.local.set({
             currentLinkedInProfile: updated,
-            currentWhatsAppContact: null,
           })
 
           // Save birthday to outreach_logs if found
@@ -635,28 +370,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
 
           sendResponse({ success: true })
-          break
-        }
-
-        case 'BACKFILL_WHATSAPP_HISTORY': {
-          const userId = await getCurrentUserId()
-          if (!userId) { sendResponse({ success: false, error: 'not_auth' }); break }
-
-          const contact = await findContactByPhone(userId, message.phone)
-          if (!contact) { sendResponse({ success: false, error: 'no_contact' }); break }
-
-          const waTabs = await chrome.tabs.query({ url: 'https://web.whatsapp.com/*' })
-          const waTab = waTabs[0]
-          if (!waTab?.id) { sendResponse({ success: false, error: 'no_tab' }); break }
-
-          const injected = await chrome.scripting.executeScript({
-            target: { tabId: waTab.id },
-            func: scanWhatsAppMessageHistory,
-          })
-          const rawEntries: Array<{ timestamp: number; direction: 'inbound' | 'outbound' }> = injected?.[0]?.result ?? []
-
-          const result = await backfillWindowsForContact(userId, contact, rawEntries)
-          sendResponse({ success: true, ...result })
           break
         }
 
@@ -814,189 +527,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true
 })
 
-// ===== WHATSAPP AUTO BACKFILL =====
-// Called silently every time the user switches to a mapped WhatsApp contact.
-// Scans visible messages and fills in any 6-hour windows not yet in the DB.
-// Safe to call repeatedly — deduplicates by interaction_date.
-
-async function autoBackfillWhatsApp(tabId: number, phone: string) {
-  try {
-    const userId = await getCurrentUserId()
-    if (!userId) return
-    const contact = await findContactByPhone(userId, phone)
-    if (!contact) return  // Not mapped — nothing to do
-
-    const injected = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: scanWhatsAppMessageHistory,
-    })
-    const rawEntries: Array<{ timestamp: number; direction: 'inbound' | 'outbound' }> = injected?.[0]?.result ?? []
-    if (rawEntries.length === 0) return
-
-    await backfillWindowsForContact(userId, contact, rawEntries)
-  } catch {
-    // Non-critical — fail silently
-  }
-}
-
-// Shared logic used by both auto-backfill and the manual BACKFILL_WHATSAPP_HISTORY message
-async function backfillWindowsForContact(
-  userId: string,
-  contact: Contact,
-  rawEntries: Array<{ timestamp: number; direction: 'inbound' | 'outbound' }>
-): Promise<{ found: number; created: number }> {
-  const windows = groupInto6HourWindows(rawEntries)
-  let created = 0
-
-  for (const win of windows) {
-    const interactionDate = new Date(win.timestamp).toISOString().split('T')[0]
-
-    const { data: existing } = await supabase
-      .from('interactions')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('contact_id', contact.id)
-      .eq('interaction_date', interactionDate)
-      .eq('type', 'whatsapp')
-      .maybeSingle()
-
-    if (existing) continue
-
-    const { data: interaction, error: iErr } = await supabase
-      .from('interactions')
-      .insert({
-        user_id: userId,
-        contact_id: contact.id,
-        type: 'whatsapp',
-        direction: win.direction,
-        notes: `[backfill] ${win.messageCount} messages`,
-        interaction_date: interactionDate,
-      })
-      .select()
-      .single()
-
-    if (iErr || !interaction) continue
-
-    const windowStart = new Date(win.timestamp)
-    const windowEnd = new Date(win.timestamp)
-    windowEnd.setHours(windowEnd.getHours() + 6)
-
-    await supabase.from('extension_interaction_windows').insert({
-      user_id: userId,
-      contact_id: contact.id,
-      interaction_id: interaction.id,
-      channel: 'whatsapp',
-      window_start: windowStart.toISOString(),
-      window_end: windowEnd.toISOString(),
-      direction: win.direction,
-      message_count: win.messageCount,
-    })
-
-    created++
-  }
-
-  if (created > 0) {
-    const affectedDates = [...new Set(windows.map(w => new Date(w.timestamp).toISOString().split('T')[0]))]
-    for (const date of affectedDates) {
-      await updateNetworkingHabit(userId, date)
-    }
-  }
-
-  return { found: rawEntries.length, created }
-}
-
-// ===== WHATSAPP HISTORY BACKFILL =====
-
-// Injected into WhatsApp tab — MUST be self-contained (no imports, no closure references)
-function scanWhatsAppMessageHistory(): Array<{ timestamp: number; direction: 'inbound' | 'outbound' }> {
-  function parseWATimestamp(s: string): number | null {
-    // s examples: "3:45 PM, 3/21/2026" | "15:45, 21/3/2026" | "3:45 p.\u00a0m., 21/3/2026"
-    const commaIdx = s.lastIndexOf(',')
-    if (commaIdx === -1) return null
-    const timeStr = s.slice(0, commaIdx).trim()
-    const dateStr = s.slice(commaIdx + 1).trim()
-
-    const parts = dateStr.trim().split('/')
-    if (parts.length !== 3) return null
-
-    const p0 = parseInt(parts[0]), p1 = parseInt(parts[1])
-    let year = parseInt(parts[2].trim()), month: number, day: number
-    if (isNaN(year) || parts[2].trim().length !== 4) return null
-    // DD/MM vs MM/DD: if first part > 12 it must be day
-    if (p0 > 12) { day = p0; month = p1 } else { month = p0; day = p1 }
-
-    const timeMatch = timeStr.match(/(\d+):(\d+)/)
-    if (!timeMatch) return null
-    let h = parseInt(timeMatch[1]), m = parseInt(timeMatch[2])
-    if (/p[.\s]*m/i.test(timeStr) && h !== 12) h += 12
-    else if (/a[.\s]*m/i.test(timeStr) && h === 12) h = 0
-
-    const d = new Date(year, month - 1, day, h, m)
-    return isNaN(d.getTime()) ? null : d.getTime()
-  }
-
-  try {
-    const entries: Array<{ timestamp: number; direction: 'inbound' | 'outbound' }> = []
-    const seen = new Set<string>()
-
-    const copyables = document.querySelectorAll('[data-pre-plain-text]')
-    for (const el of Array.from(copyables)) {
-      const prePlain = el.getAttribute('data-pre-plain-text') ?? ''
-      const bracketMatch = prePlain.match(/\[([^\]]+)\]/)
-      if (!bracketMatch) continue
-
-      const timestamp = parseWATimestamp(bracketMatch[1])
-      if (!timestamp) continue
-
-      const bubble = el.closest('[data-id]') as HTMLElement | null
-      const dataId = bubble?.getAttribute('data-id') ?? ''
-      if (dataId && seen.has(dataId)) continue
-      if (dataId) seen.add(dataId)
-
-      const isInbound = !!(el.closest('.message-in') || bubble?.closest('.message-in'))
-      entries.push({ timestamp, direction: isInbound ? 'inbound' : 'outbound' })
-    }
-
-    return entries
-  } catch {
-    return []
-  }
-}
-
-interface BackfillWindow {
-  timestamp: number
-  direction: 'inbound' | 'outbound'
-  messageCount: number
-}
-
-function groupInto6HourWindows(entries: Array<{ timestamp: number; direction: 'inbound' | 'outbound' }>): BackfillWindow[] {
-  if (entries.length === 0) return []
-  entries.sort((a, b) => a.timestamp - b.timestamp)
-
-  const SIX_HOURS = 6 * 60 * 60 * 1000
-  const windows: BackfillWindow[] = []
-  let group: typeof entries = []
-  let windowStart = entries[0].timestamp
-
-  for (const entry of entries) {
-    if (entry.timestamp - windowStart > SIX_HOURS) {
-      if (group.length > 0) {
-        const out = group.filter(m => m.direction === 'outbound').length
-        windows.push({ timestamp: windowStart, direction: out >= group.length - out ? 'outbound' : 'inbound', messageCount: group.length })
-      }
-      windowStart = entry.timestamp
-      group = [entry]
-    } else {
-      group.push(entry)
-    }
-  }
-  if (group.length > 0) {
-    const out = group.filter(m => m.direction === 'outbound').length
-    windows.push({ timestamp: windowStart, direction: out >= group.length - out ? 'outbound' : 'inbound', messageCount: group.length })
-  }
-
-  return windows
-}
 
 // ===== PHOTO UPLOAD =====
 
@@ -1122,47 +652,6 @@ interface Contact {
   name: string
 }
 
-async function findContactByPhone(userId: string, phone: string): Promise<Contact | null> {
-  // Primary: contact_channels (new unified table)
-  const variants = phoneVariants(phone)
-  const { data: channelData } = await supabase
-    .from('contact_channels')
-    .select(`
-      outreach_log_id,
-      outreach_logs!inner (
-        id,
-        name
-      )
-    `)
-    .eq('channel', 'whatsapp')
-    .in('channel_identifier', variants)
-    .maybeSingle()
-
-  if (channelData) {
-    const contactData = channelData.outreach_logs as any
-    return { id: contactData.id, name: contactData.name }
-  }
-
-  // Fallback: legacy contact_phone_mappings (for backward compat during migration)
-  const { data, error } = await supabase
-    .from('contact_phone_mappings')
-    .select(`
-      contact_id,
-      outreach_logs!inner (
-        id,
-        name
-      )
-    `)
-    .eq('user_id', userId)
-    .eq('phone_number', phone)
-    .maybeSingle()
-
-  if (error || !data) return null
-
-  const contactData = data.outreach_logs as any
-  return { id: contactData.id, name: contactData.name }
-}
-
 // F09: Normalize LinkedIn URLs for comparison (strip trailing slash, normalize www)
 function normalizeLinkedInUrl(url: string): string {
   return url.replace(/\/$/, '').replace('www.linkedin.com', 'linkedin.com').toLowerCase()
@@ -1252,7 +741,7 @@ async function findActiveWindow(userId: string, contactId: string, channel: stri
   return data
 }
 
-async function queueFailedEvent(event: WhatsAppMessageEvent | LinkedInMessageEvent) {
+async function queueFailedEvent(event: LinkedInMessageEvent) {
   try {
     const { pendingEvents = [] } = await chrome.storage.local.get('pendingEvents')
     pendingEvents.push(event)
@@ -1262,136 +751,7 @@ async function queueFailedEvent(event: WhatsAppMessageEvent | LinkedInMessageEve
   }
 }
 
-async function updateLastProcessedMessage(userId: string, phone: string, timestamp: number) {
-  try {
-    await supabase
-      .from('contact_phone_mappings')
-      .update({
-        last_processed_at: new Date(timestamp).toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userId)
-      .eq('phone_number', phone)
-  } catch {
-    // Non-critical
-  }
-}
 
-// ===== WHATSAPP MESSAGE HANDLER =====
-
-interface WhatsAppMessageEvent {
-  type: 'whatsapp_message'
-  phone: string
-  direction: 'inbound' | 'outbound'
-  timestamp: number
-}
-
-// In-memory mutex: prevents race conditions when multiple messages arrive simultaneously
-// (e.g., WhatsApp history load fires many events at once — all find "no active window" → all create interactions)
-const processingPhones = new Set<string>()
-
-async function handleWhatsAppMessage(event: WhatsAppMessageEvent) {
-  // Skip if already processing this phone — prevents duplicate interaction creation from concurrent events
-  if (processingPhones.has(event.phone)) return
-  processingPhones.add(event.phone)
-  try {
-    await _handleWhatsAppMessage(event)
-  } finally {
-    // Release mutex after a short delay so rapid messages are still grouped into the same window
-    setTimeout(() => processingPhones.delete(event.phone), 2000)
-  }
-}
-
-async function _handleWhatsAppMessage(event: WhatsAppMessageEvent) {
-  try {
-    const userId = await getCurrentUserId()
-    if (!userId) return
-
-    const contact = await findContactByPhone(userId, event.phone)
-    if (!contact) {
-      // Store pending phone so sidebar can prompt for mapping
-      await chrome.storage.local.set({ pendingPhone: event.phone })
-      return
-    }
-
-    const activeWindow = await findActiveWindow(userId, contact.id, 'whatsapp')
-
-    if (activeWindow) {
-      await supabase
-        .from('extension_interaction_windows')
-        .update({ message_count: activeWindow.message_count + 1, updated_at: new Date().toISOString() })
-        .eq('id', activeWindow.id)
-    } else {
-      const interactionDate = new Date(event.timestamp).toISOString().split('T')[0]
-
-      const { data: existingInteraction } = await supabase
-        .from('interactions')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('contact_id', contact.id)
-        .eq('interaction_date', interactionDate)
-        .eq('type', 'whatsapp')
-        .maybeSingle()
-
-      let interaction = existingInteraction
-
-      if (!interaction) {
-        const { data: newInteraction, error: interactionError } = await supabase
-          .from('interactions')
-          .insert({
-            user_id: userId,
-            contact_id: contact.id,
-            type: 'whatsapp',
-            direction: event.direction,
-            notes: null,
-            interaction_date: interactionDate,
-          })
-          .select()
-          .single()
-
-        if (interactionError || !newInteraction) {
-          await queueFailedEvent(event)
-          throw interactionError
-        }
-        interaction = newInteraction
-      }
-
-      const windowStart = new Date(event.timestamp)
-      const windowEnd = new Date(event.timestamp)
-      windowEnd.setHours(windowEnd.getHours() + 6)
-
-      const { error: windowError } = await supabase
-        .from('extension_interaction_windows')
-        .insert({
-          user_id: userId,
-          contact_id: contact.id,
-          interaction_id: interaction!.id,
-          channel: 'whatsapp',
-          window_start: windowStart.toISOString(),
-          window_end: windowEnd.toISOString(),
-          direction: event.direction,
-          message_count: 1,
-        })
-
-      if (windowError) {
-        await queueFailedEvent(event)
-        throw windowError
-      }
-
-      await updateNetworkingHabit(userId, interactionDate)
-      await updateLastProcessedMessage(userId, event.phone, event.timestamp)
-    }
-  } catch (error) {
-    console.error('Error in handleWhatsAppMessage:', error)
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: '/icons/icon-48.png',
-      title: 'reThink People',
-      message: 'Failed to log WhatsApp interaction. Check your connection.',
-    })
-    throw error
-  }
-}
 
 // ===== LINKEDIN MESSAGE HANDLER =====
 
@@ -1551,10 +911,7 @@ async function processPendingEvents() {
     for (let i = 0; i < pendingEvents.length; i++) {
       const event = pendingEvents[i]
       try {
-        if (event.type === 'whatsapp_message') {
-          await handleWhatsAppMessage(event)
-          successfulIndexes.push(i)
-        } else if (event.type === 'linkedin_message') {
+        if (event.type === 'linkedin_message') {
           await handleLinkedInMessage(event)
           successfulIndexes.push(i)
         }

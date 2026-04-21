@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import type { User } from '@supabase/supabase-js'
-import { WhatsAppMappedScreen } from './screens/WhatsAppMappedScreen'
-import { WhatsAppUnmappedScreen } from './screens/WhatsAppUnmappedScreen'
 import { LinkedInKnownScreen } from './screens/LinkedInKnownScreen'
 import { LinkedInNewScreen } from './screens/LinkedInNewScreen'
 import { DailyProgress } from './components/DailyProgress'
@@ -13,14 +11,10 @@ type SidebarState =
   | 'loading'
   | 'unauthenticated'
   | 'default'
-  | 'whatsapp_mapped'
-  | 'whatsapp_unmapped'
   | 'linkedin_known'
   | 'linkedin_new'
 
 export interface CurrentContact {
-  // WhatsApp
-  phone?: string
   // LinkedIn
   linkedinUrl?: string
   linkedinName?: string
@@ -63,7 +57,7 @@ export default function App() {
     determineState()
 
     const onStorageChange = (changes: Record<string, chrome.storage.StorageChange>) => {
-      if (changes.currentWhatsAppContact || changes.currentLinkedInProfile) {
+      if (changes.currentLinkedInProfile) {
         determineState()
       }
     }
@@ -81,21 +75,9 @@ export default function App() {
       }
       setUser(session.user)
 
-      const stored = await chrome.storage.local.get(['currentWhatsAppContact', 'currentLinkedInProfile'])
+      const stored = await chrome.storage.local.get(['currentLinkedInProfile'])
 
-      if (stored.currentWhatsAppContact?.phone) {
-        const contact = await findContactByPhone(session.user.id, stored.currentWhatsAppContact.phone)
-        if (contact) {
-          setCurrentContact({ phone: stored.currentWhatsAppContact.phone, ...contact })
-          setSidebarState('whatsapp_mapped')
-        } else {
-          setCurrentContact({
-            phone: stored.currentWhatsAppContact.phone,
-            linkedinName: stored.currentWhatsAppContact.name,
-          })
-          setSidebarState('whatsapp_unmapped')
-        }
-      } else if (stored.currentLinkedInProfile?.linkedinUrl) {
+      if (stored.currentLinkedInProfile?.linkedinUrl) {
         const profile = stored.currentLinkedInProfile as LinkedInProfile
         setLinkedInProfile(profile)
         const contact = await findContactByLinkedInUrl(session.user.id, profile.linkedinUrl!)
@@ -178,25 +160,6 @@ export default function App() {
     case 'default':
       return <DefaultScreen user={user!} onSignOut={handleSignOut} />
 
-    case 'whatsapp_mapped':
-      return (
-        <WhatsAppMappedScreen
-          contact={currentContact!}
-          user={user!}
-          onSignOut={handleSignOut}
-        />
-      )
-
-    case 'whatsapp_unmapped':
-      return (
-        <WhatsAppUnmappedScreen
-          phone={currentContact?.phone ?? ''}
-          suggestedName={currentContact?.linkedinName}
-          user={user!}
-          onMapped={() => determineState()}
-        />
-      )
-
     case 'linkedin_known':
       return (
         <LinkedInKnownScreen
@@ -221,49 +184,6 @@ export default function App() {
 }
 
 // ===== SUPABASE HELPERS =====
-
-async function findContactByPhone(userId: string, phone: string): Promise<Partial<CurrentContact> | null> {
-  const digits = phone.replace(/\D/g, '')
-  const variants = Array.from(new Set([
-    phone,
-    digits,
-    '+' + digits,
-    ...(digits.startsWith('52') && digits.length > 10 ? ['+' + digits.slice(2), digits.slice(2)] : []),
-    ...(digits.startsWith('1') && digits.length === 11 ? ['+' + digits.slice(1), digits.slice(1)] : []),
-  ])).filter(Boolean)
-
-  const { data, error } = await supabase
-    .from('contact_phone_mappings')
-    .select(`
-      contact_id,
-      outreach_logs!inner (
-        id, name, company, job_title, health_score, status, profile_photo_url,
-        personal_context, category, last_interaction_at, birthday, links, email
-      )
-    `)
-    .eq('user_id', userId)
-    .in('phone_number', variants)
-    .maybeSingle()
-
-  if (error || !data) return null
-
-  const contact = data.outreach_logs as any
-  return {
-    reThinkId: contact.id,
-    name: contact.name,
-    company: contact.company,
-    jobTitle: contact.job_title,
-    healthScore: contact.health_score,
-    status: contact.status,
-    profilePhotoUrl: contact.profile_photo_url,
-    personalContext: contact.personal_context,
-    category: contact.category,
-    lastInteractionAt: contact.last_interaction_at,
-    birthday: contact.birthday,
-    links: contact.links ?? [],
-    email: contact.email ?? null,
-  }
-}
 
 async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Promise<Partial<CurrentContact> | null> {
   const normalized = linkedinUrl.replace(/\/$/, '')
@@ -313,7 +233,7 @@ function LoginScreen({ onSignIn }: { onSignIn: () => void }) {
       </div>
       <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#003720', textAlign: 'center', margin: 0 }}>reThink People</h1>
       <p style={{ fontSize: '14px', color: '#536471', textAlign: 'center', margin: 0, lineHeight: 1.5 }}>
-        Sign in to automatically track your WhatsApp and LinkedIn conversations.
+        Sign in to automatically track your LinkedIn conversations.
       </p>
       <button
         onClick={onSignIn}
@@ -523,7 +443,7 @@ function DefaultScreen({ user, onSignOut }: { user: User; onSignOut: () => void 
           {!hasContent && (
             <div style={{ padding: '24px 0', textAlign: 'center' }}>
               <p style={{ fontSize: '13px', color: '#536471', margin: '0 0 4px 0' }}>All clear — no upcoming milestones this week.</p>
-              <p style={{ fontSize: '12px', color: '#536471', margin: 0, lineHeight: 1.5 }}>Open a WhatsApp conversation or LinkedIn profile to get started.</p>
+              <p style={{ fontSize: '12px', color: '#536471', margin: 0, lineHeight: 1.5 }}>Open a LinkedIn profile to get started.</p>
             </div>
           )}
 
