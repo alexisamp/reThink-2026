@@ -18,6 +18,7 @@ import ReflectionLibrary from '@/screens/ReflectionLibrary'
 import YearAtAGlance from '@/screens/YearAtAGlance'
 import People from '@/screens/People'
 import PersonDetail from '@/screens/PersonDetail'
+import PeopleClassify from '@/screens/PeopleClassify'
 import PeopleCompanies from '@/screens/PeopleCompanies'
 import CompanyDetail from '@/screens/CompanyDetail'
 import PeopleOpportunities from '@/screens/PeopleOpportunities'
@@ -208,6 +209,7 @@ export default function App() {
                   <Route path="/library" element={<ReflectionLibrary />} />
                   <Route path="/year" element={<YearAtAGlance />} />
                   <Route path="/people" element={<People />} />
+                  <Route path="/people/classify" element={<PeopleClassify />} />
                   <Route path="/people/companies" element={<PeopleCompanies />} />
                   <Route path="/people/companies/:id" element={<CompanyDetail />} />
                   <Route path="/people/opportunities" element={<PeopleOpportunities />} />

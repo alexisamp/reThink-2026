@@ -421,6 +421,13 @@ export default function People() {
             </button>
           </div>
           <button
+            onClick={() => navigate('/people/classify')}
+            className="text-xs text-shuttle hover:text-burnham px-2 py-1 rounded hover:bg-mercury/30 transition-colors"
+            title="Classify contacts as professional or personal"
+          >
+            Classify
+          </button>
+          <button
             onClick={handleNewPerson}
             className="flex items-center gap-1.5 bg-burnham hover:bg-burnham/90 text-gossip text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
           >

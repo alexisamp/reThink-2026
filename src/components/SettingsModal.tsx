@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   X, ArrowClockwise, CheckCircle, WarningCircle, DownloadSimple, RocketLaunch,
   Eye, EyeSlash, TrashSimple, Plugs, FunnelSimple, ArrowsClockwise,
-  PuzzlePiece, UserCircle, Bell, Timer, SignOut, ChartBar,
+  PuzzlePiece, UserCircle, Bell, Timer, SignOut, ChartBar, ClockCounterClockwise,
 } from '@phosphor-icons/react'
 import type { UpdaterState } from '@/hooks/useUpdater'
 import { supabase } from '@/lib/supabase'
@@ -24,7 +24,7 @@ interface SettingsModalProps {
   onZoomChange?: (level: 80 | 90 | 100) => void
 }
 
-type Section = 'profile' | 'appearance' | 'notifications' | 'focus' | 'performance' | 'integrations' | 'funnel' | 'updates'
+type Section = 'profile' | 'appearance' | 'notifications' | 'focus' | 'performance' | 'cadence' | 'integrations' | 'funnel' | 'updates'
 
 const SECTIONS: { id: Section; label: string; description: string; Icon: React.ElementType }[] = [
   { id: 'profile',       label: 'Profile',              description: 'Your account info and sign out.',                  Icon: UserCircle },
@@ -32,6 +32,7 @@ const SECTIONS: { id: Section; label: string; description: string; Icon: React.E
   { id: 'notifications', label: 'Notifications',         description: 'Configure when the app sends reminders.',         Icon: Bell },
   { id: 'focus',         label: 'Focus',                 description: 'Pomodoro defaults and ambient sound.',            Icon: Timer },
   { id: 'performance',   label: 'Performance',           description: 'Habit grading thresholds and adherence targets.',  Icon: ChartBar },
+  { id: 'cadence',       label: 'Relationship Cadence',  description: 'How often to touch Tier 1, 2, and 3 contacts.',   Icon: ClockCounterClockwise },
   { id: 'integrations',  label: 'Integrations',          description: 'Connect external tools and services.',            Icon: Plugs },
   { id: 'funnel',        label: 'Relationship Funnel',   description: 'Customize your pipeline stages and criteria.',    Icon: FunnelSimple },
   { id: 'updates',       label: 'Updates',               description: 'Manage app version and auto-update settings.',    Icon: ArrowsClockwise },
@@ -607,6 +608,15 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
               </div>
             )}
 
+            {/* ── RELATIONSHIP CADENCE ── */}
+            {section === 'cadence' && (
+              <CadenceSection
+                profile={profile}
+                userId={userId}
+                onProfileUpdate={(updated) => setProfile(updated)}
+              />
+            )}
+
             {/* ── INTEGRATIONS ── */}
             {section === 'integrations' && (
               <div className="space-y-5">
@@ -1028,6 +1038,123 @@ function NotifRow({
           />
         )}
         <Toggle enabled={enabled} onChange={onToggle} />
+      </div>
+    </div>
+  )
+}
+
+// ─── Cadence Section ────────────────────────────────────────────────────────
+
+interface CadenceSectionProps {
+  profile: Profile | null
+  userId: string | undefined
+  onProfileUpdate: (updated: Profile) => void
+}
+
+const TIER_META: Array<{ tier: '1' | '2' | '3'; title: string; hint: string; color: string }> = [
+  { tier: '1', title: 'Tier 1',  hint: 'Airport Test: you\'d pick them up. Closest pros.',          color: 'bg-gossip text-burnham border-gossip/70' },
+  { tier: '2', title: 'Tier 2',  hint: 'Shared identity / strong affinity. Maintained peers.',     color: 'bg-pastel/40 text-burnham border-pastel' },
+  { tier: '3', title: 'Tier 3',  hint: 'Loose connections — touchpoints to keep them warm.',       color: 'bg-mercury/40 text-shuttle border-mercury' },
+]
+
+function CadenceSection({ profile, userId, onProfileUpdate }: CadenceSectionProps) {
+  const [config, setConfig] = useState(() => profile?.tier_cadence_config ?? {
+    '1': { days: 30, label: 'Monthly' },
+    '2': { days: 90, label: 'Quarterly' },
+    '3': { days: 365, label: 'Annually' },
+  })
+  const [saving, setSaving] = useState(false)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (profile?.tier_cadence_config) setConfig(profile.tier_cadence_config)
+  }, [profile])
+
+  function setTierDays(tier: '1' | '2' | '3', days: number) {
+    setConfig(prev => ({
+      ...prev,
+      [tier]: { ...(prev[tier] ?? {}), days },
+    }))
+  }
+
+  async function save() {
+    if (!userId) return
+    setSaving(true)
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ tier_cadence_config: config })
+      .eq('id', userId)
+      .select('*')
+      .maybeSingle()
+    setSaving(false)
+    if (!error && data) {
+      onProfileUpdate(data as Profile)
+      setSavedAt(Date.now())
+      setTimeout(() => setSavedAt(null), 2000)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="text-sm font-medium text-burnham mb-1">Relationship cadence by Tier</p>
+        <p className="text-xs text-shuttle/50 mb-5">
+          How frequently you should touch each tier of professional contact. Jacob Warwick framework.
+          Individual contacts can override this via their profile.
+        </p>
+
+        <div className="space-y-3">
+          {TIER_META.map(({ tier, title, hint, color }) => (
+            <div key={tier} className="flex items-center justify-between py-2 border-b border-mercury/40 last:border-0">
+              <div className="flex items-center gap-3">
+                <span className={`w-9 h-9 rounded-lg border text-xs font-bold flex items-center justify-center ${color}`}>
+                  T{tier}
+                </span>
+                <div>
+                  <p className="text-sm text-burnham font-medium">{title}</p>
+                  <p className="text-[11px] text-shuttle/60">{hint}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-shuttle">Every</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={3650}
+                  step={1}
+                  value={config[tier]?.days ?? 0}
+                  onChange={e => setTierDays(tier, Math.max(1, Number(e.target.value) || 1))}
+                  className="w-20 text-sm text-burnham text-center border border-mercury rounded-xl px-2 py-1.5 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
+                />
+                <span className="text-xs text-shuttle">days</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-3 mt-6">
+          <button
+            onClick={save}
+            disabled={saving || !userId}
+            className="px-4 py-2 text-sm font-medium bg-burnham text-white rounded-xl hover:bg-burnham/90 transition-colors disabled:opacity-40"
+          >
+            {saving ? 'Saving…' : 'Save cadence'}
+          </button>
+          {savedAt && (
+            <span className="text-xs text-shuttle flex items-center gap-1">
+              <CheckCircle size={12} weight="fill" className="text-burnham" /> Saved
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="px-4 py-3 rounded-xl bg-[#F5F7F5] border border-mercury/60">
+        <p className="text-xs text-shuttle/50 mb-1.5">How this is used</p>
+        <p className="text-[11px] text-shuttle/70 leading-relaxed">
+          In each contact's profile, the cadence shows "Last contact: X days ago" with a status
+          (on-track / due soon / overdue) based on these thresholds. Only applies to contacts in
+          Professional or Mixed domain. Personal contacts don't trigger cadence alerts.
+        </p>
       </div>
     </div>
   )

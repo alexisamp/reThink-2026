@@ -1069,6 +1069,26 @@ export default function ContactDetailDrawer({
                     </button>
                   )}
                 </div>
+                {/* Per-contact cadence override (optional — defaults to tier config) */}
+                <div className="flex items-center gap-1.5 mt-2 text-[10px]">
+                  <span className="text-shuttle/60">Custom cadence:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={3650}
+                    placeholder="default"
+                    defaultValue={contact.custom_cadence_days ?? ''}
+                    onBlur={e => {
+                      const v = e.target.value.trim()
+                      const parsed = v === '' ? null : Math.max(1, Number(v) || 1)
+                      if (parsed !== (contact.custom_cadence_days ?? null)) {
+                        onUpdate(contact.id, { custom_cadence_days: parsed })
+                      }
+                    }}
+                    className="w-14 text-[10px] text-burnham text-center border border-mercury rounded px-1 py-0.5 bg-white focus:outline-none focus:border-shuttle/50"
+                  />
+                  <span className="text-shuttle/60">days (override)</span>
+                </div>
               </div>
             </div>
 

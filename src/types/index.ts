@@ -17,12 +17,16 @@ export interface FunnelStageConfig {
 
 export type ContactFunnelConfig = Record<ContactStatus, FunnelStageConfig>
 
+export type TierCadenceConfig = Record<'1' | '2' | '3', { days: number; label?: string }>
+
 export interface Profile {
   id: string
   email: string
   full_name: string | null
   avatar_url: string | null
-  contact_funnel_config: ContactFunnelConfig | null
+  contact_funnel_config: ContactFunnelConfig | null   // DEPRECATED: replaced by lists
+  tier_cadence_config: TierCadenceConfig
+  feature_flags: Record<string, boolean>
   created_at: string
   updated_at: string
 }
@@ -299,8 +303,86 @@ export interface Contact {
   tier?: 1 | 2 | 3 | null
   referred_by?: string | null
   advisory_role?: string | null
+  // v3 — relationship architecture (Jacob framework)
+  relationship_domain: RelationshipDomain
+  personal_tier?: PersonalTier | null
+  custom_cadence_days?: number | null
+  connection_strength: number
+  connection_strength_computed_at?: string | null
   created_at: string
   updated_at: string
+}
+
+// ─── v3: Relationship Architecture ────────────────────────────────────────────
+
+export type RelationshipDomain = 'professional' | 'personal' | 'mixed'
+export type PersonalTier = 'inner_circle' | 'close' | 'casual'
+
+export type ConnectionStrengthBucket =
+  | 'very_weak' | 'weak' | 'moderate' | 'strong' | 'very_strong'
+
+export interface ListStage {
+  key: string
+  label: string
+  description?: string
+  color?: string
+}
+
+export interface List {
+  id: string
+  user_id: string
+  name: string
+  purpose: string | null
+  stages: ListStage[]
+  color: string | null
+  icon: string | null
+  is_archived: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ListMembership {
+  id: string
+  list_id: string
+  contact_id: string
+  user_id: string
+  current_stage: string
+  entered_at: string
+  stage_changed_at: string
+  notes: string | null
+  created_at: string
+}
+
+export type ContactFactCategory =
+  | 'family' | 'career_intel' | 'compensation' | 'obsession'
+  | 'hot_button' | 'life_phase' | 'pet_peeve' | 'origin_story'
+  | 'health' | 'preference' | 'other'
+
+export type ContactFactSource = 'manual' | 'ai_extract' | 'chat_capture' | 'import'
+
+export interface ContactFact {
+  id: string
+  contact_id: string
+  user_id: string
+  category: ContactFactCategory
+  label: string | null
+  value: string
+  importance: 1 | 2 | 3
+  expires_at: string | null    // ISO date
+  source: ContactFactSource
+  created_at: string
+  updated_at: string
+}
+
+export interface ContactCadence {
+  contact_id: string
+  user_id: string
+  tier: 1 | 2 | 3 | null
+  relationship_domain: RelationshipDomain
+  custom_cadence_days: number | null
+  effective_cadence_days: number | null
+  last_interaction_at: string | null
+  days_since_last_interaction: number | null
 }
 
 export interface ContactMilestone {
@@ -404,7 +486,9 @@ export interface OpportunityContact {
   role: 'champion' | 'contact' | 'decision_maker' | 'blocker' | null
 }
 
-export type ValueLogType = 'introduction' | 'content' | 'referral' | 'advice' | 'endorsement' | 'opportunity' | 'other'
+export type ValueLogType =
+  | 'introduction' | 'content' | 'referral' | 'advice'
+  | 'endorsement' | 'opportunity' | 'candor' | 'other'
 
 export interface ValueLog {
   id: string
