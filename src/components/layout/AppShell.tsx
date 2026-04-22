@@ -9,6 +9,7 @@ import {
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { useLists } from '@/hooks/useLists'
 import CommandPalette from '@/components/CommandPalette'
 import SettingsModal from '@/components/SettingsModal'
 import CaptureModal from '@/components/CaptureModal'
@@ -112,6 +113,7 @@ function SectionHeader({
 
 export default function AppShell({ children, user, updater }: AppShellProps) {
   const navigate = useNavigate()
+  const { lists } = useLists(user.id)
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'true')
   const [crmOpen, setCrmOpen] = useState(() => localStorage.getItem(CRM_KEY) !== 'false')
   const [listsOpen, setListsOpen] = useState(() => localStorage.getItem(LISTS_KEY) !== 'false')
@@ -255,6 +257,27 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
                 collapsed={collapsed}
                 indent
               />
+              {/* User-created lists */}
+              {lists.map(l => (
+                <NavItem
+                  key={l.id}
+                  path={`/lists/${l.id}`}
+                  icon={
+                    l.icon ? (
+                      <span className="text-[13px] leading-none">{l.icon}</span>
+                    ) : (
+                      <span
+                        className="w-3.5 h-3.5 rounded-sm"
+                        style={{ backgroundColor: l.color ?? '#9CA3AF' }}
+                      />
+                    )
+                  }
+                  label={l.name}
+                  collapsed={collapsed}
+                  indent
+                />
+              ))}
+              {/* Legacy static presets */}
               <NavItem
                 path="/people?list=board"
                 icon={<Star size={14} weight="fill" className="text-yellow-500" />}

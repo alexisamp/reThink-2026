@@ -145,11 +145,11 @@ export default function PeopleCompanies() {
   return (
     <div className="flex flex-col h-full bg-[#FAFAFA]">
       {/* header */}
-      <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-mercury">
+      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-mercury/60">
         <div className="flex items-center gap-2">
-          <Buildings size={20} className="text-shuttle" />
-          <h1 className="text-lg font-semibold text-midnight">Companies</h1>
-          <span className="text-xs text-shuttle bg-mercury px-1.5 py-0.5 rounded-full ml-1">{rows.length}</span>
+          <Buildings size={16} className="text-shuttle" />
+          <h1 className="text-base font-semibold text-burnham">Companies</h1>
+          <span className="text-[11px] text-shuttle/40 font-mono">{rows.length}</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -206,25 +206,25 @@ export default function PeopleCompanies() {
 
       {/* table */}
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-sm border-collapse">
+        <table className="w-full text-[12px] border-collapse">
           <thead>
             <tr className="border-b border-mercury bg-white sticky top-0 z-10">
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle w-[280px]">
+              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle w-[280px]">
                 <div className="flex items-center gap-1">Company <CaretUpDown size={10} /></div>
               </th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Industry</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">
+              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Industry</th>
+              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">
                 <div className="flex items-center gap-1"><Users size={11} />Employees</div>
               </th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">
+              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">
                 <div className="flex items-center gap-1"><UsersThree size={11} />Followers</div>
               </th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">
+              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">
                 <div className="flex items-center gap-1"><MapPin size={11} />HQ</div>
               </th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">People</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Opps</th>
-              <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Last Contact</th>
+              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">People</th>
+              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Opps</th>
+              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Last Contact</th>
             </tr>
           </thead>
           <tbody>
@@ -250,9 +250,9 @@ export default function PeopleCompanies() {
                   onClick={() => navigate(`/people/companies/${row.id}`)}
                   className="border-b border-mercury hover:bg-gossip/20 cursor-pointer transition-colors"
                 >
-                  <td className="px-4 py-2.5">
+                  <td className="px-3 py-1.5">
                     <div className="flex items-center gap-2.5">
-                      <CompanyAvatar company={row} size={10} />
+                      <CompanyAvatar company={row} size={8} />
                       <div className="min-w-0">
                         <p className="font-medium text-midnight truncate">{row.name}</p>
                         {row.headline
@@ -261,32 +261,32 @@ export default function PeopleCompanies() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-2.5 text-shuttle">
+                  <td className="px-3 py-1.5 text-shuttle">
                     {row.sector ? (
                       <span className="px-2 py-0.5 bg-mercury text-midnight rounded text-xs">{row.sector}</span>
                     ) : '—'}
                   </td>
-                  <td className="px-4 py-2.5 text-shuttle text-xs">
+                  <td className="px-3 py-1.5 text-shuttle text-xs">
                     {employees != null ? (
                       <span className="text-midnight font-medium">{formatNumber(employees)}</span>
                     ) : row.size ? (
                       <span className="text-shuttle">{row.size}</span>
                     ) : '—'}
                   </td>
-                  <td className="px-4 py-2.5 text-shuttle text-xs">
+                  <td className="px-3 py-1.5 text-shuttle text-xs">
                     {row.followers_count != null
                       ? <span className="text-midnight font-medium">{formatNumber(row.followers_count)}</span>
                       : '—'}
                   </td>
-                  <td className="px-4 py-2.5 text-shuttle text-xs max-w-[200px] truncate" title={row.hq_location ?? undefined}>
+                  <td className="px-3 py-1.5 text-shuttle text-xs max-w-[200px] truncate" title={row.hq_location ?? undefined}>
                     {row.hq_location || '—'}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-3 py-1.5">
                     <span className={`font-medium ${row.people_count > 0 ? 'text-midnight' : 'text-mercury'}`}>
                       {row.people_count}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-3 py-1.5">
                     {row.active_opps > 0 ? (
                       <span className="px-2 py-0.5 bg-gossip text-burnham rounded-full text-xs font-medium">
                         {row.active_opps}
@@ -295,7 +295,7 @@ export default function PeopleCompanies() {
                       <span className="text-mercury">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-shuttle text-xs">
+                  <td className="px-3 py-1.5 text-shuttle text-xs">
                     {formatAgo(daysSince(row.last_interaction_at))}
                   </td>
                 </tr>

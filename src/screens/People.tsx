@@ -48,6 +48,46 @@ const TIER_COLORS: Record<number, string> = {
   3: 'bg-mercury text-shuttle',
 }
 
+const DOMAIN_ICON: Record<string, string> = {
+  professional: '💼',
+  mixed: '🔀',
+  personal: '👥',
+}
+
+const PERSONAL_TIER_LABEL: Record<string, string> = {
+  inner_circle: 'IC',
+  close: 'CL',
+  casual: 'CS',
+}
+
+const PERSONAL_TIER_COLOR: Record<string, string> = {
+  inner_circle: 'bg-white text-burnham border border-pastel',
+  close: 'bg-white text-shuttle border border-mercury',
+  casual: 'bg-white text-shuttle/70 border border-mercury/60',
+}
+
+/** Render a 5-dot strength indicator from a numeric strength value */
+function StrengthDots({ value }: { value: number }) {
+  // Map buckets to fill count: very_weak=1, weak=2, moderate=3, strong=4, very_strong=5
+  const v = Number(value) || 0
+  const filled =
+    v >= 10 ? 5 :
+    v >= 5  ? 4 :
+    v >= 2  ? 3 :
+    v >= 0.5 ? 2 :
+    v > 0    ? 1 : 0
+  return (
+    <div className="flex items-center gap-0.5" title={`Connection strength: ${v.toFixed(1)}`}>
+      {[1, 2, 3, 4, 5].map(i => (
+        <span
+          key={i}
+          className={`w-1 h-2.5 rounded-sm ${i <= filled ? 'bg-burnham' : 'bg-mercury/50'}`}
+        />
+      ))}
+    </div>
+  )
+}
+
 const STATUS_ORDER: ContactStatus[] = [
   'PROSPECT', 'INTRO', 'CONNECTED', 'ENGAGED', 'NURTURING', 'RECONNECT', 'DORMANT',
 ]
@@ -148,10 +188,8 @@ interface TableRowProps {
 function TableRow({ contact, channels, selected, onToggleSelect, onRowClick }: TableRowProps) {
   const myChannels = channels.filter(ch => ch.outreach_log_id === contact.id)
   const days = daysSince(contact.last_interaction_at)
-  const health = healthIndicator(days)
-  const tags: string[] = Array.isArray((contact as unknown as Record<string, unknown>).tags)
-    ? (contact as unknown as Record<string, unknown[]>).tags as string[]
-    : []
+  const domain = contact.relationship_domain ?? 'professional'
+  const isPersonal = domain === 'personal'
 
   return (
     <tr
@@ -159,65 +197,66 @@ function TableRow({ contact, channels, selected, onToggleSelect, onRowClick }: T
       onClick={() => onRowClick(contact)}
     >
       {/* Select checkbox */}
-      <td className="py-2 pl-4 pr-1 w-8" onClick={e => e.stopPropagation()}>
+      <td className="py-1.5 pl-4 pr-1 w-8" onClick={e => e.stopPropagation()}>
         <input
           type="checkbox"
           checked={selected}
           onChange={e => onToggleSelect(contact.id, e.target.checked)}
-          className="h-3.5 w-3.5 accent-burnham cursor-pointer"
+          className="h-3 w-3 accent-burnham cursor-pointer"
           aria-label={`Select ${contact.name}`}
         />
       </td>
 
       {/* Name + avatar */}
-      <td className="py-2 pl-1 pr-3">
-        <div className="flex items-center gap-2.5">
-          <ContactAvatar name={contact.name} photoUrl={contact.profile_photo_url} size={26} />
-          <span className="text-[13px] font-medium text-burnham truncate max-w-[160px]">{contact.name}</span>
+      <td className="py-1.5 pl-1 pr-3">
+        <div className="flex items-center gap-2">
+          <ContactAvatar name={contact.name} photoUrl={contact.profile_photo_url} size={22} />
+          <span className="text-[12px] font-medium text-burnham truncate max-w-[150px]">{contact.name}</span>
         </div>
       </td>
 
       {/* Company */}
-      <td className="py-2 px-3 text-[12px] text-shuttle truncate max-w-[120px]">
+      <td className="py-1.5 px-3 text-[11.5px] text-shuttle truncate max-w-[110px]">
         {contact.company ?? '—'}
       </td>
 
       {/* Role */}
-      <td className="py-2 px-3 text-[12px] text-shuttle truncate max-w-[120px]">
+      <td className="py-1.5 px-3 text-[11.5px] text-shuttle truncate max-w-[110px]">
         {contact.job_title ?? '—'}
       </td>
 
-      {/* Tier */}
-      <td className="py-2 px-3">
-        {contact.tier ? (
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${TIER_COLORS[contact.tier]}`}>
-            T{contact.tier}
-          </span>
-        ) : <span className="text-shuttle/30 text-[11px]">—</span>}
+      {/* Class (domain + tier/personal_tier combined) */}
+      <td className="py-1.5 px-3">
+        <div className="flex items-center gap-1" title={`Domain: ${domain}`}>
+          <span className="text-[10px]">{DOMAIN_ICON[domain]}</span>
+          {isPersonal ? (
+            contact.personal_tier ? (
+              <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${PERSONAL_TIER_COLOR[contact.personal_tier]}`}>
+                {PERSONAL_TIER_LABEL[contact.personal_tier]}
+              </span>
+            ) : <span className="text-shuttle/30 text-[10px]">—</span>
+          ) : (
+            contact.tier ? (
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${TIER_COLORS[contact.tier]}`}>
+                T{contact.tier}
+              </span>
+            ) : <span className="text-shuttle/30 text-[10px]">—</span>
+          )}
+        </div>
+      </td>
+
+      {/* Strength */}
+      <td className="py-1.5 px-3">
+        <StrengthDots value={contact.connection_strength ?? 0} />
       </td>
 
       {/* Last contact */}
-      <td className="py-2 px-3 text-[12px] text-shuttle/70 whitespace-nowrap">
+      <td className="py-1.5 px-3 text-[11px] text-shuttle/70 whitespace-nowrap">
         {formatAgo(days)}
       </td>
 
-      {/* Health */}
-      <td className="py-2 px-3">
-        <div className="flex items-center gap-1.5">
-          <span className={`w-2 h-2 rounded-full ${health.dot}`} />
-          <span className="text-[11px] text-shuttle/60">{health.label}</span>
-        </div>
-      </td>
-
-      {/* Tags */}
-      <td className="py-2 px-3">
-        <div className="flex items-center gap-1 flex-wrap max-w-[140px]">
-          {tags.slice(0, 2).map(t => <TagPill key={t} tag={t} />)}
-        </div>
-      </td>
-
       {/* Channels */}
-      <td className="py-2 pl-3 pr-4">
+      <td className="py-1.5 pl-3 pr-4">
         <ChannelIcons channels={myChannels} />
       </td>
     </tr>
@@ -289,7 +328,7 @@ export default function People() {
       .then(({ data }) => setChannels(data ?? []))
   }, [userId])
 
-  const { contacts, loading, addContact, updateContact, deleteContact, mergeContacts } = useContacts(
+  const { contacts, loading, addContact, updateContact, bulkUpdateContacts, deleteContact, mergeContacts } = useContacts(
     userId ?? undefined,
     [],
     async () => {},
@@ -361,14 +400,41 @@ export default function People() {
     if (selectedIds.size === 0) return
     setBulkTagging(true)
     try {
-      await Promise.all(
-        Array.from(selectedIds).map(id => updateContact(id, { tier }))
-      )
+      await bulkUpdateContacts(Array.from(selectedIds), { tier })
       setSelectedIds(new Set())
     } finally {
       setBulkTagging(false)
     }
-  }, [selectedIds, updateContact])
+  }, [selectedIds, bulkUpdateContacts])
+
+  const handleBulkDomain = useCallback(async (domain: 'professional' | 'personal' | 'mixed') => {
+    if (selectedIds.size === 0) return
+    setBulkTagging(true)
+    try {
+      // when moving to personal, clear pro tier; when moving to professional, clear personal_tier
+      const patch: Record<string, unknown> = { relationship_domain: domain }
+      if (domain === 'personal') patch.tier = null
+      if (domain === 'professional') patch.personal_tier = null
+      await bulkUpdateContacts(Array.from(selectedIds), patch)
+      setSelectedIds(new Set())
+    } finally {
+      setBulkTagging(false)
+    }
+  }, [selectedIds, bulkUpdateContacts])
+
+  const handleBulkPersonalTier = useCallback(async (pt: 'inner_circle' | 'close' | 'casual' | null) => {
+    if (selectedIds.size === 0) return
+    setBulkTagging(true)
+    try {
+      await bulkUpdateContacts(Array.from(selectedIds), {
+        personal_tier: pt,
+        ...(pt ? { relationship_domain: 'personal' as const } : {}),
+      })
+      setSelectedIds(new Set())
+    } finally {
+      setBulkTagging(false)
+    }
+  }, [selectedIds, bulkUpdateContacts])
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), [])
 
@@ -420,13 +486,6 @@ export default function People() {
               <Kanban size={14} />
             </button>
           </div>
-          <button
-            onClick={() => navigate('/people/classify')}
-            className="text-xs text-shuttle hover:text-burnham px-2 py-1 rounded hover:bg-mercury/30 transition-colors"
-            title="Classify contacts as professional or personal"
-          >
-            Classify
-          </button>
           <button
             onClick={handleNewPerson}
             className="flex items-center gap-1.5 bg-burnham hover:bg-burnham/90 text-gossip text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
@@ -519,26 +578,41 @@ export default function People() {
 
       {/* ── Bulk action bar (shows when ≥1 selected) ──────────────────────── */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 px-6 py-2 border-b border-mercury/50 bg-gossip/20 shrink-0">
-          <span className="text-[11px] font-semibold text-burnham">
+        <div className="flex items-center gap-3 px-6 py-1.5 border-b border-mercury/50 bg-gossip/20 shrink-0 text-[11px]">
+          <span className="font-semibold text-burnham">
             {selectedIds.size} selected
           </span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] uppercase tracking-wide text-shuttle/60 mr-1 flex items-center gap-1">
-              Tag as:
-              <TierInfoHelper />
+
+          {/* Domain */}
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] uppercase tracking-wide text-shuttle/60">Domain:</span>
+            {([
+              { key: 'professional', label: 'Pro', icon: '💼' },
+              { key: 'mixed',        label: 'Mix', icon: '🔀' },
+              { key: 'personal',     label: 'Pers', icon: '👥' },
+            ] as const).map(d => (
+              <button
+                key={d.key}
+                onClick={() => handleBulkDomain(d.key)}
+                disabled={bulkTagging}
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded border border-mercury hover:border-burnham/40 bg-white text-shuttle hover:text-burnham disabled:opacity-40 transition-colors flex items-center gap-0.5"
+              >
+                <span>{d.icon}</span>{d.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Pro tier */}
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] uppercase tracking-wide text-shuttle/60 flex items-center gap-1">
+              Tier <TierInfoHelper />
             </span>
             {([1, 2, 3] as const).map(t => (
               <button
                 key={t}
                 onClick={() => handleBulkTier(t)}
                 disabled={bulkTagging}
-                title={
-                  t === 1 ? 'Tier 1 — Airport pickup (close trust, daisy chain launch pad)'
-                  : t === 2 ? 'Tier 2 — Shared identity (ex-colleagues, same school/industry)'
-                  : 'Tier 3 — Loose connections'
-                }
-                className="text-[10px] font-medium px-2 py-0.5 rounded-full border border-mercury hover:border-burnham/40 bg-white text-shuttle hover:text-burnham disabled:opacity-40 transition-colors"
+                className="text-[10px] font-medium w-6 py-0.5 rounded border border-mercury hover:border-burnham/40 bg-white text-shuttle hover:text-burnham disabled:opacity-40 transition-colors"
               >
                 T{t}
               </button>
@@ -546,18 +620,47 @@ export default function People() {
             <button
               onClick={() => handleBulkTier(null)}
               disabled={bulkTagging}
-              className="text-[10px] text-shuttle/50 hover:text-shuttle px-2 py-0.5 disabled:opacity-40 transition-colors"
+              className="text-[10px] text-shuttle/40 hover:text-shuttle px-1 py-0.5 disabled:opacity-40 transition-colors"
+              title="Clear professional tier"
             >
-              clear
+              ✕
             </button>
           </div>
+
+          {/* Personal tier */}
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] uppercase tracking-wide text-shuttle/60">Circle:</span>
+            {([
+              { key: 'inner_circle', label: 'Inner' },
+              { key: 'close',        label: 'Close' },
+              { key: 'casual',       label: 'Casual' },
+            ] as const).map(p => (
+              <button
+                key={p.key}
+                onClick={() => handleBulkPersonalTier(p.key)}
+                disabled={bulkTagging}
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded border border-mercury hover:border-burnham/40 bg-white text-shuttle hover:text-burnham disabled:opacity-40 transition-colors"
+              >
+                {p.label}
+              </button>
+            ))}
+            <button
+              onClick={() => handleBulkPersonalTier(null)}
+              disabled={bulkTagging}
+              className="text-[10px] text-shuttle/40 hover:text-shuttle px-1 py-0.5 disabled:opacity-40 transition-colors"
+              title="Clear personal tier"
+            >
+              ✕
+            </button>
+          </div>
+
           {selectedIds.size === 2 && (
             <button
               onClick={() => setMergeModalOpen(true)}
               disabled={bulkTagging}
-              className="text-[10px] font-medium text-burnham border border-burnham/30 hover:border-burnham hover:bg-burnham hover:text-white px-2.5 py-0.5 rounded-full transition-colors disabled:opacity-40"
+              className="text-[10px] font-medium text-burnham border border-burnham/30 hover:border-burnham hover:bg-burnham hover:text-white px-2 py-0.5 rounded transition-colors disabled:opacity-40"
             >
-              Merge these two…
+              Merge two…
             </button>
           )}
 
@@ -617,8 +720,8 @@ export default function People() {
                     aria-label="Select all visible"
                   />
                 </th>
-                {['Name', 'Company', 'Role', 'Tier', 'Last Contact', 'Health', 'Tags', 'Channels'].map(h => (
-                  <th key={h} className="py-2 px-3 last:pr-4 text-[10px] font-semibold text-shuttle/50 uppercase tracking-wider whitespace-nowrap">
+                {['Name', 'Company', 'Role', 'Class', 'Strength', 'Last Contact', 'Channels'].map(h => (
+                  <th key={h} className="py-1.5 px-3 last:pr-4 text-[10px] font-semibold text-shuttle/50 uppercase tracking-wider whitespace-nowrap">
                     {h}
                   </th>
                 ))}

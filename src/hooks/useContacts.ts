@@ -190,6 +190,44 @@ export function useContacts(
     }
   }, [userId, contacts, incrementProspectingHabit])
 
+  /**
+   * Bulk-update multiple contacts with the SAME patch.
+   * Single SQL UPDATE + single setState merge (fixes race where parallel
+   * updateContact() calls each read stale `contacts` closure and only the
+   * last write wins in local state).
+   */
+  const bulkUpdateContacts = useCallback(async (
+    ids: string[],
+    patch: Partial<{
+      tier: 1 | 2 | 3 | null
+      relationship_domain: 'professional' | 'personal' | 'mixed'
+      personal_tier: 'inner_circle' | 'close' | 'casual' | null
+      category: ContactCategory | null
+      status: ContactStatus
+    }>,
+  ): Promise<void> => {
+    if (!userId || ids.length === 0) return
+    setSyncError(null)
+
+    // Supabase has a per-query limit on `.in('id', ids)` lengths — chunk at 100 to be safe
+    const CHUNK = 100
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const slice = ids.slice(i, i + CHUNK)
+      const { error } = await supabase
+        .from('outreach_logs')
+        .update(patch)
+        .in('id', slice)
+      if (error) {
+        setSyncError(`Bulk update failed: ${error.message}`)
+        return
+      }
+    }
+
+    // Single local merge
+    const idSet = new Set(ids)
+    setContacts(prev => prev.map(c => idSet.has(c.id) ? { ...c, ...patch } as Contact : c))
+  }, [userId])
+
   const deleteContact = useCallback(async (id: string): Promise<void> => {
     if (!userId) return
     const existing = contacts.find(c => c.id === id)
@@ -344,6 +382,7 @@ export function useContacts(
     syncError,
     addContact,
     updateContact,
+    bulkUpdateContacts,
     deleteContact,
     mergeContacts,
     fetchContacts,

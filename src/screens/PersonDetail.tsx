@@ -8,6 +8,9 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useValueLogs } from '@/hooks/useValueLogs'
+import ContactFacts from '@/components/ContactFacts'
+import ContactListMemberships from '@/components/ContactListMemberships'
+import { strengthBucket, strengthLabel, strengthNormalized, strengthVsTier } from '@/lib/connectionStrength'
 import type { Contact, Interaction, ContactChannel, Opportunity, ValueLog } from '@/types'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -254,6 +257,65 @@ function TimelineItem({ interaction, onDelete }: { interaction: Interaction; onD
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Pulse card ────────────────────────────────────────────────────────────────
+
+function PulseCard({ contact }: { contact: Contact }) {
+  const strength = Number(contact.connection_strength ?? 0)
+  const bucket = strengthBucket(strength)
+  const normalized = strengthNormalized(strength)
+  const assessment = strengthVsTier(contact)
+  const days = daysSince(contact.last_interaction_at)
+  const isPersonal = contact.relationship_domain === 'personal'
+
+  const severityColor = {
+    critical: 'text-red-600 bg-red-50 border-red-200',
+    warn: 'text-orange-700 bg-orange-50 border-orange-200',
+    info: 'text-burnham bg-gossip/40 border-pastel',
+    good: 'text-green-700 bg-green-50 border-green-200',
+  }[assessment.severity]
+
+  return (
+    <div className="space-y-2.5">
+      {/* Top line: days since + strength bucket */}
+      <div className="flex items-baseline justify-between">
+        <div>
+          <span className="text-2xl font-semibold text-burnham">
+            {days === null ? '—' : days}
+          </span>
+          <span className="text-[10px] text-shuttle/60 ml-1">
+            {days === null ? 'no interactions yet' : `day${days === 1 ? '' : 's'} since last`}
+          </span>
+        </div>
+        <div className="text-right">
+          <span className="text-[10px] uppercase tracking-wide text-shuttle/50">Strength</span>
+          <div className="text-[13px] font-semibold text-burnham">{strengthLabel(bucket)}</div>
+        </div>
+      </div>
+
+      {/* Strength bar */}
+      <div>
+        <div className="h-1.5 bg-mercury/50 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-burnham transition-all"
+            style={{ width: `${Math.max(2, normalized * 100)}%` }}
+          />
+        </div>
+        <div className="text-[9px] text-shuttle/40 mt-0.5 text-right font-mono">
+          {strength.toFixed(1)}
+        </div>
+      </div>
+
+      {/* Recommended action */}
+      {!isPersonal && (
+        <div className={`text-[11px] px-2 py-1.5 rounded border ${severityColor}`}>
+          <span className="font-semibold">{assessment.label}</span>
+          <span className="text-[10px] opacity-80 block mt-0.5 leading-snug">{assessment.suggestion}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -614,6 +676,22 @@ export default function PersonDetail() {
                     </span>
                   </>
                 )}
+              </div>
+
+              {/* Pulse — connection strength + action recommendation */}
+              <div className="bg-white border border-mercury rounded-lg p-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">Pulse</p>
+                <PulseCard contact={contact} />
+              </div>
+
+              {/* Key Facts — Two-Thirds ammunition */}
+              <div className="bg-white border border-mercury rounded-lg p-3">
+                <ContactFacts contactId={contact.id} />
+              </div>
+
+              {/* Active in lists */}
+              <div className="bg-white border border-mercury rounded-lg p-3">
+                <ContactListMemberships contactId={contact.id} />
               </div>
 
               {/* Recent interactions — timeline preview */}

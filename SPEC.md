@@ -4,8 +4,8 @@
 > Covers both apps (reThink + Conversations) + the Jacob integration as one product.
 > Updated continuously — current state, not aspirational.
 >
-> **Last updated:** 2026-04-21
-> **Current releases:** reThink `v0.1.124` · Conversations `v0.0.26`
+> **Last updated:** 2026-04-22
+> **Current releases:** reThink `v0.1.125` · Conversations `v0.0.26`
 > **Legend:** ✅ shipped · 🚧 in progress · 📋 planned · 🗑️ sunsetting (will be removed)
 >
 > **See also:**
@@ -583,6 +583,15 @@ Same approach — embedded webview, shared session, DOM-scraping via preload scr
 - **reThink v0.1.122** — companies UI exposes all LI-enriched fields
 - **reThink v0.1.123** — Jacob CRM foundation (data model + strength engine + classifier + cadence)
 - **reThink v0.1.124** — Lists + Key Facts + Candor
+- **reThink v0.1.125** — Bulk actions fix + inline classifier + Connection Strength visible + density pass
+  - 🐛 Fix: bulk tier tagging now works on N selected rows (single SQL UPDATE with `.in(ids)`)
+  - Inline bulk actions in People: domain + tier + personal_tier (no separate screen)
+  - New "Class" column (domain icon + adaptive tier/personal_tier pill)
+  - New "Strength" column with 5-dot bar
+  - Dropped "Health" + "Tags" columns (redundant / legacy)
+  - Sidebar auto-renders user-created lists as NavItems
+  - PersonDetail overview: new `PulseCard` (days since + strength bar + Jacob matrix action), Key Facts card, Active in Lists card
+  - Density polish on People/Companies/Opportunities tables (padding, font-sizes, smaller headers)
 
 - **Conversations v0.0.24-26** — LinkedIn deep-scrape, company auto-upsert + link, merge contacts UI
 
@@ -677,6 +686,7 @@ Features being removed or already deprecated. Each entry gets removed from this 
 
 | Item | Replacement | Removal trigger |
 |---|---|---|
+| `/people/classify` screen | Inline bulk actions in People table | ✅ Removed 2026-04-22 (v0.1.125) |
 | `outreach_logs.status` (PROSPECT/CONNECTED/...) | `list_memberships.current_stage` | When no UI reads it anymore |
 | `profiles.contact_funnel_config` jsonb | Per-list stages in `lists.stages` | When no UI reads it anymore |
 | Chrome extension (standalone) | Conversations native app | When Conversations reaches parity on capture flows |

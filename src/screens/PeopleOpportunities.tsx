@@ -147,15 +147,15 @@ function TableView({
 }) {
   return (
     <div className="flex-1 overflow-auto">
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full text-[12px] border-collapse">
         <thead>
           <tr className="border-b border-mercury bg-white sticky top-0 z-10">
-            <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Title</th>
-            <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Stage</th>
-            <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Company</th>
-            <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Type</th>
-            <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Est. Value</th>
-            <th className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Target Date</th>
+            <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Title</th>
+            <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Stage</th>
+            <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Company</th>
+            <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Type</th>
+            <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Est. Value</th>
+            <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Target Date</th>
           </tr>
         </thead>
         <tbody>
@@ -173,10 +173,10 @@ function TableView({
                 onClick={() => onRowClick(opp.id)}
                 className="border-b border-mercury hover:bg-gossip/20 cursor-pointer transition-colors"
               >
-                <td className="px-4 py-2.5">
+                <td className="px-3 py-1.5">
                   <p className="font-medium text-midnight">{opp.title}</p>
                 </td>
-                <td className="px-4 py-2.5">
+                <td className="px-3 py-1.5">
                   <div className="flex items-center gap-1">
                     <DotOutline size={16} weight="fill" className={STAGE_DOT_COLORS[opp.stage]} />
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STAGE_COLORS[opp.stage]}`}>
@@ -184,16 +184,16 @@ function TableView({
                     </span>
                   </div>
                 </td>
-                <td className="px-4 py-2.5 text-shuttle">
+                <td className="px-3 py-1.5 text-shuttle">
                   {opp.company?.name ?? '—'}
                 </td>
-                <td className="px-4 py-2.5">
+                <td className="px-3 py-1.5">
                   <span className="text-xs px-2 py-0.5 bg-mercury text-midnight rounded">{TYPE_LABELS[opp.type]}</span>
                 </td>
-                <td className="px-4 py-2.5 font-medium text-midnight">
+                <td className="px-3 py-1.5 font-medium text-midnight">
                   {formatValue(opp.estimated_value)}
                 </td>
-                <td className="px-4 py-2.5 text-shuttle text-xs">
+                <td className="px-3 py-1.5 text-shuttle text-xs">
                   <span className={daysUntil(opp.target_date) !== null && daysUntil(opp.target_date)! < 0 ? 'text-red-500' : ''}>
                     {formatTarget(opp.target_date)}
                   </span>
@@ -345,11 +345,11 @@ export default function PeopleOpportunities() {
   return (
     <div className="flex flex-col h-full bg-[#FAFAFA]">
       {/* header */}
-      <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-mercury">
+      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-mercury/60">
         <div className="flex items-center gap-2">
-          <Target size={20} className="text-shuttle" />
-          <h1 className="text-lg font-semibold text-midnight">Opportunities</h1>
-          <span className="text-xs text-shuttle bg-mercury px-1.5 py-0.5 rounded-full ml-1">{opportunities.length}</span>
+          <Target size={16} className="text-shuttle" />
+          <h1 className="text-base font-semibold text-burnham">Opportunities</h1>
+          <span className="text-[11px] text-shuttle/40 font-mono">{opportunities.length}</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
