@@ -79,7 +79,14 @@ const INTERACTION_DOT: Record<string, string> = {
 
 const VALUE_TYPE_LABELS: Record<string, string> = {
   introduction: 'Introduction', content: 'Content', referral: 'Referral',
-  advice: 'Advice', endorsement: 'Endorsement', opportunity: 'Opportunity', other: 'Other',
+  advice: 'Advice', endorsement: 'Endorsement', opportunity: 'Opportunity',
+  candor: 'Candor (they shared)', other: 'Other',
+}
+
+const VALUE_TYPE_EMOJIS: Record<string, string> = {
+  introduction: '🤝', content: '📰', referral: '🔗',
+  advice: '💡', endorsement: '⭐', opportunity: '🎯',
+  candor: '🔓', other: '📝',
 }
 
 const CHANNEL_ICONS: Record<string, React.ReactNode> = {
@@ -680,9 +687,10 @@ export default function PersonDetail() {
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     {valueLogs.map(vl => (
-                      <div key={vl.id} className="flex items-center gap-2 px-2 py-1.5 bg-white border border-mercury rounded-lg group">
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-gossip text-burnham rounded">
-                          {VALUE_TYPE_LABELS[vl.type] ?? vl.type}
+                      <div key={vl.id} className={`flex items-center gap-2 px-2 py-1.5 border rounded-lg group ${vl.type === 'candor' ? 'bg-pastel/20 border-pastel' : 'bg-white border-mercury'}`}>
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-gossip text-burnham rounded flex items-center gap-1">
+                          <span>{VALUE_TYPE_EMOJIS[vl.type] ?? ''}</span>
+                          <span>{VALUE_TYPE_LABELS[vl.type] ?? vl.type}</span>
                         </span>
                         <p className="text-[12px] text-shuttle flex-1 truncate">{vl.description || '—'}</p>
                         <span className="text-[10px] text-mercury">{vl.date}</span>

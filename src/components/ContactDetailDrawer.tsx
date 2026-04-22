@@ -21,6 +21,8 @@ import { openLink } from '@/lib/openLink'
 import { supabase } from '@/lib/supabase'
 import { syncGmailInteractions } from '@/lib/gmail'
 import { TierInfoHelper } from '@/components/TierInfoHelper'
+import ContactListMemberships from '@/components/ContactListMemberships'
+import ContactFacts from '@/components/ContactFacts'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -1090,6 +1092,16 @@ export default function ContactDetailDrawer({
                   <span className="text-shuttle/60">days (override)</span>
                 </div>
               </div>
+            </div>
+
+            {/* ── 2.5. Active in lists ─────────────────────────────────────── */}
+            <div className="px-4 py-3 border-b border-mercury">
+              <ContactListMemberships contactId={contact.id} />
+            </div>
+
+            {/* ── 2.6. Key facts ───────────────────────────────────────────── */}
+            <div className="px-4 py-3 border-b border-mercury">
+              <ContactFacts contactId={contact.id} />
             </div>
 
             {/* ── 3. Contact info ──────────────────────────────────────────── */}

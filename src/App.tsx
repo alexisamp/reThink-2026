@@ -20,6 +20,8 @@ import People from '@/screens/People'
 import PersonDetail from '@/screens/PersonDetail'
 import PeopleClassify from '@/screens/PeopleClassify'
 import PeopleCompanies from '@/screens/PeopleCompanies'
+import Lists from '@/screens/Lists'
+import ListDetail from '@/screens/ListDetail'
 import CompanyDetail from '@/screens/CompanyDetail'
 import PeopleOpportunities from '@/screens/PeopleOpportunities'
 import OpportunityDetail from '@/screens/OpportunityDetail'
@@ -215,6 +217,8 @@ export default function App() {
                   <Route path="/people/opportunities" element={<PeopleOpportunities />} />
                   <Route path="/people/opportunities/:id" element={<OpportunityDetail />} />
                   <Route path="/people/:id" element={<PersonDetail />} />
+                  <Route path="/lists" element={<Lists />} />
+                  <Route path="/lists/:id" element={<ListDetail />} />
                   <Route path="/plan" element={<Plan />} />
                   <Route path="/milestone-plan" element={<MilestonePlan />} />
                   <Route path="/playbook" element={<Playbook />} />

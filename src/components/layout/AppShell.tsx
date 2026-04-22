@@ -249,6 +249,13 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
           {(listsOpen || collapsed) && (
             <>
               <NavItem
+                path="/lists"
+                icon={<span className="w-3.5 h-3.5 rounded-sm bg-burnham flex items-center justify-center"><ListIcon size={9} weight="fill" className="text-white" /></span>}
+                label="All Lists"
+                collapsed={collapsed}
+                indent
+              />
+              <NavItem
                 path="/people?list=board"
                 icon={<Star size={14} weight="fill" className="text-yellow-500" />}
                 label="Board of Directors"
