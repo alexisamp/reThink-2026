@@ -3,7 +3,7 @@
 // Journal (collapsible + drag-to-reorder, persisted). Wired to live Supabase data.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Target, ChartLineUp, UsersThree, PencilSimple, Timer } from '@phosphor-icons/react'
+import { Target, ChartLineUp, UsersThree, PencilSimple, Timer, Play, Pause, X, Check } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Todo, Milestone, Goal } from '@/types'
 import MilestonePanel from '@/components/MilestonePanel'
@@ -13,7 +13,13 @@ import MilestoneRows, { type MilestoneRowData } from './today/MilestoneRows'
 import ThisWeek from './today/ThisWeek'
 import NextSteps from './today/NextSteps'
 import FocusTimer from './today/FocusTimer'
+import { useFocusTimer } from './today/useFocusTimer'
 import type { GroupBy, Mention } from './today/types'
+
+function fmtClock(seconds: number): string {
+  const m = Math.floor(seconds / 60), s = seconds % 60
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
 
 type GoalLite = Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'>
 interface MsTodo { id: string; milestone_id: string | null; completed: boolean }
@@ -62,6 +68,7 @@ export default function Today() {
   const [expandedMs, setExpandedMs] = useState<string | null>(null)
   const [journal, setJournal] = useState('')
   const [focusOpen, setFocusOpen] = useState(false)
+  const focus = useFocusTimer(userId)
   const [twRefresh, setTwRefresh] = useState(0)
   const journalTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const journalInit = useRef(false)
@@ -308,9 +315,26 @@ export default function Today() {
         <span className="sep">·</span>
         <span className="day-state">day in progress</span>
         <span className="hd-spacer" />
-        <button className="hd-act" onClick={() => setFocusOpen(true)} title="Start a focus session">
-          <Timer size={13} /> focus
-        </button>
+        {focus.complete ? (
+          <div className="td-focus-live done" title={focus.intention || 'Focus complete'}>
+            <Check size={12} weight="bold" />
+            <span className="time">done</span>
+            <button onClick={focus.dismiss} title="Dismiss"><X size={12} /></button>
+          </div>
+        ) : focus.active ? (
+          <div className={`td-focus-live${focus.running ? ' running' : ''}`} title={focus.intention || 'Focus session'}>
+            <span className="dot" />
+            <span className="time">{fmtClock(focus.remaining)}</span>
+            <button onClick={focus.running ? focus.pause : focus.resume} title={focus.running ? 'Pause' : 'Resume'}>
+              {focus.running ? <Pause size={12} weight="fill" /> : <Play size={12} weight="fill" />}
+            </button>
+            <button onClick={focus.cancel} title="Cancel"><X size={12} /></button>
+          </div>
+        ) : (
+          <button className="hd-act" onClick={() => setFocusOpen(true)} title="Start a focus session">
+            <Timer size={13} /> focus
+          </button>
+        )}
       </div>
 
       <div className="td-two-col">
@@ -361,7 +385,7 @@ export default function Today() {
         <FocusTimer
           open={focusOpen}
           onClose={() => setFocusOpen(false)}
-          userId={userId}
+          onStart={focus.start}
           goals={goals.map(g => ({ id: g.id, text: g.text, emoji: g.emoji }))}
         />
       )}
