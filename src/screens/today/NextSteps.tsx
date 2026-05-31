@@ -3,7 +3,7 @@
 //  🟠 reach-out  : a Tier 1/2 contact overdue per cadence (last_interaction_at vs tier cadence)
 // Each action logs an interaction today → auto-feeds the weekly KPIs (interactions / tier touches).
 import { useCallback, useEffect, useState } from 'react'
-import { Check, PaperPlaneTilt } from '@phosphor-icons/react'
+import { Check, PaperPlaneTilt, UsersThree } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 
 interface NSItem {
@@ -33,9 +33,10 @@ interface Props {
   today: string
   weekEnd: string
   onActioned?: () => void
+  onManage?: () => void
 }
 
-export default function NextSteps({ userId, today, weekEnd, onActioned }: Props) {
+export default function NextSteps({ userId, today, weekEnd, onActioned, onManage }: Props) {
   const [items, setItems] = useState<NSItem[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -134,12 +135,11 @@ export default function NextSteps({ userId, today, weekEnd, onActioned }: Props)
     onActioned?.()
   }
 
-  if (loading) return <div className="td-ns-empty">Loading…</div>
-  if (items.length === 0) return <div className="td-ns-empty">Nobody waiting. Plan a follow-up.</div>
-
   return (
     <div className="td-ns-rows">
-      {items.map(it => (
+      {loading && <div className="td-ns-empty">Loading…</div>}
+      {!loading && items.length === 0 && <div className="td-ns-empty">Nobody waiting. Plan a follow-up.</div>}
+      {!loading && items.map(it => (
         <div className={`td-ns-row ${it.status}`} key={it.contactId}>
           <span className="av">{it.avatar ? <img src={it.avatar} alt="" /> : (it.name[0] || '?')}</span>
           <div className="who-wrap">
@@ -159,6 +159,14 @@ export default function NextSteps({ userId, today, weekEnd, onActioned }: Props)
           </button>
         </div>
       ))}
+      {onManage && (
+        <div className="td-tw-foot">
+          <button onClick={onManage}>
+            <UsersThree size={11} />
+            <span>Manage people</span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }

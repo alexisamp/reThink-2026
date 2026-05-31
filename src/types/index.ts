@@ -82,6 +82,8 @@ export interface Milestone {
   target_date: string | null
   status: string
   completed_at: string | null
+  emoji: string | null    // optional per-milestone emoji (falls back to parent goal)
+  color: string | null    // optional per-milestone color hex (falls back to parent goal)
   created_at: string
 }
 

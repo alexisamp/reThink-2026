@@ -98,7 +98,7 @@ export default function Today() {
       setUserId(user.id)
 
       const [todosRes, msTodosRes, msRes, goalsRes, reviewRes] = await Promise.all([
-        supabase.from('todos').select('*').eq('user_id', user.id).or(`date.is.null,date.eq.${today}`).order('sort_order').order('created_at'),
+        supabase.from('todos').select('*').eq('user_id', user.id).eq('date', today).order('sort_order').order('created_at'),
         supabase.from('todos').select('id, milestone_id, completed').eq('user_id', user.id).not('milestone_id', 'is', null),
         supabase.from('milestones').select('*').eq('user_id', user.id).neq('status', 'COMPLETE').order('target_date', { nullsFirst: false }),
         supabase.from('goals').select('id, text, alias, color, emoji').eq('user_id', user.id).eq('goal_type', 'ACTIVE').order('position'),
@@ -139,22 +139,31 @@ export default function Today() {
     return FALLBACK_COLORS[idx]
   }, [goalsMap])
 
+  // Only milestones with open work (≥1 linked todo, not all done). Avoids dumping
+  // every dormant milestone; surfaces what you're actually pushing on this week.
   const milestoneRows: MilestoneRowData[] = useMemo(() => {
-    return milestones.slice(0, 5).map(m => {
-      const g = goalsMap.get(m.goal_id)
-      const prog = msProgress.get(m.id) ?? { done: 0, total: 0 }
-      const due = formatDue(m.target_date, today)
-      return {
-        id: m.id,
-        name: m.text,
-        emoji: g?.emoji ?? null,
-        color: colorForGoal(m.goal_id),
-        due: due.label,
-        urgent: due.urgent,
-        done: prog.done,
-        total: prog.total,
-      }
-    })
+    return milestones
+      .filter(m => {
+        const p = msProgress.get(m.id)
+        return p && p.total > 0 && p.done < p.total
+      })
+      .sort((a, b) => (a.target_date ?? '9999-12-31').localeCompare(b.target_date ?? '9999-12-31'))
+      .slice(0, 6)
+      .map(m => {
+        const g = goalsMap.get(m.goal_id)
+        const prog = msProgress.get(m.id)!
+        const due = formatDue(m.target_date, today)
+        return {
+          id: m.id,
+          name: m.text,
+          emoji: m.emoji ?? g?.emoji ?? null,
+          color: m.color ?? colorForGoal(m.goal_id),
+          due: due.label,
+          urgent: due.urgent,
+          done: prog.done,
+          total: prog.total,
+        }
+      })
   }, [milestones, goalsMap, msProgress, today, colorForGoal])
 
   // ── todo lookups for TodoList ──────────────────────────────────
@@ -189,9 +198,17 @@ export default function Today() {
     await supabase.from('todos').update({ completed: next, completed_at: next ? new Date().toISOString() : null }).eq('id', id)
   }
   const deleteTodo = async (id: string) => {
-    setTodos(prev => prev.filter(x => x.id !== id))
-    setMsTodos(prev => prev.filter(x => x.id !== id))
-    await supabase.from('todos').delete().eq('id', id)
+    const t = todos.find(x => x.id === id)
+    if (t?.milestone_id) {
+      // Belongs to a milestone → don't destroy it; just remove from today (return to milestone).
+      // Permanent deletion only happens from inside the milestone drawer.
+      setTodos(prev => prev.filter(x => x.id !== id))
+      await supabase.from('todos').update({ date: null }).eq('id', id)
+    } else {
+      setTodos(prev => prev.filter(x => x.id !== id))
+      setMsTodos(prev => prev.filter(x => x.id !== id))
+      await supabase.from('todos').delete().eq('id', id)
+    }
   }
   const starTodo = async (id: string) => {
     const t = todos.find(x => x.id === id); if (!t) return
@@ -229,12 +246,12 @@ export default function Today() {
   // ── milestone panel todo sync ──────────────────────────────────
   const onPanelTodoCreate = (t: Todo) => {
     if (t.milestone_id) setMsTodos(prev => prev.some(x => x.id === t.id) ? prev : [...prev, { id: t.id, milestone_id: t.milestone_id, completed: t.completed }])
-    if (t.date === today || t.date === null) setTodos(prev => prev.some(x => x.id === t.id) ? prev : [...prev, t])
+    if (t.date === today) setTodos(prev => prev.some(x => x.id === t.id) ? prev : [...prev, t])
   }
   const onPanelTodoUpdate = (t: Todo) => {
     if (t.milestone_id) syncMsTodo(t.id, { completed: t.completed, milestone_id: t.milestone_id })
     setTodos(prev => {
-      const inToday = t.date === today || t.date === null
+      const inToday = t.date === today
       const exists = prev.some(x => x.id === t.id)
       if (inToday) return exists ? prev.map(x => x.id === t.id ? t : x) : [...prev, t]
       return prev.filter(x => x.id !== t.id)
@@ -254,7 +271,7 @@ export default function Today() {
   const sections: RailSectionDef[] = userId ? [
     {
       id: 'milestones', title: 'Milestones', icon: <Target size={13} />, count: milestoneRows.length,
-      body: <MilestoneRows rows={milestoneRows} activeId={expandedMs} onExpand={setExpandedMs} />,
+      body: <MilestoneRows rows={milestoneRows} activeId={expandedMs} onExpand={setExpandedMs} onManage={() => navigate('/milestone-plan')} />,
     },
     {
       id: 'thisweek', title: 'This week', icon: <ChartLineUp size={13} />, tone: 'lagging',
@@ -262,17 +279,24 @@ export default function Today() {
     },
     {
       id: 'nextsteps', title: 'Next steps', icon: <UsersThree size={13} />,
-      body: <NextSteps userId={userId} today={today} weekEnd={weekDates[6]} onActioned={() => setTwRefresh(n => n + 1)} />,
+      body: <NextSteps userId={userId} today={today} weekEnd={weekDates[6]} onActioned={() => setTwRefresh(n => n + 1)} onManage={() => navigate('/people')} />,
     },
     {
       id: 'journal', title: 'Journal', icon: <PencilSimple size={13} />,
       body: (
-        <textarea
-          className="td-journal-area"
-          placeholder="What's on your mind?"
-          value={journal}
-          onChange={e => onJournalChange(e.target.value)}
-        />
+        <>
+          <textarea
+            className="td-journal-area"
+            placeholder="What's on your mind?"
+            value={journal}
+            onChange={e => onJournalChange(e.target.value)}
+          />
+          <div className="td-tw-foot">
+            <button onClick={() => navigate('/library')}>
+              <span>Open journal</span>
+            </button>
+          </div>
+        </>
       ),
     },
   ] : []

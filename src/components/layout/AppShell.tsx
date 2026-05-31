@@ -59,8 +59,8 @@ function NavItem({ path, icon, label, collapsed, onClick, indent, iconColor }: N
       <button
         onClick={handleClick}
         className={[
-          'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-[12px] transition-all duration-150',
-          indent && !collapsed ? 'pl-5' : '',
+          'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-all duration-150',
+          indent && !collapsed ? 'pl-5 text-[11px]' : 'text-[12px]',
           isActive
             ? 'bg-gossip/70 text-burnham font-medium'
             : 'text-shuttle hover:bg-mercury/50 hover:text-burnham',
@@ -184,7 +184,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         <div className={['flex items-center gap-2.5 px-3 py-4 shrink-0', collapsed ? 'justify-center' : ''].join(' ')}>
           <img src="/logo-sm.png" alt="reThink" className="w-6 h-6 shrink-0 rounded-sm" />
           {!collapsed && (
-            <span className="text-sm font-semibold text-burnham truncate">reThink 2026</span>
+            <span className="text-[13px] font-semibold text-burnham truncate tracking-[-0.01em]">reThink 2026</span>
           )}
         </div>
 
@@ -317,7 +317,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
               )}
             </div>
             {!collapsed && (
-              <span className="text-xs text-burnham truncate font-medium">{fullName || user.email}</span>
+              <span className="text-[11px] text-burnham truncate font-medium">{fullName || user.email}</span>
             )}
           </div>
 
@@ -331,7 +331,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
             <Gear size={15} className="shrink-0" />
             {!collapsed && (
               <>
-                <span className="flex-1 text-left text-xs">Settings</span>
+                <span className="flex-1 text-left text-[11px]">Settings</span>
                 {showUpdateDot && (
                   <span className="text-[10px] font-medium text-pastel bg-gossip/40 px-1.5 py-0.5 rounded-full">update</span>
                 )}
@@ -347,7 +347,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
             ].join(' ')}
           >
             <SignOut size={15} className="shrink-0" />
-            {!collapsed && <span className="text-xs">Sign out</span>}
+            {!collapsed && <span className="text-[11px]">Sign out</span>}
           </button>
 
           <SectionDivider collapsed={collapsed} />

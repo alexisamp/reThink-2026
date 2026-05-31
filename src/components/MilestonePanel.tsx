@@ -25,6 +25,9 @@ import { CSS } from '@dnd-kit/utilities'
 import { supabase } from '@/lib/supabase'
 import type { Milestone, Todo, Goal } from '@/types'
 
+const EMOJI_PRESETS = ['🎯','🧑‍💼','💰','🎒','✍️','🚀','📈','🤝','🏋️','📚','🧠','🌱','🏡','❤️','🎨','🔧','📞','✈️','🏆','⚡']
+const COLOR_PRESETS = ['#4F5BD5','#2A8C82','#7C5CBF','#C16A4F','#C9943F','#3E7A4E','#3E5F7A','#7A3E68','#C2566E','#536471']
+
 interface MilestonePanelProps {
   milestone: Milestone | null
   goal: Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'> | null
@@ -197,6 +200,12 @@ export default function MilestonePanel({
   // Editable target date
   const [editingTargetDate, setEditingTargetDate] = useState(false)
 
+  // Per-milestone emoji + color (fall back to parent goal in the rail)
+  const [emoji, setEmoji] = useState<string | null>(milestone?.emoji ?? null)
+  const [color, setColor] = useState<string | null>(milestone?.color ?? null)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [showColorPicker, setShowColorPicker] = useState(false)
+
   // Delete milestone
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -238,6 +247,10 @@ export default function MilestonePanel({
   useEffect(() => {
     if (!milestone) return
     setDescription((milestone as any).description ?? '')
+    setEmoji(milestone.emoji ?? null)
+    setColor(milestone.color ?? null)
+    setShowEmojiPicker(false)
+    setShowColorPicker(false)
     setTodos([])
     setConfirmDelete(false)
     setAddingTodo(false)
@@ -274,6 +287,19 @@ export default function MilestonePanel({
         onMilestoneUpdate({ ...milestone, description: val } as any)
       }, 600)
     )
+  }
+
+  const saveEmoji = async (val: string | null) => {
+    setEmoji(val)
+    setShowEmojiPicker(false)
+    await supabase.from('milestones').update({ emoji: val }).eq('id', milestone.id)
+    onMilestoneUpdate({ ...milestone, emoji: val } as any)
+  }
+  const saveColor = async (val: string | null) => {
+    setColor(val)
+    setShowColorPicker(false)
+    await supabase.from('milestones').update({ color: val }).eq('id', milestone.id)
+    onMilestoneUpdate({ ...milestone, color: val } as any)
   }
 
   const handleTargetDateChange = async (val: string) => {
@@ -407,6 +433,48 @@ export default function MilestonePanel({
               </span>
             </div>
           )}
+
+          {/* Emoji + color pickers — make the rail row match the design */}
+          <div className="flex items-center gap-2 mb-2.5">
+            <div className="relative">
+              <button
+                onClick={() => { setShowEmojiPicker(v => !v); setShowColorPicker(false) }}
+                className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-[15px] leading-none transition-colors"
+                title="Set milestone emoji"
+              >
+                {emoji ?? goal?.emoji ?? '🎯'}
+              </button>
+              {showEmojiPicker && (
+                <div className="absolute top-9 left-0 z-10 bg-white rounded-xl p-2 w-[208px]" style={{ boxShadow: 'var(--shadow-pop)' }}>
+                  <div className="grid grid-cols-6 gap-1">
+                    {EMOJI_PRESETS.map(e => (
+                      <button key={e} onClick={() => saveEmoji(e)} className="w-7 h-7 rounded-md hover:bg-mercury/40 flex items-center justify-center text-[15px] leading-none transition-colors">{e}</button>
+                    ))}
+                  </div>
+                  <button onClick={() => saveEmoji(null)} className="mt-1 w-full text-[10px] text-shuttle/60 hover:text-burnham py-1 transition-colors">Use goal emoji</button>
+                </div>
+              )}
+            </div>
+            <div className="relative">
+              <button
+                onClick={() => { setShowColorPicker(v => !v); setShowEmojiPicker(false) }}
+                className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                title="Set milestone color"
+              >
+                <span className="w-3.5 h-3.5 rounded-full ring-1 ring-white/20" style={{ background: color ?? goal?.color ?? '#3E7A4E' }} />
+              </button>
+              {showColorPicker && (
+                <div className="absolute top-9 left-0 z-10 bg-white rounded-xl p-2 w-[176px]" style={{ boxShadow: 'var(--shadow-pop)' }}>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {COLOR_PRESETS.map(c => (
+                      <button key={c} onClick={() => saveColor(c)} className="w-6 h-6 rounded-full ring-1 ring-black/5 hover:scale-110 transition-transform" style={{ background: c }} title={c} />
+                    ))}
+                  </div>
+                  <button onClick={() => saveColor(null)} className="mt-1.5 w-full text-[10px] text-shuttle/60 hover:text-burnham py-1 transition-colors">Use goal color</button>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Title row */}
           <div className="flex items-start justify-between gap-3">
