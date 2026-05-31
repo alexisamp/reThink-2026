@@ -1,11 +1,14 @@
+@import './styles/design-tokens.css';
+@import './styles/today.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
-  body { @apply bg-white text-burnham font-sans antialiased; }
-  ::selection { background-color: #E5F9BD; color: #003720; }
+  body { @apply bg-canvas text-burnham font-sans antialiased; font-feature-settings: 'cv11', 'ss03'; }
+  ::selection { background-color: #EAF6CC; color: #003720; }
   ::-webkit-scrollbar { width: 0; background: transparent; }
 
   /* Custom checkbox */

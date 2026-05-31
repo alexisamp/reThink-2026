@@ -169,13 +169,13 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
 
   return (
     <div
-      className="flex min-h-screen bg-white text-burnham font-sans"
+      className="flex min-h-screen bg-canvas text-burnham font-sans"
       style={{ '--sidebar-width': sidebarPx } as React.CSSProperties}
     >
       {/* Left sidebar */}
       <aside
         className={[
-          'fixed top-0 left-0 h-screen z-30 flex flex-col bg-white border-r border-mercury/60',
+          'fixed top-0 left-0 h-screen z-30 flex flex-col bg-sidebar border-r border-mercury/50',
           'transition-all duration-200 overflow-hidden',
           sidebarWidth,
         ].join(' ')}
@@ -376,7 +376,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
 
       {/* Main content */}
       <main
-        className={['flex-1 min-h-screen transition-all duration-200', contentMargin].join(' ')}
+        className={['flex-1 min-h-screen transition-all duration-200 bg-[#F4F4F4]', contentMargin].join(' ')}
         style={{ zoom: zoom / 100 }}
       >
         {children}

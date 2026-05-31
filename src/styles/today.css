@@ -1,0 +1,183 @@
+/* reThink Today surface — ported from the design handoff bundle (styles.css)
+   Geist-based · Granola-calm canvas · subtle 1px-ring shadows · main col = todos hero
+   Right rail: Milestones → This Week → Next Steps → Journal (collapsible + draggable) */
+
+/* ── Page chrome ──────────────────────────────────────────── */
+.td-page { padding: 36px 56px 80px; max-width: 1300px; margin: 0 auto; }
+.td-page-hd { display: flex; align-items: baseline; gap: 14px; margin-bottom: 44px; }
+.td-page-hd .date { font-family: var(--font-display); font-size: 36px; font-weight: 400; color: var(--burnham); letter-spacing: -0.025em; line-height: 1.05; white-space: nowrap; }
+.td-page-hd .sep { color: var(--fg-3); font-size: 18px; align-self: center; }
+.td-page-hd .day-state { font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); text-transform: lowercase; white-space: nowrap; letter-spacing: 0.04em; align-self: center; }
+.td-page-hd .hd-spacer { flex: 1; }
+.td-page-hd .hd-act { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: 0; padding: 5px 9px; border-radius: 7px; color: var(--shuttle); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em; cursor: pointer; transition: all 120ms ease; align-self: center; }
+.td-page-hd .hd-act:hover { background: color-mix(in oklab, var(--mercury) 45%, transparent); color: var(--burnham); }
+
+/* ── Two-column body ──────────────────────────────────────── */
+.td-two-col { display: grid; grid-template-columns: minmax(0, 1fr) 296px; gap: 56px; align-items: flex-start; }
+@media (max-width: 1100px) { .td-two-col { grid-template-columns: 1fr; } }
+.td-main-col { max-width: 680px; }
+
+/* ── Section header ───────────────────────────────────────── */
+.td-section { margin-bottom: 36px; }
+.td-section-hd { display: flex; align-items: baseline; gap: 14px; margin-bottom: 18px; }
+.td-section-hd h3 { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 400; color: var(--burnham); letter-spacing: -0.022em; white-space: nowrap; }
+.td-section-hd .rule { flex: 1; height: 1px; background: var(--border-1); transform: translateY(-8px); }
+.td-section-hd .count { font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); white-space: nowrap; letter-spacing: 0.04em; align-self: center; }
+.td-section-hd .group-toggle { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 10px; color: var(--shuttle); background: transparent; border: 0; padding: 2px 6px; border-radius: 4px; cursor: pointer; letter-spacing: 0.04em; align-self: center; }
+.td-section-hd .group-toggle:hover { background: color-mix(in oklab, var(--mercury) 40%, transparent); color: var(--burnham); }
+
+/* ── Todo rows (main list — the HERO) ──────────────────────── */
+.td-todo { display: flex; align-items: center; gap: 10px; padding: 10px 10px; margin: 0 -10px; border-radius: 8px; transition: background 120ms ease; position: relative; }
+.td-todo:hover { background: color-mix(in oklab, var(--mercury) 22%, transparent); }
+.td-todo.featured { background: color-mix(in oklab, var(--featured-accent, var(--moss)) 8%, transparent); box-shadow: inset 2px 0 0 var(--featured-accent, var(--moss)); }
+.td-todo.done .body { text-decoration: line-through; color: var(--fg-3); }
+.td-todo .pri { width: 14px; text-align: right; font-family: var(--font-mono); font-size: 10px; color: color-mix(in oklab, var(--shuttle) 40%, transparent); flex-shrink: 0; letter-spacing: 0.02em; }
+.td-cb { width: 15px; height: 15px; border-radius: 5px; border: 1.5px solid color-mix(in oklab, var(--shuttle) 35%, transparent); background: #fff; flex-shrink: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 9px; transition: all 120ms ease; padding: 0; }
+.td-cb:hover { border-color: var(--moss); }
+.td-cb.checked { background: var(--moss); border-color: var(--moss); animation: td-cb-check 200ms ease; }
+@keyframes td-cb-check { 0% { transform: scale(1); } 50% { transform: scale(0.85); } 100% { transform: scale(1); } }
+.td-todo .text-area { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; cursor: text; }
+.td-todo .body { font-size: 13.5px; color: color-mix(in oklab, var(--burnham) 85%, transparent); line-height: 1.45; letter-spacing: -0.005em; }
+.td-chip-ms { font-family: var(--font-mono); font-size: 9px; padding: 2px 7px; border-radius: 4px; background: color-mix(in oklab, var(--mercury) 40%, transparent); color: color-mix(in oklab, var(--shuttle) 75%, transparent); cursor: pointer; white-space: nowrap; letter-spacing: 0.01em; transition: all 120ms ease; border: 0; }
+.td-chip-ms:hover { background: color-mix(in oklab, var(--moss) 14%, transparent); color: var(--moss); }
+.td-chip-mention { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid color-mix(in oklab, var(--midnight) 8%, transparent); background: color-mix(in oklab, var(--midnight) 4%, transparent); border-radius: 6px; font-size: 10px; font-weight: 500; color: color-mix(in oklab, var(--midnight) 72%, transparent); line-height: 1.1; }
+.td-chip-mention .av { width: 12px; height: 12px; border-radius: 999px; background: var(--mercury); display: inline-flex; align-items: center; justify-content: center; font-size: 7px; font-weight: 600; color: color-mix(in oklab, var(--shuttle) 80%, transparent); overflow: hidden; }
+.td-chip-mention .av.sq { border-radius: 3px; }
+.td-chip-mention .av img { width: 100%; height: 100%; object-fit: cover; }
+.td-todo .block { font-family: var(--font-mono); font-size: 9px; color: color-mix(in oklab, var(--shuttle) 50%, transparent); letter-spacing: 0.02em; }
+.td-todo .actions { display: flex; gap: 0; opacity: 0; transition: opacity 120ms ease; }
+.td-todo:hover .actions { opacity: 1; }
+.td-todo .actions button { background: transparent; border: 0; padding: 4px; color: color-mix(in oklab, var(--shuttle) 70%, transparent); border-radius: 4px; transition: all 100ms ease; display: inline-flex; }
+.td-todo .actions button:hover { color: var(--burnham); background: color-mix(in oklab, var(--mercury) 50%, transparent); }
+.td-todo .actions button.star.on { color: var(--featured-accent, var(--moss)); opacity: 1; }
+.td-todo:not(:hover) .actions button.star.on { opacity: 1; }
+.td-todo .text-area input { width: 100%; border: 0; background: transparent; border-bottom: 1px solid color-mix(in oklab, var(--burnham) 30%, transparent); font-size: 13.5px; color: var(--burnham); padding: 1px 0; }
+
+.td-add { display: flex; align-items: center; gap: 10px; padding: 10px; margin: 4px -10px 0; border-radius: 8px; cursor: text; color: var(--fg-3); font-size: 13px; transition: all 120ms ease; width: calc(100% + 20px); text-align: left; background: transparent; border: 0; }
+.td-add:hover { background: color-mix(in oklab, var(--mercury) 22%, transparent); color: var(--burnham); }
+.td-add i { font-size: 13px; }
+.td-add input { flex: 1; border: 0; background: transparent; font-size: 13.5px; color: var(--burnham); }
+
+/* group header (when grouped by milestone) */
+.td-group-hd { display: flex; align-items: baseline; gap: 10px; padding: 16px 0 8px; }
+.td-group-hd .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--moss); flex-shrink: 0; align-self: center; }
+.td-group-hd .name { font-family: var(--font-display); font-size: 11px; font-weight: 500; color: var(--shuttle); letter-spacing: -0.005em; }
+.td-group-hd .rule { flex: 1; height: 1px; background: var(--border-1); transform: translateY(-3px); }
+.td-group-hd .count { font-family: var(--font-mono); font-size: 9px; color: var(--fg-3); letter-spacing: 0.02em; }
+.td-group-hd.no-ms .dot { background: color-mix(in oklab, var(--shuttle) 30%, transparent); }
+
+/* popover (group toggle, etc.) */
+.td-popover { position: absolute; z-index: 60; top: 100%; left: 0; margin-top: 4px; min-width: 140px; background: #fff; border-radius: 10px; box-shadow: var(--shadow-pop); padding: 6px; display: flex; flex-direction: column; animation: td-fade-in 100ms ease; }
+.td-popover button { background: transparent; border: 0; text-align: left; padding: 7px 10px; border-radius: 6px; font-size: 12px; color: var(--burnham); display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; text-transform: capitalize; }
+.td-popover button:hover { background: color-mix(in oklab, var(--gossip) 50%, transparent); }
+
+/* ── Right rail ──────────────────────────────────────────── */
+.td-rail { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 36px; }
+
+/* RailSection — unified card chrome (collapsible + draggable) */
+.td-rail-sec {
+  background: var(--bg-1); border-radius: 14px; box-shadow: var(--shadow-card);
+  transition: box-shadow 150ms ease, opacity 150ms ease, transform 150ms ease;
+}
+.td-rail-sec.dragging { opacity: 0.5; }
+.td-rail-sec.drop-target { box-shadow: 0 0 0 2px color-mix(in oklab, var(--moss) 55%, transparent), var(--shadow-card); }
+/* lagging / scoreboard tone — This Week reads as outcomes */
+.td-rail-sec.tone-lagging { background: color-mix(in oklab, var(--moss) 13%, #fff); box-shadow: 0 0 0 1px color-mix(in oklab, var(--moss) 18%, transparent), var(--shadow-card); }
+.td-rail-sec.tone-lagging .td-rail-sec-toggle .label { color: var(--burnham); }
+
+.td-rail-sec-hd { display: flex; align-items: center; gap: 4px; padding: 12px 12px 0 8px; }
+.td-rail-sec-hd .grip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 22px; color: color-mix(in oklab, var(--shuttle) 38%, transparent);
+  cursor: grab; opacity: 0.45; transition: opacity 120ms ease, color 120ms ease; background: transparent; border: 0; padding: 0;
+}
+.td-rail-sec:hover .grip { opacity: 1; }
+.td-rail-sec-hd .grip:hover { color: var(--burnham); }
+.td-rail-sec-hd .grip:active { cursor: grabbing; }
+.td-rail-sec-toggle {
+  flex: 1; display: flex; align-items: center; gap: 8px; background: transparent; border: 0;
+  padding: 2px 0; cursor: pointer; color: var(--shuttle); transition: color 120ms ease; text-align: left;
+}
+.td-rail-sec-toggle:hover { color: var(--burnham); }
+.td-rail-sec-toggle .label { font-family: var(--font-sans); font-size: 13px; font-weight: 600; color: var(--burnham); letter-spacing: -0.005em; white-space: nowrap; }
+.td-rail-sec-toggle .count { font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; color: var(--fg-3); letter-spacing: 0.02em; }
+.td-rail-sec-actions { display: flex; align-items: center; gap: 2px; }
+.td-rail-sec-actions .hd-act, .td-rail-sec-actions .caret {
+  background: transparent; border: 0; padding: 4px; border-radius: 5px; cursor: pointer;
+  color: color-mix(in oklab, var(--shuttle) 65%, transparent); transition: all 120ms ease;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.td-rail-sec-actions .hd-act:hover, .td-rail-sec-actions .caret:hover { background: color-mix(in oklab, var(--mercury) 45%, transparent); color: var(--burnham); }
+.td-rail-sec-body { padding: 8px 16px 14px; animation: td-fade-in 150ms ease; }
+@keyframes td-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── Milestone rows (compact + colored by goal + emoji) ── */
+.td-ms-rows { display: flex; flex-direction: column; }
+.td-ms-item {
+  --c: var(--goal-revenue);
+  padding: 5px 8px 6px; margin: 0 -8px; border-radius: 8px; cursor: pointer;
+  transition: background 120ms var(--ease-out-soft);
+}
+.td-ms-item:hover { background: color-mix(in oklab, var(--c) 8%, transparent); }
+.td-ms-item.active { background: color-mix(in oklab, var(--c) 12%, transparent); }
+.td-ms-row { display: grid; grid-template-columns: 17px 1fr auto auto 12px; gap: 8px; align-items: center; }
+.td-ms-row .emoji { font-size: 13px; line-height: 1; text-align: center; }
+[data-ms-emoji="off"] .td-ms-row .emoji { display: none; }
+[data-ms-emoji="off"] .td-ms-row { grid-template-columns: 1fr auto auto 12px; }
+.td-ms-row .name {
+  font-family: var(--font-sans); font-size: 12.5px; font-weight: 500; letter-spacing: -0.005em;
+  color: color-mix(in oklab, var(--c) 84%, #000);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.td-ms-item:hover .name { color: color-mix(in oklab, var(--c) 68%, #000); }
+.td-ms-item.active .name { font-weight: 600; }
+.td-ms-row .frac { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--burnham); letter-spacing: 0.01em; }
+.td-ms-row .due { font-family: var(--font-mono); font-size: 9.5px; color: color-mix(in oklab, var(--shuttle) 65%, transparent); letter-spacing: 0.03em; white-space: nowrap; }
+.td-ms-row .due.urgent { color: var(--c); font-weight: 600; padding: 1px 5px; background: color-mix(in oklab, var(--c) 14%, #fff); border-radius: 3px; }
+.td-ms-row .ms-go { display: inline-flex; align-items: center; justify-content: center; color: color-mix(in oklab, var(--c) 55%, transparent); opacity: 0; transform: translateX(-2px); transition: all 130ms var(--ease-out-soft); }
+.td-ms-item:hover .ms-go { opacity: 1; transform: translateX(0); }
+.td-ms-bar { height: 2px; margin: 5px 0 0; background: color-mix(in oklab, var(--c) 16%, var(--mercury)); border-radius: 2px; overflow: hidden; }
+.td-ms-bar > span { display: block; height: 100%; background: var(--c); border-radius: 2px; transition: width 300ms var(--ease-out-soft); }
+.td-ms-empty { font-size: 11.5px; color: var(--fg-3); font-style: italic; padding: 4px 0; }
+
+/* ── This Week rows (KPIs) ────── */
+.td-tw-rows { display: flex; flex-direction: column; }
+.td-tw-row { display: grid; grid-template-columns: 20px 1fr auto 24px; gap: 10px; align-items: center; padding: 8px 0; }
+.td-tw-row + .td-tw-row { border-top: 1px solid color-mix(in oklab, var(--moss) 22%, transparent); }
+.td-tw-row .emoji { font-size: 15px; line-height: 1; text-align: center; }
+.td-tw-row .name { font-size: 12.5px; color: color-mix(in oklab, var(--shuttle) 95%, transparent); letter-spacing: -0.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.td-tw-row .val { font-family: var(--font-mono); font-size: 12px; color: var(--burnham); letter-spacing: 0.01em; white-space: nowrap; }
+.td-tw-row .val .target { color: color-mix(in oklab, var(--shuttle) 55%, transparent); }
+.td-tw-row .add { background: transparent; border: 0; padding: 3px; color: color-mix(in oklab, var(--shuttle) 50%, transparent); border-radius: 4px; cursor: pointer; transition: all 100ms ease; justify-self: end; display: inline-flex; }
+.td-tw-row .add:hover { color: var(--moss); background: color-mix(in oklab, var(--moss) 12%, transparent); }
+.td-tw-bar { height: 2px; background: color-mix(in oklab, var(--moss) 24%, #fff); border-radius: 2px; overflow: hidden; margin-top: -4px; margin-bottom: 4px; }
+.td-tw-bar > span { display: block; height: 100%; background: var(--moss); border-radius: 2px; transition: width 300ms var(--ease-out-soft); }
+.td-tw-foot { margin-top: 8px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.td-tw-foot button { background: transparent; border: 0; padding: 4px 6px; color: var(--shuttle); font-size: 11px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; border-radius: 4px; }
+.td-tw-foot button:hover { color: var(--burnham); }
+.td-tw-empty { font-size: 11.5px; color: var(--fg-3); font-style: italic; padding: 4px 0; }
+
+/* ── Next steps rows (people feed → This Week KPIs) ──────── */
+.td-ns-empty { font-size: 11.5px; color: var(--fg-3); font-style: italic; padding: 4px 0; }
+.td-ns-rows { display: flex; flex-direction: column; }
+.td-ns-row { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; }
+.td-ns-row + .td-ns-row { border-top: 1px solid var(--border-1); }
+.td-ns-row .av { width: 26px; height: 26px; border-radius: 999px; background: color-mix(in oklab, var(--mercury) 60%, transparent); flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--shuttle); overflow: hidden; }
+.td-ns-row .av img { width: 100%; height: 100%; object-fit: cover; }
+.td-ns-row .who-wrap { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.td-ns-row .who { font-weight: 500; color: var(--burnham); font-size: 12.5px; letter-spacing: -0.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.td-ns-row .meta { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.td-ns-row .status-dot { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
+.td-ns-row .status-dot.scheduled { background: var(--moss); }
+.td-ns-row .status-dot.reach-out { background: var(--acc-clay); }
+.td-ns-row .when { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.02em; flex-shrink: 0; }
+.td-ns-row.scheduled .when { color: color-mix(in oklab, var(--moss) 85%, #000); }
+.td-ns-row.reach-out .when { color: color-mix(in oklab, var(--acc-clay) 80%, #000); }
+.td-ns-row .feeds { font-family: var(--font-mono); font-size: 9px; color: var(--fg-3); letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.td-ns-row .ns-log { background: transparent; border: 0; width: 26px; height: 26px; border-radius: 6px; cursor: pointer; color: color-mix(in oklab, var(--shuttle) 55%, transparent); display: inline-flex; align-items: center; justify-content: center; transition: all 120ms ease; flex-shrink: 0; }
+.td-ns-row.scheduled .ns-log:hover { color: var(--moss); background: color-mix(in oklab, var(--moss) 12%, transparent); }
+.td-ns-row.reach-out .ns-log:hover { color: var(--acc-clay); background: color-mix(in oklab, var(--acc-clay) 12%, transparent); }
+
+/* ── Journal textarea ───────────────────────────────────── */
+.td-journal-area { width: 100%; border: 0; padding: 0; resize: none; background: transparent; font-family: var(--font-sans); font-size: 12.5px; color: var(--burnham); line-height: 1.55; min-height: 64px; }
+.td-journal-area::placeholder { color: color-mix(in oklab, var(--shuttle) 35%, transparent); }
