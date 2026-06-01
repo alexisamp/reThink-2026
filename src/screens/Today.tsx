@@ -16,7 +16,7 @@ import ThisWeek from './today/ThisWeek'
 import NextSteps from './today/NextSteps'
 import FocusTimer from './today/FocusTimer'
 import { useFocusTimer } from './today/useFocusTimer'
-import type { GroupBy, Mention } from './today/types'
+import type { GroupBy, Mention, TodoMilestoneOption } from './today/types'
 import { companyImage, createCrmObject, firstRelation, mentionFromCompany, mentionFromContact, mentionFromOpportunity } from '@/lib/crmObjects'
 
 function fmtClock(seconds: number): string {
@@ -205,7 +205,7 @@ export default function Today() {
   // Manually curated focus set — the user picks which milestones surface here
   // (via the "Show in Today" toggle in the drawer / Manage screen).
   const milestoneRows: MilestoneRowData[] = useMemo(() => {
-    return milestones
+    return [...milestones]
       .filter(m => m.focused)
       .sort((a, b) =>
         ((a.position ?? 999) - (b.position ?? 999)) ||
@@ -219,6 +219,30 @@ export default function Today() {
           id: m.id,
           name: m.text,
           emoji: m.emoji ?? g?.emoji ?? null,
+          color: m.color ?? colorForGoal(m.goal_id),
+          due: due.label,
+          urgent: due.urgent,
+          done: prog.done,
+          total: prog.total,
+        }
+      })
+  }, [milestones, goalsMap, msProgress, today, colorForGoal])
+
+  const milestoneOptions: TodoMilestoneOption[] = useMemo(() => {
+    return [...milestones]
+      .sort((a, b) =>
+        ((a.position ?? 999) - (b.position ?? 999)) ||
+        (a.target_date ?? '9999-12-31').localeCompare(b.target_date ?? '9999-12-31') ||
+        a.text.localeCompare(b.text))
+      .map(m => {
+        const g = goalsMap.get(m.goal_id)
+        const prog = msProgress.get(m.id) ?? { done: 0, total: 0 }
+        const due = formatDue(m.target_date, today)
+        return {
+          id: m.id,
+          name: m.text,
+          goalId: m.goal_id,
+          goalLabel: g?.alias || g?.text || null,
           color: m.color ?? colorForGoal(m.goal_id),
           due: due.label,
           urgent: due.urgent,
@@ -340,6 +364,26 @@ export default function Today() {
       if (milestoneId) setMsTodos(prev => [...prev, { id: data.id, milestone_id: milestoneId, completed: false }])
       loadMentions(userId, [...todos, todo])
     }
+  }
+
+  const changeTodoMilestone = async (id: string, milestoneId: string | null) => {
+    const todo = todos.find(x => x.id === id)
+    if (!todo) return
+    const milestone = milestoneId ? milestones.find(m => m.id === milestoneId) : null
+    const patch: Partial<Todo> = {
+      milestone_id: milestoneId,
+      goal_id: milestone?.goal_id ?? null,
+    }
+    setTodos(prev => prev.map(x => x.id === id ? { ...x, ...patch } : x))
+    setMsTodos(prev => {
+      const without = prev.filter(x => x.id !== id)
+      if (!milestoneId) return without
+      return [...without, { id, milestone_id: milestoneId, completed: todo.completed }]
+    })
+    await supabase.from('todos').update({
+      milestone_id: milestoneId,
+      goal_id: milestone?.goal_id ?? null,
+    }).eq('id', id)
   }
 
   const reorderTodos = async (orderedActiveIds: string[]) => {
@@ -469,6 +513,7 @@ export default function Today() {
             milestoneOrder={milestoneOrder}
             resolveMentions={resolveMentions}
             mentionOptions={mentionOptions}
+            milestoneOptions={milestoneOptions}
             groupBy={groupBy}
             onChangeGroup={setGroup}
             onToggle={toggleTodo}
@@ -478,6 +523,7 @@ export default function Today() {
             onEditText={editTodoText}
             onAdd={addTodo}
             onCreateMention={createMention}
+            onChangeMilestone={changeTodoMilestone}
             onMilestoneClick={setExpandedMs}
             onReorder={reorderTodos}
           />

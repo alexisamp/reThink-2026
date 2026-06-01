@@ -13,3 +13,15 @@ export interface Mention {
   companyId?: string | null
   searchText?: string | null
 }
+
+export interface TodoMilestoneOption {
+  id: string
+  name: string
+  goalId: string
+  goalLabel: string | null
+  color: string
+  due: string | null
+  urgent: boolean
+  done: number
+  total: number
+}

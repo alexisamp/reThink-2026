@@ -57,13 +57,19 @@
 .td-todo .body { font-size: 13.5px; color: color-mix(in oklab, var(--burnham) 85%, transparent); line-height: 1.45; letter-spacing: -0.005em; }
 .td-chip-ms { --ms: var(--moss); font-family: var(--font-mono); font-size: 9px; padding: 2px 7px; border-radius: 4px; background: color-mix(in oklab, var(--ms) 12%, #fff); color: color-mix(in oklab, var(--ms) 76%, #000); cursor: pointer; white-space: nowrap; letter-spacing: 0.01em; transition: all 120ms ease; border: 0; }
 .td-chip-ms:hover { background: color-mix(in oklab, var(--ms) 20%, #fff); color: color-mix(in oklab, var(--ms) 62%, #000); }
+.td-chip-ms.ghost { opacity: 0; background: transparent; color: color-mix(in oklab, var(--shuttle) 48%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--shuttle) 16%, transparent); }
+.td-todo:hover .td-chip-ms.ghost, .td-todo.editing .td-chip-ms.ghost, .td-ms-chip-wrap:focus-within .td-chip-ms.ghost { opacity: 1; }
+.td-ms-chip-wrap { position: relative; display: inline-flex; }
+.td-ms-chip-wrap .chip-pop { position: absolute; left: 0; top: calc(100% + 7px); width: min(340px, calc(100vw - 36px)); }
 .td-chip-mention { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid color-mix(in oklab, var(--midnight) 8%, transparent); background: color-mix(in oklab, var(--midnight) 4%, transparent); border-radius: 6px; font-size: 10px; font-weight: 500; color: color-mix(in oklab, var(--midnight) 72%, transparent); line-height: 1.1; }
 .td-chip-mention.clickable { cursor: pointer; transition: all 120ms ease; }
 .td-chip-mention.clickable:hover { border-color: color-mix(in oklab, var(--burnham) 18%, transparent); background: color-mix(in oklab, var(--burnham) 7%, transparent); color: var(--burnham); }
 .td-chip-mention .av { width: 12px; height: 12px; border-radius: 999px; background: var(--mercury); display: inline-flex; align-items: center; justify-content: center; font-size: 7px; font-weight: 600; color: color-mix(in oklab, var(--shuttle) 80%, transparent); overflow: hidden; }
 .td-chip-mention .av.sq { border-radius: 3px; }
 .td-chip-mention .av img { width: 100%; height: 100%; object-fit: cover; }
-.td-chip-waiting { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 6px; background: color-mix(in oklab, var(--shuttle) 9%, transparent); color: color-mix(in oklab, var(--shuttle) 75%, transparent); font-size: 9.5px; font-family: var(--font-mono); }
+.td-chip-waiting { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 6px; border: 0; background: color-mix(in oklab, var(--shuttle) 9%, transparent); color: color-mix(in oklab, var(--shuttle) 75%, transparent); font-size: 9.5px; font-family: var(--font-mono); }
+.td-chip-waiting.clickable { cursor: pointer; }
+.td-chip-waiting.clickable:hover { background: color-mix(in oklab, var(--shuttle) 14%, transparent); color: var(--burnham); }
 .td-todo .block { font-family: var(--font-mono); font-size: 9px; color: color-mix(in oklab, var(--shuttle) 50%, transparent); letter-spacing: 0.02em; }
 .td-todo .actions { display: flex; gap: 0; opacity: 0; transition: opacity 120ms ease; }
 .td-todo:hover .actions { opacity: 1; }
@@ -81,6 +87,9 @@
 
 .td-add { display: flex; align-items: center; gap: 10px; padding: 10px; margin: 4px -10px 0; border-radius: 8px; cursor: text; color: var(--fg-3); font-size: 13px; transition: all 120ms ease; width: calc(100% + 20px); text-align: left; background: transparent; border: 0; }
 .td-add:hover { background: color-mix(in oklab, var(--mercury) 22%, transparent); color: var(--burnham); }
+.td-add.empty-row { color: color-mix(in oklab, var(--shuttle) 42%, transparent); }
+.td-add-placeholder { font-size: 13.5px; }
+.td-cb.ghost { opacity: 0.45; border-style: dashed; background: transparent; }
 .td-add i { font-size: 13px; }
 .td-add input { flex: 1; border: 0; background: transparent; font-size: 13.5px; color: var(--burnham); }
 .td-add .td-mention-wrap { flex: 1; min-width: 0; }
@@ -110,6 +119,9 @@
 .td-mention-row { width: 100%; display: grid; grid-template-columns: 24px 1fr; align-items: center; gap: 9px; padding: 7px; border: 0; border-radius: 7px; background: transparent; text-align: left; cursor: pointer; }
 .td-mention-row:hover, .td-mention-row.active { background: color-mix(in oklab, var(--gossip) 55%, transparent); }
 .td-mention-row.create .td-mention-avatar { background: color-mix(in oklab, var(--moss) 12%, #fff); color: var(--moss); font-size: 13px; }
+.td-ms-picker .td-mention-row { grid-template-columns: 14px 1fr; }
+.td-ms-option-dot { --ms: var(--moss); width: 8px; height: 8px; border-radius: 999px; background: var(--ms); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ms) 12%, transparent); justify-self: center; }
+.td-ms-option.clear .td-ms-option-dot { background: color-mix(in oklab, var(--shuttle) 28%, transparent); box-shadow: none; }
 .td-mention-avatar { width: 24px; height: 24px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; background: color-mix(in oklab, var(--mercury) 70%, #fff); color: var(--shuttle); font-size: 10px; font-weight: 600; }
 .td-mention-avatar.sq { border-radius: 6px; }
 .td-mention-avatar img { width: 100%; height: 100%; object-fit: cover; }

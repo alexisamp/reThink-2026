@@ -1,9 +1,9 @@
 // TodoList — Today's todos (the HERO). Priority / milestone grouping, featured
 // star, milestone + mention chips, AM/PM block, inline edit, add, done section.
 // Visual contract ported from the reThink design bundle (TodoList.jsx).
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, Star, TrashSimple, Plus, CaretDown, DotsSixVertical, HourglassMedium } from '@phosphor-icons/react'
+import { Check, Star, TrashSimple, CaretDown, DotsSixVertical, HourglassMedium } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core'
@@ -13,7 +13,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import type { Todo, TodoContentSegment, TodoMentionKind } from '@/types'
 import MentionEditor, { MentionChip as RichMentionChip } from './MentionEditor'
-import type { GroupBy, Mention } from './types'
+import type { GroupBy, Mention, TodoMilestoneOption } from './types'
 import {
   editorToContentSegments,
   linksFromMentions as linksFromMentionItems,
@@ -42,6 +42,103 @@ function linksForTodoEdit(todo: Todo, originalMentions: Mention[], linked: Menti
   }
 }
 
+function MilestoneOptionRow({
+  option,
+  selected,
+  clear,
+  onMouseDown,
+}: {
+  option?: TodoMilestoneOption
+  selected?: boolean
+  clear?: boolean
+  onMouseDown: (e: ReactMouseEvent<HTMLButtonElement>) => void
+}) {
+  return (
+    <button
+      type="button"
+      className={`td-mention-row td-ms-option${selected ? ' active' : ''}${clear ? ' clear' : ''}`}
+      onMouseDown={onMouseDown}
+    >
+      <span className="td-ms-option-dot" style={option ? { ['--ms' as string]: option.color } : undefined} />
+      <span className="td-mention-copy">
+        <span className="name">{clear ? 'No milestone' : option?.name}</span>
+        {option ? (
+          <span className="sub">{[option.goalLabel, option.due, option.total ? `${option.done}/${option.total}` : null].filter(Boolean).join(' · ')}</span>
+        ) : (
+          <span className="sub">Remove milestone from this todo</span>
+        )}
+      </span>
+    </button>
+  )
+}
+
+function MilestoneChipPicker({
+  label,
+  color,
+  currentMilestoneId,
+  options,
+  onSelect,
+  onOpenDetail,
+}: {
+  label?: string | null
+  color?: string | null
+  currentMilestoneId?: string | null
+  options: TodoMilestoneOption[]
+  onSelect: (milestoneId: string | null) => void
+  onOpenDetail?: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const wrap = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  const visible = options.slice(0, 10)
+  return (
+    <span ref={wrap} className="td-ms-chip-wrap">
+      <button
+        type="button"
+        className={`td-chip-ms${label ? '' : ' ghost'}`}
+        style={color ? { ['--ms' as string]: color } : undefined}
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen(v => !v)
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation()
+          onOpenDetail?.()
+        }}
+      >
+        {label ?? 'Add milestone'}
+      </button>
+      {open && (
+        <div className="td-mention-picker td-ms-picker chip-pop">
+          <div className="td-mention-header">Milestones</div>
+          {currentMilestoneId && (
+            <MilestoneOptionRow
+              clear
+              onMouseDown={(e) => { e.preventDefault(); onSelect(null); setOpen(false) }}
+            />
+          )}
+          {visible.length === 0 ? (
+            <div className="td-mention-empty">No active milestones</div>
+          ) : visible.map(option => (
+            <MilestoneOptionRow
+              key={option.id}
+              option={option}
+              selected={option.id === currentMilestoneId}
+              onMouseDown={(e) => { e.preventDefault(); onSelect(option.id); setOpen(false) }}
+            />
+          ))}
+        </div>
+      )}
+    </span>
+  )
+}
+
 interface RowProps {
   todo: Todo
   priorityNumber?: number
@@ -49,6 +146,7 @@ interface RowProps {
   hideMilestone?: boolean
   mentions: Mention[]
   mentionOptions: Mention[]
+  milestoneOptions: TodoMilestoneOption[]
   milestoneColor?: string | null
   onToggle: (id: string) => void
   onDelete: (id: string) => void
@@ -56,6 +154,7 @@ interface RowProps {
   onToggleWaiting: (id: string) => void
   onEditText: (id: string, text: string, contentSegments: TodoContentSegment[], links?: TodoLinks) => void
   onCreateMention: (kind: TodoMentionKind, name: string, companyId?: string | null) => Promise<Mention | null>
+  onChangeMilestone: (id: string, milestoneId: string | null) => void
   onMilestoneClick?: (id: string) => void
   dragRef?: (el: HTMLElement | null) => void
   dragStyle?: CSSProperties
@@ -63,8 +162,8 @@ interface RowProps {
 }
 
 function TodoRow({
-  todo, priorityNumber, milestone, hideMilestone, mentions, mentionOptions, milestoneColor,
-  onToggle, onDelete, onStar, onToggleWaiting, onEditText, onCreateMention, onMilestoneClick,
+  todo, priorityNumber, milestone, hideMilestone, mentions, mentionOptions, milestoneOptions, milestoneColor,
+  onToggle, onDelete, onStar, onToggleWaiting, onEditText, onCreateMention, onChangeMilestone, onMilestoneClick,
   dragRef, dragStyle, dragHandle,
 }: RowProps) {
   const navigate = useNavigate()
@@ -114,23 +213,31 @@ function TodoRow({
             autoFocus
             initialSegments={segmentsForTodo(todo, mentions, mentionOptions)}
             mentionOptions={mentionOptions}
+            milestoneOptions={milestoneOptions}
+            currentMilestoneId={todo.milestone_id}
             placeholder="Type @ to link CRM"
             onCommit={commit}
             onCancel={cancel}
             onOpenMention={goToMention}
             onCreateMention={onCreateMention}
+            onSelectMilestone={(milestoneId) => onChangeMilestone(todo.id, milestoneId)}
           />
         ) : (
           <>
             {renderBody()}
-            {todo.waiting && <span className="td-chip-waiting"><HourglassMedium size={10} /> on hold</span>}
-            {milestone && !hideMilestone && (
-              <button
-                className="td-chip-ms"
-                style={milestoneColor ? { ['--ms' as string]: milestoneColor } : undefined}
-                onClick={(e) => { e.stopPropagation(); if (todo.milestone_id && onMilestoneClick) onMilestoneClick(todo.milestone_id) }}
-              >
-                {milestone}
+            {!hideMilestone && (
+              <MilestoneChipPicker
+                label={milestone}
+                color={milestoneColor}
+                currentMilestoneId={todo.milestone_id}
+                options={milestoneOptions}
+                onSelect={(milestoneId) => onChangeMilestone(todo.id, milestoneId)}
+                onOpenDetail={() => { if (todo.milestone_id && onMilestoneClick) onMilestoneClick(todo.milestone_id) }}
+              />
+            )}
+            {todo.waiting && (
+              <button className="td-chip-waiting clickable" onClick={(e) => { e.stopPropagation(); onToggleWaiting(todo.id) }}>
+                <HourglassMedium size={10} /> on hold
               </button>
             )}
           </>
@@ -176,31 +283,44 @@ function SortableTodoRow(props: RowProps) {
 }
 
 function AddTodo({
-  onAdd, mentionOptions, onCreateMention, label = 'Add a task',
+  onAdd, mentionOptions, milestoneOptions, onCreateMention, label = 'Type a todo...',
 }: {
-  onAdd: (text: string, contentSegments: TodoContentSegment[], links: TodoLinks) => void
+  onAdd: (text: string, milestoneId: string | null, contentSegments: TodoContentSegment[], links: TodoLinks) => void
   mentionOptions: Mention[]
+  milestoneOptions: TodoMilestoneOption[]
   onCreateMention: (kind: TodoMentionKind, name: string, companyId?: string | null) => Promise<Mention | null>
   label?: string
 }) {
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null)
+  const [editorKey, setEditorKey] = useState(0)
+  const selectedMilestone = milestoneOptions.find(m => m.id === selectedMilestoneId) ?? null
   const commit = (segments: EditorSegment[]) => {
     const linked = segments.filter((s): s is { type: 'mention'; mention: Mention } => s.type === 'mention').map(s => s.mention)
     const text = plainTextFromEditorSegments(segments)
     const contentSegments = editorToContentSegments(segments)
-    if (text || linked.length > 0) onAdd(text, contentSegments, linksFromMentions(linked))
-    setEditing(false)
+    if (text || linked.length > 0) {
+      onAdd(text, selectedMilestoneId, contentSegments, linksFromMentions(linked))
+      setSelectedMilestoneId(null)
+      setEditorKey(k => k + 1)
+      setEditing(true)
+    } else {
+      setEditing(false)
+      setSelectedMilestoneId(null)
+    }
   }
   const cancel = () => {
     setEditing(false)
+    setSelectedMilestoneId(null)
+    setEditorKey(k => k + 1)
   }
 
   if (!editing) {
     return (
-      <button className="td-add" onClick={() => setEditing(true)}>
-        <Plus size={13} />
-        <span>{label}</span>
+      <button className="td-add empty-row" onClick={() => setEditing(true)}>
+        <span className="td-cb ghost" />
+        <span className="td-add-placeholder">{label}</span>
       </button>
     )
   }
@@ -208,15 +328,29 @@ function AddTodo({
     <div className="td-add">
       <span className="td-cb" />
       <MentionEditor
+        key={editorKey}
         autoFocus
-        placeholder="What's next? Type @ to link CRM"
+        placeholder="Type a todo...  @ for CRM, / for milestone"
         initialSegments={[]}
         mentionOptions={mentionOptions}
+        milestoneOptions={milestoneOptions}
+        currentMilestoneId={selectedMilestoneId}
         onCommit={commit}
         onCancel={cancel}
         onOpenMention={(mention) => { if (mention.id) navigate(pathForMention(mention)) }}
         onCreateMention={onCreateMention}
+        onSelectMilestone={setSelectedMilestoneId}
       />
+      {selectedMilestone && (
+        <button
+          type="button"
+          className="td-chip-ms"
+          style={{ ['--ms' as string]: selectedMilestone.color }}
+          onClick={() => setSelectedMilestoneId(null)}
+        >
+          {selectedMilestone.name}
+        </button>
+      )}
     </div>
   )
 }
@@ -258,6 +392,7 @@ interface TodoListProps {
   milestoneOrder: string[]
   resolveMentions: (todo: Todo) => Mention[]
   mentionOptions: Mention[]
+  milestoneOptions: TodoMilestoneOption[]
   groupBy: GroupBy
   onChangeGroup: (g: GroupBy) => void
   onToggle: (id: string) => void
@@ -267,13 +402,14 @@ interface TodoListProps {
   onEditText: (id: string, text: string, contentSegments: TodoContentSegment[], links?: TodoLinks) => void
   onAdd: (text: string, milestoneId: string | null, contentSegments: TodoContentSegment[], links?: TodoLinks) => void
   onCreateMention: (kind: TodoMentionKind, name: string, companyId?: string | null) => Promise<Mention | null>
+  onChangeMilestone: (id: string, milestoneId: string | null) => void
   onMilestoneClick: (id: string) => void
   onReorder?: (orderedActiveIds: string[]) => void
 }
 
 export default function TodoList({
-  todos, milestoneName, milestoneColor, milestoneTotal, milestoneOrder, resolveMentions, mentionOptions,
-  groupBy, onChangeGroup, onToggle, onDelete, onStar, onToggleWaiting, onEditText, onAdd, onCreateMention, onMilestoneClick, onReorder,
+  todos, milestoneName, milestoneColor, milestoneTotal, milestoneOrder, resolveMentions, mentionOptions, milestoneOptions,
+  groupBy, onChangeGroup, onToggle, onDelete, onStar, onToggleWaiting, onEditText, onAdd, onCreateMention, onChangeMilestone, onMilestoneClick, onReorder,
 }: TodoListProps) {
   const active = todos.filter(t => !t.completed)
   const done = todos.filter(t => t.completed)
@@ -327,8 +463,9 @@ export default function TodoList({
                   key={t.id} todo={t} priorityNumber={priMap.get(t.id)}
                   milestone={milestoneName(t.milestone_id)} mentions={resolveMentions(t)}
                   mentionOptions={mentionOptions}
+                  milestoneOptions={milestoneOptions}
                   milestoneColor={milestoneColor(t.milestone_id)}
-                  onToggle={onToggle} onDelete={onDelete} onStar={onStar} onToggleWaiting={onToggleWaiting} onEditText={onEditText} onCreateMention={onCreateMention} onMilestoneClick={onMilestoneClick}
+                  onToggle={onToggle} onDelete={onDelete} onStar={onStar} onToggleWaiting={onToggleWaiting} onEditText={onEditText} onCreateMention={onCreateMention} onChangeMilestone={onChangeMilestone} onMilestoneClick={onMilestoneClick}
                 />
               ))}
             </SortableContext>
@@ -336,7 +473,7 @@ export default function TodoList({
           {active.length === 0 && (
             <div className="td-ms-empty">Nothing yet. Add the first thing that matters today.</div>
           )}
-          <AddTodo mentionOptions={mentionOptions} onCreateMention={onCreateMention} onAdd={(text, segments, links) => onAdd(text, null, segments, links)} />
+          <AddTodo mentionOptions={mentionOptions} milestoneOptions={milestoneOptions} onCreateMention={onCreateMention} onAdd={onAdd} />
         </>
       )}
 
@@ -344,7 +481,7 @@ export default function TodoList({
         groups.length === 0 ? (
           <>
             <div className="td-ms-empty">Nothing yet. Add the first thing that matters today.</div>
-            <AddTodo mentionOptions={mentionOptions} onCreateMention={onCreateMention} onAdd={(text, segments, links) => onAdd(text, null, segments, links)} />
+            <AddTodo mentionOptions={mentionOptions} milestoneOptions={milestoneOptions} onCreateMention={onCreateMention} onAdd={onAdd} />
           </>
         ) : groups.map(g => (
           <div key={g.id}>
@@ -362,14 +499,16 @@ export default function TodoList({
                 milestone={milestoneName(t.milestone_id)} hideMilestone={g.id !== '__none__'}
                 mentions={resolveMentions(t)}
                 mentionOptions={mentionOptions}
+                milestoneOptions={milestoneOptions}
                 milestoneColor={milestoneColor(t.milestone_id)}
-                onToggle={onToggle} onDelete={onDelete} onStar={onStar} onToggleWaiting={onToggleWaiting} onEditText={onEditText} onCreateMention={onCreateMention} onMilestoneClick={onMilestoneClick}
+                onToggle={onToggle} onDelete={onDelete} onStar={onStar} onToggleWaiting={onToggleWaiting} onEditText={onEditText} onCreateMention={onCreateMention} onChangeMilestone={onChangeMilestone} onMilestoneClick={onMilestoneClick}
               />
             ))}
             <AddTodo
               mentionOptions={mentionOptions}
+              milestoneOptions={milestoneOptions}
               onCreateMention={onCreateMention}
-              onAdd={(text, segments, links) => onAdd(text, g.id === '__none__' ? null : g.id, segments, links)}
+              onAdd={(text, milestoneId, segments, links) => onAdd(text, milestoneId ?? (g.id === '__none__' ? null : g.id), segments, links)}
               label={g.id === '__none__' ? 'Add a task' : `Add to ${g.name}…`}
             />
           </div>
@@ -388,8 +527,9 @@ export default function TodoList({
             <TodoRow
               key={t.id} todo={t} milestone={milestoneName(t.milestone_id)} mentions={resolveMentions(t)}
               mentionOptions={mentionOptions}
+              milestoneOptions={milestoneOptions}
               milestoneColor={milestoneColor(t.milestone_id)}
-              onToggle={onToggle} onDelete={onDelete} onStar={onStar} onToggleWaiting={onToggleWaiting} onEditText={onEditText} onCreateMention={onCreateMention} onMilestoneClick={onMilestoneClick}
+              onToggle={onToggle} onDelete={onDelete} onStar={onStar} onToggleWaiting={onToggleWaiting} onEditText={onEditText} onCreateMention={onCreateMention} onChangeMilestone={onChangeMilestone} onMilestoneClick={onMilestoneClick}
             />
           ))}
         </div>

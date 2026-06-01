@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type CSSProperties } from 'react'
 import type { TodoMentionKind } from '@/types'
-import type { Mention } from './types'
+import type { Mention, TodoMilestoneOption } from './types'
 import {
   MENTION_CLIPBOARD,
   hasMentionTokens,
@@ -25,6 +25,15 @@ interface PickerAction {
   mention?: Mention
   label: string
 }
+
+interface MilestoneAction {
+  type: 'milestone' | 'clear'
+  key: string
+  label: string
+  milestone?: TodoMilestoneOption
+}
+
+type TriggerState = { type: 'mention' | 'milestone'; query: string; rect: DOMRect }
 
 function chipLabel(mention: Mention) {
   return mention.kind === 'person' ? mention.name.split(' ')[0] : mention.name
@@ -167,7 +176,7 @@ function caretRect(range: Range) {
   return next
 }
 
-function getMentionTrigger(root: HTMLElement): { range: Range; query: string; rect: DOMRect } | null {
+function getEditorTrigger(root: HTMLElement): { type: 'mention' | 'milestone'; range: Range; query: string; rect: DOMRect } | null {
   const sel = window.getSelection()
   if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return null
   const range = sel.getRangeAt(0)
@@ -175,12 +184,13 @@ function getMentionTrigger(root: HTMLElement): { range: Range; query: string; re
   if (range.startContainer.nodeType !== Node.TEXT_NODE) return null
   const text = range.startContainer.textContent ?? ''
   const left = text.slice(0, range.startOffset)
-  const match = /(^|\s)@([^\s@/]*)$/.exec(left)
+  const match = /(^|\s)([@/])([^\s@/]*)$/.exec(left)
   if (!match || match.index === undefined) return null
+  const type = match[2] === '@' ? 'mention' : 'milestone'
   const triggerRange = document.createRange()
   triggerRange.setStart(range.startContainer, match.index + match[1].length)
   triggerRange.setEnd(range.startContainer, range.startOffset)
-  return { range: triggerRange, query: match[2] ?? '', rect: caretRect(range.cloneRange()) }
+  return { type, range: triggerRange, query: match[3] ?? '', rect: caretRect(range.cloneRange()) }
 }
 
 function currentCompanyId(root: HTMLElement) {
@@ -256,6 +266,37 @@ function pickerActions(options: Mention[], query: string, usedKeys: Set<string>)
   return actions
 }
 
+function scoreMilestone(option: TodoMilestoneOption, rawQuery: string) {
+  const q = rawQuery.trim().toLowerCase()
+  if (!q) return 1
+  const haystack = [option.name, option.goalLabel, option.due].filter(Boolean).join(' ').toLowerCase()
+  const name = option.name.toLowerCase()
+  if (!haystack.includes(q)) return 0
+  if (name === q) return 100
+  if (name.startsWith(q)) return 80
+  if (haystack.split(/\s+/).some(word => word.startsWith(q))) return 55
+  return 25
+}
+
+function milestoneActions(options: TodoMilestoneOption[], query: string, currentMilestoneId?: string | null): MilestoneAction[] {
+  const ranked = options
+    .map(option => ({ option, score: scoreMilestone(option, query) + (option.id === currentMilestoneId ? 6 : 0) }))
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.option.name.localeCompare(b.option.name))
+    .slice(0, 8)
+    .map(item => ({
+      type: 'milestone' as const,
+      key: `milestone:${item.option.id}`,
+      label: item.option.name,
+      milestone: item.option,
+    }))
+
+  if (currentMilestoneId) {
+    return [{ type: 'clear', key: 'milestone:clear', label: 'No milestone' }, ...ranked]
+  }
+  return ranked
+}
+
 function MentionPicker({
   actions,
   selected,
@@ -307,30 +348,81 @@ function MentionPicker({
   )
 }
 
+function MilestonePicker({
+  actions,
+  selected,
+  style,
+  onPick,
+}: {
+  actions: MilestoneAction[]
+  selected: number
+  style: CSSProperties
+  onPick: (action: MilestoneAction) => void
+}) {
+  return (
+    <div className="td-mention-picker td-ms-picker fixed" style={style}>
+      <div className="td-mention-header">Milestones</div>
+      {actions.length === 0 ? (
+        <div className="td-mention-empty">No milestones match</div>
+      ) : actions.map((action, index) => {
+        const milestone = action.milestone
+        return (
+          <button
+            key={action.key}
+            type="button"
+            className={`td-mention-row td-ms-option${index === selected ? ' active' : ''}${action.type === 'clear' ? ' clear' : ''}`}
+            onMouseDown={e => { e.preventDefault(); onPick(action) }}
+          >
+            <span
+              className="td-ms-option-dot"
+              style={milestone ? { ['--ms' as string]: milestone.color } : undefined}
+            />
+            <span className="td-mention-copy">
+              <span className="name">{action.label}</span>
+              {milestone && (
+                <span className="sub">
+                  {[milestone.goalLabel, milestone.due, milestone.total ? `${milestone.done}/${milestone.total}` : null].filter(Boolean).join(' · ')}
+                </span>
+              )}
+              {action.type === 'clear' && <span className="sub">Remove milestone from this todo</span>}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 interface MentionEditorProps {
   initialSegments: EditorSegment[]
   mentionOptions: Mention[]
+  milestoneOptions?: TodoMilestoneOption[]
+  currentMilestoneId?: string | null
   placeholder?: string
   autoFocus?: boolean
   onCommit: (segments: EditorSegment[]) => void
   onCancel: () => void
   onOpenMention: (mention: Mention) => void
   onCreateMention: (kind: TodoMentionKind, name: string, companyId?: string | null) => Promise<Mention | null>
+  onSelectMilestone?: (milestoneId: string | null) => void
 }
 
 export default function MentionEditor({
   initialSegments,
   mentionOptions,
+  milestoneOptions = [],
+  currentMilestoneId,
   placeholder,
   autoFocus,
   onCommit,
   onCancel,
   onOpenMention,
   onCreateMention,
+  onSelectMilestone,
 }: MentionEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<Range | null>(null)
-  const [trigger, setTrigger] = useState<{ query: string; rect: DOMRect } | null>(null)
+  const [trigger, setTrigger] = useState<TriggerState | null>(null)
   const [selected, setSelected] = useState(0)
   const [selectedChip, setSelectedChip] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -338,8 +430,12 @@ export default function MentionEditor({
     .filter((s): s is { type: 'mention'; mention: Mention } => s.type === 'mention')
     .map(s => mentionKey(s.mention))), [initialSegments])
   const actions = useMemo(
-    () => pickerActions(mentionOptions, trigger?.query ?? '', usedKeys),
-    [mentionOptions, trigger?.query, usedKeys],
+    () => trigger?.type === 'mention' ? pickerActions(mentionOptions, trigger.query, usedKeys) : [],
+    [mentionOptions, trigger, usedKeys],
+  )
+  const msActions = useMemo(
+    () => trigger?.type === 'milestone' ? milestoneActions(milestoneOptions, trigger.query, currentMilestoneId) : [],
+    [trigger, milestoneOptions, currentMilestoneId],
   )
 
   useEffect(() => {
@@ -363,9 +459,9 @@ export default function MentionEditor({
   const refreshTrigger = () => {
     const root = editorRef.current
     if (!root) return
-    const next = getMentionTrigger(root)
+    const next = getEditorTrigger(root)
     triggerRef.current = next?.range ?? null
-    setTrigger(next ? { query: next.query, rect: next.rect } : null)
+    setTrigger(next ? { type: next.type, query: next.query, rect: next.rect } : null)
     setSelected(0)
   }
 
@@ -402,6 +498,21 @@ export default function MentionEditor({
         placeCaretAfter(companyChip.nextSibling ?? companyChip)
       }
     }
+    setTrigger(null)
+    triggerRef.current = null
+    setSelectedChip(null)
+    window.requestAnimationFrame(() => root.focus())
+  }
+
+  const pickMilestone = (action: MilestoneAction) => {
+    const root = editorRef.current
+    const range = triggerRef.current
+    if (!root || !range || !onSelectMilestone) return
+    range.deleteContents()
+    const spacer = document.createTextNode(' ')
+    range.insertNode(spacer)
+    placeCaretAfter(spacer)
+    onSelectMilestone(action.type === 'clear' ? null : action.milestone?.id ?? null)
     setTrigger(null)
     triggerRef.current = null
     setSelectedChip(null)
@@ -484,9 +595,19 @@ export default function MentionEditor({
         }}
         onKeyDown={e => {
           if (trigger) {
-            if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(i => actions.length ? (i + 1) % actions.length : 0); return }
-            if (e.key === 'ArrowUp') { e.preventDefault(); setSelected(i => actions.length ? (i - 1 + actions.length) % actions.length : 0); return }
-            if ((e.key === 'Enter' || e.key === 'Tab') && actions[selected]) { e.preventDefault(); void pickAction(actions[selected]); return }
+            const listLength = trigger.type === 'mention' ? actions.length : msActions.length
+            if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(i => listLength ? (i + 1) % listLength : 0); return }
+            if (e.key === 'ArrowUp') { e.preventDefault(); setSelected(i => listLength ? (i - 1 + listLength) % listLength : 0); return }
+            if ((e.key === 'Enter' || e.key === 'Tab') && trigger.type === 'mention') {
+              e.preventDefault()
+              if (actions[selected]) void pickAction(actions[selected])
+              return
+            }
+            if ((e.key === 'Enter' || e.key === 'Tab') && trigger.type === 'milestone') {
+              e.preventDefault()
+              if (msActions[selected]) pickMilestone(msActions[selected])
+              return
+            }
             if (e.key === 'Escape') { e.preventDefault(); setTrigger(null); return }
           }
           if (selectedChip && (e.key === 'Backspace' || e.key === 'Delete')) {
@@ -510,7 +631,9 @@ export default function MentionEditor({
         }}
       />
       {trigger && pickerStyle && (
-        <MentionPicker actions={actions} selected={selected} style={pickerStyle} onPick={action => { void pickAction(action) }} />
+        trigger.type === 'mention'
+          ? <MentionPicker actions={actions} selected={selected} style={pickerStyle} onPick={action => { void pickAction(action) }} />
+          : <MilestonePicker actions={msActions} selected={selected} style={pickerStyle} onPick={pickMilestone} />
       )}
     </div>
   )
