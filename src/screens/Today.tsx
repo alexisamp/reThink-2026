@@ -239,6 +239,16 @@ export default function Today() {
     }
   }
 
+  const reorderTodos = async (orderedActiveIds: string[]) => {
+    setTodos(prev => {
+      const byId = new Map(prev.map(t => [t.id, t]))
+      const active = orderedActiveIds.map(id => byId.get(id)).filter(Boolean) as Todo[]
+      const done = prev.filter(t => t.completed)
+      return [...active, ...done]
+    })
+    await Promise.all(orderedActiveIds.map((id, i) => supabase.from('todos').update({ sort_order: i }).eq('id', id)))
+  }
+
   // ── journal autosave ───────────────────────────────────────────
   const onJournalChange = (v: string) => {
     setJournal(v)
@@ -352,6 +362,7 @@ export default function Today() {
             onEditText={editTodoText}
             onAdd={addTodo}
             onMilestoneClick={setExpandedMs}
+            onReorder={reorderTodos}
           />
         </div>
 

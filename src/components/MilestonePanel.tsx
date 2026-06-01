@@ -54,11 +54,23 @@ function DateChip({ value, today, onChange }: {
     if (diff > 1 && diff < 7) return date.toLocaleDateString('en-US', { weekday: 'short' })
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
+  const meta = (off: number) => {
+    const d = new Date(); d.setDate(d.getDate() + off)
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+  const weekday = (off: number) => {
+    const d = new Date(); d.setDate(d.getDate() + off)
+    return d.toLocaleDateString('en-US', { weekday: 'short' })
+  }
+  // Today, tomorrow, then the next 4 days by name, then next week (next Monday).
   const presets = [
     { label: 'Today', offset: 0 },
     { label: 'Tomorrow', offset: 1 },
-    { label: 'Mon', offset: ((1 - new Date().getDay() + 7) % 7) || 7 },
-    { label: 'Next week', offset: 7 },
+    { label: weekday(2), offset: 2 },
+    { label: weekday(3), offset: 3 },
+    { label: weekday(4), offset: 4 },
+    { label: weekday(5), offset: 5 },
+    { label: 'Next week', offset: ((1 - new Date().getDay() + 7) % 7) || 7 },
   ]
   const setOff = (off: number) => {
     const d = new Date(); d.setDate(d.getDate() + off)
@@ -75,7 +87,11 @@ function DateChip({ value, today, onChange }: {
       </button>
       {open && (
         <div className="td-date-pop" onClick={e => e.stopPropagation()}>
-          {presets.map(p => <button key={p.label} onClick={() => setOff(p.offset)}>{p.label}</button>)}
+          {presets.map(p => (
+            <button key={p.label} onClick={() => setOff(p.offset)}>
+              {p.label}<span className="meta">{meta(p.offset)}</span>
+            </button>
+          ))}
           <div className="sep" />
           <input type="date" value={value ?? ''} onChange={e => { onChange(e.target.value || null); setOpen(false) }} />
           {value && <>
@@ -86,6 +102,17 @@ function DateChip({ value, today, onChange }: {
       )}
     </span>
   )
+}
+
+// Timeline bucket label for a date.
+function bucketLabel(d: string, today: string): string {
+  const date = new Date(d + 'T12:00:00'), t = new Date(today + 'T12:00:00')
+  const diff = Math.round((date.getTime() - t.getTime()) / 86400000)
+  if (diff < 0) return `Overdue · ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+  if (diff === 0) return 'Today'
+  if (diff === 1) return 'Tomorrow'
+  if (diff < 7) return date.toLocaleDateString('en-US', { weekday: 'long' })
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 // ── Single subtask row ────────────────────────────────────────────────────────
@@ -190,9 +217,18 @@ export default function MilestonePanel({
 
   const pending = todos.filter(t => !t.completed)
   const done = todos.filter(t => t.completed)
-  const ordered = [...pending, ...done]
   const doneCount = done.length
   const total = todos.length
+
+  // Timeline: dated pending todos grouped by date (chronological), then "No date".
+  const datedPending = pending.filter(t => t.date).sort((a, b) => (a.date as string).localeCompare(b.date as string))
+  const noDatePending = pending.filter(t => !t.date)
+  const datedGroups: { date: string; label: string; todos: Todo[] }[] = []
+  for (const t of datedPending) {
+    const last = datedGroups[datedGroups.length - 1]
+    if (last && last.date === t.date) last.todos.push(t)
+    else datedGroups.push({ date: t.date as string, label: bucketLabel(t.date as string, today), todos: [t] })
+  }
 
   const handleClose = () => { setVisible(false); setTimeout(onClose, 260) }
 
@@ -382,16 +418,38 @@ export default function MilestonePanel({
           ) : total === 0 ? (
             <div className="td-drawer-empty">Add the first step toward this milestone.</div>
           ) : (
-            ordered.map(t => (
-              <SubtaskRow
-                key={t.id} todo={t} today={today}
-                onToggle={() => toggleTodo(t)}
-                onText={(text) => editText(t, text)}
-                onDate={(d) => changeDate(t, d)}
-                onAddToday={() => changeDate(t, today)}
-                onDelete={() => deleteTodo(t)}
-              />
-            ))
+            <div className="td-timeline">
+              {datedGroups.map(g => (
+                <div className="td-tl-group" key={g.date}>
+                  <div className="td-drawer-section">{g.label}</div>
+                  {g.todos.map(t => (
+                    <SubtaskRow key={t.id} todo={t} today={today}
+                      onToggle={() => toggleTodo(t)} onText={(text) => editText(t, text)}
+                      onDate={(d) => changeDate(t, d)} onAddToday={() => changeDate(t, today)} onDelete={() => deleteTodo(t)} />
+                  ))}
+                </div>
+              ))}
+              {noDatePending.length > 0 && (
+                <div className="td-tl-group nodate">
+                  <div className="td-drawer-section">No date</div>
+                  {noDatePending.map(t => (
+                    <SubtaskRow key={t.id} todo={t} today={today}
+                      onToggle={() => toggleTodo(t)} onText={(text) => editText(t, text)}
+                      onDate={(d) => changeDate(t, d)} onAddToday={() => changeDate(t, today)} onDelete={() => deleteTodo(t)} />
+                  ))}
+                </div>
+              )}
+              {done.length > 0 && (
+                <div className="td-tl-group done">
+                  <div className="td-drawer-section">Done · {done.length}</div>
+                  {done.map(t => (
+                    <SubtaskRow key={t.id} todo={t} today={today}
+                      onToggle={() => toggleTodo(t)} onText={(text) => editText(t, text)}
+                      onDate={(d) => changeDate(t, d)} onAddToday={() => changeDate(t, today)} onDelete={() => deleteTodo(t)} />
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           <div className="td-subtask-add" onClick={() => { setAdding(true); setTimeout(() => addRef.current?.focus(), 0) }}>

@@ -1,8 +1,15 @@
 // TodoList — Today's todos (the HERO). Priority / milestone grouping, featured
 // star, milestone + mention chips, AM/PM block, inline edit, add, done section.
 // Visual contract ported from the reThink design bundle (TodoList.jsx).
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Star, TrashSimple, Plus, CaretDown } from '@phosphor-icons/react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Check, Star, TrashSimple, Plus, CaretDown, DotsSixVertical } from '@phosphor-icons/react'
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import type { Todo } from '@/types'
 import type { GroupBy, Mention } from './types'
 
@@ -31,11 +38,15 @@ interface RowProps {
   onStar: (id: string) => void
   onEditText: (id: string, text: string) => void
   onMilestoneClick?: (id: string) => void
+  dragRef?: (el: HTMLElement | null) => void
+  dragStyle?: CSSProperties
+  dragHandle?: ReactNode
 }
 
 function TodoRow({
   todo, priorityNumber, milestone, hideMilestone, mentions,
   onToggle, onDelete, onStar, onEditText, onMilestoneClick,
+  dragRef, dragStyle, dragHandle,
 }: RowProps) {
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(todo.text)
@@ -47,7 +58,8 @@ function TodoRow({
   }
 
   return (
-    <div className={`td-todo${todo.is_featured ? ' featured' : ''}${todo.completed ? ' done' : ''}`}>
+    <div ref={dragRef} style={dragStyle} className={`td-todo${todo.is_featured ? ' featured' : ''}${todo.completed ? ' done' : ''}`}>
+      {dragHandle}
       <span className="pri">{priorityNumber ?? ''}</span>
       <button className={`td-cb${todo.completed ? ' checked' : ''}`} onClick={() => onToggle(todo.id)} aria-label="Toggle done">
         {todo.completed && <Check size={9} weight="bold" />}
@@ -91,6 +103,23 @@ function TodoRow({
       </span>
     </div>
   )
+}
+
+function SortableTodoRow(props: RowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.todo.id })
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    position: isDragging ? 'relative' : undefined,
+    zIndex: isDragging ? 20 : undefined,
+  }
+  const handle = (
+    <button className="grip-todo" {...attributes} {...listeners} title="Drag to reorder" aria-label="Drag to reorder">
+      <DotsSixVertical size={11} />
+    </button>
+  )
+  return <TodoRow {...props} dragRef={setNodeRef} dragStyle={style} dragHandle={handle} />
 }
 
 function AddTodo({ onAdd, label = 'Add a task' }: { onAdd: (text: string) => void; label?: string }) {
@@ -162,14 +191,26 @@ interface TodoListProps {
   onEditText: (id: string, text: string) => void
   onAdd: (text: string, milestoneId: string | null) => void
   onMilestoneClick: (id: string) => void
+  onReorder?: (orderedActiveIds: string[]) => void
 }
 
 export default function TodoList({
   todos, milestoneName, milestoneTotal, milestoneOrder, resolveMentions,
-  groupBy, onChangeGroup, onToggle, onDelete, onStar, onEditText, onAdd, onMilestoneClick,
+  groupBy, onChangeGroup, onToggle, onDelete, onStar, onEditText, onAdd, onMilestoneClick, onReorder,
 }: TodoListProps) {
   const active = todos.filter(t => !t.completed)
   const done = todos.filter(t => t.completed)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active: a, over } = e
+    if (!over || a.id === over.id || !onReorder) return
+    const ids = active.map(t => t.id)
+    const from = ids.indexOf(a.id as string)
+    const to = ids.indexOf(over.id as string)
+    if (from < 0 || to < 0) return
+    onReorder(arrayMove(ids, from, to))
+  }
 
   // priority numbers global to active list (1..3)
   const priMap = new Map<string, number>()
@@ -202,13 +243,17 @@ export default function TodoList({
 
       {groupBy === 'priority' && (
         <>
-          {active.map(t => (
-            <TodoRow
-              key={t.id} todo={t} priorityNumber={priMap.get(t.id)}
-              milestone={milestoneName(t.milestone_id)} mentions={resolveMentions(t)}
-              onToggle={onToggle} onDelete={onDelete} onStar={onStar} onEditText={onEditText} onMilestoneClick={onMilestoneClick}
-            />
-          ))}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={active.map(t => t.id)} strategy={verticalListSortingStrategy}>
+              {active.map(t => (
+                <SortableTodoRow
+                  key={t.id} todo={t} priorityNumber={priMap.get(t.id)}
+                  milestone={milestoneName(t.milestone_id)} mentions={resolveMentions(t)}
+                  onToggle={onToggle} onDelete={onDelete} onStar={onStar} onEditText={onEditText} onMilestoneClick={onMilestoneClick}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
           {active.length === 0 && (
             <div className="td-ms-empty">Nothing yet. Add the first thing that matters today.</div>
           )}

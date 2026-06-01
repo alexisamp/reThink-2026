@@ -1,8 +1,15 @@
 // RightRail — draggable + collapsible sections (Milestones, This Week, Next Steps,
-// Journal). Order + per-section open state persist in localStorage.
-// Chrome ported from the reThink design bundle (RailSection.jsx + RightRail.jsx).
+// Journal). Order + per-section open state persist in localStorage. Reorder uses
+// @dnd-kit/sortable (the native HTML5 version dropped without persisting).
 import { useEffect, useState, type ReactNode } from 'react'
 import { DotsSixVertical, CaretDown, CaretRight } from '@phosphor-icons/react'
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import type { RailSectionId } from './types'
 
 const RAIL_LS_KEY = 'rethink.today.rail.v1'
@@ -43,70 +50,48 @@ function useRailLayout(defaultOrder: RailSectionId[], defaultOpen: Record<string
   const toggle = (id: RailSectionId) =>
     setLayout(l => ({ ...l, open: { ...l.open, [id]: !l.open[id] } }))
 
-  const move = (fromId: RailSectionId, toId: RailSectionId) =>
+  const reorder = (fromId: RailSectionId, toId: RailSectionId) =>
     setLayout(l => {
-      if (fromId === toId) return l
-      const order = [...l.order]
-      const from = order.indexOf(fromId)
-      const to = order.indexOf(toId)
-      if (from < 0 || to < 0) return l
-      order.splice(from, 1)
-      order.splice(to, 0, fromId)
-      return { ...l, order }
+      const from = l.order.indexOf(fromId)
+      const to = l.order.indexOf(toId)
+      if (from < 0 || to < 0 || from === to) return l
+      return { ...l, order: arrayMove(l.order, from, to) }
     })
 
-  return { layout, toggle, move }
+  return { layout, toggle, reorder }
 }
 
-interface SectionProps extends RailSectionDef {
+function SortableSection({ sec, open, onToggle }: {
+  sec: RailSectionDef
   open: boolean
   onToggle: (id: RailSectionId) => void
-  dragId: RailSectionId | null
-  overId: RailSectionId | null
-  onDragStart: (id: RailSectionId) => void
-  onDragEnter: (id: RailSectionId) => void
-  onDragEnd: () => void
-}
-
-function RailSection({
-  id, title, icon, open, onToggle, count, tone, body,
-  dragId, overId, onDragStart, onDragEnter, onDragEnd,
-}: SectionProps) {
-  const [grabbable, setGrabbable] = useState(false)
-  const dragging = dragId === id
-  const isOver = overId === id && dragId !== null && dragId !== id
-
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sec.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.55 : 1,
+    zIndex: isDragging ? 20 : undefined,
+    position: isDragging ? ('relative' as const) : undefined,
+  }
   return (
-    <section
-      className={`td-rail-sec${tone ? ' tone-' + tone : ''}${dragging ? ' dragging' : ''}${isOver ? ' drop-target' : ''}`}
-      draggable={grabbable}
-      onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart(id) }}
-      onDragEnter={(e) => { e.preventDefault(); onDragEnter(id) }}
-      onDragOver={(e) => e.preventDefault()}
-      onDragEnd={() => { onDragEnd(); setGrabbable(false) }}
-    >
+    <section ref={setNodeRef} style={style} className={`td-rail-sec${sec.tone ? ' tone-' + sec.tone : ''}${isDragging ? ' dragging' : ''}`}>
       <header className="td-rail-sec-hd">
-        <button
-          className="grip"
-          title="Drag to reorder"
-          onMouseDown={() => setGrabbable(true)}
-          onMouseUp={() => setGrabbable(false)}
-          onMouseLeave={() => setGrabbable(false)}
-        >
+        <button className="grip" title="Drag to reorder" {...attributes} {...listeners}>
           <DotsSixVertical size={13} />
         </button>
-        <button className="td-rail-sec-toggle" onClick={() => onToggle(id)}>
-          {icon}
-          <span className="label">{title}</span>
-          {!open && count != null && <span className="count">· {count}</span>}
+        <button className="td-rail-sec-toggle" onClick={() => onToggle(sec.id)}>
+          {sec.icon}
+          <span className="label">{sec.title}</span>
+          {!open && sec.count != null && <span className="count">· {sec.count}</span>}
         </button>
         <div className="td-rail-sec-actions">
-          <button className="caret" onClick={() => onToggle(id)} title={open ? 'Collapse' : 'Expand'}>
+          <button className="caret" onClick={() => onToggle(sec.id)} title={open ? 'Collapse' : 'Expand'}>
             {open ? <CaretDown size={11} /> : <CaretRight size={11} />}
           </button>
         </div>
       </header>
-      {open && <div className="td-rail-sec-body">{body}</div>}
+      {open && <div className="td-rail-sec-body">{sec.body}</div>}
     </section>
   )
 }
@@ -115,34 +100,27 @@ const DEFAULT_ORDER: RailSectionId[] = ['milestones', 'thisweek', 'nextsteps', '
 const DEFAULT_OPEN: Record<string, boolean> = { milestones: true, thisweek: true, nextsteps: true, journal: false }
 
 export default function RightRail({ sections }: { sections: RailSectionDef[] }) {
-  const { layout, toggle, move } = useRailLayout(DEFAULT_ORDER, DEFAULT_OPEN)
-  const [dragId, setDragId] = useState<RailSectionId | null>(null)
-  const [overId, setOverId] = useState<RailSectionId | null>(null)
-
+  const { layout, toggle, reorder } = useRailLayout(DEFAULT_ORDER, DEFAULT_OPEN)
   const byId = new Map(sections.map(s => [s.id, s]))
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
-  const dnd = {
-    dragId, overId,
-    onDragStart: (id: RailSectionId) => setDragId(id),
-    onDragEnter: (id: RailSectionId) => setOverId(id),
-    onDragEnd: () => { if (dragId && overId) move(dragId, overId); setDragId(null); setOverId(null) },
+  const onDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    reorder(active.id as RailSectionId, over.id as RailSectionId)
   }
 
   return (
     <aside className="td-rail">
-      {layout.order.map(id => {
-        const sec = byId.get(id)
-        if (!sec) return null
-        return (
-          <RailSection
-            key={id}
-            {...sec}
-            open={!!layout.open[id]}
-            onToggle={toggle}
-            {...dnd}
-          />
-        )
-      })}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={layout.order} strategy={verticalListSortingStrategy}>
+          {layout.order.map(id => {
+            const sec = byId.get(id)
+            if (!sec) return null
+            return <SortableSection key={id} sec={sec} open={!!layout.open[id]} onToggle={toggle} />
+          })}
+        </SortableContext>
+      </DndContext>
     </aside>
   )
 }
