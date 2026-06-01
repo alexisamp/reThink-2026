@@ -1,7 +1,7 @@
 // TodoList — Today's todos (the HERO). Priority / milestone grouping, featured
 // star, milestone + mention chips, AM/PM block, inline edit, add, done section.
 // Visual contract ported from the reThink design bundle (TodoList.jsx).
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, Star, TrashSimple, Plus, CaretDown, DotsSixVertical, HourglassMedium } from '@phosphor-icons/react'
 import {
@@ -31,6 +31,9 @@ function mentionKey(m: Mention) {
 }
 
 const MENTION_TOKEN_RE = /\[\[mention:(person|company|opportunity):([^\]]+)\]\]/g
+const MENTION_CLIPBOARD = 'application/x-rethink-mention-segments'
+
+type EditorSegment = { type: 'text'; text: string } | { type: 'mention'; mention: Mention }
 
 function groupedMentionOptions(options: Mention[], query: string) {
   const q = query.trim().toLowerCase()
@@ -170,6 +173,16 @@ function createEditorChip(item: Mention) {
   return chip
 }
 
+function chipToMention(node: HTMLElement): Mention {
+  return {
+    id: node.dataset.id || undefined,
+    kind: (node.dataset.kind as Mention['kind']) || 'person',
+    name: node.dataset.name || 'Mention',
+    imageUrl: node.dataset.imageUrl || null,
+    companyId: node.dataset.companyId || null,
+  }
+}
+
 function renderEditorContent(el: HTMLDivElement, text: string, linked: Mention[], mentionOptions: Mention[]) {
   el.innerHTML = ''
   const sourceMentions = [...linked, ...mentionOptions]
@@ -191,13 +204,7 @@ function renderEditorContent(el: HTMLDivElement, text: string, linked: Mention[]
 }
 
 function readEditorMentions(el: HTMLDivElement): Mention[] {
-  return Array.from(el.querySelectorAll<HTMLElement>('[data-mention="true"]')).map(node => ({
-    id: node.dataset.id || undefined,
-    kind: (node.dataset.kind as Mention['kind']) || 'person',
-    name: node.dataset.name || 'Mention',
-    imageUrl: node.dataset.imageUrl || null,
-    companyId: node.dataset.companyId || null,
-  }))
+  return Array.from(el.querySelectorAll<HTMLElement>('[data-mention="true"]')).map(chipToMention)
 }
 
 function serializeEditor(el: HTMLDivElement): string {
@@ -217,6 +224,67 @@ function plainEditorText(el: HTMLDivElement) {
   const clone = el.cloneNode(true) as HTMLElement
   clone.querySelectorAll('[data-mention="true"]').forEach(n => n.remove())
   return (clone.textContent ?? '').replace(/\s{2,}/g, ' ').trim()
+}
+
+function segmentsFromNodes(nodes: Node[]): EditorSegment[] {
+  const out: EditorSegment[] = []
+  const pushText = (text: string) => {
+    if (!text) return
+    const last = out[out.length - 1]
+    if (last?.type === 'text') last.text += text
+    else out.push({ type: 'text', text })
+  }
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      pushText(node.textContent ?? '')
+      return
+    }
+    if (node instanceof HTMLElement && node.dataset.mention === 'true') {
+      out.push({ type: 'mention', mention: chipToMention(node) })
+      return
+    }
+    node.childNodes.forEach(walk)
+  }
+  nodes.forEach(walk)
+  return out
+}
+
+function plainFromSegments(segments: EditorSegment[]) {
+  return segments.map(s => s.type === 'text' ? s.text : `@${s.mention.name}`).join('').replace(/\s{2,}/g, ' ').trim()
+}
+
+function insertSegments(root: HTMLDivElement, segments: EditorSegment[]) {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return
+  const range = sel.getRangeAt(0)
+  if (!root.contains(range.startContainer)) return
+  range.deleteContents()
+  const frag = document.createDocumentFragment()
+  let last: Node | null = null
+  segments.forEach(segment => {
+    const node = segment.type === 'text'
+      ? document.createTextNode(segment.text)
+      : createEditorChip(segment.mention)
+    frag.append(node)
+    last = node
+  })
+  range.insertNode(frag)
+  if (last) placeCaretAfter(last)
+}
+
+function segmentsFromTokenText(text: string, mentionOptions: Mention[]): EditorSegment[] {
+  const segments: EditorSegment[] = []
+  let last = 0
+  MENTION_TOKEN_RE.lastIndex = 0
+  text.replace(MENTION_TOKEN_RE, (token, kind: Mention['kind'], id: string, index: number) => {
+    if (index > last) segments.push({ type: 'text', text: text.slice(last, index) })
+    const mention = mentionByKindId(kind, id, mentionOptions)
+    segments.push(mention ? { type: 'mention', mention } : { type: 'text', text: token })
+    last = index + token.length
+    return token
+  })
+  if (last < text.length) segments.push({ type: 'text', text: text.slice(last) })
+  return segments
 }
 
 function getMentionTriggerRange(root: HTMLDivElement): { range: Range; query: string } | null {
@@ -333,6 +401,49 @@ function MentionTextInput({
     return false
   }
 
+  const handleCopy = (e: ClipboardEvent<HTMLDivElement>) => {
+    const sel = window.getSelection()
+    const el = editorRef.current
+    if (!sel || !el || sel.rangeCount === 0 || sel.isCollapsed) return
+    const range = sel.getRangeAt(0)
+    if (!el.contains(range.commonAncestorContainer)) return
+    const fragment = range.cloneContents()
+    const segments = segmentsFromNodes(Array.from(fragment.childNodes))
+    e.clipboardData.setData(MENTION_CLIPBOARD, JSON.stringify(segments))
+    e.clipboardData.setData('text/plain', plainFromSegments(segments))
+    e.preventDefault()
+  }
+
+  const handleCut = (e: ClipboardEvent<HTMLDivElement>) => {
+    const sel = window.getSelection()
+    const el = editorRef.current
+    if (!sel || !el || sel.rangeCount === 0 || sel.isCollapsed) return
+    const range = sel.getRangeAt(0)
+    if (!el.contains(range.commonAncestorContainer)) return
+    const fragment = range.cloneContents()
+    const segments = segmentsFromNodes(Array.from(fragment.childNodes))
+    e.clipboardData.setData(MENTION_CLIPBOARD, JSON.stringify(segments))
+    e.clipboardData.setData('text/plain', plainFromSegments(segments))
+    range.deleteContents()
+    refreshTrigger()
+    e.preventDefault()
+  }
+
+  const handlePaste = (e: ClipboardEvent<HTMLDivElement>) => {
+    const el = editorRef.current
+    if (!el) return
+    const rawSegments = e.clipboardData.getData(MENTION_CLIPBOARD)
+    const rawText = e.clipboardData.getData('text/plain')
+    let segments: EditorSegment[] | null = null
+    if (rawSegments) {
+      try { segments = JSON.parse(rawSegments) as EditorSegment[] } catch { segments = null }
+    }
+    if (!segments) segments = hasMentionTokens(rawText) ? segmentsFromTokenText(rawText, mentionOptions) : [{ type: 'text', text: rawText }]
+    insertSegments(el, segments)
+    setTrigger(null)
+    e.preventDefault()
+  }
+
   return (
     <div className="td-mention-wrap">
       <div
@@ -342,6 +453,9 @@ function MentionTextInput({
         data-placeholder={placeholder}
         suppressContentEditableWarning
         onInput={refreshTrigger}
+        onCopy={handleCopy}
+        onCut={handleCut}
+        onPaste={handlePaste}
         onMouseDown={e => {
           const target = e.target as HTMLElement
           if (target.dataset.removeMention === 'true') {
