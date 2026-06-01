@@ -189,6 +189,79 @@
 .td-ns-row.scheduled .ns-log:hover { color: var(--moss); background: color-mix(in oklab, var(--moss) 12%, transparent); }
 .td-ns-row.reach-out .ns-log:hover { color: var(--acc-clay); background: color-mix(in oklab, var(--acc-clay) 12%, transparent); }
 
+/* ── Milestone drawer (design-system rebuild, themed by --c) ──── */
+.td-drawer-bg { position: fixed; inset: 0; background: rgba(0,55,32,0.08); backdrop-filter: blur(2px); z-index: 210; }
+.td-drawer {
+  --c: var(--moss);
+  position: fixed; top: 0; right: 0; bottom: 0; width: 440px; max-width: 92vw; z-index: 215;
+  display: flex; flex-direction: column; background: #fff; border-left: 1px solid var(--border-2);
+  box-shadow: var(--shadow-pop);
+}
+.td-drawer-hd { flex-shrink: 0; padding: 18px 20px 16px; background: color-mix(in oklab, var(--c) 12%, #fff); border-bottom: 1px solid color-mix(in oklab, var(--c) 16%, transparent); }
+.td-drawer-goal { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: color-mix(in oklab, var(--c) 70%, #000); margin-bottom: 9px; }
+.td-drawer-titlerow { display: flex; align-items: flex-start; gap: 10px; }
+.td-drawer-emoji { width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 17px; line-height: 1; background: color-mix(in oklab, var(--c) 18%, #fff); cursor: pointer; transition: all 120ms ease; border: 0; }
+.td-drawer-emoji:hover { background: color-mix(in oklab, var(--c) 26%, #fff); }
+.td-drawer-title { flex: 1; min-width: 0; font-family: var(--font-display); font-size: 17px; font-weight: 500; color: var(--burnham); letter-spacing: -0.02em; line-height: 1.25; padding-top: 2px; }
+.td-drawer-title input { width: 100%; border: 0; background: transparent; border-bottom: 1px solid color-mix(in oklab, var(--c) 45%, transparent); font-family: var(--font-display); font-size: 17px; font-weight: 500; color: var(--burnham); letter-spacing: -0.02em; padding: 0 0 2px; }
+.td-drawer-acts { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.td-drawer-acts button { background: transparent; border: 0; padding: 5px; border-radius: 6px; color: color-mix(in oklab, var(--shuttle) 60%, transparent); cursor: pointer; display: inline-flex; transition: all 120ms ease; }
+.td-drawer-acts button:hover { background: color-mix(in oklab, var(--c) 16%, transparent); color: var(--burnham); }
+.td-drawer-acts button.danger:hover { color: var(--danger); background: color-mix(in oklab, var(--danger) 10%, transparent); }
+.td-drawer-meta { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.td-drawer-meta .due { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 10.5px; color: color-mix(in oklab, var(--c) 72%, #000); background: transparent; border: 0; cursor: pointer; padding: 2px 5px; border-radius: 5px; }
+.td-drawer-meta .due:hover { background: color-mix(in oklab, var(--c) 14%, transparent); }
+.td-drawer-meta .focus-toggle { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-sans); font-size: 10.5px; font-weight: 500; color: color-mix(in oklab, var(--c) 72%, #000); background: transparent; border: 0; cursor: pointer; padding: 3px 8px; border-radius: 6px; transition: all 120ms ease; }
+.td-drawer-meta .focus-toggle:hover { background: color-mix(in oklab, var(--c) 14%, transparent); }
+.td-drawer-meta .focus-toggle.on { background: var(--c); color: #fff; }
+.td-swatches { display: flex; align-items: center; gap: 6px; }
+.td-swatch { width: 15px; height: 15px; border-radius: 999px; cursor: pointer; border: 0; padding: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.07); transition: transform 100ms ease; }
+.td-swatch:hover { transform: scale(1.15); }
+.td-swatch.sel { box-shadow: 0 0 0 1.5px #fff, 0 0 0 3px currentColor; }
+
+.td-ms-progress { display: flex; gap: 2px; height: 5px; margin-top: 13px; }
+.td-ms-progress .seg { flex: 1; height: 100%; border-radius: 2px; background: color-mix(in oklab, var(--c) 14%, var(--mercury)); transition: background 200ms ease; }
+.td-ms-progress .seg.done { background: var(--c); }
+.td-ms-progress-label { font-family: var(--font-mono); font-size: 9.5px; color: color-mix(in oklab, var(--c) 62%, #000); margin-top: 6px; letter-spacing: 0.02em; }
+
+.td-drawer-note-wrap { flex-shrink: 0; padding: 9px 20px; border-bottom: 1px solid var(--border-1); }
+.td-drawer-note { width: 100%; border: 0; background: transparent; font-size: 11.5px; color: var(--shuttle); padding: 0; }
+.td-drawer-note::placeholder { color: color-mix(in oklab, var(--shuttle) 35%, transparent); }
+.td-drawer-body { flex: 1; overflow-y: auto; padding: 12px 20px 8px; min-height: 0; }
+.td-drawer-section { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--fg-3); margin: 12px 0 4px; }
+.td-drawer-empty { text-align: center; padding: 28px 0; font-size: 12px; color: var(--fg-3); font-style: italic; }
+
+.td-subtask { display: grid; grid-template-columns: 16px 1fr auto auto; gap: 9px; align-items: center; padding: 7px 8px; margin: 0 -8px; border-radius: 7px; transition: background 100ms ease; }
+.td-subtask:hover { background: color-mix(in oklab, var(--c) 6%, transparent); }
+.td-subtask.done .text { text-decoration: line-through; color: var(--fg-3); }
+.td-subtask .cbx { width: 15px; height: 15px; border-radius: 5px; border: 1.5px solid color-mix(in oklab, var(--shuttle) 35%, transparent); background: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: #fff; padding: 0; transition: all 120ms ease; }
+.td-subtask .cbx:hover { border-color: var(--c); }
+.td-subtask .cbx.checked { background: var(--c); border-color: var(--c); }
+.td-subtask .text { font-size: 13px; color: color-mix(in oklab, var(--burnham) 82%, transparent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+.td-subtask .text input { width: 100%; border: 0; background: transparent; border-bottom: 1px solid color-mix(in oklab, var(--c) 40%, transparent); font-size: 13px; color: var(--burnham); padding: 1px 0; }
+.td-subtask .date-cell { position: relative; display: flex; justify-content: flex-end; }
+.td-subtask .in-today { font-family: var(--font-mono); font-size: 9.5px; color: var(--c); padding: 2px 6px; white-space: nowrap; letter-spacing: 0.02em; }
+.td-subtask .acts { display: flex; gap: 0; opacity: 0; transition: opacity 100ms ease; }
+.td-subtask:hover .acts { opacity: 1; }
+.td-subtask .acts button { background: transparent; border: 0; padding: 4px; color: color-mix(in oklab, var(--shuttle) 65%, transparent); border-radius: 5px; cursor: pointer; display: inline-flex; transition: all 100ms ease; }
+.td-subtask .acts button:hover { background: color-mix(in oklab, var(--mercury) 50%, transparent); color: var(--burnham); }
+.td-subtask .acts button.to-today { color: var(--c); }
+.td-subtask .acts button.to-today:hover { background: color-mix(in oklab, var(--c) 14%, transparent); }
+.td-subtask .acts button.del:hover { color: var(--danger); background: color-mix(in oklab, var(--danger) 10%, transparent); }
+.td-date-chip { font-family: var(--font-mono); font-size: 10px; color: var(--shuttle); padding: 3px 7px; border-radius: 5px; cursor: pointer; transition: all 120ms ease; background: transparent; border: 0; letter-spacing: 0.02em; white-space: nowrap; }
+.td-date-chip:hover { background: color-mix(in oklab, var(--mercury) 50%, transparent); color: var(--burnham); }
+.td-date-chip.empty { color: var(--fg-3); font-style: italic; }
+.td-date-chip.is-today { color: var(--c); font-weight: 500; }
+.td-date-pop { position: absolute; z-index: 60; right: 0; top: 100%; margin-top: 4px; background: #fff; border-radius: 10px; box-shadow: var(--shadow-pop); padding: 6px; display: flex; flex-direction: column; min-width: 172px; animation: td-fade-in 100ms ease; }
+.td-date-pop button { background: transparent; border: 0; text-align: left; padding: 7px 10px; border-radius: 6px; font-size: 12px; color: var(--burnham); display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; }
+.td-date-pop button:hover { background: color-mix(in oklab, var(--c) 12%, transparent); }
+.td-date-pop button .meta { font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); }
+.td-date-pop .sep { height: 1px; background: var(--border-1); margin: 4px 2px; }
+.td-date-pop input[type=date] { width: 100%; border: 1px solid var(--border-1); border-radius: 6px; padding: 6px 8px; font: 400 12px var(--font-sans); color: var(--burnham); }
+.td-subtask-add { display: flex; align-items: center; gap: 9px; padding: 10px 8px 2px; margin: 4px -8px 0; color: var(--fg-3); font-size: 12px; cursor: text; border-top: 1px dashed var(--border-1); }
+.td-subtask-add:hover { color: var(--burnham); }
+.td-subtask-add input { flex: 1; border: 0; background: transparent; font-size: 13px; color: var(--burnham); }
+
 /* ── Journal textarea ───────────────────────────────────── */
 .td-journal-area { width: 100%; border: 0; padding: 0; resize: none; background: transparent; font-family: var(--font-sans); font-size: 12.5px; color: var(--burnham); line-height: 1.55; min-height: 64px; }
 .td-journal-area::placeholder { color: color-mix(in oklab, var(--shuttle) 35%, transparent); }

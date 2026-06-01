@@ -84,6 +84,8 @@ export interface Milestone {
   completed_at: string | null
   emoji: string | null    // optional per-milestone emoji (falls back to parent goal)
   color: string | null    // optional per-milestone color hex (falls back to parent goal)
+  focused: boolean        // user-curated: show in Today's right rail
+  position: number | null // manual ordering in the Manage view
   created_at: string
 }
 

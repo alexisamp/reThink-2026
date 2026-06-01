@@ -146,19 +146,18 @@ export default function Today() {
     return FALLBACK_COLORS[idx]
   }, [goalsMap])
 
-  // Only milestones with open work (≥1 linked todo, not all done). Avoids dumping
-  // every dormant milestone; surfaces what you're actually pushing on this week.
+  // Manually curated focus set — the user picks which milestones surface here
+  // (via the "Show in Today" toggle in the drawer / Manage screen).
   const milestoneRows: MilestoneRowData[] = useMemo(() => {
     return milestones
-      .filter(m => {
-        const p = msProgress.get(m.id)
-        return p && p.total > 0 && p.done < p.total
-      })
-      .sort((a, b) => (a.target_date ?? '9999-12-31').localeCompare(b.target_date ?? '9999-12-31'))
+      .filter(m => m.focused)
+      .sort((a, b) =>
+        ((a.position ?? 999) - (b.position ?? 999)) ||
+        (a.target_date ?? '9999-12-31').localeCompare(b.target_date ?? '9999-12-31'))
       .slice(0, 6)
       .map(m => {
         const g = goalsMap.get(m.goal_id)
-        const prog = msProgress.get(m.id)!
+        const prog = msProgress.get(m.id) ?? { done: 0, total: 0 }
         const due = formatDue(m.target_date, today)
         return {
           id: m.id,

@@ -25,7 +25,7 @@ export default function MilestoneRows({ rows, activeId, onExpand, onManage }: Pr
   return (
     <div className="td-ms-rows">
       {rows.length === 0 && (
-        <div className="td-ms-empty">No milestones with open tasks. Add tasks to one to track it here.</div>
+        <div className="td-ms-empty">No focused milestones yet. Pick a few in Manage milestones.</div>
       )}
       {rows.map(m => {
         const pct = m.total > 0 ? (m.done / m.total) * 100 : 0

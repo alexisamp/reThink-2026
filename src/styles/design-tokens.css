@@ -59,6 +59,8 @@
 
   /* Featured todo accent (configurable; default brand green) */
   --featured-accent: var(--moss);
+
+  --danger: #E11D48;   /* destructive only — sparse */
 }
 
 /* ── Milestone palettes (goal = life area) ──────────────────────
