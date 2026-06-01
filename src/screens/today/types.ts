@@ -11,4 +11,5 @@ export interface Mention {
   sub?: string | null
   imageUrl?: string | null
   companyId?: string | null
+  searchText?: string | null
 }

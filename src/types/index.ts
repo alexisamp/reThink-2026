@@ -147,6 +147,19 @@ export interface HabitLog {
 
 export type TodoBlock = 'AM' | 'PM' | null
 
+export type TodoMentionKind = 'person' | 'company' | 'opportunity'
+
+export type TodoContentSegment =
+  | { type: 'text'; text: string }
+  | {
+      type: 'mention'
+      kind: TodoMentionKind
+      id: string
+      label: string
+      imageUrl?: string | null
+      companyId?: string | null
+    }
+
 export interface Todo {
   id: string
   goal_id: string | null
@@ -156,6 +169,7 @@ export interface Todo {
   opportunity_id: string | null
   user_id: string
   text: string
+  content_segments?: TodoContentSegment[] | null
   effort: string | null
   block: TodoBlock
   completed: boolean

@@ -1,11 +1,23 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   House, CalendarBlank, Strategy, ChartPie, Repeat, BookOpen, Timer, Check,
   Target, Flag, CheckSquare, Lightbulb, Eye, Scales, Trophy, Question as PhQuestion,
+  Plus,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
-import type { Goal, Milestone, Todo, Capture, CaptureType } from '@/types'
+import type { Goal, Milestone, Todo, Capture, CaptureType, TodoMentionKind } from '@/types'
+import type { Mention } from '@/screens/today/types'
+import {
+  createCrmObject,
+  hasStrongCrmMatch,
+  iconForCrmKind,
+  mentionFromCompany,
+  mentionFromContact,
+  mentionFromOpportunity,
+  pathForMention,
+  rankCrmObjects,
+} from '@/lib/crmObjects'
 
 interface Command {
   id: string
@@ -41,9 +53,11 @@ interface SearchResult {
   id: string
   label: string
   sub?: string
-  group: 'goal' | 'milestone' | 'todo' | 'capture'
+  group: 'goal' | 'milestone' | 'todo' | 'capture' | 'person' | 'company' | 'opportunity' | 'create'
   Icon: React.ElementType
   action: () => void
+  score: number
+  badge?: string
 }
 
 export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapture }: CommandPaletteProps) {
@@ -55,6 +69,7 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [recentTodos, setRecentTodos] = useState<Todo[]>([])
   const [captures, setCaptures] = useState<Capture[]>([])
+  const [crmOptions, setCrmOptions] = useState<Mention[]>([])
   const [userId, setUserId] = useState<string | null>(null)
 
   // Resolve userId once
@@ -103,6 +118,19 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
       .eq('user_id', userId)
       .gte('captured_date', monthAgo)
       .then(({ data }) => setCaptures((data as Capture[]) ?? []))
+
+    Promise.all([
+      supabase.from('outreach_logs').select('id, name, profile_photo_url, company, job_title, email').eq('user_id', userId).order('name'),
+      supabase.from('companies').select('id, name, logo_url, domain, sector, headline').eq('user_id', userId).order('name'),
+      supabase.from('opportunities').select('id, title, stage, type, company_id, company:companies(id, name, logo_url, domain)').eq('user_id', userId).order('created_at', { ascending: false }),
+    ]).then(([peopleRes, companiesRes, oppsRes]) => {
+      const people = (peopleRes.data ?? []).map(c => mentionFromContact(c))
+      const companies = (companiesRes.data ?? []).map(c => mentionFromCompany(c))
+      const opps = ((oppsRes.data ?? []) as Parameters<typeof mentionFromOpportunity>[0][])
+        .filter(o => o.stage !== 'won' && o.stage !== 'lost')
+        .map(o => mentionFromOpportunity(o))
+      setCrmOptions([...people, ...companies, ...opps])
+    })
   }, [open, userId])
 
   const markMilestoneComplete = async (id: string) => {
@@ -110,6 +138,28 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
     await supabase.from('milestones').update({ status: 'COMPLETE' }).eq('id', id).eq('user_id', userId)
     setPendingMilestones(prev => prev.filter(m => m.id !== id))
     onClose()
+  }
+
+  const createFromPalette = async (kind: TodoMentionKind, name: string) => {
+    if (!userId) return
+    const created = await createCrmObject(supabase, userId, kind, name)
+    if (!created) return
+    setCrmOptions(prev => {
+      const exists = prev.some(m => m.kind === created.mention.kind && m.id === created.mention.id)
+      return exists ? prev : [...prev, created.mention]
+    })
+    navigate(created.path)
+    onClose()
+  }
+
+  const scoreText = (value: string, rawQuery: string, base: number) => {
+    const q = rawQuery.trim().toLowerCase()
+    const v = value.toLowerCase()
+    if (!q || !v.includes(q)) return 0
+    if (v === q) return base + 90
+    if (v.startsWith(q)) return base + 70
+    if (v.split(/\s+/).some(w => w.startsWith(q))) return base + 45
+    return base + 20
   }
 
   const navCommands: Command[] = [
@@ -137,73 +187,108 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
     : allCommands
 
   // Search results (when query >= 2 chars)
-  const searchResults: SearchResult[] = useMemo(() => {
+  const buildSearchResults = (): SearchResult[] => {
     if (query.trim().length < 2) return []
-    const q = query.toLowerCase()
+    const q = query.trim().toLowerCase()
     const results: SearchResult[] = []
 
     goals
-      .filter(g => `${g.text} ${g.alias ?? ''}`.toLowerCase().includes(q))
-      .slice(0, 3)
-      .forEach(g => results.push({
-        id: g.id,
-        label: g.alias ?? g.text,
-        sub: g.text !== (g.alias ?? g.text) ? g.text : undefined,
+      .map(g => ({ item: g, score: scoreText(`${g.text} ${g.alias ?? ''}`, q, 48) }))
+      .filter(x => x.score > 0)
+      .forEach(({ item, score }) => results.push({
+        id: `goal:${item.id}`,
+        label: item.alias ?? item.text,
+        sub: item.text !== (item.alias ?? item.text) ? item.text : undefined,
         group: 'goal',
         Icon: Target,
+        score,
+        badge: 'Goal',
         action: () => { navigate('/strategy'); onClose() },
       }))
 
     milestones
-      .filter(m => m.text.toLowerCase().includes(q))
-      .slice(0, 3)
-      .forEach(m => results.push({
-        id: m.id,
-        label: m.text,
-        sub: m.target_date ?? undefined,
+      .map(m => ({ item: m, score: scoreText(m.text, q, 42) }))
+      .filter(x => x.score > 0)
+      .forEach(({ item, score }) => results.push({
+        id: `milestone:${item.id}`,
+        label: item.text,
+        sub: item.target_date ?? undefined,
         group: 'milestone',
         Icon: Flag,
+        score,
+        badge: 'Milestone',
         action: () => { onClose() },
       }))
 
     recentTodos
-      .filter(t => t.text.toLowerCase().includes(q))
-      .slice(0, 4)
-      .forEach(t => results.push({
-        id: t.id,
-        label: t.text,
-        sub: t.date ?? undefined,
+      .map(t => ({ item: t, score: scoreText(t.text, q, 36) }))
+      .filter(x => x.score > 0)
+      .forEach(({ item, score }) => results.push({
+        id: `todo:${item.id}`,
+        label: item.text,
+        sub: item.date ?? undefined,
         group: 'todo',
         Icon: CheckSquare,
+        score,
+        badge: 'Todo',
         action: () => { navigate('/'); onClose() },
       }))
 
     captures
-      .filter(c => `${c.title} ${c.body ?? ''}`.toLowerCase().includes(q))
-      .slice(0, 4)
-      .forEach(c => results.push({
-        id: c.id,
-        label: c.title,
-        sub: c.type,
+      .map(c => ({ item: c, score: scoreText(`${c.title} ${c.body ?? ''}`, q, 34) }))
+      .filter(x => x.score > 0)
+      .forEach(({ item, score }) => results.push({
+        id: `capture:${item.id}`,
+        label: item.title,
+        sub: item.type,
         group: 'capture',
-        Icon: CAPTURE_ICONS[c.type as CaptureType] ?? Lightbulb,
-        action: () => { onOpenCapture?.(c); onClose() },
+        Icon: CAPTURE_ICONS[item.type as CaptureType] ?? Lightbulb,
+        score,
+        badge: 'Capture',
+        action: () => { onOpenCapture?.(item); onClose() },
       }))
 
-    return results
-  }, [query, goals, milestones, recentTodos, captures, navigate, onClose, onOpenCapture])
+    rankCrmObjects(crmOptions, q, new Set(), 12).forEach((mention, index) => results.push({
+      id: `${mention.kind}:${mention.id}`,
+      label: mention.name,
+      sub: mention.sub ?? undefined,
+      group: mention.kind,
+      Icon: iconForCrmKind(mention.kind),
+      score: 84 - index,
+      badge: mention.kind === 'person' ? 'Person' : mention.kind === 'company' ? 'Company' : 'Opportunity',
+      action: () => { navigate(pathForMention(mention)); onClose() },
+    }))
+
+    if (!hasStrongCrmMatch(crmOptions, q)) {
+      ;(['person', 'company', 'opportunity'] as TodoMentionKind[]).forEach((kind, index) => {
+        results.push({
+          id: `create:${kind}`,
+          label: `Create ${kind} "${query.trim()}"`,
+          sub: kind === 'opportunity' ? 'New opportunity' : kind === 'company' ? 'New company' : 'New person',
+          group: 'create',
+          Icon: Plus,
+          score: 24 - index,
+          badge: 'Create',
+          action: () => { void createFromPalette(kind, query.trim()) },
+        })
+      })
+    }
+
+    return results.sort((a, b) => b.score - a.score || a.label.localeCompare(b.label)).slice(0, 16)
+  }
+  const searchResults = buildSearchResults()
 
   const [selected, setSelected] = useState(0)
 
   useEffect(() => {
     if (open) {
-      setQuery('')
-      setSelected(0)
-      setTimeout(() => inputRef.current?.focus(), 50)
+      window.setTimeout(() => {
+        setQuery('')
+        setSelected(0)
+        inputRef.current?.focus()
+      }, 50)
     }
   }, [open])
-
-  useEffect(() => { setSelected(0) }, [query])
 
   const isSearchMode = query.trim().length >= 2
 
@@ -236,13 +321,6 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
     ...(showMilestoneSection ? milestoneItems : []),
   ]
 
-  const GROUP_LABELS: Record<string, string> = {
-    goal: 'Objetivos',
-    milestone: 'Milestones',
-    todo: 'Tareas',
-    capture: 'Capturas',
-  }
-
   return (
     <div
       className="fixed inset-0 z-[200] flex items-start justify-center pt-[20vh] bg-black/10 backdrop-blur-[2px]"
@@ -257,7 +335,7 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
           placeholder="Type a command or search…"
           className="w-full px-4 py-3 text-sm border-b border-mercury outline-none bg-white text-burnham placeholder-shuttle/50"
           value={query}
-          onChange={e => setQuery(e.target.value)}
+          onChange={e => { setQuery(e.target.value); setSelected(0) }}
           onKeyDown={handleKeyDown}
         />
         <div className="max-h-80 overflow-y-auto">
@@ -268,37 +346,31 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
               </div>
             ) : (
               <div className="py-1">
-                {(['goal', 'milestone', 'todo', 'capture'] as const).map(group => {
-                  const groupItems = searchResults.filter(r => r.group === group)
-                  if (groupItems.length === 0) return null
-                  return (
-                    <div key={group}>
-                      <p className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono px-4 py-2 mt-1">
-                        {GROUP_LABELS[group]}
-                      </p>
-                      {groupItems.map(item => {
-                        const globalIdx = searchResults.indexOf(item)
-                        return (
-                          <button
-                            key={item.id}
-                            onClick={item.action}
-                            onMouseEnter={() => setSelected(globalIdx)}
-                            className={[
-                              'w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors',
-                              globalIdx === selected ? 'bg-mercury/30' : 'hover:bg-mercury/20',
-                            ].join(' ')}
-                          >
-                            <item.Icon size={14} className="text-shuttle/40 shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[13px] text-burnham truncate">{item.label}</p>
-                              {item.sub && <p className="text-[10px] text-shuttle/40 font-mono">{item.sub}</p>}
-                            </div>
-                          </button>
-                        )
-                      })}
+                <p className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono px-4 py-2 mt-1">
+                  Search
+                </p>
+                {searchResults.map((item, globalIdx) => (
+                  <button
+                    key={item.id}
+                    onClick={item.action}
+                    onMouseEnter={() => setSelected(globalIdx)}
+                    className={[
+                      'w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors',
+                      globalIdx === selected ? 'bg-mercury/30' : 'hover:bg-mercury/20',
+                    ].join(' ')}
+                  >
+                    <item.Icon size={14} className="text-shuttle/40 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-burnham truncate">{item.label}</p>
+                      {item.sub && <p className="text-[10px] text-shuttle/40 font-mono truncate">{item.sub}</p>}
                     </div>
-                  )
-                })}
+                    {item.badge && (
+                      <span className="text-[9px] font-mono text-shuttle/45 bg-mercury/30 px-1.5 py-0.5 rounded">
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
               </div>
             )
           ) : (

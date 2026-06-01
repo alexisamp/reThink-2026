@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Target, ChartLineUp, UsersThree, PencilSimple, Timer, Play, Pause, X, Check, Moon } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
-import type { Todo, Milestone, Goal, Review } from '@/types'
+import type { Todo, Milestone, Goal, Review, TodoContentSegment, TodoMentionKind } from '@/types'
 import MilestonePanel from '@/components/MilestonePanel'
 import DayStartDrawer from '@/components/DayStartDrawer'
 import EndOfDayDrawer from '@/components/EndOfDayDrawer'
@@ -17,6 +17,7 @@ import NextSteps from './today/NextSteps'
 import FocusTimer from './today/FocusTimer'
 import { useFocusTimer } from './today/useFocusTimer'
 import type { GroupBy, Mention } from './today/types'
+import { companyImage, createCrmObject, firstRelation, mentionFromCompany, mentionFromContact, mentionFromOpportunity } from '@/lib/crmObjects'
 
 function fmtClock(seconds: number): string {
   const m = Math.floor(seconds / 60), s = seconds % 60
@@ -31,7 +32,7 @@ interface TodoLinks {
   opportunityId?: string | null
 }
 interface RelationCompany {
-  id?: string | null
+  id: string
   name?: string | null
   logo_url?: string | null
   domain?: string | null
@@ -61,17 +62,6 @@ function formatDue(target: string | null, today: string): { label: string | null
   if (days < 0) return { label: `${-days}d ago`, urgent: true }
   if (days === 0) return { label: 'today', urgent: true }
   return { label: `${days}d`, urgent: days <= 7 }
-}
-
-function firstRelation<T>(value: T | T[] | null | undefined): T | null {
-  if (!value) return null
-  return Array.isArray(value) ? value[0] ?? null : value
-}
-
-function companyImage(logoUrl?: string | null, domain?: string | null): string | null {
-  if (logoUrl) return logoUrl
-  if (!domain) return null
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
 }
 
 export default function Today() {
@@ -171,33 +161,11 @@ export default function Today() {
       const byTodo = new Map<string, Todo>()
       ;[...overdueTodos, ...((todosRes.data ?? []) as Todo[])].forEach(t => byTodo.set(t.id, t))
       const todoList = [...byTodo.values()]
-      const peopleOptions: Mention[] = (contactsRes.data ?? []).map(c => ({
-        id: c.id,
-        name: c.name,
-        kind: 'person',
-        sub: [c.job_title, c.company].filter(Boolean).join(' · ') || c.email || null,
-        imageUrl: c.profile_photo_url,
-      }))
-      const companyOptions: Mention[] = (companiesRes.data ?? []).map(c => ({
-        id: c.id,
-        name: c.name,
-        kind: 'company',
-        sub: c.domain || c.sector || c.headline || null,
-        imageUrl: companyImage(c.logo_url, c.domain),
-      }))
+      const peopleOptions: Mention[] = (contactsRes.data ?? []).map(c => mentionFromContact(c))
+      const companyOptions: Mention[] = (companiesRes.data ?? []).map(c => mentionFromCompany(c))
       const oppOptions: Mention[] = ((oppsRes.data ?? []) as OpportunityMentionRow[])
         .filter(o => o.stage !== 'won' && o.stage !== 'lost')
-        .map(o => {
-          const company = firstRelation(o.company)
-          return {
-            id: o.id,
-            name: o.title ?? 'Opportunity',
-            kind: 'opportunity',
-            sub: [company?.name, o.stage, o.type].filter(Boolean).join(' · ') || null,
-            imageUrl: companyImage(company?.logo_url, company?.domain),
-            companyId: o.company_id ?? company?.id ?? null,
-          }
-        })
+        .map(o => mentionFromOpportunity(o))
       const review = reviewRes.data as TodayReviewRow | null
       setTodos(todoList)
       setMsTodos((msTodosRes.data ?? []) as MsTodo[])
@@ -322,27 +290,45 @@ export default function Today() {
     setTodos(prev => prev.map(x => x.id === id ? { ...x, waiting: next } : x))
     await supabase.from('todos').update({ waiting: next }).eq('id', id)
   }
-  const editTodoText = async (id: string, text: string, links?: TodoLinks) => {
-    const patch: Partial<Todo> = { text }
+  const createMention = useCallback(async (kind: TodoMentionKind, name: string, companyId?: string | null) => {
+    if (!userId) return null
+    const created = await createCrmObject(supabase, userId, kind, name, { today, companyId })
+    if (!created) return null
+    setMentionOptions(prev => {
+      const exists = prev.some(m => m.kind === created.mention.kind && m.id === created.mention.id)
+      return exists ? prev : [...prev, created.mention].sort((a, b) => a.name.localeCompare(b.name))
+    })
+    setMentions(prev => {
+      const next = new Map(prev)
+      if (created.mention.id) next.set(`${created.mention.kind}:${created.mention.id}`, created.mention)
+      return next
+    })
+    return created.mention
+  }, [today, userId])
+
+  const editTodoText = async (id: string, text: string, contentSegments: TodoContentSegment[], links?: TodoLinks) => {
+    const patch: Partial<Todo> = { text, content_segments: contentSegments }
     if (links?.contactId !== undefined) patch.contact_id = links.contactId
     if (links?.companyId !== undefined) patch.company_id = links.companyId
     if (links?.opportunityId !== undefined) patch.opportunity_id = links.opportunityId
     setTodos(prev => prev.map(x => x.id === id ? { ...x, ...patch } : x))
     await supabase.from('todos').update({
       text,
+      content_segments: contentSegments,
       ...(links?.contactId !== undefined ? { contact_id: links.contactId } : {}),
       ...(links?.companyId !== undefined ? { company_id: links.companyId } : {}),
       ...(links?.opportunityId !== undefined ? { opportunity_id: links.opportunityId } : {}),
     }).eq('id', id)
     if (userId && links) loadMentions(userId, todos.map(x => x.id === id ? { ...x, ...patch } as Todo : x))
   }
-  const addTodo = async (text: string, milestoneId: string | null, links: TodoLinks = {}) => {
+  const addTodo = async (text: string, milestoneId: string | null, contentSegments: TodoContentSegment[], links: TodoLinks = {}) => {
     if (!userId) return
     const milestone = milestoneId ? milestones.find(m => m.id === milestoneId) : null
     const selectedOpp = links.opportunityId ? mentionOptions.find(m => m.kind === 'opportunity' && m.id === links.opportunityId) : null
     const companyId = links.companyId ?? selectedOpp?.companyId ?? null
     const { data } = await supabase.from('todos').insert({
       text, user_id: userId, date: today,
+      content_segments: contentSegments,
       milestone_id: milestoneId, goal_id: milestone?.goal_id ?? null,
       contact_id: links.contactId ?? null,
       company_id: companyId,
@@ -491,6 +477,7 @@ export default function Today() {
             onToggleWaiting={toggleWaiting}
             onEditText={editTodoText}
             onAdd={addTodo}
+            onCreateMention={createMention}
             onMilestoneClick={setExpandedMs}
             onReorder={reorderTodos}
           />

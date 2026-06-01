@@ -89,13 +89,11 @@
 .td-mention-wrap { position: relative; display: block; min-width: 0; width: 100%; }
 .td-mention-editor { width: 100%; min-width: 0; outline: none; border: 0; background: transparent; padding: 0; font-size: 13.5px; color: color-mix(in oklab, var(--burnham) 90%, transparent); line-height: 1.55; letter-spacing: -0.005em; cursor: text; white-space: pre-wrap; overflow-wrap: anywhere; }
 .td-mention-editor:empty::before { content: attr(data-placeholder); color: color-mix(in oklab, var(--shuttle) 42%, transparent); pointer-events: none; }
-.td-editor-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; margin: 0 2px; border: 1px solid color-mix(in oklab, var(--midnight) 9%, transparent); background: color-mix(in oklab, var(--midnight) 4%, transparent); border-radius: 6px; font-size: 10px; font-weight: 500; color: color-mix(in oklab, var(--midnight) 74%, transparent); line-height: 1.1; vertical-align: -2px; user-select: all; -webkit-user-select: all; }
+.td-editor-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; margin: 0 2px; border: 1px solid color-mix(in oklab, var(--midnight) 9%, transparent); background: color-mix(in oklab, var(--midnight) 4%, transparent); border-radius: 6px; font-size: 10px; font-weight: 500; color: color-mix(in oklab, var(--midnight) 74%, transparent); line-height: 1.1; vertical-align: 0; user-select: none; -webkit-user-select: none; cursor: default; }
+.td-editor-chip.selected { border-color: color-mix(in oklab, var(--moss) 42%, transparent); background: color-mix(in oklab, var(--moss) 13%, #fff); color: var(--burnham); box-shadow: 0 0 0 1px color-mix(in oklab, var(--moss) 18%, transparent); }
 .td-editor-chip .av { width: 12px; height: 12px; border-radius: 999px; background: var(--mercury); display: inline-flex; align-items: center; justify-content: center; font-size: 7px; font-weight: 600; color: color-mix(in oklab, var(--shuttle) 80%, transparent); overflow: hidden; }
 .td-editor-chip .av.sq { border-radius: 3px; }
 .td-editor-chip .av img { width: 100%; height: 100%; object-fit: cover; }
-.td-editor-chip button { display: inline-flex; align-items: center; justify-content: center; width: 0; height: 13px; margin: 0; padding: 0; border: 0; border-radius: 999px; background: transparent; color: color-mix(in oklab, var(--shuttle) 45%, transparent); font-size: 11px; line-height: 1; cursor: pointer; opacity: 0; overflow: hidden; transition: opacity 100ms ease, width 100ms ease, margin 100ms ease, background 100ms ease, color 100ms ease; }
-.td-editor-chip:hover button { width: 13px; margin-left: 1px; opacity: 1; }
-.td-editor-chip button:hover { background: color-mix(in oklab, var(--shuttle) 12%, transparent); color: var(--burnham); }
 .td-linked-mentions { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .td-linked-chip { display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; background: transparent; color: color-mix(in oklab, var(--shuttle) 65%, transparent); cursor: pointer; border-radius: 6px; }
 .td-linked-chip:hover { color: var(--burnham); }
@@ -106,10 +104,12 @@
   box-shadow: var(--shadow-pop); border: 1px solid color-mix(in oklab, var(--burnham) 8%, transparent);
   animation: td-fade-in 100ms ease;
 }
+.td-mention-picker.fixed { position: fixed; z-index: 260; top: auto; left: auto; width: min(360px, calc(100vw - 36px)); }
 .td-mention-section + .td-mention-section { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border-1); }
 .td-mention-header { padding: 4px 7px 5px; font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-3); }
 .td-mention-row { width: 100%; display: grid; grid-template-columns: 24px 1fr; align-items: center; gap: 9px; padding: 7px; border: 0; border-radius: 7px; background: transparent; text-align: left; cursor: pointer; }
 .td-mention-row:hover, .td-mention-row.active { background: color-mix(in oklab, var(--gossip) 55%, transparent); }
+.td-mention-row.create .td-mention-avatar { background: color-mix(in oklab, var(--moss) 12%, #fff); color: var(--moss); font-size: 13px; }
 .td-mention-avatar { width: 24px; height: 24px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; background: color-mix(in oklab, var(--mercury) 70%, #fff); color: var(--shuttle); font-size: 10px; font-weight: 600; }
 .td-mention-avatar.sq { border-radius: 6px; }
 .td-mention-avatar img { width: 100%; height: 100%; object-fit: cover; }
