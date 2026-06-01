@@ -177,6 +177,7 @@ export interface Review {
   energy_level: number | null
   notes: string | null
   one_thing: string | null
+  one_thing_done?: boolean | null
   tomorrow_focus: string | null
   weekly_one_thing: string | null
   ai_coach_notes: string | null

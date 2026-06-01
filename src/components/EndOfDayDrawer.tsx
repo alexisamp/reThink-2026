@@ -7,15 +7,17 @@ interface EndOfDayDrawerProps {
   todos: Todo[]
   today: string
   userId: string
+  dailyGoal?: string | null
   onClose: () => void
-  onComplete: () => void
+  onComplete: (result: { tomorrowGoal?: string; removedTodoIds: string[] }) => void
 }
 
-export default function EndOfDayDrawer({ todos, today, userId, onClose, onComplete }: EndOfDayDrawerProps) {
+export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClose, onComplete }: EndOfDayDrawerProps) {
   const pending = todos.filter(t => !t.completed)
   const [carry, setCarry] = useState<Record<string, boolean>>({})
   const [tomorrowObjective, setTomorrowObjective] = useState('')
   const [energyLevel, setEnergyLevel] = useState<number | null>(null)
+  const [goalDone, setGoalDone] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -35,12 +37,18 @@ export default function EndOfDayDrawer({ todos, today, userId, onClose, onComple
 
   const handleClose = async () => {
     setSaving(true)
+    let removedTodoIds: string[] = []
     try {
       // Carry selected todos to tomorrow
       const toCarry = pending.filter(t => carry[t.id]).map(t => t.id)
       if (toCarry.length > 0) {
         await supabase.from('todos').update({ date: tomorrow }).in('id', toCarry)
       }
+      const toClear = pending.filter(t => !carry[t.id]).map(t => t.id)
+      if (toClear.length > 0) {
+        await supabase.from('todos').update({ date: null }).in('id', toClear)
+      }
+      removedTodoIds = [...toCarry, ...toClear]
       // Save tomorrow's objective as tomorrow's review.one_thing
       if (tomorrowObjective.trim()) {
         await supabase.from('reviews').upsert(
@@ -48,62 +56,72 @@ export default function EndOfDayDrawer({ todos, today, userId, onClose, onComple
           { onConflict: 'user_id,date' }
         )
       }
-      // Mark today as complete (tomorrow_reviewed) + save energy level
-      await supabase.from('reviews').upsert(
-        { user_id: userId, date: today, tomorrow_reviewed: true, ...(energyLevel !== null ? { energy_level: energyLevel } : {}) },
-        { onConflict: 'user_id,date' }
-      )
+      // Mark today as complete. one_thing_done is backed by a migration, but the
+      // fallback keeps older databases from blocking the close-day flow.
+      const reviewPayload = {
+        user_id: userId,
+        date: today,
+        tomorrow_reviewed: true,
+        ...(energyLevel !== null ? { energy_level: energyLevel } : {}),
+        ...(goalDone !== null ? { one_thing_done: goalDone } : {}),
+      }
+      const { error } = await supabase.from('reviews').upsert(reviewPayload, { onConflict: 'user_id,date' })
+      if (error && goalDone !== null) {
+        const { one_thing_done: _ignored, ...fallback } = reviewPayload
+        await supabase.from('reviews').upsert(fallback, { onConflict: 'user_id,date' })
+      }
     } catch (err) {
       console.error('End of day save failed:', err)
     } finally {
       setSaving(false)
-      onComplete()
+      onComplete({ tomorrowGoal: tomorrowObjective.trim() || undefined, removedTodoIds })
     }
   }
 
   return (
     <>
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-[170] bg-black/20 backdrop-blur-[1px]"
-        onClick={onClose}
-      />
+      <div className="td-drawer-bg" onClick={onClose} />
 
       {/* Drawer */}
-      <div className="fixed right-0 top-0 bottom-0 z-[180] w-full max-w-sm bg-white border-l border-mercury flex flex-col shadow-2xl">
+      <div className="td-day-drawer">
         {/* Header */}
-        <div className="px-6 pt-6 pb-4 border-b border-mercury flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Moon size={16} className="text-burnham" weight="fill" />
-            <h2 className="text-sm font-semibold text-burnham">Closing the day</h2>
+        <div className="td-day-drawer-hd">
+          <span className="icon"><Moon size={15} weight="fill" /></span>
+          <div>
+            <h2>Close the day</h2>
+            <p>Review today and carry forward what still matters.</p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-shuttle hover:text-burnham transition-colors p-1 rounded"
-          >
-            <X size={16} />
-          </button>
+          <button className="close" onClick={onClose} title="Close"><X size={15} /></button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+        <div className="td-day-drawer-body">
+
+          {dailyGoal && (
+            <div className="td-day-block">
+              <label>Today's goal</label>
+              <p className="td-day-goal-text">{dailyGoal}</p>
+              <div className="td-day-segment">
+                <button className={goalDone === true ? 'on' : ''} onClick={() => setGoalDone(true)}>Done</button>
+                <button className={goalDone === false ? 'on' : ''} onClick={() => setGoalDone(false)}>Not yet</button>
+              </div>
+            </div>
+          )}
 
           {/* Pending todos */}
           {pending.length > 0 ? (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/60 mb-3">
-                Carry to tomorrow?
-              </p>
-              <div className="space-y-2">
+            <div className="td-day-block">
+              <label>Carry to tomorrow?</label>
+              <div className="td-day-carry">
                 {pending.map(todo => (
-                  <label key={todo.id} className="flex items-start gap-3 cursor-pointer group">
+                  <label key={todo.id}>
                     <input
                       type="checkbox"
                       checked={carry[todo.id] ?? false}
                       onChange={e => setCarry(prev => ({ ...prev, [todo.id]: e.target.checked }))}
-                      className="custom-checkbox mt-0.5 shrink-0"
                     />
-                    <span className={`text-sm transition-colors ${carry[todo.id] ? 'text-burnham' : 'text-shuttle line-through'}`}>
+                    <span className={carry[todo.id] ? '' : 'skip'}>
                       {todo.text}
                     </span>
                   </label>
@@ -111,27 +129,21 @@ export default function EndOfDayDrawer({ todos, today, userId, onClose, onComple
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-pastel">
+            <div className="td-day-done">
               <Check size={16} weight="bold" />
-              <p className="text-sm font-medium text-burnham">All todos done today!</p>
+              <p>All todos done today.</p>
             </div>
           )}
 
           {/* Energy level */}
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/60 mb-3">
-              Today's energy level
-            </p>
-            <div className="grid grid-cols-10 gap-1">
+          <div className="td-day-block">
+            <label>Energy level</label>
+            <div className="td-energy-grid">
               {[1,2,3,4,5,6,7,8,9,10].map(n => (
                 <button
                   key={n}
                   onClick={() => setEnergyLevel(prev => prev === n ? null : n)}
-                  className={`h-7 rounded text-[9px] font-medium transition-all ${
-                    energyLevel === n
-                      ? 'bg-gossip border border-pastel text-burnham font-bold'
-                      : 'bg-white border border-mercury text-shuttle hover:border-pastel'
-                  }`}
+                  className={energyLevel === n ? 'on' : ''}
                 >
                   {n}
                 </button>
@@ -140,13 +152,10 @@ export default function EndOfDayDrawer({ todos, today, userId, onClose, onComple
           </div>
 
           {/* Tomorrow's objective */}
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/60 mb-2">
-              Tomorrow's one thing
-            </p>
+          <div className="td-day-block">
+            <label>Tomorrow's one thing</label>
             <input
               ref={inputRef}
-              type="text"
               value={tomorrowObjective}
               onChange={e => setTomorrowObjective(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleClose()}
@@ -158,11 +167,10 @@ export default function EndOfDayDrawer({ todos, today, userId, onClose, onComple
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-5 border-t border-mercury">
+        <div className="td-day-drawer-foot">
           <button
             onClick={handleClose}
             disabled={saving}
-            className="w-full flex items-center justify-center gap-2 bg-burnham hover:bg-burnham/90 disabled:opacity-60 text-white py-3 rounded-lg text-sm font-medium transition-all"
           >
             {saving ? (
               <span>Saving...</span>

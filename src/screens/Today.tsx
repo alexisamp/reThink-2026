@@ -3,10 +3,12 @@
 // Journal (collapsible + drag-to-reorder, persisted). Wired to live Supabase data.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Target, ChartLineUp, UsersThree, PencilSimple, Timer, Play, Pause, X, Check } from '@phosphor-icons/react'
+import { Target, ChartLineUp, UsersThree, PencilSimple, Timer, Play, Pause, X, Check, Moon } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
-import type { Todo, Milestone, Goal } from '@/types'
+import type { Todo, Milestone, Goal, Review } from '@/types'
 import MilestonePanel from '@/components/MilestonePanel'
+import DayStartDrawer from '@/components/DayStartDrawer'
+import EndOfDayDrawer from '@/components/EndOfDayDrawer'
 import TodoList from './today/TodoList'
 import RightRail, { type RailSectionDef } from './today/RightRail'
 import MilestoneRows, { type MilestoneRowData } from './today/MilestoneRows'
@@ -32,6 +34,7 @@ interface RelationCompany {
   id?: string | null
   name?: string | null
   logo_url?: string | null
+  domain?: string | null
 }
 interface OpportunityMentionRow {
   id: string
@@ -41,6 +44,7 @@ interface OpportunityMentionRow {
   company_id?: string | null
   company?: RelationCompany | RelationCompany[] | null
 }
+type TodayReviewRow = Pick<Review, 'notes' | 'one_thing' | 'energy_level' | 'tomorrow_reviewed'>
 
 const GROUP_KEY = 'rethink.today.groupBy'
 const FALLBACK_COLORS = ['#3E7A4E', '#536471', '#7A3E68', '#3E5F7A', '#9A6B4F']
@@ -62,6 +66,12 @@ function formatDue(target: string | null, today: string): { label: string | null
 function firstRelation<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null
   return Array.isArray(value) ? value[0] ?? null : value
+}
+
+function companyImage(logoUrl?: string | null, domain?: string | null): string | null {
+  if (logoUrl) return logoUrl
+  if (!domain) return null
+  return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
 }
 
 export default function Today() {
@@ -91,6 +101,9 @@ export default function Today() {
   const [groupBy, setGroupBy] = useState<GroupBy>(() => (localStorage.getItem(GROUP_KEY) as GroupBy) || 'priority')
   const [expandedMs, setExpandedMs] = useState<string | null>(null)
   const [journal, setJournal] = useState('')
+  const [dailyGoal, setDailyGoal] = useState('')
+  const [startOpen, setStartOpen] = useState(false)
+  const [endOpen, setEndOpen] = useState(false)
   const [focusOpen, setFocusOpen] = useState(false)
   const focus = useFocusTimer(userId)
   const [twRefresh, setTwRefresh] = useState(0)
@@ -109,11 +122,11 @@ export default function Today() {
             .then(({ data }) => (data ?? []).forEach(c => map.set(`person:${c.id}`, { id: c.id, name: c.name, kind: 'person', imageUrl: c.profile_photo_url })))
         : null,
       companyIds.length
-        ? supabase.from('companies').select('id, name, logo_url').in('id', companyIds).eq('user_id', uid)
-            .then(({ data }) => (data ?? []).forEach(c => map.set(`company:${c.id}`, { id: c.id, name: c.name, kind: 'company', imageUrl: c.logo_url })))
+        ? supabase.from('companies').select('id, name, logo_url, domain').in('id', companyIds).eq('user_id', uid)
+            .then(({ data }) => (data ?? []).forEach(c => map.set(`company:${c.id}`, { id: c.id, name: c.name, kind: 'company', imageUrl: companyImage(c.logo_url, c.domain) })))
         : null,
       oppIds.length
-        ? supabase.from('opportunities').select('id, title, company_id, company:companies(id, name, logo_url)').in('id', oppIds).eq('user_id', uid)
+        ? supabase.from('opportunities').select('id, title, company_id, company:companies(id, name, logo_url, domain)').in('id', oppIds).eq('user_id', uid)
             .then(({ data }) => ((data ?? []) as OpportunityMentionRow[]).forEach(o => {
               const company = firstRelation(o.company)
               map.set(`opportunity:${o.id}`, {
@@ -121,7 +134,7 @@ export default function Today() {
                 name: o.title ?? 'Opportunity',
                 kind: 'opportunity',
                 sub: company?.name ?? null,
-                imageUrl: company?.logo_url ?? null,
+                imageUrl: companyImage(company?.logo_url, company?.domain),
                 companyId: o.company_id ?? company?.id ?? null,
               })
             }))
@@ -138,19 +151,26 @@ export default function Today() {
       if (!user || cancelled) return
       setUserId(user.id)
 
-      const [todosRes, msTodosRes, msRes, goalsRes, reviewRes, contactsRes, companiesRes, oppsRes] = await Promise.all([
+      const [todosRes, overdueTodosRes, msTodosRes, msRes, goalsRes, reviewRes, contactsRes, companiesRes, oppsRes] = await Promise.all([
         supabase.from('todos').select('*').eq('user_id', user.id).eq('date', today).order('sort_order').order('created_at'),
+        supabase.from('todos').select('*').eq('user_id', user.id).lt('date', today).eq('completed', false).order('date').order('sort_order').order('created_at'),
         supabase.from('todos').select('id, milestone_id, completed').eq('user_id', user.id).not('milestone_id', 'is', null),
         supabase.from('milestones').select('*').eq('user_id', user.id).neq('status', 'COMPLETE').order('target_date', { nullsFirst: false }),
         supabase.from('goals').select('id, text, alias, color, emoji').eq('user_id', user.id).eq('goal_type', 'ACTIVE').order('position'),
-        supabase.from('reviews').select('notes').eq('user_id', user.id).eq('date', today).maybeSingle(),
+        supabase.from('reviews').select('notes, one_thing, energy_level, tomorrow_reviewed').eq('user_id', user.id).eq('date', today).maybeSingle(),
         supabase.from('outreach_logs').select('id, name, profile_photo_url, company, job_title, email').eq('user_id', user.id).order('name'),
         supabase.from('companies').select('id, name, logo_url, domain, sector, headline').eq('user_id', user.id).order('name'),
-        supabase.from('opportunities').select('id, title, stage, type, company_id, company:companies(id, name, logo_url)').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('opportunities').select('id, title, stage, type, company_id, company:companies(id, name, logo_url, domain)').eq('user_id', user.id).order('created_at', { ascending: false }),
       ])
       if (cancelled) return
 
-      const todoList = (todosRes.data ?? []) as Todo[]
+      const overdueTodos = ((overdueTodosRes.data ?? []) as Todo[]).map(t => ({ ...t, date: today }))
+      if (overdueTodos.length > 0) {
+        supabase.from('todos').update({ date: today }).in('id', overdueTodos.map(t => t.id)).then(() => {})
+      }
+      const byTodo = new Map<string, Todo>()
+      ;[...overdueTodos, ...((todosRes.data ?? []) as Todo[])].forEach(t => byTodo.set(t.id, t))
+      const todoList = [...byTodo.values()]
       const peopleOptions: Mention[] = (contactsRes.data ?? []).map(c => ({
         id: c.id,
         name: c.name,
@@ -163,7 +183,7 @@ export default function Today() {
         name: c.name,
         kind: 'company',
         sub: c.domain || c.sector || c.headline || null,
-        imageUrl: c.logo_url,
+        imageUrl: companyImage(c.logo_url, c.domain),
       }))
       const oppOptions: Mention[] = ((oppsRes.data ?? []) as OpportunityMentionRow[])
         .filter(o => o.stage !== 'won' && o.stage !== 'lost')
@@ -174,10 +194,11 @@ export default function Today() {
             name: o.title ?? 'Opportunity',
             kind: 'opportunity',
             sub: [company?.name, o.stage, o.type].filter(Boolean).join(' · ') || null,
-            imageUrl: company?.logo_url ?? null,
+            imageUrl: companyImage(company?.logo_url, company?.domain),
             companyId: o.company_id ?? company?.id ?? null,
           }
         })
+      const review = reviewRes.data as TodayReviewRow | null
       setTodos(todoList)
       setMsTodos((msTodosRes.data ?? []) as MsTodo[])
       setMilestones((msRes.data ?? []) as Milestone[])
@@ -185,7 +206,9 @@ export default function Today() {
       const gl = (goalsRes.data ?? []) as GoalLite[]
       setGoals(gl)
       setGoalsMap(new Map(gl.map(g => [g.id, g])))
-      if (!journalInit.current) { setJournal(reviewRes.data?.notes ?? ''); journalInit.current = true }
+      if (!journalInit.current) { setJournal(review?.notes ?? ''); journalInit.current = true }
+      setDailyGoal(review?.one_thing ?? '')
+      if (!review?.one_thing && !sessionStorage.getItem(`rethink.today.goalSkipped:${today}`)) setStartOpen(true)
       loadMentions(user.id, todoList)
     })()
     return () => { cancelled = true }
@@ -245,6 +268,12 @@ export default function Today() {
     const g = goalsMap.get(m.goal_id)
     return g?.alias || m.text
   }, [milestones, goalsMap])
+  const milestoneColor = useCallback((id: string | null) => {
+    if (!id) return null
+    const m = milestones.find(x => x.id === id)
+    if (!m) return null
+    return m.color ?? colorForGoal(m.goal_id)
+  }, [milestones, colorForGoal])
 
   const milestoneTotal = useCallback((id: string) => msProgress.get(id)?.total ?? 0, [msProgress])
   const milestoneOrder = useMemo(() => milestones.map(m => m.id), [milestones])
@@ -286,6 +315,12 @@ export default function Today() {
     const next = !t.is_featured
     setTodos(prev => prev.map(x => x.id === id ? { ...x, is_featured: next } : x))
     await supabase.from('todos').update({ is_featured: next }).eq('id', id)
+  }
+  const toggleWaiting = async (id: string) => {
+    const t = todos.find(x => x.id === id); if (!t) return
+    const next = !t.waiting
+    setTodos(prev => prev.map(x => x.id === id ? { ...x, waiting: next } : x))
+    await supabase.from('todos').update({ waiting: next }).eq('id', id)
   }
   const editTodoText = async (id: string, text: string, links?: TodoLinks) => {
     const patch: Partial<Todo> = { text }
@@ -426,13 +461,24 @@ export default function Today() {
             <Timer size={13} /> focus
           </button>
         )}
+        <button className="hd-act" onClick={() => setEndOpen(true)} title="Close the day">
+          <Moon size={13} /> close
+        </button>
       </div>
+
+      {dailyGoal && (
+        <div className="td-day-goal">
+          <span className="label">one thing</span>
+          <button onClick={() => setStartOpen(true)}>{dailyGoal}</button>
+        </div>
+      )}
 
       <div className="td-two-col">
         <div className="td-main-col">
           <TodoList
             todos={todos}
             milestoneName={milestoneName}
+            milestoneColor={milestoneColor}
             milestoneTotal={milestoneTotal}
             milestoneOrder={milestoneOrder}
             resolveMentions={resolveMentions}
@@ -442,6 +488,7 @@ export default function Today() {
             onToggle={toggleTodo}
             onDelete={deleteTodo}
             onStar={starTodo}
+            onToggleWaiting={toggleWaiting}
             onEditText={editTodoText}
             onAdd={addTodo}
             onMilestoneClick={setExpandedMs}
@@ -480,6 +527,31 @@ export default function Today() {
           onClose={() => setFocusOpen(false)}
           onStart={focus.start}
           goals={goals.map(g => ({ id: g.id, text: g.text, emoji: g.emoji }))}
+        />
+      )}
+
+      {userId && startOpen && (
+        <DayStartDrawer
+          today={today}
+          userId={userId}
+          initialGoal={dailyGoal}
+          onClose={() => { sessionStorage.setItem(`rethink.today.goalSkipped:${today}`, '1'); setStartOpen(false) }}
+          onSave={(goal) => { setDailyGoal(goal); setStartOpen(false) }}
+        />
+      )}
+
+      {userId && endOpen && (
+        <EndOfDayDrawer
+          todos={todos}
+          today={today}
+          userId={userId}
+          dailyGoal={dailyGoal}
+          onClose={() => setEndOpen(false)}
+          onComplete={({ tomorrowGoal, removedTodoIds }) => {
+            if (tomorrowGoal) sessionStorage.removeItem(`rethink.today.goalSkipped:${today}`)
+            setTodos(prev => prev.filter(t => !removedTodoIds.includes(t.id)))
+            setEndOpen(false)
+          }}
         />
       )}
     </div>

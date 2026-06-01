@@ -2,7 +2,8 @@
 // star, milestone + mention chips, AM/PM block, inline edit, add, done section.
 // Visual contract ported from the reThink design bundle (TodoList.jsx).
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { Check, Star, TrashSimple, Plus, CaretDown, DotsSixVertical, X } from '@phosphor-icons/react'
+import { useNavigate } from 'react-router-dom'
+import { Check, Star, TrashSimple, Plus, CaretDown, DotsSixVertical, X, HourglassMedium } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core'
@@ -65,12 +66,17 @@ function linksForTodoEdit(todo: Todo, originalMentions: Mention[], linked: Menti
   }
 }
 
-function MentionChip({ name, kind, imageUrl }: Mention) {
+function MentionChip({ name, kind, imageUrl, onClick }: Mention & { onClick?: () => void }) {
   const initial = (name || '?').charAt(0).toUpperCase()
   const squared = kind === 'company' || kind === 'opportunity'
   const label = kind === 'person' ? name.split(' ')[0] : name
   return (
-    <span className="td-chip-mention">
+    <span
+      className={`td-chip-mention${onClick ? ' clickable' : ''}`}
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick() } : undefined}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+    >
       <span className={`av${squared ? ' sq' : ''}`}>
         {imageUrl ? <img src={imageUrl} alt="" /> : initial}
       </span>
@@ -159,22 +165,6 @@ function MentionTextInput({
 
   return (
     <div className="td-mention-wrap">
-      {linked.length > 0 && (
-        <span className="td-linked-mentions">
-          {linked.map(m => (
-            <button
-              key={mentionKey(m)}
-              type="button"
-              className="td-linked-chip"
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => onLinkedChange(linked.filter(x => mentionKey(x) !== mentionKey(m)))}
-            >
-              <MentionChip {...m} />
-              <X size={9} />
-            </button>
-          ))}
-        </span>
-      )}
       <input
         ref={inputRef}
         autoFocus={autoFocus}
@@ -197,6 +187,22 @@ function MentionTextInput({
           if (e.key === 'Escape') onCancel()
         }}
       />
+      {linked.length > 0 && (
+        <span className="td-linked-mentions">
+          {linked.map(m => (
+            <button
+              key={mentionKey(m)}
+              type="button"
+              className="td-linked-chip"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => onLinkedChange(linked.filter(x => mentionKey(x) !== mentionKey(m)))}
+            >
+              <MentionChip {...m} />
+              <X size={9} />
+            </button>
+          ))}
+        </span>
+      )}
       {trigger && <MentionPicker groups={groups} activeKey={activeKey} onSelect={selectMention} />}
     </div>
   )
@@ -219,9 +225,11 @@ interface RowProps {
   hideMilestone?: boolean
   mentions: Mention[]
   mentionOptions: Mention[]
+  milestoneColor?: string | null
   onToggle: (id: string) => void
   onDelete: (id: string) => void
   onStar: (id: string) => void
+  onToggleWaiting: (id: string) => void
   onEditText: (id: string, text: string, links?: TodoLinks) => void
   onMilestoneClick?: (id: string) => void
   dragRef?: (el: HTMLElement | null) => void
@@ -230,10 +238,11 @@ interface RowProps {
 }
 
 function TodoRow({
-  todo, priorityNumber, milestone, hideMilestone, mentions, mentionOptions,
-  onToggle, onDelete, onStar, onEditText, onMilestoneClick,
+  todo, priorityNumber, milestone, hideMilestone, mentions, mentionOptions, milestoneColor,
+  onToggle, onDelete, onStar, onToggleWaiting, onEditText, onMilestoneClick,
   dragRef, dragStyle, dragHandle,
 }: RowProps) {
+  const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(todo.text)
   const [linked, setLinked] = useState<Mention[]>(mentions)
@@ -254,7 +263,7 @@ function TodoRow({
   const cancel = () => { setText(todo.text); setLinked(mentions); setEditing(false) }
 
   return (
-    <div ref={dragRef} style={dragStyle} className={`td-todo${todo.is_featured ? ' featured' : ''}${todo.completed ? ' done' : ''}`}>
+    <div ref={dragRef} style={dragStyle} className={`td-todo${todo.is_featured ? ' featured' : ''}${todo.completed ? ' done' : ''}${todo.waiting ? ' waiting' : ''}`}>
       {dragHandle}
       <span className="pri">{priorityNumber ?? ''}</span>
       <button className={`td-cb${todo.completed ? ' checked' : ''}`} onClick={() => onToggle(todo.id)} aria-label="Toggle done">
@@ -276,15 +285,27 @@ function TodoRow({
         ) : (
           <>
             <span className="body">{todo.text}</span>
+            {mentions.map((m, i) => (
+              <MentionChip
+                key={i}
+                {...m}
+                onClick={m.id ? () => {
+                  if (m.kind === 'person') navigate(`/people/${m.id}`)
+                  if (m.kind === 'company') navigate(`/people/companies/${m.id}`)
+                  if (m.kind === 'opportunity') navigate(`/people/opportunities/${m.id}`)
+                } : undefined}
+              />
+            ))}
+            {todo.waiting && <span className="td-chip-waiting"><HourglassMedium size={10} /> on hold</span>}
             {milestone && !hideMilestone && (
               <button
                 className="td-chip-ms"
+                style={milestoneColor ? { ['--ms' as string]: milestoneColor } : undefined}
                 onClick={(e) => { e.stopPropagation(); if (todo.milestone_id && onMilestoneClick) onMilestoneClick(todo.milestone_id) }}
               >
                 {milestone}
               </button>
             )}
-            {mentions.map((m, i) => <MentionChip key={i} {...m} />)}
           </>
         )}
       </div>
@@ -296,6 +317,13 @@ function TodoRow({
           onClick={() => onStar(todo.id)}
         >
           <Star size={12} weight={todo.is_featured ? 'fill' : 'regular'} />
+        </button>
+        <button
+          className={`hold${todo.waiting ? ' on' : ''}`}
+          title={todo.waiting ? 'Remove on hold' : 'Mark on hold'}
+          onClick={() => onToggleWaiting(todo.id)}
+        >
+          <HourglassMedium size={12} weight={todo.waiting ? 'fill' : 'regular'} />
         </button>
         <button title="Delete" onClick={() => onDelete(todo.id)}><TrashSimple size={12} /></button>
       </span>
@@ -400,6 +428,7 @@ function GroupToggle({ value, onChange }: { value: GroupBy; onChange: (g: GroupB
 interface TodoListProps {
   todos: Todo[]
   milestoneName: (id: string | null) => string | null
+  milestoneColor: (id: string | null) => string | null
   milestoneTotal: (id: string) => number
   milestoneOrder: string[]
   resolveMentions: (todo: Todo) => Mention[]
@@ -409,6 +438,7 @@ interface TodoListProps {
   onToggle: (id: string) => void
   onDelete: (id: string) => void
   onStar: (id: string) => void
+  onToggleWaiting: (id: string) => void
   onEditText: (id: string, text: string, links?: TodoLinks) => void
   onAdd: (text: string, milestoneId: string | null, links?: TodoLinks) => void
   onMilestoneClick: (id: string) => void
@@ -416,8 +446,8 @@ interface TodoListProps {
 }
 
 export default function TodoList({
-  todos, milestoneName, milestoneTotal, milestoneOrder, resolveMentions, mentionOptions,
-  groupBy, onChangeGroup, onToggle, onDelete, onStar, onEditText, onAdd, onMilestoneClick, onReorder,
+  todos, milestoneName, milestoneColor, milestoneTotal, milestoneOrder, resolveMentions, mentionOptions,
+  groupBy, onChangeGroup, onToggle, onDelete, onStar, onToggleWaiting, onEditText, onAdd, onMilestoneClick, onReorder,
 }: TodoListProps) {
   const active = todos.filter(t => !t.completed)
   const done = todos.filter(t => t.completed)
@@ -471,7 +501,8 @@ export default function TodoList({
                   key={t.id} todo={t} priorityNumber={priMap.get(t.id)}
                   milestone={milestoneName(t.milestone_id)} mentions={resolveMentions(t)}
                   mentionOptions={mentionOptions}
-                  onToggle={onToggle} onDelete={onDelete} onStar={onStar} onEditText={onEditText} onMilestoneClick={onMilestoneClick}
+                  milestoneColor={milestoneColor(t.milestone_id)}
+                  onToggle={onToggle} onDelete={onDelete} onStar={onStar} onToggleWaiting={onToggleWaiting} onEditText={onEditText} onMilestoneClick={onMilestoneClick}
                 />
               ))}
             </SortableContext>
@@ -483,32 +514,40 @@ export default function TodoList({
         </>
       )}
 
-      {groupBy === 'milestone' && groups && groups.map(g => (
-        <div key={g.id}>
-          <div className={`td-group-hd${g.id === '__none__' ? ' no-ms' : ''}`}>
-            <span className="dot" />
-            <span className="name">{g.name}</span>
-            <span className="rule" />
-            <span className="count">
-              {g.todos.length}{g.total ? ` of ${g.total} here` : ` todo${g.todos.length === 1 ? '' : 's'}`}
-            </span>
-          </div>
-          {g.todos.map(t => (
-            <TodoRow
-              key={t.id} todo={t} priorityNumber={priMap.get(t.id)}
-              milestone={milestoneName(t.milestone_id)} hideMilestone={g.id !== '__none__'}
-              mentions={resolveMentions(t)}
+      {groupBy === 'milestone' && groups && (
+        groups.length === 0 ? (
+          <>
+            <div className="td-ms-empty">Nothing yet. Add the first thing that matters today.</div>
+            <AddTodo mentionOptions={mentionOptions} onAdd={(text, links) => onAdd(text, null, links)} />
+          </>
+        ) : groups.map(g => (
+          <div key={g.id}>
+            <div className={`td-group-hd${g.id === '__none__' ? ' no-ms' : ''}`}>
+              <span className="dot" />
+              <span className="name">{g.name}</span>
+              <span className="rule" />
+              <span className="count">
+                {g.todos.length}{g.total ? ` of ${g.total} here` : ` todo${g.todos.length === 1 ? '' : 's'}`}
+              </span>
+            </div>
+            {g.todos.map(t => (
+              <TodoRow
+                key={t.id} todo={t} priorityNumber={priMap.get(t.id)}
+                milestone={milestoneName(t.milestone_id)} hideMilestone={g.id !== '__none__'}
+                mentions={resolveMentions(t)}
+                mentionOptions={mentionOptions}
+                milestoneColor={milestoneColor(t.milestone_id)}
+                onToggle={onToggle} onDelete={onDelete} onStar={onStar} onToggleWaiting={onToggleWaiting} onEditText={onEditText} onMilestoneClick={onMilestoneClick}
+              />
+            ))}
+            <AddTodo
               mentionOptions={mentionOptions}
-              onToggle={onToggle} onDelete={onDelete} onStar={onStar} onEditText={onEditText} onMilestoneClick={onMilestoneClick}
+              onAdd={(text, links) => onAdd(text, g.id === '__none__' ? null : g.id, links)}
+              label={g.id === '__none__' ? 'Add a task' : `Add to ${g.name}…`}
             />
-          ))}
-          <AddTodo
-            mentionOptions={mentionOptions}
-            onAdd={(text, links) => onAdd(text, g.id === '__none__' ? null : g.id, links)}
-            label={g.id === '__none__' ? 'Add a task' : `Add to ${g.name}…`}
-          />
-        </div>
-      ))}
+          </div>
+        ))
+      )}
 
       {done.length > 0 && (
         <div style={{ marginTop: 18 }}>
@@ -522,7 +561,8 @@ export default function TodoList({
             <TodoRow
               key={t.id} todo={t} milestone={milestoneName(t.milestone_id)} mentions={resolveMentions(t)}
               mentionOptions={mentionOptions}
-              onToggle={onToggle} onDelete={onDelete} onStar={onStar} onEditText={onEditText} onMilestoneClick={onMilestoneClick}
+              milestoneColor={milestoneColor(t.milestone_id)}
+              onToggle={onToggle} onDelete={onDelete} onStar={onStar} onToggleWaiting={onToggleWaiting} onEditText={onEditText} onMilestoneClick={onMilestoneClick}
             />
           ))}
         </div>
