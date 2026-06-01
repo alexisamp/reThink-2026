@@ -63,6 +63,7 @@
 .td-todo .actions button.star.on { color: var(--featured-accent, var(--moss)); opacity: 1; }
 .td-todo:not(:hover) .actions button.star.on { opacity: 1; }
 .td-todo .text-area input { width: 100%; border: 0; background: transparent; border-bottom: 1px solid color-mix(in oklab, var(--burnham) 30%, transparent); font-size: 13.5px; color: var(--burnham); padding: 1px 0; }
+.td-todo .text-area .td-mention-wrap { flex: 1 1 260px; }
 .td-todo .grip-todo { position: absolute; left: -3px; top: 50%; transform: translateY(-50%); width: 14px; height: 22px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 0; padding: 0; color: color-mix(in oklab, var(--shuttle) 45%, transparent); cursor: grab; opacity: 0; transition: opacity 120ms ease, color 120ms ease; touch-action: none; }
 .td-todo:hover .grip-todo { opacity: 0.5; }
 .td-todo .grip-todo:hover { opacity: 1; color: var(--burnham); }
@@ -72,6 +73,32 @@
 .td-add:hover { background: color-mix(in oklab, var(--mercury) 22%, transparent); color: var(--burnham); }
 .td-add i { font-size: 13px; }
 .td-add input { flex: 1; border: 0; background: transparent; font-size: 13.5px; color: var(--burnham); }
+.td-add .td-mention-wrap { flex: 1; min-width: 0; }
+
+/* CRM mention input — Notion-like @ picker for todos */
+.td-mention-wrap { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 7px; min-width: 0; }
+.td-mention-wrap input { flex: 1 1 180px; min-width: 140px; outline: none; }
+.td-linked-mentions { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.td-linked-chip { display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; background: transparent; color: color-mix(in oklab, var(--shuttle) 65%, transparent); cursor: pointer; border-radius: 6px; }
+.td-linked-chip:hover { color: var(--burnham); }
+.td-linked-chip .td-chip-mention { pointer-events: none; }
+.td-mention-picker {
+  position: absolute; z-index: 80; left: 0; top: calc(100% + 7px); width: min(360px, calc(100vw - 36px));
+  max-height: 330px; overflow-y: auto; padding: 7px; border-radius: 10px; background: #fff;
+  box-shadow: var(--shadow-pop); border: 1px solid color-mix(in oklab, var(--burnham) 8%, transparent);
+  animation: td-fade-in 100ms ease;
+}
+.td-mention-section + .td-mention-section { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border-1); }
+.td-mention-header { padding: 4px 7px 5px; font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-3); }
+.td-mention-row { width: 100%; display: grid; grid-template-columns: 24px 1fr; align-items: center; gap: 9px; padding: 7px; border: 0; border-radius: 7px; background: transparent; text-align: left; cursor: pointer; }
+.td-mention-row:hover, .td-mention-row.active { background: color-mix(in oklab, var(--gossip) 55%, transparent); }
+.td-mention-avatar { width: 24px; height: 24px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; background: color-mix(in oklab, var(--mercury) 70%, #fff); color: var(--shuttle); font-size: 10px; font-weight: 600; }
+.td-mention-avatar.sq { border-radius: 6px; }
+.td-mention-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.td-mention-copy { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.td-mention-copy .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; color: var(--burnham); }
+.td-mention-copy .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; color: var(--fg-3); }
+.td-mention-empty { padding: 18px 10px; color: var(--fg-3); font-size: 12px; text-align: center; }
 
 /* group header (when grouped by milestone) */
 .td-group-hd { display: flex; align-items: baseline; gap: 10px; padding: 16px 0 8px; }

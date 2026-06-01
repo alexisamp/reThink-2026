@@ -23,6 +23,24 @@ function fmtClock(seconds: number): string {
 
 type GoalLite = Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'>
 interface MsTodo { id: string; milestone_id: string | null; completed: boolean }
+interface TodoLinks {
+  contactId?: string | null
+  companyId?: string | null
+  opportunityId?: string | null
+}
+interface RelationCompany {
+  id?: string | null
+  name?: string | null
+  logo_url?: string | null
+}
+interface OpportunityMentionRow {
+  id: string
+  title: string | null
+  stage?: string | null
+  type?: string | null
+  company_id?: string | null
+  company?: RelationCompany | RelationCompany[] | null
+}
 
 const GROUP_KEY = 'rethink.today.groupBy'
 const FALLBACK_COLORS = ['#3E7A4E', '#536471', '#7A3E68', '#3E5F7A', '#9A6B4F']
@@ -39,6 +57,11 @@ function formatDue(target: string | null, today: string): { label: string | null
   if (days < 0) return { label: `${-days}d ago`, urgent: true }
   if (days === 0) return { label: 'today', urgent: true }
   return { label: `${days}d`, urgent: days <= 7 }
+}
+
+function firstRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null
+  return Array.isArray(value) ? value[0] ?? null : value
 }
 
 export default function Today() {
@@ -64,6 +87,7 @@ export default function Today() {
   const [goalsMap, setGoalsMap] = useState<Map<string, GoalLite>>(new Map())
   const [goals, setGoals] = useState<GoalLite[]>([])
   const [mentions, setMentions] = useState<Map<string, Mention>>(new Map())  // key: `${kind}:${id}`
+  const [mentionOptions, setMentionOptions] = useState<Mention[]>([])
   const [groupBy, setGroupBy] = useState<GroupBy>(() => (localStorage.getItem(GROUP_KEY) as GroupBy) || 'priority')
   const [expandedMs, setExpandedMs] = useState<string | null>(null)
   const [journal, setJournal] = useState('')
@@ -82,15 +106,25 @@ export default function Today() {
     await Promise.all([
       contactIds.length
         ? supabase.from('outreach_logs').select('id, name, profile_photo_url').in('id', contactIds).eq('user_id', uid)
-            .then(({ data }) => (data ?? []).forEach(c => map.set(`person:${c.id}`, { name: c.name, kind: 'person', imageUrl: c.profile_photo_url })))
+            .then(({ data }) => (data ?? []).forEach(c => map.set(`person:${c.id}`, { id: c.id, name: c.name, kind: 'person', imageUrl: c.profile_photo_url })))
         : null,
       companyIds.length
         ? supabase.from('companies').select('id, name, logo_url').in('id', companyIds).eq('user_id', uid)
-            .then(({ data }) => (data ?? []).forEach(c => map.set(`company:${c.id}`, { name: c.name, kind: 'company', imageUrl: c.logo_url })))
+            .then(({ data }) => (data ?? []).forEach(c => map.set(`company:${c.id}`, { id: c.id, name: c.name, kind: 'company', imageUrl: c.logo_url })))
         : null,
       oppIds.length
-        ? supabase.from('opportunities').select('id, title').in('id', oppIds).eq('user_id', uid)
-            .then(({ data }) => (data ?? []).forEach(o => map.set(`opportunity:${o.id}`, { name: o.title, kind: 'opportunity' })))
+        ? supabase.from('opportunities').select('id, title, company_id, company:companies(id, name, logo_url)').in('id', oppIds).eq('user_id', uid)
+            .then(({ data }) => ((data ?? []) as OpportunityMentionRow[]).forEach(o => {
+              const company = firstRelation(o.company)
+              map.set(`opportunity:${o.id}`, {
+                id: o.id,
+                name: o.title ?? 'Opportunity',
+                kind: 'opportunity',
+                sub: company?.name ?? null,
+                imageUrl: company?.logo_url ?? null,
+                companyId: o.company_id ?? company?.id ?? null,
+              })
+            }))
         : null,
     ])
     setMentions(map)
@@ -104,19 +138,50 @@ export default function Today() {
       if (!user || cancelled) return
       setUserId(user.id)
 
-      const [todosRes, msTodosRes, msRes, goalsRes, reviewRes] = await Promise.all([
+      const [todosRes, msTodosRes, msRes, goalsRes, reviewRes, contactsRes, companiesRes, oppsRes] = await Promise.all([
         supabase.from('todos').select('*').eq('user_id', user.id).eq('date', today).order('sort_order').order('created_at'),
         supabase.from('todos').select('id, milestone_id, completed').eq('user_id', user.id).not('milestone_id', 'is', null),
         supabase.from('milestones').select('*').eq('user_id', user.id).neq('status', 'COMPLETE').order('target_date', { nullsFirst: false }),
         supabase.from('goals').select('id, text, alias, color, emoji').eq('user_id', user.id).eq('goal_type', 'ACTIVE').order('position'),
         supabase.from('reviews').select('notes').eq('user_id', user.id).eq('date', today).maybeSingle(),
+        supabase.from('outreach_logs').select('id, name, profile_photo_url, company, job_title, email').eq('user_id', user.id).order('name'),
+        supabase.from('companies').select('id, name, logo_url, domain, sector, headline').eq('user_id', user.id).order('name'),
+        supabase.from('opportunities').select('id, title, stage, type, company_id, company:companies(id, name, logo_url)').eq('user_id', user.id).order('created_at', { ascending: false }),
       ])
       if (cancelled) return
 
       const todoList = (todosRes.data ?? []) as Todo[]
+      const peopleOptions: Mention[] = (contactsRes.data ?? []).map(c => ({
+        id: c.id,
+        name: c.name,
+        kind: 'person',
+        sub: [c.job_title, c.company].filter(Boolean).join(' · ') || c.email || null,
+        imageUrl: c.profile_photo_url,
+      }))
+      const companyOptions: Mention[] = (companiesRes.data ?? []).map(c => ({
+        id: c.id,
+        name: c.name,
+        kind: 'company',
+        sub: c.domain || c.sector || c.headline || null,
+        imageUrl: c.logo_url,
+      }))
+      const oppOptions: Mention[] = ((oppsRes.data ?? []) as OpportunityMentionRow[])
+        .filter(o => o.stage !== 'won' && o.stage !== 'lost')
+        .map(o => {
+          const company = firstRelation(o.company)
+          return {
+            id: o.id,
+            name: o.title ?? 'Opportunity',
+            kind: 'opportunity',
+            sub: [company?.name, o.stage, o.type].filter(Boolean).join(' · ') || null,
+            imageUrl: company?.logo_url ?? null,
+            companyId: o.company_id ?? company?.id ?? null,
+          }
+        })
       setTodos(todoList)
       setMsTodos((msTodosRes.data ?? []) as MsTodo[])
       setMilestones((msRes.data ?? []) as Milestone[])
+      setMentionOptions([...peopleOptions, ...companyOptions, ...oppOptions])
       const gl = (goalsRes.data ?? []) as GoalLite[]
       setGoals(gl)
       setGoalsMap(new Map(gl.map(g => [g.id, g])))
@@ -222,20 +287,37 @@ export default function Today() {
     setTodos(prev => prev.map(x => x.id === id ? { ...x, is_featured: next } : x))
     await supabase.from('todos').update({ is_featured: next }).eq('id', id)
   }
-  const editTodoText = async (id: string, text: string) => {
-    setTodos(prev => prev.map(x => x.id === id ? { ...x, text } : x))
-    await supabase.from('todos').update({ text }).eq('id', id)
+  const editTodoText = async (id: string, text: string, links?: TodoLinks) => {
+    const patch: Partial<Todo> = { text }
+    if (links?.contactId !== undefined) patch.contact_id = links.contactId
+    if (links?.companyId !== undefined) patch.company_id = links.companyId
+    if (links?.opportunityId !== undefined) patch.opportunity_id = links.opportunityId
+    setTodos(prev => prev.map(x => x.id === id ? { ...x, ...patch } : x))
+    await supabase.from('todos').update({
+      text,
+      ...(links?.contactId !== undefined ? { contact_id: links.contactId } : {}),
+      ...(links?.companyId !== undefined ? { company_id: links.companyId } : {}),
+      ...(links?.opportunityId !== undefined ? { opportunity_id: links.opportunityId } : {}),
+    }).eq('id', id)
+    if (userId && links) loadMentions(userId, todos.map(x => x.id === id ? { ...x, ...patch } as Todo : x))
   }
-  const addTodo = async (text: string, milestoneId: string | null) => {
+  const addTodo = async (text: string, milestoneId: string | null, links: TodoLinks = {}) => {
     if (!userId) return
     const milestone = milestoneId ? milestones.find(m => m.id === milestoneId) : null
+    const selectedOpp = links.opportunityId ? mentionOptions.find(m => m.kind === 'opportunity' && m.id === links.opportunityId) : null
+    const companyId = links.companyId ?? selectedOpp?.companyId ?? null
     const { data } = await supabase.from('todos').insert({
       text, user_id: userId, date: today,
       milestone_id: milestoneId, goal_id: milestone?.goal_id ?? null,
+      contact_id: links.contactId ?? null,
+      company_id: companyId,
+      opportunity_id: links.opportunityId ?? null,
     }).select().single()
     if (data) {
-      setTodos(prev => [...prev, data as Todo])
+      const todo = data as Todo
+      setTodos(prev => [...prev, todo])
       if (milestoneId) setMsTodos(prev => [...prev, { id: data.id, milestone_id: milestoneId, completed: false }])
+      loadMentions(userId, [...todos, todo])
     }
   }
 
@@ -354,6 +436,7 @@ export default function Today() {
             milestoneTotal={milestoneTotal}
             milestoneOrder={milestoneOrder}
             resolveMentions={resolveMentions}
+            mentionOptions={mentionOptions}
             groupBy={groupBy}
             onChangeGroup={setGroup}
             onToggle={toggleTodo}
