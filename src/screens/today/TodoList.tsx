@@ -3,7 +3,7 @@
 // Visual contract ported from the reThink design bundle (TodoList.jsx).
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, Star, TrashSimple, Plus, CaretDown, DotsSixVertical, X, HourglassMedium } from '@phosphor-icons/react'
+import { Check, Star, TrashSimple, Plus, CaretDown, DotsSixVertical, HourglassMedium } from '@phosphor-icons/react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
 } from '@dnd-kit/core'
@@ -30,13 +30,7 @@ function mentionKey(m: Mention) {
   return `${m.kind}:${m.id ?? m.name}`
 }
 
-function findMentionTrigger(value: string, cursor: number | null): { start: number; end: number; query: string } | null {
-  const end = cursor ?? value.length
-  const left = value.slice(0, end)
-  const match = /(^|\s)@([^\s@/]*)$/.exec(left)
-  if (!match || match.index === undefined) return null
-  return { start: match.index + match[1].length, end, query: match[2] ?? '' }
-}
+const MENTION_TOKEN_RE = /\[\[mention:(person|company|opportunity):([^\]]+)\]\]/g
 
 function groupedMentionOptions(options: Mention[], query: string) {
   const q = query.trim().toLowerCase()
@@ -47,6 +41,24 @@ function groupedMentionOptions(options: Mention[], query: string) {
       .filter(m => !q || `${m.name} ${m.sub ?? ''}`.toLowerCase().includes(q))
       .slice(0, 6),
   })).filter(g => g.items.length > 0)
+}
+
+function mentionToken(m: Mention) {
+  return m.id ? `[[mention:${m.kind}:${m.id}]]` : ''
+}
+
+function hasMentionTokens(text: string) {
+  MENTION_TOKEN_RE.lastIndex = 0
+  return MENTION_TOKEN_RE.test(text)
+}
+
+function stripMentionTokens(text: string) {
+  MENTION_TOKEN_RE.lastIndex = 0
+  return text.replace(MENTION_TOKEN_RE, '').replace(/\s{2,}/g, ' ').trim()
+}
+
+function mentionByKindId(kind: Mention['kind'], id: string, mentions: Mention[]) {
+  return mentions.find(m => m.kind === kind && m.id === id) ?? null
 }
 
 function linksFromMentions(items: Mention[]): TodoLinks {
@@ -125,57 +137,229 @@ function MentionPicker({
   )
 }
 
+function createEditorChip(item: Mention) {
+  const chip = document.createElement('span')
+  chip.className = 'td-editor-chip'
+  chip.contentEditable = 'false'
+  chip.dataset.mention = 'true'
+  chip.dataset.kind = item.kind
+  chip.dataset.id = item.id ?? ''
+  chip.dataset.name = item.name
+  chip.dataset.imageUrl = item.imageUrl ?? ''
+  chip.dataset.companyId = item.companyId ?? ''
+  const initial = (item.name || '?').charAt(0).toUpperCase()
+  const squared = item.kind === 'company' || item.kind === 'opportunity'
+  const label = item.kind === 'person' ? item.name.split(' ')[0] : item.name
+  const avatar = document.createElement('span')
+  avatar.className = `av${squared ? ' sq' : ''}`
+  if (item.imageUrl) {
+    const img = document.createElement('img')
+    img.src = item.imageUrl
+    img.alt = ''
+    avatar.append(img)
+  } else {
+    avatar.textContent = initial
+  }
+  const labelEl = document.createElement('span')
+  labelEl.textContent = label
+  const remove = document.createElement('button')
+  remove.type = 'button'
+  remove.dataset.removeMention = 'true'
+  remove.textContent = '×'
+  chip.append(avatar, labelEl, remove)
+  return chip
+}
+
+function renderEditorContent(el: HTMLDivElement, text: string, linked: Mention[], mentionOptions: Mention[]) {
+  el.innerHTML = ''
+  const sourceMentions = [...linked, ...mentionOptions]
+  if (hasMentionTokens(text)) {
+    let last = 0
+    MENTION_TOKEN_RE.lastIndex = 0
+    text.replace(MENTION_TOKEN_RE, (token, kind: Mention['kind'], id: string, index: number) => {
+      if (index > last) el.append(document.createTextNode(text.slice(last, index)))
+      const mention = mentionByKindId(kind, id, sourceMentions)
+      if (mention) el.append(createEditorChip(mention))
+      last = index + token.length
+      return token
+    })
+    if (last < text.length) el.append(document.createTextNode(text.slice(last)))
+  } else {
+    el.append(document.createTextNode(text))
+    linked.forEach(m => { el.append(document.createTextNode(' ')); el.append(createEditorChip(m)) })
+  }
+}
+
+function readEditorMentions(el: HTMLDivElement): Mention[] {
+  return Array.from(el.querySelectorAll<HTMLElement>('[data-mention="true"]')).map(node => ({
+    id: node.dataset.id || undefined,
+    kind: (node.dataset.kind as Mention['kind']) || 'person',
+    name: node.dataset.name || 'Mention',
+    imageUrl: node.dataset.imageUrl || null,
+    companyId: node.dataset.companyId || null,
+  }))
+}
+
+function serializeEditor(el: HTMLDivElement): string {
+  const walk = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+    if (node instanceof HTMLElement && node.dataset.mention === 'true') {
+      const kind = node.dataset.kind as Mention['kind']
+      const id = node.dataset.id
+      return kind && id ? ` ${mentionToken({ kind, id, name: node.dataset.name || '' })} ` : ''
+    }
+    return Array.from(node.childNodes).map(walk).join('')
+  }
+  return Array.from(el.childNodes).map(walk).join('').replace(/\s{2,}/g, ' ').trim()
+}
+
+function plainEditorText(el: HTMLDivElement) {
+  const clone = el.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('[data-mention="true"]').forEach(n => n.remove())
+  return (clone.textContent ?? '').replace(/\s{2,}/g, ' ').trim()
+}
+
+function getMentionTriggerRange(root: HTMLDivElement): { range: Range; query: string } | null {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return null
+  const range = sel.getRangeAt(0)
+  if (!root.contains(range.startContainer)) return null
+  if (range.startContainer.nodeType !== Node.TEXT_NODE) return null
+  const text = range.startContainer.textContent ?? ''
+  const left = text.slice(0, range.startOffset)
+  const match = /(^|\s)@([^\s@/]*)$/.exec(left)
+  if (!match || match.index === undefined) return null
+  const triggerRange = document.createRange()
+  triggerRange.setStart(range.startContainer, match.index + match[1].length)
+  triggerRange.setEnd(range.startContainer, range.startOffset)
+  return { range: triggerRange, query: match[2] ?? '' }
+}
+
+function placeCaretAfter(node: Node) {
+  const range = document.createRange()
+  range.setStartAfter(node)
+  range.collapse(true)
+  const sel = window.getSelection()
+  sel?.removeAllRanges()
+  sel?.addRange(range)
+}
+
 function MentionTextInput({
-  value, onValueChange, linked, onLinkedChange, mentionOptions, placeholder, autoFocus,
+  value, linked, mentionOptions, placeholder, autoFocus,
   onCommit, onCancel,
 }: {
   value: string
-  onValueChange: (value: string) => void
   linked: Mention[]
-  onLinkedChange: (items: Mention[]) => void
   mentionOptions: Mention[]
   placeholder?: string
   autoFocus?: boolean
-  onCommit: () => void
+  onCommit: (value: string, linked: Mention[]) => void
   onCancel: () => void
 }) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [trigger, setTrigger] = useState<{ start: number; end: number; query: string } | null>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<Range | null>(null)
+  const [trigger, setTrigger] = useState<{ query: string } | null>(null)
   const [active, setActive] = useState(0)
   const groups = useMemo(() => groupedMentionOptions(mentionOptions, trigger?.query ?? ''), [mentionOptions, trigger])
   const flat = groups.flatMap(g => g.items)
   const activeKey = flat[active] ? mentionKey(flat[active]) : null
 
-  const refreshTrigger = (nextValue: string, cursor: number | null) => {
-    const next = findMentionTrigger(nextValue, cursor)
-    setTrigger(next)
+  useEffect(() => {
+    const el = editorRef.current
+    if (!el) return
+    renderEditorContent(el, value, linked, mentionOptions)
+    if (autoFocus) {
+      el.focus()
+      const range = document.createRange()
+      range.selectNodeContents(el)
+      range.collapse(false)
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      sel?.addRange(range)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refreshTrigger = () => {
+    const el = editorRef.current
+    if (!el) return
+    const next = getMentionTriggerRange(el)
+    triggerRef.current = next?.range ?? null
+    setTrigger(next ? { query: next.query } : null)
     setActive(0)
   }
 
   const selectMention = (item: Mention) => {
-    if (!trigger) return
-    const before = value.slice(0, trigger.start)
-    const after = value.slice(trigger.end).replace(/^\s+/, '')
-    const nextValue = `${before}${after}`.replace(/\s{2,}/g, ' ').trimStart()
-    onValueChange(nextValue)
-    onLinkedChange(prevLinked(linked, item, mentionOptions))
+    const el = editorRef.current
+    const range = triggerRef.current
+    if (!el || !range) return
+    range.deleteContents()
+    const chip = createEditorChip(item)
+    range.insertNode(chip)
+    chip.after(document.createTextNode(' '))
+    placeCaretAfter(chip.nextSibling ?? chip)
+    if (item.kind === 'opportunity' && item.companyId && !readEditorMentions(el).some(m => m.kind === 'company')) {
+      const company = mentionOptions.find(m => m.kind === 'company' && m.id === item.companyId)
+      if (company) {
+        const c = createEditorChip(company)
+        chip.after(document.createTextNode(' '), c)
+        placeCaretAfter(c)
+      }
+    }
     setTrigger(null)
-    window.requestAnimationFrame(() => inputRef.current?.focus())
+    triggerRef.current = null
+    window.requestAnimationFrame(() => el.focus())
+  }
+
+  const commit = () => {
+    const el = editorRef.current
+    if (!el) return
+    onCommit(serializeEditor(el), readEditorMentions(el))
+  }
+
+  const removePreviousChip = () => {
+    const sel = window.getSelection()
+    const el = editorRef.current
+    if (!sel || !el || sel.rangeCount === 0 || !sel.isCollapsed) return false
+    const range = sel.getRangeAt(0)
+    let prev: Node | null = null
+    if (range.startContainer.nodeType === Node.TEXT_NODE && range.startOffset === 0) prev = range.startContainer.previousSibling
+    if (range.startContainer === el && range.startOffset > 0) prev = el.childNodes[range.startOffset - 1]
+    if (prev instanceof HTMLElement && prev.dataset.mention === 'true') {
+      const after = prev.nextSibling
+      prev.remove()
+      if (after?.nodeType === Node.TEXT_NODE && after.textContent?.startsWith(' ')) after.textContent = after.textContent.slice(1)
+      return true
+    }
+    return false
   }
 
   return (
     <div className="td-mention-wrap">
-      <input
-        ref={inputRef}
-        autoFocus={autoFocus}
-        placeholder={placeholder}
-        value={value}
-        onChange={e => {
-          onValueChange(e.currentTarget.value)
-          refreshTrigger(e.currentTarget.value, e.currentTarget.selectionStart)
+      <div
+        ref={editorRef}
+        className="td-mention-editor"
+        contentEditable
+        data-placeholder={placeholder}
+        suppressContentEditableWarning
+        onInput={refreshTrigger}
+        onMouseDown={e => {
+          const target = e.target as HTMLElement
+          if (target.dataset.removeMention === 'true') {
+            e.preventDefault()
+            target.closest('[data-mention="true"]')?.remove()
+            editorRef.current?.focus()
+          }
         }}
-        onClick={e => refreshTrigger(value, e.currentTarget.selectionStart)}
-        onBlur={onCommit}
+        onClick={e => {
+          const target = e.target as HTMLElement
+          if (target.dataset.removeMention === 'true') {
+            target.closest('[data-mention="true"]')?.remove()
+            editorRef.current?.focus()
+            return
+          }
+          refreshTrigger()
+        }}
+        onBlur={commit}
         onKeyDown={e => {
           if (trigger) {
             if (e.key === 'ArrowDown') { e.preventDefault(); setActive(i => flat.length ? (i + 1) % flat.length : 0); return }
@@ -183,39 +367,14 @@ function MentionTextInput({
             if ((e.key === 'Enter' || e.key === 'Tab') && flat[active]) { e.preventDefault(); selectMention(flat[active]); return }
             if (e.key === 'Escape') { e.preventDefault(); setTrigger(null); return }
           }
-          if (e.key === 'Enter') onCommit()
+          if (e.key === 'Backspace' && removePreviousChip()) { e.preventDefault(); return }
+          if (e.key === 'Enter') { e.preventDefault(); commit() }
           if (e.key === 'Escape') onCancel()
         }}
       />
-      {linked.length > 0 && (
-        <span className="td-linked-mentions">
-          {linked.map(m => (
-            <button
-              key={mentionKey(m)}
-              type="button"
-              className="td-linked-chip"
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => onLinkedChange(linked.filter(x => mentionKey(x) !== mentionKey(m)))}
-            >
-              <MentionChip {...m} />
-              <X size={9} />
-            </button>
-          ))}
-        </span>
-      )}
       {trigger && <MentionPicker groups={groups} activeKey={activeKey} onSelect={selectMention} />}
     </div>
   )
-}
-
-function prevLinked(current: Mention[], item: Mention, options: Mention[]) {
-  const next = current.filter(m => m.kind !== item.kind)
-  next.push(item)
-  if (item.kind === 'opportunity' && item.companyId && !next.some(m => m.kind === 'company')) {
-    const company = options.find(m => m.kind === 'company' && m.id === item.companyId)
-    if (company) next.push(company)
-  }
-  return next
 }
 
 interface RowProps {
@@ -244,26 +403,55 @@ function TodoRow({
 }: RowProps) {
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
-  const [text, setText] = useState(todo.text)
   const [linked, setLinked] = useState<Mention[]>(mentions)
-  useEffect(() => setText(todo.text), [todo.text])
   useEffect(() => { if (!editing) setLinked(mentions) }, [mentions, editing])
 
-  const commit = () => {
-    if (text.trim()) {
-      const links = linksForTodoEdit(todo, mentions, linked)
+  const goToMention = (m: Mention) => {
+    if (!m.id) return
+    if (m.kind === 'person') navigate(`/people/${m.id}`)
+    if (m.kind === 'company') navigate(`/people/companies/${m.id}`)
+    if (m.kind === 'opportunity') navigate(`/people/opportunities/${m.id}`)
+  }
+
+  const renderBody = () => {
+    const allMentions = [...mentions, ...mentionOptions]
+    if (!hasMentionTokens(todo.text)) {
+      return (
+        <>
+          <span className="body">{todo.text}</span>
+          {mentions.map((m, i) => <MentionChip key={i} {...m} onClick={() => goToMention(m)} />)}
+        </>
+      )
+    }
+    const out: ReactNode[] = []
+    let last = 0
+    MENTION_TOKEN_RE.lastIndex = 0
+    todo.text.replace(MENTION_TOKEN_RE, (token, kind: Mention['kind'], id: string, index: number) => {
+      if (index > last) out.push(<span className="body" key={`t-${index}`}>{todo.text.slice(last, index)}</span>)
+      const mention = mentionByKindId(kind, id, allMentions)
+      if (mention) out.push(<MentionChip key={`${kind}:${id}:${index}`} {...mention} onClick={() => goToMention(mention)} />)
+      last = index + token.length
+      return token
+    })
+    if (last < todo.text.length) out.push(<span className="body" key="tail">{todo.text.slice(last)}</span>)
+    return out
+  }
+
+  const commit = (nextText: string, nextLinked: Mention[]) => {
+    if (stripMentionTokens(nextText) || nextLinked.length > 0) {
+      const links = linksForTodoEdit(todo, mentions, nextLinked)
       const changedLinks =
         links.contactId !== (todo.contact_id ?? null) ||
         links.companyId !== (todo.company_id ?? null) ||
         links.opportunityId !== (todo.opportunity_id ?? null)
-      if (text.trim() !== todo.text || changedLinks) onEditText(todo.id, text.trim(), links)
+      if (nextText !== todo.text || changedLinks) onEditText(todo.id, nextText, links)
     }
     setEditing(false)
   }
-  const cancel = () => { setText(todo.text); setLinked(mentions); setEditing(false) }
+  const cancel = () => { setLinked(mentions); setEditing(false) }
 
   return (
-    <div ref={dragRef} style={dragStyle} className={`td-todo${todo.is_featured ? ' featured' : ''}${todo.completed ? ' done' : ''}${todo.waiting ? ' waiting' : ''}`}>
+    <div ref={dragRef} style={dragStyle} className={`td-todo${editing ? ' editing' : ''}${todo.is_featured ? ' featured' : ''}${todo.completed ? ' done' : ''}${todo.waiting ? ' waiting' : ''}`}>
       {dragHandle}
       <span className="pri">{priorityNumber ?? ''}</span>
       <button className={`td-cb${todo.completed ? ' checked' : ''}`} onClick={() => onToggle(todo.id)} aria-label="Toggle done">
@@ -273,29 +461,16 @@ function TodoRow({
         {editing ? (
           <MentionTextInput
             autoFocus
-            value={text}
-            onValueChange={setText}
+            value={todo.text}
             linked={linked}
-            onLinkedChange={setLinked}
             mentionOptions={mentionOptions}
             placeholder="Type @ to link CRM"
-            onCommit={commit}
+            onCommit={(nextText, nextLinked) => { setLinked(nextLinked); commit(nextText, nextLinked) }}
             onCancel={cancel}
           />
         ) : (
           <>
-            <span className="body">{todo.text}</span>
-            {mentions.map((m, i) => (
-              <MentionChip
-                key={i}
-                {...m}
-                onClick={m.id ? () => {
-                  if (m.kind === 'person') navigate(`/people/${m.id}`)
-                  if (m.kind === 'company') navigate(`/people/companies/${m.id}`)
-                  if (m.kind === 'opportunity') navigate(`/people/opportunities/${m.id}`)
-                } : undefined}
-              />
-            ))}
+            {renderBody()}
             {todo.waiting && <span className="td-chip-waiting"><HourglassMedium size={10} /> on hold</span>}
             {milestone && !hideMilestone && (
               <button
@@ -355,18 +530,12 @@ function AddTodo({
   mentionOptions: Mention[]
   label?: string
 }) {
-  const [text, setText] = useState('')
   const [editing, setEditing] = useState(false)
-  const [linked, setLinked] = useState<Mention[]>([])
-  const commit = () => {
-    if (text.trim()) onAdd(text.trim(), linksFromMentions(linked))
-    setText('')
-    setLinked([])
+  const commit = (nextText: string, nextLinked: Mention[]) => {
+    if (stripMentionTokens(nextText) || nextLinked.length > 0) onAdd(nextText, linksFromMentions(nextLinked))
     setEditing(false)
   }
   const cancel = () => {
-    setText('')
-    setLinked([])
     setEditing(false)
   }
 
@@ -384,10 +553,8 @@ function AddTodo({
       <MentionTextInput
         autoFocus
         placeholder="What's next? Type @ to link CRM"
-        value={text}
-        onValueChange={setText}
-        linked={linked}
-        onLinkedChange={setLinked}
+        value=""
+        linked={[]}
         mentionOptions={mentionOptions}
         onCommit={commit}
         onCancel={cancel}

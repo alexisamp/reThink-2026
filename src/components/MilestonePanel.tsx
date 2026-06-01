@@ -19,6 +19,10 @@ import type { Milestone, Todo, Goal } from '@/types'
 const EMOJI_PRESETS = ['🎯','🧑‍💼','💰','🎒','✍️','🚀','📈','🤝','🏋️','📚','🧠','🌱','🏡','❤️','🎨','🔧','📞','✈️','🏆','⚡']
 const COLOR_PRESETS = ['#4F5BD5','#2A8C82','#7C5CBF','#C16A4F','#C9943F','#3E7A4E','#3E5F7A','#7A3E68','#C2566E','#536471']
 
+function cleanTodoText(text: string) {
+  return text.replace(/\[\[mention:(person|company|opportunity):[^\]]+\]\]/g, '').replace(/\s{2,}/g, ' ').trim()
+}
+
 interface MilestonePanelProps {
   milestone: Milestone | null
   goal: Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'> | null
@@ -139,7 +143,7 @@ function SubtaskRow({ todo, today, onToggle, onText, onDate, onAddToday, onDelet
         {editing
           ? <input autoFocus value={text} onChange={e => setText(e.target.value)} onBlur={commit}
               onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setText(todo.text); setEditing(false) } }} />
-          : todo.text}
+          : cleanTodoText(todo.text)}
       </span>
       <div className="date-cell">
         {isToday

@@ -3,6 +3,10 @@ import { X, Check, ArrowRight, Moon } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Todo } from '@/types'
 
+function cleanTodoText(text: string) {
+  return text.replace(/\[\[mention:(person|company|opportunity):[^\]]+\]\]/g, '').replace(/\s{2,}/g, ' ').trim()
+}
+
 interface EndOfDayDrawerProps {
   todos: Todo[]
   today: string
@@ -20,6 +24,7 @@ export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClos
   const [goalDone, setGoalDone] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const dayLabel = new Date(today + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   useEffect(() => {
     // Default: carry all pending todos
@@ -84,13 +89,13 @@ export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClos
       <div className="td-drawer-bg" onClick={onClose} />
 
       {/* Drawer */}
-      <div className="td-day-drawer">
+      <div className="td-day-drawer close-day">
         {/* Header */}
         <div className="td-day-drawer-hd">
           <span className="icon"><Moon size={15} weight="fill" /></span>
           <div>
             <h2>Close the day</h2>
-            <p>Review today and carry forward what still matters.</p>
+            <p>{dayLabel}</p>
           </div>
           <button className="close" onClick={onClose} title="Close"><X size={15} /></button>
         </div>
@@ -122,7 +127,7 @@ export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClos
                       onChange={e => setCarry(prev => ({ ...prev, [todo.id]: e.target.checked }))}
                     />
                     <span className={carry[todo.id] ? '' : 'skip'}>
-                      {todo.text}
+                      {cleanTodoText(todo.text)}
                     </span>
                   </label>
                 ))}
@@ -160,7 +165,6 @@ export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClos
               onChange={e => setTomorrowObjective(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleClose()}
               placeholder="What will make tomorrow a win?"
-              className="w-full text-sm text-burnham border-b border-mercury focus:border-burnham outline-none bg-transparent pb-1 placeholder-mercury transition-colors"
             />
           </div>
 

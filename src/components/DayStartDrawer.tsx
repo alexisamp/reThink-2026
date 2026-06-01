@@ -14,6 +14,7 @@ export default function DayStartDrawer({ today, userId, initialGoal, onClose, on
   const [goal, setGoal] = useState(initialGoal ?? '')
   const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const dayLabel = new Date(today + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   useEffect(() => {
     setGoal(initialGoal ?? '')
@@ -36,24 +37,26 @@ export default function DayStartDrawer({ today, userId, initialGoal, onClose, on
   return (
     <>
       <div className="td-drawer-bg" onClick={onClose} />
-      <div className="td-day-drawer">
+      <div className="td-day-drawer start">
         <div className="td-day-drawer-hd">
           <span className="icon"><Sun size={15} weight="fill" /></span>
           <div>
             <h2>Start the day</h2>
-            <p>Set the one thing that makes today count.</p>
+            <p>{dayLabel}</p>
           </div>
           <button className="close" onClick={onClose} title="Close"><X size={15} /></button>
         </div>
         <div className="td-day-drawer-body">
-          <label>Today's goal</label>
-          <input
-            ref={inputRef}
-            value={goal}
-            onChange={e => setGoal(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onClose() }}
-            placeholder="What needs to be true by tonight?"
-          />
+          <div className="td-day-block primary">
+            <label>One thing</label>
+            <input
+              ref={inputRef}
+              value={goal}
+              onChange={e => setGoal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onClose() }}
+              placeholder="What needs to be true by tonight?"
+            />
+          </div>
         </div>
         <div className="td-day-drawer-foot">
           <button onClick={save} disabled={saving || !goal.trim()}>

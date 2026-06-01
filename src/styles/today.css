@@ -44,6 +44,7 @@
 /* ── Todo rows (main list — the HERO) ──────────────────────── */
 .td-todo { display: flex; align-items: center; gap: 10px; padding: 10px 10px; margin: 0 -10px; border-radius: 8px; transition: background 120ms ease; position: relative; }
 .td-todo:hover { background: color-mix(in oklab, var(--mercury) 22%, transparent); }
+.td-todo.editing { background: color-mix(in oklab, var(--moss) 5%, transparent); box-shadow: inset 2px 0 0 color-mix(in oklab, var(--moss) 72%, transparent); }
 .td-todo.featured { background: color-mix(in oklab, var(--featured-accent, var(--moss)) 8%, transparent); box-shadow: inset 2px 0 0 var(--featured-accent, var(--moss)); }
 .td-todo.waiting { background: color-mix(in oklab, var(--shuttle) 6%, transparent); }
 .td-todo.done .body { text-decoration: line-through; color: var(--fg-3); }
@@ -85,8 +86,16 @@
 .td-add .td-mention-wrap { flex: 1; min-width: 0; }
 
 /* CRM mention input — Notion-like @ picker for todos */
-.td-mention-wrap { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 7px; min-width: 0; }
-.td-mention-wrap input { flex: 1 1 180px; min-width: 140px; outline: none; }
+.td-mention-wrap { position: relative; display: block; min-width: 0; width: 100%; }
+.td-mention-editor { width: 100%; min-width: 0; outline: none; border: 0; background: transparent; padding: 0; font-size: 13.5px; color: color-mix(in oklab, var(--burnham) 90%, transparent); line-height: 1.45; letter-spacing: -0.005em; cursor: text; white-space: pre-wrap; overflow-wrap: anywhere; }
+.td-mention-editor:empty::before { content: attr(data-placeholder); color: color-mix(in oklab, var(--shuttle) 42%, transparent); pointer-events: none; }
+.td-editor-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 4px 1px 6px; margin: 0 2px; border: 1px solid color-mix(in oklab, var(--midnight) 9%, transparent); background: color-mix(in oklab, var(--midnight) 4%, transparent); border-radius: 6px; font-size: 10.5px; font-weight: 500; color: color-mix(in oklab, var(--midnight) 74%, transparent); line-height: 1.25; vertical-align: 1px; user-select: none; }
+.td-editor-chip .av { width: 13px; height: 13px; border-radius: 999px; background: var(--mercury); display: inline-flex; align-items: center; justify-content: center; font-size: 7px; font-weight: 600; color: color-mix(in oklab, var(--shuttle) 80%, transparent); overflow: hidden; }
+.td-editor-chip .av.sq { border-radius: 3px; }
+.td-editor-chip .av img { width: 100%; height: 100%; object-fit: cover; }
+.td-editor-chip button { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; margin: 0 0 0 1px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: color-mix(in oklab, var(--shuttle) 45%, transparent); font-size: 11px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 100ms ease, background 100ms ease, color 100ms ease; }
+.td-editor-chip:hover button { opacity: 1; }
+.td-editor-chip button:hover { background: color-mix(in oklab, var(--shuttle) 12%, transparent); color: var(--burnham); }
 .td-linked-mentions { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .td-linked-chip { display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; background: transparent; color: color-mix(in oklab, var(--shuttle) 65%, transparent); cursor: pointer; border-radius: 6px; }
 .td-linked-chip:hover { color: var(--burnham); }
@@ -111,21 +120,25 @@
 
 /* Start/end day pulse drawer */
 .td-day-drawer {
-  position: fixed; top: 0; right: 0; bottom: 0; z-index: 215; width: 380px; max-width: 92vw;
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 215; width: 420px; max-width: 92vw;
   background: #fff; border-left: 1px solid var(--border-2); box-shadow: var(--shadow-pop);
   display: flex; flex-direction: column; animation: td-slide-in 220ms cubic-bezier(0.22,1,0.36,1);
 }
 @keyframes td-slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
-.td-day-drawer-hd { display: flex; align-items: flex-start; gap: 10px; padding: 18px 20px 16px; border-bottom: 1px solid var(--border-1); background: color-mix(in oklab, var(--moss) 9%, #fff); }
-.td-day-drawer-hd .icon { width: 26px; height: 26px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in oklab, var(--moss) 15%, #fff); color: var(--moss); flex-shrink: 0; }
-.td-day-drawer-hd h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--burnham); letter-spacing: -0.01em; }
-.td-day-drawer-hd p { margin: 2px 0 0; color: var(--shuttle); font-size: 11.5px; line-height: 1.35; }
+.td-day-drawer-hd { display: flex; align-items: flex-start; gap: 11px; padding: 19px 20px 17px; border-bottom: 1px solid color-mix(in oklab, var(--moss) 16%, transparent); background: color-mix(in oklab, var(--moss) 11%, #fff); }
+.td-day-drawer.close-day .td-day-drawer-hd { background: color-mix(in oklab, var(--burnham) 5%, #fff); border-bottom-color: color-mix(in oklab, var(--burnham) 9%, transparent); }
+.td-day-drawer-hd .icon { width: 28px; height: 28px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in oklab, var(--moss) 17%, #fff); color: var(--moss); flex-shrink: 0; }
+.td-day-drawer.close-day .td-day-drawer-hd .icon { background: color-mix(in oklab, var(--burnham) 8%, #fff); color: var(--burnham); }
+.td-day-drawer-hd h2 { margin: 0; font-family: var(--font-display); font-size: 17px; font-weight: 500; color: var(--burnham); letter-spacing: -0.02em; line-height: 1.1; }
+.td-day-drawer-hd p { margin: 5px 0 0; font-family: var(--font-mono); color: var(--fg-3); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.35; }
 .td-day-drawer-hd .close { margin-left: auto; border: 0; background: transparent; color: color-mix(in oklab, var(--shuttle) 70%, transparent); border-radius: 6px; padding: 5px; display: inline-flex; cursor: pointer; }
 .td-day-drawer-hd .close:hover { background: color-mix(in oklab, var(--mercury) 45%, transparent); color: var(--burnham); }
-.td-day-drawer-body { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 20px; }
-.td-day-block { display: flex; flex-direction: column; gap: 9px; }
+.td-day-drawer-body { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 0; }
+.td-day-block { display: flex; flex-direction: column; gap: 9px; padding: 15px 0 17px; border-bottom: 1px solid var(--border-1); }
+.td-day-block:first-child { padding-top: 2px; }
+.td-day-block.primary { border-bottom: 0; padding-top: 4px; }
 .td-day-block label, .td-day-drawer-body > label { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--fg-3); }
-.td-day-drawer-body input[type="text"], .td-day-drawer-body > input, .td-day-block > input { width: 100%; border: 0; border-bottom: 1px solid color-mix(in oklab, var(--burnham) 24%, transparent); background: transparent; padding: 3px 0 6px; color: var(--burnham); font-size: 13.5px; outline: none; }
+.td-day-drawer-body input[type="text"], .td-day-drawer-body > input, .td-day-block > input { width: 100%; border: 0; border-bottom: 1px solid color-mix(in oklab, var(--burnham) 24%, transparent); background: transparent; padding: 3px 0 7px; color: var(--burnham); font-size: 14px; outline: none; }
 .td-day-goal-text { margin: 0; color: var(--burnham); font-size: 13px; line-height: 1.45; }
 .td-day-segment { display: inline-flex; align-items: center; align-self: flex-start; gap: 2px; padding: 2px; border-radius: 8px; background: color-mix(in oklab, var(--mercury) 32%, transparent); }
 .td-day-segment button { border: 0; background: transparent; border-radius: 6px; padding: 5px 9px; color: var(--shuttle); font-size: 11px; cursor: pointer; }
@@ -140,8 +153,8 @@
 .td-energy-grid button { height: 28px; border-radius: 7px; border: 1px solid var(--border-1); background: #fff; color: var(--shuttle); font-size: 10px; cursor: pointer; transition: all 120ms ease; }
 .td-energy-grid button:hover { border-color: color-mix(in oklab, var(--moss) 35%, transparent); }
 .td-energy-grid button.on { background: color-mix(in oklab, var(--moss) 14%, #fff); border-color: color-mix(in oklab, var(--moss) 35%, transparent); color: var(--burnham); font-weight: 600; }
-.td-day-drawer-foot { padding: 14px 20px 18px; border-top: 1px solid var(--border-1); }
-.td-day-drawer-foot button { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 8px; background: var(--burnham); color: #fff; padding: 10px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: opacity 120ms ease; }
+.td-day-drawer-foot { padding: 14px 20px 18px; border-top: 1px solid var(--border-1); display: flex; justify-content: flex-end; }
+.td-day-drawer-foot button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 8px; background: var(--burnham); color: #fff; padding: 9px 13px; min-width: 128px; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 120ms ease; }
 .td-day-drawer-foot button:disabled { opacity: 0.55; cursor: default; }
 
 /* group header (when grouped by milestone) */
