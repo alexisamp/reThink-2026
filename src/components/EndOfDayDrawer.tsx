@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { X, Check, ArrowRight, Moon } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Todo } from '@/types'
@@ -13,11 +13,20 @@ interface EndOfDayDrawerProps {
   userId: string
   dailyGoal?: string | null
   onClose: () => void
-  onComplete: (result: { tomorrowGoal?: string; removedTodoIds: string[] }) => void
+  onComplete: (result: {
+    tomorrowGoal?: string
+    removedTodoIds: string[]
+    carriedCount: number
+    clearedCount: number
+    completedCount: number
+    pendingCount: number
+    energyLevel: number | null
+    goalDone: boolean | null
+  }) => void
 }
 
 export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClose, onComplete }: EndOfDayDrawerProps) {
-  const pending = todos.filter(t => !t.completed)
+  const pending = useMemo(() => todos.filter(t => !t.completed), [todos])
   const [carry, setCarry] = useState<Record<string, boolean>>({})
   const [tomorrowObjective, setTomorrowObjective] = useState('')
   const [energyLevel, setEnergyLevel] = useState<number | null>(null)
@@ -32,7 +41,7 @@ export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClos
     pending.forEach(t => { init[t.id] = true })
     setCarry(init)
     setTimeout(() => inputRef.current?.focus(), 100)
-  }, [])
+  }, [pending])
 
   const tomorrow = (() => {
     const [y, m, day] = today.split('-').map(Number)
@@ -43,13 +52,17 @@ export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClos
   const handleClose = async () => {
     setSaving(true)
     let removedTodoIds: string[] = []
+    let carriedCount = 0
+    let clearedCount = 0
     try {
       // Carry selected todos to tomorrow
       const toCarry = pending.filter(t => carry[t.id]).map(t => t.id)
+      carriedCount = toCarry.length
       if (toCarry.length > 0) {
         await supabase.from('todos').update({ date: tomorrow }).in('id', toCarry)
       }
       const toClear = pending.filter(t => !carry[t.id]).map(t => t.id)
+      clearedCount = toClear.length
       if (toClear.length > 0) {
         await supabase.from('todos').update({ date: null }).in('id', toClear)
       }
@@ -67,19 +80,34 @@ export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClos
         user_id: userId,
         date: today,
         tomorrow_reviewed: true,
+        day_locked_at: new Date().toISOString(),
         ...(energyLevel !== null ? { energy_level: energyLevel } : {}),
         ...(goalDone !== null ? { one_thing_done: goalDone } : {}),
       }
       const { error } = await supabase.from('reviews').upsert(reviewPayload, { onConflict: 'user_id,date' })
       if (error && goalDone !== null) {
-        const { one_thing_done: _ignored, ...fallback } = reviewPayload
-        await supabase.from('reviews').upsert(fallback, { onConflict: 'user_id,date' })
+        await supabase.from('reviews').upsert({
+          user_id: userId,
+          date: today,
+          tomorrow_reviewed: true,
+          day_locked_at: reviewPayload.day_locked_at,
+          ...(energyLevel !== null ? { energy_level: energyLevel } : {}),
+        }, { onConflict: 'user_id,date' })
       }
     } catch (err) {
       console.error('End of day save failed:', err)
     } finally {
       setSaving(false)
-      onComplete({ tomorrowGoal: tomorrowObjective.trim() || undefined, removedTodoIds })
+      onComplete({
+        tomorrowGoal: tomorrowObjective.trim() || undefined,
+        removedTodoIds,
+        carriedCount,
+        clearedCount,
+        completedCount: todos.filter(t => t.completed).length,
+        pendingCount: pending.length,
+        energyLevel,
+        goalDone,
+      })
     }
   }
 

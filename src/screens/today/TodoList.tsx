@@ -17,6 +17,7 @@ import type { GroupBy, Mention, TodoMilestoneOption } from './types'
 import {
   editorToContentSegments,
   linksFromMentions as linksFromMentionItems,
+  normalizeEditorSegments,
   plainTextFromEditorSegments,
   segmentsForTodo,
   type EditorSegment,
@@ -41,6 +42,21 @@ function linksForTodoEdit(todo: Todo, originalMentions: Mention[], linked: Menti
     companyId: originalMentions.some(m => m.kind === 'company') || !todo.company_id ? selected.companyId : todo.company_id,
     opportunityId: originalMentions.some(m => m.kind === 'opportunity') || !todo.opportunity_id ? selected.opportunityId : todo.opportunity_id,
   }
+}
+
+function stripTrailingMilestoneCommand(segments: EditorSegment[]) {
+  const next = segments.map(segment => segment.type === 'text' ? { ...segment } : segment)
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    const segment = next[i]
+    if (segment.type !== 'text') break
+    const stripped = segment.text.replace(/(^|\s)\/[^\s@/]*\s*$/, '$1')
+    if (stripped !== segment.text) {
+      segment.text = stripped
+      break
+    }
+    if (segment.text.trim()) break
+  }
+  return normalizeEditorSegments(next)
 }
 
 function MilestoneOptionRow({
@@ -195,14 +211,15 @@ function TodoRow({
         ? <span className="body" key={`t-${index}`}>{segment.text}</span>
         : segment.type === 'mention'
           ? <RichMentionChip key={`m-${index}-${segment.mention.kind}-${segment.mention.id}`} mention={segment.mention} onClick={() => goToMention(segment.mention)} />
-          : <FileChip key={`f-${index}-${segment.file.id}`} file={segment.file} onClick={() => openTodoFile(segment.file)} />
+          : <FileChip key={`f-${index}-${segment.file.id}`} file={segment.file} onClick={() => { void openTodoFile(segment.file) }} />
     ))
   }
 
   const commit = (nextSegments: EditorSegment[]) => {
-    const nextLinked = nextSegments.filter((s): s is { type: 'mention'; mention: Mention } => s.type === 'mention').map(s => s.mention)
-    const nextText = plainTextFromEditorSegments(nextSegments)
-    const contentSegments = editorToContentSegments(nextSegments)
+    const cleanSegments = stripTrailingMilestoneCommand(nextSegments)
+    const nextLinked = cleanSegments.filter((s): s is { type: 'mention'; mention: Mention } => s.type === 'mention').map(s => s.mention)
+    const nextText = plainTextFromEditorSegments(cleanSegments)
+    const contentSegments = editorToContentSegments(cleanSegments)
     if (nextText || nextLinked.length > 0) {
       setSegmentPreview({
         todoId: todo.id,
@@ -210,7 +227,7 @@ function TodoRow({
         baseContentKey: JSON.stringify(todo.content_segments ?? []),
         text: nextText,
         contentKey: JSON.stringify(contentSegments),
-        segments: nextSegments,
+        segments: cleanSegments,
       })
       const links = linksForTodoEdit(todo, mentions, nextLinked)
       const changedLinks =
@@ -328,9 +345,10 @@ function AddTodo({
     setSelectedMilestoneId(id)
   }
   const commit = (segments: EditorSegment[]) => {
-    const linked = segments.filter((s): s is { type: 'mention'; mention: Mention } => s.type === 'mention').map(s => s.mention)
-    const text = plainTextFromEditorSegments(segments)
-    const contentSegments = editorToContentSegments(segments)
+    const cleanSegments = stripTrailingMilestoneCommand(segments)
+    const linked = cleanSegments.filter((s): s is { type: 'mention'; mention: Mention } => s.type === 'mention').map(s => s.mention)
+    const text = plainTextFromEditorSegments(cleanSegments)
+    const contentSegments = editorToContentSegments(cleanSegments)
     if (text || linked.length > 0) {
       onAdd(text, selectedMilestoneRef.current, contentSegments, linksFromMentions(linked))
       selectMilestone(null)

@@ -1,12 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  House, CalendarBlank, Strategy, ChartPie, Repeat, BookOpen, Timer, Check,
-  Target, Flag, CheckSquare, Lightbulb, Eye, Scales, Trophy, Question as PhQuestion,
-  Plus,
+  House, BookOpen, Timer, Check, Target, Flag, CheckSquare, Plus, Users, ChartBar, FileText,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
-import type { Goal, Milestone, Todo, Capture, CaptureType, TodoMentionKind } from '@/types'
+import type { Goal, Milestone, Todo, TodoMentionKind } from '@/types'
 import type { Mention } from '@/screens/today/types'
 import {
   createCrmObject,
@@ -18,6 +16,8 @@ import {
   pathForMention,
   rankCrmObjects,
 } from '@/lib/crmObjects'
+import { openTodoFile } from '@/lib/filePills'
+import { driveFileToSegment, searchDriveFiles, type DriveFileResult } from '@/lib/googleDrive'
 
 interface Command {
   id: string
@@ -37,30 +37,20 @@ interface CommandPaletteProps {
   open: boolean
   onClose: () => void
   onStartTimer?: () => void
-  onOpenCapture?: (capture: Capture) => void
-}
-
-const CAPTURE_ICONS: Record<CaptureType, React.ElementType> = {
-  idea: Lightbulb,
-  learning: BookOpen,
-  reflection: Eye,
-  decision: Scales,
-  win: Trophy,
-  question: PhQuestion,
 }
 
 interface SearchResult {
   id: string
   label: string
   sub?: string
-  group: 'goal' | 'milestone' | 'todo' | 'capture' | 'person' | 'company' | 'opportunity' | 'create'
+  group: 'goal' | 'milestone' | 'todo' | 'capture' | 'person' | 'company' | 'opportunity' | 'drive' | 'create'
   Icon: React.ElementType
   action: () => void
   score: number
   badge?: string
 }
 
-export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapture }: CommandPaletteProps) {
+export default function CommandPalette({ open, onClose, onStartTimer }: CommandPaletteProps) {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -68,8 +58,8 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
   const [goals, setGoals] = useState<Goal[]>([])
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [recentTodos, setRecentTodos] = useState<Todo[]>([])
-  const [captures, setCaptures] = useState<Capture[]>([])
   const [crmOptions, setCrmOptions] = useState<Mention[]>([])
+  const [driveResults, setDriveResults] = useState<DriveFileResult[]>([])
   const [userId, setUserId] = useState<string | null>(null)
 
   // Resolve userId once
@@ -111,14 +101,6 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
       .gte('date', weekAgo)
       .then(({ data }) => setRecentTodos((data as Todo[]) ?? []))
 
-    // Recent captures (last 30 days) — table may not exist yet, silently ignore
-    const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
-    supabase.from('captures')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('captured_date', monthAgo)
-      .then(({ data }) => setCaptures((data as Capture[]) ?? []))
-
     Promise.all([
       supabase.from('outreach_logs').select('id, name, profile_photo_url, company, job_title, email').eq('user_id', userId).order('name'),
       supabase.from('companies').select('id, name, logo_url, domain, sector, headline').eq('user_id', userId).order('name'),
@@ -132,6 +114,28 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
       setCrmOptions([...people, ...companies, ...opps])
     })
   }, [open, userId])
+
+  useEffect(() => {
+    if (!open || query.trim().length < 2) {
+      const reset = window.setTimeout(() => setDriveResults([]), 0)
+      return () => window.clearTimeout(reset)
+    }
+    let cancelled = false
+    const q = query.trim()
+    const timer = window.setTimeout(() => {
+      searchDriveFiles(q, 6)
+        .then(files => {
+          if (!cancelled) setDriveResults(files)
+        })
+        .catch(() => {
+          if (!cancelled) setDriveResults([])
+        })
+    }, 180)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [open, query])
 
   const markMilestoneComplete = async (id: string) => {
     if (!userId) return
@@ -164,11 +168,10 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
 
   const navCommands: Command[] = [
     { id: 'today',    label: 'Go to Today',         Icon: House,         shortcut: '⌘1', group: 'nav', action: () => { navigate('/today');        onClose() } },
-    { id: 'monthly',  label: 'Go to Monthly',        Icon: CalendarBlank, shortcut: '⌘2', group: 'nav', action: () => { navigate('/monthly');      onClose() } },
-    { id: 'dashboard',label: 'Go to Dashboard',      Icon: ChartPie,      shortcut: '⌘3', group: 'nav', action: () => { navigate('/dashboard');    onClose() } },
-    { id: 'strategy', label: 'Go to Strategy',       Icon: Strategy,                      group: 'nav', action: () => { navigate('/strategy');     onClose() } },
-    { id: 'review',   label: 'Go to Weekly Review',  Icon: Repeat,                        group: 'nav', action: () => { navigate('/weekly-review'); onClose() } },
-    { id: 'library',  label: 'Go to Library',        Icon: BookOpen,                      group: 'nav', action: () => { navigate('/library');       onClose() } },
+    { id: 'review',   label: 'Go to Review Queue',   Icon: CheckSquare,   shortcut: '⌘2', group: 'nav', action: () => { navigate('/review');       onClose() } },
+    { id: 'plan',     label: 'Go to Plan',           Icon: ChartBar,      shortcut: '⌘3', group: 'nav', action: () => { navigate('/plan');         onClose() } },
+    { id: 'people',   label: 'Go to People',         Icon: Users,                         group: 'nav', action: () => { navigate('/people');       onClose() } },
+    { id: 'playbook', label: 'Go to Playbook',       Icon: BookOpen,      shortcut: '⌘4', group: 'nav', action: () => { navigate('/playbook');     onClose() } },
     { id: 'timer',    label: 'Start Focus Timer',    Icon: Timer,                         group: 'nav', action: () => { navigate('/today'); onStartTimer?.(); onClose() } },
   ]
 
@@ -203,7 +206,7 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
         Icon: Target,
         score,
         badge: 'Goal',
-        action: () => { navigate('/strategy'); onClose() },
+        action: () => { navigate('/plan'); onClose() },
       }))
 
     milestones
@@ -234,20 +237,6 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
         action: () => { navigate('/'); onClose() },
       }))
 
-    captures
-      .map(c => ({ item: c, score: scoreText(`${c.title} ${c.body ?? ''}`, q, 34) }))
-      .filter(x => x.score > 0)
-      .forEach(({ item, score }) => results.push({
-        id: `capture:${item.id}`,
-        label: item.title,
-        sub: item.type,
-        group: 'capture',
-        Icon: CAPTURE_ICONS[item.type as CaptureType] ?? Lightbulb,
-        score,
-        badge: 'Capture',
-        action: () => { onOpenCapture?.(item); onClose() },
-      }))
-
     rankCrmObjects(crmOptions, q, new Set(), 12).forEach((mention, index) => results.push({
       id: `${mention.kind}:${mention.id}`,
       label: mention.name,
@@ -257,6 +246,20 @@ export default function CommandPalette({ open, onClose, onStartTimer, onOpenCapt
       score: 84 - index,
       badge: mention.kind === 'person' ? 'Person' : mention.kind === 'company' ? 'Company' : 'Opportunity',
       action: () => { navigate(pathForMention(mention)); onClose() },
+    }))
+
+    driveResults.forEach((file, index) => results.push({
+      id: `drive:${file.id}`,
+      label: file.name,
+      sub: file.modifiedTime ? `Modified ${new Date(file.modifiedTime).toLocaleDateString()}` : undefined,
+      group: 'drive',
+      Icon: FileText,
+      score: 76 - index,
+      badge: 'Drive',
+      action: () => {
+        void openTodoFile(driveFileToSegment(file))
+        onClose()
+      },
     }))
 
     if (!hasStrongCrmMatch(crmOptions, q)) {

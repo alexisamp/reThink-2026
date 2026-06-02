@@ -1,73 +1,54 @@
-# React + TypeScript + Vite
+# reThink 2026
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Personal operating system for daily focus, relationship work, planning, and positioning.
 
-Currently, two official plugins are available:
+## Product Map
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- `Today` — daily cockpit: one thing, todos, milestones, next steps, journal, and review summary.
+- `Review` — Notion and Conversations suggestions are accepted, edited, or dismissed before they write canonical data.
+- `People` / `Companies` / `Opportunities` — relationship CRM and active pipeline.
+- `Lists` — contextual relationship funnels.
+- `Plan` — weekly and monthly planning surface.
+- `Playbook` — operational story bank, value bank, scripts, positioning, and LLM context.
 
-## React Compiler
+Legacy planning screens are intentionally hidden and redirected to `Plan` while the code remains in place for one release cycle.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Development
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Build:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run build
 ```
+
+Desktop wrapper:
+
+```bash
+npm run tauri dev
+```
+
+## Environment
+
+Create `.env.local` with:
+
+```bash
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+VITE_GEMINI_API_KEY=...      # optional
+VITE_ATTIO_API_KEY=...       # optional
+```
+
+## Database
+
+Supabase migrations live in `supabase/migrations`.
+
+Current notable migration:
+
+- `0005_review_queue.sql` adds `review_items` with RLS and duplicate prevention for external-source suggestions.
+
+Apply migrations before using Review Queue in a fresh environment.

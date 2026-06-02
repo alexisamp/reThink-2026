@@ -79,6 +79,7 @@ Everything serves exactly three life goals:
 ⌘K  Quick actions          🔍
 ─────────────────────────────
 ◎  Today                    ← daily cockpit
+☑  Review                   ← external-source review queue
 📋  Playbook                 ← positioning + stories
 
 ▽  CRM                    ⚙
@@ -125,6 +126,7 @@ WhatsApp · LinkedIn · Exit5 · X(Twitter). Keyboard switch ⌘1/⌘2/⌘3/⌘4
 - **D. Habits** — daily checkboxes, tagged to goal. Streak count visible. No grades.
 
 **Right sidebar (collapsible):**
+- **Review:** top pending Notion/Conversations suggestions with quick accept/dismiss and link to Review Queue.
 - **Pulse:** energy slider 1-10 + summary (habits done, todos completed, conversations logged).
 - **Journal:** free-form notes.
 - **Next Steps:** pending from recent `interactions WHERE next_step_owner='me' AND next_step_date <= today`. Shows person + text + days since conversation. Actions: mark done / snooze.
@@ -179,6 +181,18 @@ No grades, no friction logs, no 5-step wizards.
 ### 4.4 PLAYBOOK — positioning toolkit
 
 See Section 8 for full content. Summary: markdown-first, quarterly-update discipline, exportable as `.md` to feed any LLM.
+
+### 4.5 REVIEW QUEUE — external-source gate
+
+**Purpose:** Notion and Conversations suggestions do not become canonical relationship data until Alexis reviews them.
+
+**Sources v1:** `notion`, `conversations`.
+
+**Targets v1:** `contact_fact`, `interaction`, `next_step`, `todo`, `value_log`, `playbook_entry`.
+
+**Actions:** accept, edit payload + accept, dismiss, assign/merge into an existing contact, open source URL.
+
+Accepted items write into canonical tables. Dismissed items remain in `review_items` for audit. Duplicate prevention is enforced by `(user_id, source, source_external_id)` when an external id is present.
 
 ---
 
@@ -593,6 +607,13 @@ Same approach — embedded webview, shared session, DOM-scraping via preload scr
   - PersonDetail overview: new `PulseCard` (days since + strength bar + Jacob matrix action), Key Facts card, Active in Lists card
   - Density polish on People/Companies/Opportunities tables (padding, font-sizes, smaller headers)
 
+- **reThink v0.1.126** — Post-Notion product cleanup + Review Queue v1
+  - New `/review` screen backed by `review_items`
+  - Review accepts into canonical tables: todos, interactions, contact facts, value logs, playbook entries
+  - Today right rail shows top pending review items
+  - Command palette exposes only canonical surfaces
+  - Legacy planning routes redirect to `/plan`
+
 - **Conversations v0.0.24-26** — LinkedIn deep-scrape, company auto-upsert + link, merge contacts UI
 
 ### 10.2 Jacob CRM phases
@@ -687,6 +708,7 @@ Features being removed or already deprecated. Each entry gets removed from this 
 | Item | Replacement | Removal trigger |
 |---|---|---|
 | `/people/classify` screen | Inline bulk actions in People table | ✅ Removed 2026-04-22 (v0.1.125) |
+| `/monthly`, `/dashboard`, `/strategy`, `/weekly-review`, `/library`, `/year`, `/milestone-plan` visible screens | `/plan` | Hidden + redirected 2026-06-02; delete after one stable release |
 | `outreach_logs.status` (PROSPECT/CONNECTED/...) | `list_memberships.current_stage` | When no UI reads it anymore |
 | `profiles.contact_funnel_config` jsonb | Per-list stages in `lists.stages` | When no UI reads it anymore |
 | Chrome extension (standalone) | Conversations native app | When Conversations reaches parity on capture flows |
