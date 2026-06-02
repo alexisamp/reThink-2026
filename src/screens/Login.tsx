@@ -1,11 +1,18 @@
 import { supabase } from '@/lib/supabase'
+import { GOOGLE_OAUTH_SCOPES_STRING, markGoogleDriveScopeRequested } from '@/lib/googleDrive'
 
 export default function Login() {
-  const signInWithGoogle = () =>
-    supabase.auth.signInWithOAuth({
+  const signInWithGoogle = () => {
+    markGoogleDriveScopeRequested()
+    return supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: {
+        redirectTo: window.location.origin,
+        scopes: GOOGLE_OAUTH_SCOPES_STRING,
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+      },
     })
+  }
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center px-6">

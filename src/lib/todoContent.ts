@@ -13,9 +13,16 @@ export const MENTION_CLIPBOARD = 'application/x-rethink-mention-segments'
 export type EditorSegment =
   | { type: 'text'; text: string }
   | { type: 'mention'; mention: Mention }
+  | { type: 'file'; file: TodoFileSegment }
+
+export type TodoFileSegment = Extract<TodoContentSegment, { type: 'file' }>
 
 export function mentionKey(m: Pick<Mention, 'kind' | 'id' | 'name'>) {
   return `${m.kind}:${m.id ?? m.name}`
+}
+
+export function fileKey(file: Pick<TodoFileSegment, 'id' | 'label'>) {
+  return `file:${file.id || file.label}`
 }
 
 export function hasMentionTokens(text: string) {
@@ -65,21 +72,25 @@ export function editorToContentSegments(segments: EditorSegment[]): TodoContentS
   }
   for (const segment of segments) {
     if (segment.type === 'text') pushText(segment.text)
-    else {
+    else if (segment.type === 'mention') {
       const mention = mentionToSegment(segment.mention)
       if (mention) out.push(mention)
+    } else {
+      out.push(segment.file)
     }
   }
-  return out.filter(s => s.type === 'mention' || s.text.length > 0)
+  return out.filter(s => s.type !== 'text' || s.text.length > 0)
 }
 
 export function contentToEditorSegments(segments: TodoContentSegment[] | null | undefined, options: Mention[] = []): EditorSegment[] {
   const out: EditorSegment[] = []
   for (const segment of segments ?? []) {
     if (segment.type === 'text') out.push({ type: 'text', text: segment.text })
-    else {
+    else if (segment.type === 'mention') {
       const mention = segmentToMention(segment, options)
       if (mention) out.push({ type: 'mention', mention })
+    } else {
+      out.push({ type: 'file', file: segment })
     }
   }
   return out
@@ -119,7 +130,11 @@ export function segmentsForTodo(todo: Todo, linked: Mention[] = [], options: Men
 
 export function plainTextFromEditorSegments(segments: EditorSegment[]) {
   return segments
-    .map(s => s.type === 'text' ? s.text : `@${s.mention.name}`)
+    .map(s => {
+      if (s.type === 'text') return s.text
+      if (s.type === 'mention') return `@${s.mention.name}`
+      return s.file.label
+    })
     .join('')
     .replace(/\s{2,}/g, ' ')
     .trim()
@@ -127,7 +142,11 @@ export function plainTextFromEditorSegments(segments: EditorSegment[]) {
 
 export function plainTextFromContentSegments(segments: TodoContentSegment[] | null | undefined) {
   return (segments ?? [])
-    .map(s => s.type === 'text' ? s.text : `@${s.label}`)
+    .map(s => {
+      if (s.type === 'text') return s.text
+      if (s.type === 'mention') return `@${s.label}`
+      return s.label
+    })
     .join('')
     .replace(/\s{2,}/g, ' ')
     .trim()

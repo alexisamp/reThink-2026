@@ -1,5 +1,6 @@
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use base64::{engine::general_purpose, Engine as _};
 
 #[tauri::command]
 fn open_url_in_browser(url: String) {
@@ -11,12 +12,27 @@ fn open_url_in_browser(url: String) {
     { let _ = std::process::Command::new("xdg-open").arg(&url).spawn(); }
 }
 
+#[tauri::command]
+fn read_local_file_base64(path: String) -> Result<String, String> {
+    let canonical = std::fs::canonicalize(&path).map_err(|_| "File not found".to_string())?;
+    let meta = std::fs::metadata(&canonical).map_err(|_| "File not found".to_string())?;
+    if !meta.is_file() {
+        return Err("Selected path is not a file".to_string());
+    }
+    if meta.len() > 50 * 1024 * 1024 {
+        return Err("File is too large to import".to_string());
+    }
+    let bytes = std::fs::read(&canonical).map_err(|_| "Could not read file".to_string())?;
+    Ok(general_purpose::STANDARD.encode(bytes))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_process::init())
     .plugin(tauri_plugin_notification::init())
+    .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_global_shortcut::Builder::new().build())
     .setup(|app| {
@@ -41,7 +57,7 @@ pub fn run() {
 
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![open_url_in_browser])
+    .invoke_handler(tauri::generate_handler![open_url_in_browser, read_local_file_base64])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

@@ -10,6 +10,7 @@ import { useFunnelConfig } from '@/hooks/useFunnelConfig'
 import { FUNNEL_STAGE_ORDER, UNDELETABLE_STAGES } from '@/lib/funnelDefaults'
 import type { ContactStatus, Profile } from '@/types'
 import { useUserSettings } from '@/lib/userSettings'
+import { consumeGoogleDriveScopeRequested, GOOGLE_OAUTH_SCOPES_STRING, hasGoogleDriveScope, markGoogleDriveScopeRequested } from '@/lib/googleDrive'
 
 interface SettingsModalProps {
   open: boolean
@@ -67,6 +68,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
 
   // Google integration
   const [googleConnected, setGoogleConnected] = useState(false)
+  const [googleDriveConnected, setGoogleDriveConnected] = useState(false)
   const [googleEmail, setGoogleEmail] = useState<string | null>(null)
   const [googleConnecting, setGoogleConnecting] = useState(false)
 
@@ -99,12 +101,21 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
       // Don't check provider === 'google' — user may have signed up via email then linked Google OAuth.
       // Check for stored token in user_metadata (saved by useAuth onAuthStateChange or reconnect flow).
       const storedToken = session?.user?.user_metadata?.google_access_token
+      const storedScopes = session?.user?.user_metadata?.google_scopes as string | undefined
       const hasToken = !!(session?.provider_token || storedToken)
       setGoogleConnected(hasToken)
+      setGoogleDriveConnected(hasToken && hasGoogleDriveScope(storedScopes))
       setGoogleEmail(hasToken ? (session?.user?.email ?? null) : null)
       // If provider_token is present (just came back from OAuth), persist it so extension can use it
       if (session?.provider_token) {
-        supabase.auth.updateUser({ data: { google_access_token: session.provider_token } })
+        const includeDriveScope = consumeGoogleDriveScopeRequested()
+        supabase.auth.updateUser({
+          data: {
+            google_access_token: session.provider_token,
+            ...(includeDriveScope ? { google_scopes: GOOGLE_OAUTH_SCOPES_STRING } : {}),
+          },
+        })
+        if (includeDriveScope) setGoogleDriveConnected(true)
       }
     })
   }, [open])
@@ -163,13 +174,14 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
 
   const reconnectGoogle = async () => {
     setGoogleConnecting(true)
+    markGoogleDriveScopeRequested()
     // signInWithOAuth redirects the browser to Google — page will reload after.
     // On return, the useEffect above detects provider_token and saves it to user_metadata.
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: window.location.origin,
-        scopes: 'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar',
+        scopes: GOOGLE_OAUTH_SCOPES_STRING,
         queryParams: { access_type: 'offline', prompt: 'consent' },
       },
     })
@@ -653,17 +665,22 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
 
                 <SettingCard
                   icon={<ArrowClockwise size={16} className="text-shuttle/60" />}
-                  label="Google Calendar & Gmail"
-                  description="Grant access to see meetings with your contacts and auto-log email interactions."
+                  label="Google Calendar, Gmail & Drive"
+                  description="Grant access to meetings, email interactions, and spreadsheet imports."
                 >
                   <div className="flex items-center gap-2 mt-1">
-                    {googleConnected ? (
+                    {googleConnected && googleDriveConnected ? (
                       <div className="flex items-center gap-1.5 text-sm">
                         <CheckCircle size={15} className="text-pastel" weight="fill" />
                         <span className="text-burnham font-medium">Connected</span>
                         {googleEmail && (
                           <span className="text-shuttle/50 text-xs">as {googleEmail}</span>
                         )}
+                      </div>
+                    ) : googleConnected ? (
+                      <div className="flex items-center gap-1.5 text-sm">
+                        <WarningCircle size={15} className="text-shuttle/50" weight="fill" />
+                        <span className="text-shuttle/70">Reconnect to enable Drive imports</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5 text-sm">
@@ -682,7 +699,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                     </button>
                   </div>
                   <p className="text-xs text-shuttle/40 mt-2">
-                    Reconnecting grants access to: see meetings with your contacts · auto-log email interactions
+                    Reconnecting grants access to: see meetings with your contacts · auto-log email interactions · import Excel files to Google Sheets
                   </p>
                 </SettingCard>
 

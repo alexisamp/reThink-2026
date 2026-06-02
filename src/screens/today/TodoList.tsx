@@ -12,7 +12,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { Todo, TodoContentSegment, TodoMentionKind } from '@/types'
-import MentionEditor, { MentionChip as RichMentionChip } from './MentionEditor'
+import MentionEditor, { FileChip, MentionChip as RichMentionChip } from './MentionEditor'
 import type { GroupBy, Mention, TodoMilestoneOption } from './types'
 import {
   editorToContentSegments,
@@ -22,6 +22,7 @@ import {
   type EditorSegment,
 } from '@/lib/todoContent'
 import { pathForMention } from '@/lib/crmObjects'
+import { openTodoFile } from '@/lib/filePills'
 
 interface TodoLinks {
   contactId?: string | null
@@ -192,7 +193,9 @@ function TodoRow({
     return segments.map((segment, index) => (
       segment.type === 'text'
         ? <span className="body" key={`t-${index}`}>{segment.text}</span>
-        : <RichMentionChip key={`m-${index}-${segment.mention.kind}-${segment.mention.id}`} mention={segment.mention} onClick={() => goToMention(segment.mention)} />
+        : segment.type === 'mention'
+          ? <RichMentionChip key={`m-${index}-${segment.mention.kind}-${segment.mention.id}`} mention={segment.mention} onClick={() => goToMention(segment.mention)} />
+          : <FileChip key={`f-${index}-${segment.file.id}`} file={segment.file} onClick={() => openTodoFile(segment.file)} />
     ))
   }
 

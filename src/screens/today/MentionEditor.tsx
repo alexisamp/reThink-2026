@@ -3,14 +3,17 @@ import type { TodoMentionKind } from '@/types'
 import type { Mention, TodoMilestoneOption } from './types'
 import {
   MENTION_CLIPBOARD,
+  fileKey,
   hasMentionTokens,
   legacyTextToEditorSegments,
   mentionKey,
   normalizeEditorSegments,
   plainTextFromEditorSegments,
+  type TodoFileSegment,
   type EditorSegment,
 } from '@/lib/todoContent'
 import { hasStrongCrmMatch, rankCrmObjects } from '@/lib/crmObjects'
+import { chooseTodoFile, fileSegmentFromUrl, isSpreadsheetFileName, openTodoFile, spreadsheetFileToSegment } from '@/lib/filePills'
 
 const KIND_LABEL: Record<TodoMentionKind, string> = {
   person: 'People',
@@ -33,7 +36,7 @@ interface MilestoneAction {
   milestone?: TodoMilestoneOption
 }
 
-type TriggerState = { type: 'mention' | 'milestone'; query: string; rect: DOMRect }
+type TriggerState = { type: 'mention' | 'milestone' | 'file'; query: string; rect: DOMRect }
 
 function chipLabel(mention: Mention) {
   return mention.kind === 'person' ? mention.name.split(' ')[0] : mention.name
@@ -71,6 +74,44 @@ export function MentionChip({
   )
 }
 
+function fileKindLabel(file: Pick<TodoFileSegment, 'label' | 'openMode' | 'mimeType'>) {
+  if (file.openMode === 'sheets') return 'Sheet'
+  const label = file.label.toLowerCase()
+  if (label.endsWith('.pdf') || file.mimeType === 'application/pdf') return 'PDF'
+  if (label.endsWith('.md') || file.mimeType === 'text/markdown') return 'MD'
+  if (label.endsWith('.txt') || file.mimeType === 'text/plain') return 'TXT'
+  return 'File'
+}
+
+export function FileChip({
+  file,
+  onClick,
+  selected,
+  editor,
+}: {
+  file: TodoFileSegment
+  onClick?: () => void
+  selected?: boolean
+  editor?: boolean
+}) {
+  return (
+    <span
+      className={[
+        editor ? 'td-editor-chip td-file-chip' : 'td-chip-mention td-file-chip',
+        onClick ? 'clickable' : '',
+        selected ? 'selected' : '',
+      ].filter(Boolean).join(' ')}
+      onClick={onClick ? (e) => { e.stopPropagation(); onClick() } : undefined}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      title={file.label}
+    >
+      <span className="av sq">{fileKindLabel(file)}</span>
+      <span>{file.label}</span>
+    </span>
+  )
+}
+
 function createEditorChip(mention: Mention, selectedKey: string | null) {
   const chip = document.createElement('span')
   chip.className = `td-editor-chip${selectedKey === mentionKey(mention) ? ' selected' : ''}`
@@ -101,6 +142,30 @@ function createEditorChip(mention: Mention, selectedKey: string | null) {
   return chip
 }
 
+function createEditorFileChip(file: TodoFileSegment, selectedKey: string | null) {
+  const chip = document.createElement('span')
+  chip.className = `td-editor-chip td-file-chip${selectedKey === fileKey(file) ? ' selected' : ''}`
+  chip.contentEditable = 'false'
+  chip.dataset.file = 'true'
+  chip.dataset.id = file.id
+  chip.dataset.label = file.label
+  chip.dataset.source = file.source
+  chip.dataset.mimeType = file.mimeType ?? ''
+  chip.dataset.path = file.path ?? ''
+  chip.dataset.url = file.url ?? ''
+  chip.dataset.googleFileId = file.googleFileId ?? ''
+  chip.dataset.openMode = file.openMode
+  chip.dataset.key = fileKey(file)
+
+  const icon = document.createElement('span')
+  icon.className = 'av sq'
+  icon.textContent = fileKindLabel(file)
+  const label = document.createElement('span')
+  label.textContent = file.label
+  chip.append(icon, label)
+  return chip
+}
+
 function chipToMention(node: HTMLElement): Mention {
   return {
     id: node.dataset.id || undefined,
@@ -109,6 +174,26 @@ function chipToMention(node: HTMLElement): Mention {
     imageUrl: node.dataset.imageUrl || null,
     companyId: node.dataset.companyId || null,
   }
+}
+
+function chipToFile(node: HTMLElement): TodoFileSegment {
+  return {
+    type: 'file',
+    id: node.dataset.id || crypto.randomUUID(),
+    label: node.dataset.label || 'File',
+    source: (node.dataset.source as TodoFileSegment['source']) || 'url',
+    mimeType: node.dataset.mimeType || null,
+    path: node.dataset.path || null,
+    url: node.dataset.url || null,
+    googleFileId: node.dataset.googleFileId || null,
+    openMode: (node.dataset.openMode as TodoFileSegment['openMode']) || 'browser',
+  }
+}
+
+function chipToSegment(node: HTMLElement): EditorSegment | null {
+  if (node.dataset.mention === 'true') return { type: 'mention', mention: chipToMention(node) }
+  if (node.dataset.file === 'true') return { type: 'file', file: chipToFile(node) }
+  return null
 }
 
 function segmentsFromNodes(nodes: Node[]): EditorSegment[] {
@@ -124,8 +209,19 @@ function segmentsFromNodes(nodes: Node[]): EditorSegment[] {
       pushText(node.textContent ?? '')
       return
     }
-    if (node instanceof HTMLElement && node.dataset.mention === 'true') {
-      out.push({ type: 'mention', mention: chipToMention(node) })
+    if (node instanceof HTMLElement) {
+      const segment = chipToSegment(node)
+      if (segment) {
+        out.push(segment)
+        return
+      }
+    }
+    if (node instanceof HTMLAnchorElement) {
+      const file = fileSegmentFromUrl(node.href)
+      if (file) {
+        out.push({ type: 'file', file })
+        return
+      }
       return
     }
     node.childNodes.forEach(walk)
@@ -141,9 +237,9 @@ function readSegments(root: HTMLElement): EditorSegment[] {
 function renderSegments(root: HTMLElement, segments: EditorSegment[], selectedKey: string | null) {
   root.innerHTML = ''
   for (const segment of segments) {
-    root.append(segment.type === 'text'
-      ? document.createTextNode(segment.text)
-      : createEditorChip(segment.mention, selectedKey))
+    if (segment.type === 'text') root.append(document.createTextNode(segment.text))
+    else if (segment.type === 'mention') root.append(createEditorChip(segment.mention, selectedKey))
+    else root.append(createEditorFileChip(segment.file, selectedKey))
   }
 }
 
@@ -176,7 +272,7 @@ function caretRect(range: Range) {
   return next
 }
 
-function getEditorTrigger(root: HTMLElement): { type: 'mention' | 'milestone'; range: Range; query: string; rect: DOMRect } | null {
+function getEditorTrigger(root: HTMLElement): { type: 'mention' | 'milestone' | 'file'; range: Range; query: string; rect: DOMRect } | null {
   const sel = window.getSelection()
   if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return null
   const range = sel.getRangeAt(0)
@@ -186,11 +282,12 @@ function getEditorTrigger(root: HTMLElement): { type: 'mention' | 'milestone'; r
   const left = text.slice(0, range.startOffset)
   const match = /(^|\s)([@/])([^\s@/]*)$/.exec(left)
   if (!match || match.index === undefined) return null
-  const type = match[2] === '@' ? 'mention' : 'milestone'
+  const query = match[3] ?? ''
+  const type = match[2] === '@' ? 'mention' : query.toLowerCase().startsWith('file') ? 'file' : 'milestone'
   const triggerRange = document.createRange()
   triggerRange.setStart(range.startContainer, match.index + match[1].length)
   triggerRange.setEnd(range.startContainer, range.startOffset)
-  return { type, range: triggerRange, query: match[3] ?? '', rect: caretRect(range.cloneRange()) }
+  return { type, range: triggerRange, query, rect: caretRect(range.cloneRange()) }
 }
 
 function currentCompanyId(root: HTMLElement) {
@@ -211,7 +308,9 @@ function insertSegments(root: HTMLElement, segments: EditorSegment[]) {
   for (const segment of segments) {
     const node = segment.type === 'text'
       ? document.createTextNode(segment.text)
-      : createEditorChip(segment.mention, null)
+      : segment.type === 'mention'
+        ? createEditorChip(segment.mention, null)
+        : createEditorFileChip(segment.file, null)
     frag.append(node)
     last = node
   }
@@ -234,7 +333,7 @@ function chipNearCaret(root: HTMLElement, direction: 'previous' | 'next') {
       ? root.childNodes[range.startOffset - 1]
       : root.childNodes[range.startOffset]
   }
-  return node instanceof HTMLElement && node.dataset.mention === 'true' ? node : null
+  return node instanceof HTMLElement && (node.dataset.mention === 'true' || node.dataset.file === 'true') ? node : null
 }
 
 function removeChip(chip: HTMLElement) {
@@ -393,6 +492,37 @@ function MilestonePicker({
   )
 }
 
+function FilePicker({
+  selected,
+  style,
+  importing,
+  onChoose,
+}: {
+  selected: number
+  style: CSSProperties
+  importing: boolean
+  onChoose: () => void
+}) {
+  return (
+    <div className="td-mention-picker td-file-picker fixed" style={style}>
+      <div className="td-mention-header">Files</div>
+      <button
+        type="button"
+        className={`td-mention-row${selected === 0 ? ' active' : ''}`}
+        onMouseDown={e => { e.preventDefault(); onChoose() }}
+        disabled={importing}
+      >
+        <span className="td-mention-avatar sq">+</span>
+        <span className="td-mention-copy">
+          <span className="name">{importing ? 'Importing…' : 'Choose local file'}</span>
+          <span className="sub">Excel and CSV files are converted to Google Sheets</span>
+        </span>
+      </button>
+      <div className="td-mention-empty compact">Paste a Drive, Docs, Sheets, or PDF URL to create a file pill.</div>
+    </div>
+  )
+}
+
 interface MentionEditorProps {
   initialSegments: EditorSegment[]
   mentionOptions: Mention[]
@@ -422,10 +552,12 @@ export default function MentionEditor({
 }: MentionEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<Range | null>(null)
+  const fileBusyRef = useRef(false)
   const [trigger, setTrigger] = useState<TriggerState | null>(null)
   const [selected, setSelected] = useState(0)
   const [selectedChip, setSelectedChip] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [fileBusy, setFileBusy] = useState(false)
   const usedKeys = useMemo(() => new Set(initialSegments
     .filter((s): s is { type: 'mention'; mention: Mention } => s.type === 'mention')
     .map(s => mentionKey(s.mention))), [initialSegments])
@@ -437,6 +569,11 @@ export default function MentionEditor({
     () => trigger?.type === 'milestone' ? milestoneActions(milestoneOptions, trigger.query, currentMilestoneId) : [],
     [trigger, milestoneOptions, currentMilestoneId],
   )
+
+  const setFileBusyState = (busy: boolean) => {
+    fileBusyRef.current = busy
+    setFileBusy(busy)
+  }
 
   useEffect(() => {
     const root = editorRef.current
@@ -454,6 +591,9 @@ export default function MentionEditor({
     root.querySelectorAll<HTMLElement>('[data-mention="true"]').forEach(chip => {
       chip.classList.toggle('selected', chip.dataset.key === selectedChip)
     })
+    root.querySelectorAll<HTMLElement>('[data-file="true"]').forEach(chip => {
+      chip.classList.toggle('selected', chip.dataset.key === selectedChip)
+    })
   }, [selectedChip])
 
   const refreshTrigger = () => {
@@ -469,8 +609,38 @@ export default function MentionEditor({
     const root = editorRef.current
     if (!root) return
     const segments = readSegments(root)
-    if (plainTextFromEditorSegments(segments) || segments.some(s => s.type === 'mention')) onCommit(segments)
+    if (plainTextFromEditorSegments(segments) || segments.some(s => s.type !== 'text')) onCommit(segments)
     else onCancel()
+  }
+
+  const insertFile = (file: TodoFileSegment, replaceRange?: Range | null) => {
+    const root = editorRef.current
+    if (!root) return
+    const range = replaceRange ?? window.getSelection()?.getRangeAt(0)
+    if (!range || !root.contains(range.startContainer)) return
+    range.deleteContents()
+    const chip = createEditorFileChip(file, null)
+    range.insertNode(chip)
+    const spacer = document.createTextNode(' ')
+    chip.after(spacer)
+    placeCaretAfter(spacer)
+    setTrigger(null)
+    triggerRef.current = null
+    setSelectedChip(null)
+    window.requestAnimationFrame(() => root.focus())
+  }
+
+  const chooseFile = async () => {
+    const range = triggerRef.current?.cloneRange() ?? null
+    setFileBusyState(true)
+    try {
+      const file = await chooseTodoFile()
+      if (file) insertFile(file, range)
+    } catch (err) {
+      console.error('chooseTodoFile failed:', err)
+    } finally {
+      setFileBusyState(false)
+    }
   }
 
   const pickAction = async (action: PickerAction) => {
@@ -523,7 +693,8 @@ export default function MentionEditor({
     const root = editorRef.current
     const selectedNode = selectedChip ? root?.querySelector<HTMLElement>(`[data-key="${CSS.escape(selectedChip)}"]`) : null
     if (root && selectedNode) {
-      const segment: EditorSegment = { type: 'mention', mention: chipToMention(selectedNode) }
+      const segment = chipToSegment(selectedNode)
+      if (!segment) return
       e.clipboardData.setData(MENTION_CLIPBOARD, JSON.stringify([segment]))
       e.clipboardData.setData('text/plain', plainTextFromEditorSegments([segment]))
       if (cut) removeChip(selectedNode)
@@ -548,6 +719,40 @@ export default function MentionEditor({
     top: trigger.rect.bottom + 8,
   } : undefined
 
+  const pasteSegments = async (e: ClipboardEvent<HTMLDivElement>) => {
+    const root = editorRef.current
+    if (!root) return
+
+    const files = Array.from(e.clipboardData.files)
+    const spreadsheet = files.find(file => isSpreadsheetFileName(file.name))
+    if (spreadsheet) {
+      e.preventDefault()
+      setFileBusyState(true)
+      try {
+        insertFile(await spreadsheetFileToSegment(spreadsheet))
+      } catch (err) {
+        console.error('spreadsheet paste failed:', err)
+      } finally {
+        setFileBusyState(false)
+      }
+      return
+    }
+
+    const rawSegments = e.clipboardData.getData(MENTION_CLIPBOARD)
+    const rawText = e.clipboardData.getData('text/plain')
+    let segments: EditorSegment[] | null = null
+    if (rawSegments) {
+      try { segments = JSON.parse(rawSegments) as EditorSegment[] } catch { segments = null }
+    }
+    const file = fileSegmentFromUrl(rawText)
+    if (!segments && file) segments = [{ type: 'file', file }]
+    if (!segments) segments = hasMentionTokens(rawText) ? legacyTextToEditorSegments(rawText, mentionOptions) : [{ type: 'text', text: rawText }]
+    insertSegments(root, segments)
+    setTrigger(null)
+    setSelectedChip(null)
+    e.preventDefault()
+  }
+
   return (
     <div className="td-mention-wrap">
       <div
@@ -559,43 +764,52 @@ export default function MentionEditor({
         onInput={() => { setSelectedChip(null); refreshTrigger() }}
         onCopy={e => copySelection(e, false)}
         onCut={e => copySelection(e, true)}
-        onPaste={e => {
-          const root = editorRef.current
-          if (!root) return
-          const rawSegments = e.clipboardData.getData(MENTION_CLIPBOARD)
-          const rawText = e.clipboardData.getData('text/plain')
-          let segments: EditorSegment[] | null = null
-          if (rawSegments) {
-            try { segments = JSON.parse(rawSegments) as EditorSegment[] } catch { segments = null }
-          }
-          if (!segments) segments = hasMentionTokens(rawText) ? legacyTextToEditorSegments(rawText, mentionOptions) : [{ type: 'text', text: rawText }]
-          insertSegments(root, segments)
-          setTrigger(null)
-          setSelectedChip(null)
+        onPaste={e => { void pasteSegments(e) }}
+        onDragOver={e => {
+          if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/uri-list')) e.preventDefault()
+        }}
+        onDrop={e => {
+          const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')
+          const file = fileSegmentFromUrl(url)
+          const spreadsheet = Array.from(e.dataTransfer.files).find(item => isSpreadsheetFileName(item.name))
+          if (!file && !spreadsheet) return
           e.preventDefault()
+          if (file) {
+            insertFile(file)
+            return
+          }
+          if (spreadsheet) {
+            setFileBusyState(true)
+            spreadsheetFileToSegment(spreadsheet)
+              .then(segment => insertFile(segment))
+              .catch(err => console.error('spreadsheet drop failed:', err))
+              .finally(() => setFileBusyState(false))
+          }
         }}
         onMouseDown={e => {
-          const chip = (e.target as HTMLElement).closest<HTMLElement>('[data-mention="true"]')
+          const chip = (e.target as HTMLElement).closest<HTMLElement>('[data-mention="true"], [data-file="true"]')
           if (!chip) return
           e.preventDefault()
           setSelectedChip(chip.dataset.key ?? null)
           editorRef.current?.focus()
         }}
         onDoubleClick={e => {
-          const chip = (e.target as HTMLElement).closest<HTMLElement>('[data-mention="true"]')
+          const chip = (e.target as HTMLElement).closest<HTMLElement>('[data-mention="true"], [data-file="true"]')
           if (!chip) return
           e.preventDefault()
-          onOpenMention(chipToMention(chip))
+          if (chip.dataset.mention === 'true') onOpenMention(chipToMention(chip))
+          if (chip.dataset.file === 'true') openTodoFile(chipToFile(chip))
         }}
         onClick={() => refreshTrigger()}
         onBlur={() => {
           window.setTimeout(() => {
+            if (fileBusyRef.current) return
             if (!document.activeElement?.closest?.('.td-mention-picker')) commit()
           }, 0)
         }}
         onKeyDown={e => {
           if (trigger) {
-            const listLength = trigger.type === 'mention' ? actions.length : msActions.length
+            const listLength = trigger.type === 'mention' ? actions.length : trigger.type === 'file' ? 1 : msActions.length
             if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(i => listLength ? (i + 1) % listLength : 0); return }
             if (e.key === 'ArrowUp') { e.preventDefault(); setSelected(i => listLength ? (i - 1 + listLength) % listLength : 0); return }
             if ((e.key === 'Enter' || e.key === 'Tab') && trigger.type === 'mention') {
@@ -606,6 +820,11 @@ export default function MentionEditor({
             if ((e.key === 'Enter' || e.key === 'Tab') && trigger.type === 'milestone') {
               e.preventDefault()
               if (msActions[selected]) pickMilestone(msActions[selected])
+              return
+            }
+            if ((e.key === 'Enter' || e.key === 'Tab') && trigger.type === 'file') {
+              e.preventDefault()
+              void chooseFile()
               return
             }
             if (e.key === 'Escape') { e.preventDefault(); setTrigger(null); return }
@@ -633,7 +852,9 @@ export default function MentionEditor({
       {trigger && pickerStyle && (
         trigger.type === 'mention'
           ? <MentionPicker actions={actions} selected={selected} style={pickerStyle} onPick={action => { void pickAction(action) }} />
-          : <MilestonePicker actions={msActions} selected={selected} style={pickerStyle} onPick={pickMilestone} />
+          : trigger.type === 'file'
+            ? <FilePicker selected={selected} style={pickerStyle} importing={fileBusy} onChoose={() => { void chooseFile() }} />
+            : <MilestonePicker actions={msActions} selected={selected} style={pickerStyle} onPick={pickMilestone} />
       )}
     </div>
   )

@@ -17,6 +17,7 @@
     "@phosphor-icons/react": "^2.1.10",
     "@rolldown/pluginutils": "^1.0.0-rc.15",
     "@supabase/supabase-js": "^2.99.0",
+    "@tauri-apps/plugin-dialog": "2.7.0",
     "@tauri-apps/plugin-global-shortcut": "^2.3.1",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2.5.3",
@@ -31,7 +32,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/api": "2.10.1",
     "@tauri-apps/cli": "^2.10.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",

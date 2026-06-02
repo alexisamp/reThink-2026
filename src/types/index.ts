@@ -159,6 +159,17 @@ export type TodoContentSegment =
       imageUrl?: string | null
       companyId?: string | null
     }
+  | {
+      type: 'file'
+      id: string
+      label: string
+      source: 'local' | 'url' | 'google_drive'
+      mimeType?: string | null
+      path?: string | null
+      url?: string | null
+      googleFileId?: string | null
+      openMode: 'browser' | 'sheets' | 'system'
+    }
 
 export interface Todo {
   id: string
