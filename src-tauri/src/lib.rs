@@ -5,7 +5,11 @@ use base64::{engine::general_purpose, Engine as _};
 #[tauri::command]
 fn open_url_in_browser(url: String) {
     #[cfg(target_os = "macos")]
-    { let _ = std::process::Command::new("open").arg(&url).spawn(); }
+    {
+        let escaped = url.replace('\\', "\\\\").replace('"', "\\\"");
+        let script = format!("open location \"{}\"", escaped);
+        let _ = std::process::Command::new("osascript").args(["-e", &script]).spawn();
+    }
     #[cfg(target_os = "windows")]
     { let _ = std::process::Command::new("cmd").args(["/C", "start", "", &url]).spawn(); }
     #[cfg(target_os = "linux")]
