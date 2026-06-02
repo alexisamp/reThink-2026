@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { Habit, HabitLog } from '@/types'
+import { areNotificationsEnabled, getSettings } from '@/lib/userSettings'
 
 const isTauri = typeof (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== 'undefined'
 
@@ -10,6 +11,8 @@ export function useHabitNotifications(habits: Habit[], logs: HabitLog[], today: 
     let notificationModule: typeof import('@tauri-apps/plugin-notification') | null = null
 
     const schedule = async () => {
+      if (!areNotificationsEnabled(getSettings())) return
+
       if (!notificationModule) {
         notificationModule = await import('@tauri-apps/plugin-notification')
       }

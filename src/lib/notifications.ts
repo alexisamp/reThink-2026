@@ -1,5 +1,5 @@
 import type { Habit, Milestone, Review } from '@/types'
-import { getSettings } from '@/lib/userSettings'
+import { areNotificationsEnabled, getSettings } from '@/lib/userSettings'
 
 export type NotificationTrigger = {
   type: 'morning_brief' | 'habit_reminder' | 'streak_at_risk' | 'milestone_approaching' | 'weekly_review'
@@ -23,6 +23,8 @@ export function checkNotificationTriggers(opts: {
   const dayOfWeek = now.getDay() // 0=Sun, 6=Sat
   const triggers: NotificationTrigger[] = []
   const s = getSettings()
+
+  if (!areNotificationsEnabled(s)) return triggers
 
   // Morning brief
   if (s.notifMorningEnabled) {

@@ -29,6 +29,7 @@ import MilestonePlan from '@/screens/MilestonePlan'
 import Playbook from '@/screens/Playbook'
 import ContactDetailDrawer from '@/components/ContactDetailDrawer'
 import { checkNotificationTriggers, formatNotificationMessage } from '@/lib/notifications'
+import { areNotificationsEnabled, getSettings, useUserSettings } from '@/lib/userSettings'
 import { useUpdater } from '@/hooks/useUpdater'
 import type { Contact } from '@/types'
 
@@ -46,7 +47,9 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [hasWorkbook, setHasWorkbook] = useState<boolean | null>(null)
+  const [settings] = useUserSettings()
   const updater = useUpdater()
+  const notificationsEnabled = areNotificationsEnabled(settings)
 
   // App signals: open_contact from external triggers (e.g. Chrome extension)
   const [signalContact, setSignalContact] = useState<Contact | null>(null)
@@ -137,11 +140,16 @@ export default function App() {
 
   // Smart Notifications (Sprint 11)
   useEffect(() => {
+    if (!notificationsEnabled) return
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission()
     }
+  }, [notificationsEnabled])
 
+  useEffect(() => {
+    if (!notificationsEnabled) return
     const check = async () => {
+      if (!areNotificationsEnabled(getSettings())) return
       if (!user || !('Notification' in window) || Notification.permission !== 'granted') return
       const today = new Date().toISOString().split('T')[0]
       const [habitsRes, logsRes, msRes, reviewRes] = await Promise.all([
@@ -166,7 +174,7 @@ export default function App() {
 
     const interval = setInterval(check, 60_000) // every minute
     return () => clearInterval(interval)
-  }, [user])
+  }, [user, notificationsEnabled])
 
   if (loading) return <Splash />
 

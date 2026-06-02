@@ -46,6 +46,7 @@ const DEFAULTS: UserSettings = {
 }
 
 const KEY = 'rethink_settings'
+const SETTINGS_CHANGED_EVENT = 'rethink_settings_changed'
 
 export function getSettings(): UserSettings {
   try {
@@ -59,14 +60,32 @@ export function getSettings(): UserSettings {
 
 export function saveSettings(partial: Partial<UserSettings>): void {
   const current = getSettings()
-  localStorage.setItem(KEY, JSON.stringify({ ...current, ...partial }))
+  const next = { ...current, ...partial }
+  localStorage.setItem(KEY, JSON.stringify(next))
+  window.dispatchEvent(new CustomEvent<UserSettings>(SETTINGS_CHANGED_EVENT, { detail: next }))
+}
+
+export function areNotificationsEnabled(settings: UserSettings = getSettings()): boolean {
+  return settings.notifMorningEnabled || settings.notifEveningEnabled || settings.notifWeeklyEnabled
 }
 
 export function useUserSettings(): [UserSettings, (partial: Partial<UserSettings>) => void] {
   const [settings, setSettings] = useState<UserSettings>(getSettings)
 
   useEffect(() => {
-    setSettings(getSettings())
+    const syncSettings = () => setSettings(getSettings())
+    const handleSettingsChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<UserSettings>
+      setSettings(customEvent.detail ?? getSettings())
+    }
+
+    syncSettings()
+    window.addEventListener('storage', syncSettings)
+    window.addEventListener(SETTINGS_CHANGED_EVENT, handleSettingsChanged)
+    return () => {
+      window.removeEventListener('storage', syncSettings)
+      window.removeEventListener(SETTINGS_CHANGED_EVENT, handleSettingsChanged)
+    }
   }, [])
 
   const update = (partial: Partial<UserSettings>) => {
