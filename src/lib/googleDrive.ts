@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { TodoFileSegment } from '@/lib/todoContent'
+import type { Session } from '@supabase/supabase-js'
 
 export const GOOGLE_DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file'
 export const GOOGLE_DRIVE_METADATA_SCOPE = 'https://www.googleapis.com/auth/drive.metadata.readonly'
@@ -25,6 +26,17 @@ export function consumeGoogleDriveScopeRequested() {
   const requested = localStorage.getItem(DRIVE_SCOPE_REQUESTED_KEY) === '1'
   if (requested) localStorage.removeItem(DRIVE_SCOPE_REQUESTED_KEY)
   return requested
+}
+
+export async function persistGoogleProviderSession(session: Session | null) {
+  if (!session?.provider_token) return false
+  const meta: Record<string, string> = {
+    google_access_token: session.provider_token,
+    google_scopes: GOOGLE_OAUTH_SCOPES_STRING,
+  }
+  if (session.provider_refresh_token) meta.google_refresh_token = session.provider_refresh_token
+  await supabase.auth.updateUser({ data: meta })
+  return true
 }
 
 async function googleAccessToken() {
