@@ -168,6 +168,14 @@ function TodoRow({
 }: RowProps) {
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
+  const [segmentPreview, setSegmentPreview] = useState<{
+    todoId: string
+    baseText: string
+    baseContentKey: string
+    text: string
+    contentKey: string
+    segments: EditorSegment[]
+  } | null>(null)
 
   const goToMention = (m: Mention) => {
     if (!m.id) return
@@ -175,7 +183,12 @@ function TodoRow({
   }
 
   const renderBody = () => {
-    const segments = segmentsForTodo(todo, mentions, mentionOptions)
+    const todoContentKey = JSON.stringify(todo.content_segments ?? [])
+    const canUsePreview = segmentPreview?.todoId === todo.id && (
+      (todo.text === segmentPreview.baseText && todoContentKey === segmentPreview.baseContentKey) ||
+      (todo.text === segmentPreview.text && todoContentKey === segmentPreview.contentKey)
+    )
+    const segments = canUsePreview ? segmentPreview.segments : segmentsForTodo(todo, mentions, mentionOptions)
     return segments.map((segment, index) => (
       segment.type === 'text'
         ? <span className="body" key={`t-${index}`}>{segment.text}</span>
@@ -188,6 +201,14 @@ function TodoRow({
     const nextText = plainTextFromEditorSegments(nextSegments)
     const contentSegments = editorToContentSegments(nextSegments)
     if (nextText || nextLinked.length > 0) {
+      setSegmentPreview({
+        todoId: todo.id,
+        baseText: todo.text,
+        baseContentKey: JSON.stringify(todo.content_segments ?? []),
+        text: nextText,
+        contentKey: JSON.stringify(contentSegments),
+        segments: nextSegments,
+      })
       const links = linksForTodoEdit(todo, mentions, nextLinked)
       const changedLinks =
         links.contactId !== (todo.contact_id ?? null) ||

@@ -55,7 +55,7 @@
 @keyframes td-cb-check { 0% { transform: scale(1); } 50% { transform: scale(0.85); } 100% { transform: scale(1); } }
 .td-todo .text-area { flex: 1; min-width: 0; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; cursor: text; }
 .td-todo.editing .text-area { display: block; }
-.td-flow { min-width: 0; flex: 1 1 auto; display: inline-flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; }
+.td-flow { min-width: 0; flex: 1 1 auto; display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; }
 .td-meta { flex: 0 1 auto; min-width: 0; max-width: 42%; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .td-todo .body { min-width: 0; font-size: 13.5px; color: color-mix(in oklab, var(--burnham) 85%, transparent); line-height: 1.35; letter-spacing: -0.005em; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 .td-chip-ms { --ms: var(--moss); max-width: 180px; display: inline-flex; align-items: center; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: 9px; padding: 2px 7px; border-radius: 4px; background: color-mix(in oklab, var(--ms) 12%, #fff); color: color-mix(in oklab, var(--ms) 76%, #000); cursor: pointer; white-space: nowrap; letter-spacing: 0.01em; transition: all 120ms ease; border: 0; }
