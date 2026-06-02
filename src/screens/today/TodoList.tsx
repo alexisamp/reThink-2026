@@ -224,22 +224,24 @@ function TodoRow({
           />
         ) : (
           <>
-            {renderBody()}
-            {!hideMilestone && (
-              <MilestoneChipPicker
-                label={milestone}
-                color={milestoneColor}
-                currentMilestoneId={todo.milestone_id}
-                options={milestoneOptions}
-                onSelect={(milestoneId) => onChangeMilestone(todo.id, milestoneId)}
-                onOpenDetail={() => { if (todo.milestone_id && onMilestoneClick) onMilestoneClick(todo.milestone_id) }}
-              />
-            )}
-            {todo.waiting && (
-              <button className="td-chip-waiting clickable" onClick={(e) => { e.stopPropagation(); onToggleWaiting(todo.id) }}>
-                <HourglassMedium size={10} /> on hold
-              </button>
-            )}
+            <span className="td-flow">{renderBody()}</span>
+            <span className="td-meta">
+              {!hideMilestone && (
+                <MilestoneChipPicker
+                  label={milestone}
+                  color={milestoneColor}
+                  currentMilestoneId={todo.milestone_id}
+                  options={milestoneOptions}
+                  onSelect={(milestoneId) => onChangeMilestone(todo.id, milestoneId)}
+                  onOpenDetail={() => { if (todo.milestone_id && onMilestoneClick) onMilestoneClick(todo.milestone_id) }}
+                />
+              )}
+              {todo.waiting && (
+                <button className="td-chip-waiting clickable" onClick={(e) => { e.stopPropagation(); onToggleWaiting(todo.id) }}>
+                  <HourglassMedium size={10} /> on hold
+                </button>
+              )}
+            </span>
           </>
         )}
       </div>
@@ -294,25 +296,30 @@ function AddTodo({
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null)
+  const selectedMilestoneRef = useRef<string | null>(null)
   const [editorKey, setEditorKey] = useState(0)
   const selectedMilestone = milestoneOptions.find(m => m.id === selectedMilestoneId) ?? null
+  const selectMilestone = (id: string | null) => {
+    selectedMilestoneRef.current = id
+    setSelectedMilestoneId(id)
+  }
   const commit = (segments: EditorSegment[]) => {
     const linked = segments.filter((s): s is { type: 'mention'; mention: Mention } => s.type === 'mention').map(s => s.mention)
     const text = plainTextFromEditorSegments(segments)
     const contentSegments = editorToContentSegments(segments)
     if (text || linked.length > 0) {
-      onAdd(text, selectedMilestoneId, contentSegments, linksFromMentions(linked))
-      setSelectedMilestoneId(null)
+      onAdd(text, selectedMilestoneRef.current, contentSegments, linksFromMentions(linked))
+      selectMilestone(null)
       setEditorKey(k => k + 1)
       setEditing(true)
     } else {
       setEditing(false)
-      setSelectedMilestoneId(null)
+      selectMilestone(null)
     }
   }
   const cancel = () => {
     setEditing(false)
-    setSelectedMilestoneId(null)
+    selectMilestone(null)
     setEditorKey(k => k + 1)
   }
 
@@ -339,14 +346,14 @@ function AddTodo({
         onCancel={cancel}
         onOpenMention={(mention) => { if (mention.id) navigate(pathForMention(mention)) }}
         onCreateMention={onCreateMention}
-        onSelectMilestone={setSelectedMilestoneId}
+        onSelectMilestone={selectMilestone}
       />
       {selectedMilestone && (
         <button
           type="button"
           className="td-chip-ms"
           style={{ ['--ms' as string]: selectedMilestone.color }}
-          onClick={() => setSelectedMilestoneId(null)}
+          onClick={() => selectMilestone(null)}
         >
           {selectedMilestone.name}
         </button>

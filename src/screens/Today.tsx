@@ -350,6 +350,33 @@ export default function Today() {
     const milestone = milestoneId ? milestones.find(m => m.id === milestoneId) : null
     const selectedOpp = links.opportunityId ? mentionOptions.find(m => m.kind === 'opportunity' && m.id === links.opportunityId) : null
     const companyId = links.companyId ?? selectedOpp?.companyId ?? null
+    const tempId = `temp-${crypto.randomUUID()}`
+    const optimisticTodo: Todo = {
+      id: tempId,
+      text,
+      user_id: userId,
+      date: today,
+      content_segments: contentSegments,
+      milestone_id: milestoneId,
+      goal_id: milestone?.goal_id ?? null,
+      contact_id: links.contactId ?? null,
+      company_id: companyId,
+      opportunity_id: links.opportunityId ?? null,
+      effort: null,
+      block: null,
+      completed: false,
+      waiting: false,
+      completed_at: null,
+      sort_order: todos.length,
+      url: null,
+      outreach_log_id: null,
+      attio_task_id: null,
+      is_featured: false,
+      created_at: new Date().toISOString(),
+    }
+    setTodos(prev => [...prev, optimisticTodo])
+    if (milestoneId) setMsTodos(prev => [...prev, { id: tempId, milestone_id: milestoneId, completed: false }])
+
     const { data } = await supabase.from('todos').insert({
       text, user_id: userId, date: today,
       content_segments: contentSegments,
@@ -359,10 +386,24 @@ export default function Today() {
       opportunity_id: links.opportunityId ?? null,
     }).select().single()
     if (data) {
-      const todo = data as Todo
-      setTodos(prev => [...prev, todo])
-      if (milestoneId) setMsTodos(prev => [...prev, { id: data.id, milestone_id: milestoneId, completed: false }])
+      const todo = {
+        ...(data as Todo),
+        text,
+        content_segments: contentSegments,
+        milestone_id: milestoneId,
+        goal_id: milestone?.goal_id ?? null,
+        contact_id: links.contactId ?? null,
+        company_id: companyId,
+        opportunity_id: links.opportunityId ?? null,
+      }
+      setTodos(prev => prev.map(item => item.id === tempId ? todo : item))
+      if (milestoneId) {
+        setMsTodos(prev => prev.map(item => item.id === tempId ? { id: data.id, milestone_id: milestoneId, completed: false } : item))
+      }
       loadMentions(userId, [...todos, todo])
+    } else {
+      setTodos(prev => prev.filter(item => item.id !== tempId))
+      if (milestoneId) setMsTodos(prev => prev.filter(item => item.id !== tempId))
     }
   }
 

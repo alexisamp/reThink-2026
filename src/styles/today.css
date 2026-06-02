@@ -42,7 +42,7 @@
 .td-section-hd .group-toggle:hover { background: color-mix(in oklab, var(--mercury) 40%, transparent); color: var(--burnham); }
 
 /* ── Todo rows (main list — the HERO) ──────────────────────── */
-.td-todo { display: flex; align-items: center; gap: 10px; padding: 10px 10px; margin: 0 -10px; border-radius: 8px; transition: background 120ms ease; position: relative; }
+.td-todo { display: flex; align-items: center; gap: 10px; padding: 7px 10px; margin: 0 -10px; border-radius: 8px; transition: background 120ms ease; position: relative; min-height: 32px; }
 .td-todo:hover { background: color-mix(in oklab, var(--mercury) 22%, transparent); }
 .td-todo.editing { background: color-mix(in oklab, var(--moss) 5%, transparent); box-shadow: inset 2px 0 0 color-mix(in oklab, var(--moss) 72%, transparent); }
 .td-todo.featured { background: color-mix(in oklab, var(--featured-accent, var(--moss)) 8%, transparent); box-shadow: inset 2px 0 0 var(--featured-accent, var(--moss)); }
@@ -53,15 +53,18 @@
 .td-cb:hover { border-color: var(--moss); }
 .td-cb.checked { background: var(--moss); border-color: var(--moss); animation: td-cb-check 200ms ease; }
 @keyframes td-cb-check { 0% { transform: scale(1); } 50% { transform: scale(0.85); } 100% { transform: scale(1); } }
-.td-todo .text-area { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; cursor: text; }
-.td-todo .body { font-size: 13.5px; color: color-mix(in oklab, var(--burnham) 85%, transparent); line-height: 1.45; letter-spacing: -0.005em; }
-.td-chip-ms { --ms: var(--moss); font-family: var(--font-mono); font-size: 9px; padding: 2px 7px; border-radius: 4px; background: color-mix(in oklab, var(--ms) 12%, #fff); color: color-mix(in oklab, var(--ms) 76%, #000); cursor: pointer; white-space: nowrap; letter-spacing: 0.01em; transition: all 120ms ease; border: 0; }
+.td-todo .text-area { flex: 1; min-width: 0; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; cursor: text; }
+.td-todo.editing .text-area { display: block; }
+.td-flow { min-width: 0; flex: 1 1 auto; display: inline-flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; }
+.td-meta { flex: 0 1 auto; min-width: 0; max-width: 42%; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.td-todo .body { min-width: 0; font-size: 13.5px; color: color-mix(in oklab, var(--burnham) 85%, transparent); line-height: 1.35; letter-spacing: -0.005em; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.td-chip-ms { --ms: var(--moss); max-width: 180px; display: inline-flex; align-items: center; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: 9px; padding: 2px 7px; border-radius: 4px; background: color-mix(in oklab, var(--ms) 12%, #fff); color: color-mix(in oklab, var(--ms) 76%, #000); cursor: pointer; white-space: nowrap; letter-spacing: 0.01em; transition: all 120ms ease; border: 0; }
 .td-chip-ms:hover { background: color-mix(in oklab, var(--ms) 20%, #fff); color: color-mix(in oklab, var(--ms) 62%, #000); }
 .td-chip-ms.ghost { opacity: 0; background: transparent; color: color-mix(in oklab, var(--shuttle) 48%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--shuttle) 16%, transparent); }
 .td-todo:hover .td-chip-ms.ghost, .td-todo.editing .td-chip-ms.ghost, .td-ms-chip-wrap:focus-within .td-chip-ms.ghost { opacity: 1; }
-.td-ms-chip-wrap { position: relative; display: inline-flex; }
+.td-ms-chip-wrap { position: relative; display: inline-flex; min-width: 0; }
 .td-ms-chip-wrap .chip-pop { position: absolute; left: 0; top: calc(100% + 7px); width: min(340px, calc(100vw - 36px)); }
-.td-chip-mention { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid color-mix(in oklab, var(--midnight) 8%, transparent); background: color-mix(in oklab, var(--midnight) 4%, transparent); border-radius: 6px; font-size: 10px; font-weight: 500; color: color-mix(in oklab, var(--midnight) 72%, transparent); line-height: 1.1; }
+.td-chip-mention { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border: 1px solid color-mix(in oklab, var(--midnight) 8%, transparent); background: color-mix(in oklab, var(--midnight) 4%, transparent); border-radius: 6px; font-size: 10px; font-weight: 500; color: color-mix(in oklab, var(--midnight) 72%, transparent); line-height: 1.1; }
 .td-chip-mention.clickable { cursor: pointer; transition: all 120ms ease; }
 .td-chip-mention.clickable:hover { border-color: color-mix(in oklab, var(--burnham) 18%, transparent); background: color-mix(in oklab, var(--burnham) 7%, transparent); color: var(--burnham); }
 .td-chip-mention .av { width: 12px; height: 12px; border-radius: 999px; background: var(--mercury); display: inline-flex; align-items: center; justify-content: center; font-size: 7px; font-weight: 600; color: color-mix(in oklab, var(--shuttle) 80%, transparent); overflow: hidden; }
@@ -85,7 +88,7 @@
 .td-todo .grip-todo:hover { opacity: 1; color: var(--burnham); }
 .td-todo .grip-todo:active { cursor: grabbing; }
 
-.td-add { display: flex; align-items: center; gap: 10px; padding: 10px; margin: 4px -10px 0; border-radius: 8px; cursor: text; color: var(--fg-3); font-size: 13px; transition: all 120ms ease; width: calc(100% + 20px); text-align: left; background: transparent; border: 0; }
+.td-add { display: flex; align-items: center; gap: 10px; padding: 7px 10px; margin: 4px -10px 0; border-radius: 8px; cursor: text; color: var(--fg-3); font-size: 13px; transition: all 120ms ease; width: calc(100% + 20px); min-height: 32px; text-align: left; background: transparent; border: 0; }
 .td-add:hover { background: color-mix(in oklab, var(--mercury) 22%, transparent); color: var(--burnham); }
 .td-add.empty-row { color: color-mix(in oklab, var(--shuttle) 42%, transparent); }
 .td-add-placeholder { font-size: 13.5px; }
@@ -93,10 +96,11 @@
 .td-add i { font-size: 13px; }
 .td-add input { flex: 1; border: 0; background: transparent; font-size: 13.5px; color: var(--burnham); }
 .td-add .td-mention-wrap { flex: 1; min-width: 0; }
+.td-add > .td-chip-ms { flex: 0 1 auto; max-width: 220px; }
 
 /* CRM mention input — Notion-like @ picker for todos */
 .td-mention-wrap { position: relative; display: block; min-width: 0; width: 100%; }
-.td-mention-editor { width: 100%; min-width: 0; outline: none; border: 0; background: transparent; padding: 0; font-size: 13.5px; color: color-mix(in oklab, var(--burnham) 90%, transparent); line-height: 1.55; letter-spacing: -0.005em; cursor: text; white-space: pre-wrap; overflow-wrap: anywhere; }
+.td-mention-editor { width: 100%; min-width: 0; outline: none; border: 0; background: transparent; padding: 0; font-size: 13.5px; color: color-mix(in oklab, var(--burnham) 90%, transparent); line-height: 1.4; letter-spacing: -0.005em; cursor: text; white-space: pre-wrap; overflow-wrap: anywhere; }
 .td-mention-editor:empty::before { content: attr(data-placeholder); color: color-mix(in oklab, var(--shuttle) 42%, transparent); pointer-events: none; }
 .td-editor-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; margin: 0 2px; border: 1px solid color-mix(in oklab, var(--midnight) 9%, transparent); background: color-mix(in oklab, var(--midnight) 4%, transparent); border-radius: 6px; font-size: 10px; font-weight: 500; color: color-mix(in oklab, var(--midnight) 74%, transparent); line-height: 1.1; vertical-align: 0; user-select: none; -webkit-user-select: none; cursor: default; }
 .td-editor-chip.selected { border-color: color-mix(in oklab, var(--moss) 42%, transparent); background: color-mix(in oklab, var(--moss) 13%, #fff); color: var(--burnham); box-shadow: 0 0 0 1px color-mix(in oklab, var(--moss) 18%, transparent); }
