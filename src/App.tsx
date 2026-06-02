@@ -8,14 +8,8 @@ import Login from '@/screens/Login'
 import CompactMode from '@/screens/CompactMode'
 import AppShell from '@/components/layout/AppShell'
 import Assessment from '@/screens/Assessment'
-import Strategy from '@/screens/Strategy'
-import Monthly from '@/screens/Monthly'
 import Today from '@/screens/Today'
-import Dashboard from '@/screens/Dashboard'
-import GoalDetail from '@/screens/GoalDetail'
-import WeeklyReview from '@/screens/WeeklyReview'
-import ReflectionLibrary from '@/screens/ReflectionLibrary'
-import YearAtAGlance from '@/screens/YearAtAGlance'
+import ReviewQueue from '@/screens/ReviewQueue'
 import People from '@/screens/People'
 import PersonDetail from '@/screens/PersonDetail'
 import PeopleCompanies from '@/screens/PeopleCompanies'
@@ -25,7 +19,6 @@ import CompanyDetail from '@/screens/CompanyDetail'
 import PeopleOpportunities from '@/screens/PeopleOpportunities'
 import OpportunityDetail from '@/screens/OpportunityDetail'
 import Plan from '@/screens/Plan'
-import MilestonePlan from '@/screens/MilestonePlan'
 import Playbook from '@/screens/Playbook'
 import ContactDetailDrawer from '@/components/ContactDetailDrawer'
 import { checkNotificationTriggers, formatNotificationMessage } from '@/lib/notifications'
@@ -209,14 +202,15 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<Navigate to="/today" replace />} />
                   <Route path="/today" element={<Today />} />
-                  <Route path="/strategy" element={<Strategy />} />
-                  <Route path="/monthly" element={<Monthly />} />
-                  <Route path="/monthly/:goalId" element={<Monthly />} />
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/dashboard/goal/:id" element={<GoalDetail />} />
-                  <Route path="/weekly-review" element={<WeeklyReview />} />
-                  <Route path="/library" element={<ReflectionLibrary />} />
-                  <Route path="/year" element={<YearAtAGlance />} />
+                  <Route path="/review" element={<ReviewQueue />} />
+                  <Route path="/strategy" element={<Navigate to="/plan" replace />} />
+                  <Route path="/monthly" element={<Navigate to="/plan" replace />} />
+                  <Route path="/monthly/:goalId" element={<Navigate to="/plan" replace />} />
+                  <Route path="/dashboard" element={<Navigate to="/plan" replace />} />
+                  <Route path="/dashboard/goal/:id" element={<Navigate to="/plan" replace />} />
+                  <Route path="/weekly-review" element={<Navigate to="/plan" replace />} />
+                  <Route path="/library" element={<Navigate to="/plan" replace />} />
+                  <Route path="/year" element={<Navigate to="/plan" replace />} />
                   <Route path="/people" element={<People />} />
                   <Route path="/people/companies" element={<PeopleCompanies />} />
                   <Route path="/people/companies/:id" element={<CompanyDetail />} />
@@ -226,7 +220,7 @@ export default function App() {
                   <Route path="/lists" element={<Lists />} />
                   <Route path="/lists/:id" element={<ListDetail />} />
                   <Route path="/plan" element={<Plan />} />
-                  <Route path="/milestone-plan" element={<MilestonePlan />} />
+                  <Route path="/milestone-plan" element={<Navigate to="/plan" replace />} />
                   <Route path="/playbook" element={<Playbook />} />
                   <Route path="*" element={<Navigate to="/today" replace />} />
                 </Routes>

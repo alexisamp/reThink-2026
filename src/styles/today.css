@@ -3,7 +3,7 @@
    Right rail: Milestones → This Week → Next Steps → Journal (collapsible + draggable) */
 
 /* ── Page chrome ──────────────────────────────────────────── */
-.td-page { padding: 36px 56px 80px; max-width: 1300px; margin: 0 auto; }
+.td-page { padding: 36px clamp(34px, 4vw, 64px) 80px; max-width: 1500px; margin: 0 auto; }
 .td-page-hd { display: flex; align-items: baseline; gap: 14px; margin-bottom: 44px; }
 .td-page-hd .date { font-family: var(--font-display); font-size: 36px; font-weight: 400; color: var(--burnham); letter-spacing: -0.025em; line-height: 1.05; white-space: nowrap; }
 .td-page-hd .sep { color: var(--fg-3); font-size: 18px; align-self: center; }
@@ -11,7 +11,7 @@
 .td-page-hd .hd-spacer { flex: 1; }
 .td-page-hd .hd-act { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: 0; padding: 5px 9px; border-radius: 7px; color: var(--shuttle); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em; cursor: pointer; transition: all 120ms ease; align-self: center; }
 .td-page-hd .hd-act:hover { background: color-mix(in oklab, var(--mercury) 45%, transparent); color: var(--burnham); }
-.td-day-goal { display: flex; align-items: center; gap: 10px; margin: -26px 0 34px; max-width: 680px; }
+.td-day-goal { display: flex; align-items: center; gap: 10px; margin: -26px 0 34px; max-width: 920px; }
 .td-day-goal .label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
 .td-day-goal button { border: 0; background: transparent; padding: 3px 0; color: var(--burnham); font-size: 13px; font-weight: 500; cursor: pointer; border-bottom: 1px solid color-mix(in oklab, var(--burnham) 18%, transparent); }
 .td-day-goal button:hover { border-color: var(--burnham); }
@@ -28,9 +28,9 @@
 @keyframes td-focus-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 /* ── Two-column body ──────────────────────────────────────── */
-.td-two-col { display: grid; grid-template-columns: minmax(0, 1fr) 296px; gap: 56px; align-items: flex-start; }
-@media (max-width: 1100px) { .td-two-col { grid-template-columns: 1fr; } }
-.td-main-col { max-width: 680px; }
+.td-two-col { display: grid; grid-template-columns: minmax(720px, 1fr) 296px; gap: clamp(36px, 4vw, 56px); align-items: flex-start; }
+@media (max-width: 1180px) { .td-two-col { grid-template-columns: 1fr; } }
+.td-main-col { max-width: 980px; min-width: 0; }
 
 /* ── Section header ───────────────────────────────────────── */
 .td-section { margin-bottom: 36px; }
@@ -56,9 +56,9 @@
 .td-todo .text-area { flex: 1; min-width: 0; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; cursor: text; }
 .td-todo.editing .text-area { display: block; }
 .td-flow { min-width: 0; flex: 1 1 auto; display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; }
-.td-meta { flex: 0 1 auto; min-width: 0; max-width: 42%; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.td-meta { flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .td-todo .body { min-width: 0; font-size: 13.5px; color: color-mix(in oklab, var(--burnham) 85%, transparent); line-height: 1.35; letter-spacing: -0.005em; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
-.td-chip-ms { --ms: var(--moss); max-width: 180px; display: inline-flex; align-items: center; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: 9px; padding: 2px 7px; border-radius: 4px; background: color-mix(in oklab, var(--ms) 12%, #fff); color: color-mix(in oklab, var(--ms) 76%, #000); cursor: pointer; white-space: nowrap; letter-spacing: 0.01em; transition: all 120ms ease; border: 0; }
+.td-chip-ms { --ms: var(--moss); max-width: 150px; display: inline-flex; align-items: center; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: 9px; padding: 2px 7px; border-radius: 4px; background: color-mix(in oklab, var(--ms) 12%, #fff); color: color-mix(in oklab, var(--ms) 76%, #000); cursor: pointer; white-space: nowrap; letter-spacing: 0.01em; transition: all 120ms ease; border: 0; }
 .td-chip-ms:hover { background: color-mix(in oklab, var(--ms) 20%, #fff); color: color-mix(in oklab, var(--ms) 62%, #000); }
 .td-chip-ms.ghost { opacity: 0; background: transparent; color: color-mix(in oklab, var(--shuttle) 48%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--shuttle) 16%, transparent); }
 .td-todo:hover .td-chip-ms.ghost, .td-todo.editing .td-chip-ms.ghost, .td-ms-chip-wrap:focus-within .td-chip-ms.ghost { opacity: 1; }
@@ -70,7 +70,7 @@
 .td-chip-mention .av { width: 12px; height: 12px; border-radius: 999px; background: var(--mercury); display: inline-flex; align-items: center; justify-content: center; font-size: 7px; font-weight: 600; color: color-mix(in oklab, var(--shuttle) 80%, transparent); overflow: hidden; }
 .td-chip-mention .av.sq { border-radius: 3px; }
 .td-chip-mention .av img { width: 100%; height: 100%; object-fit: cover; }
-.td-file-chip { max-width: min(220px, 100%); }
+.td-file-chip { max-width: min(180px, 34vw); }
 .td-file-chip > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .td-file-chip .av.sq { width: auto; min-width: 18px; padding: 0 3px; border-radius: 3px; font-size: 6.5px; letter-spacing: 0.02em; text-transform: uppercase; background: color-mix(in oklab, var(--moss) 11%, #fff); color: color-mix(in oklab, var(--moss) 78%, var(--burnham)); }
 .td-chip-waiting { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; border-radius: 6px; border: 0; background: color-mix(in oklab, var(--shuttle) 9%, transparent); color: color-mix(in oklab, var(--shuttle) 75%, transparent); font-size: 9.5px; font-family: var(--font-mono); }
@@ -126,6 +126,8 @@
 .td-mention-row { width: 100%; display: grid; grid-template-columns: 24px 1fr; align-items: center; gap: 9px; padding: 7px; border: 0; border-radius: 7px; background: transparent; text-align: left; cursor: pointer; }
 .td-mention-row:hover, .td-mention-row.active { background: color-mix(in oklab, var(--gossip) 55%, transparent); }
 .td-mention-row.create .td-mention-avatar { background: color-mix(in oklab, var(--moss) 12%, #fff); color: var(--moss); font-size: 13px; }
+.td-file-picker-divider { height: 1px; margin: 6px 2px; background: var(--border-1); }
+.td-drive-row .td-mention-avatar { font-family: var(--font-mono); font-size: 7px; text-transform: uppercase; color: color-mix(in oklab, var(--moss) 78%, var(--burnham)); background: color-mix(in oklab, var(--moss) 11%, #fff); }
 .td-ms-picker .td-mention-row { grid-template-columns: 14px 1fr; }
 .td-ms-option-dot { --ms: var(--moss); width: 8px; height: 8px; border-radius: 999px; background: var(--ms); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ms) 12%, transparent); justify-self: center; }
 .td-ms-option.clear .td-ms-option-dot { background: color-mix(in oklab, var(--shuttle) 28%, transparent); box-shadow: none; }
@@ -176,6 +178,21 @@
 .td-day-drawer-foot { padding: 14px 20px 18px; border-top: 1px solid var(--border-1); display: flex; justify-content: flex-end; }
 .td-day-drawer-foot button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 8px; background: var(--burnham); color: #fff; padding: 9px 13px; min-width: 128px; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 120ms ease; }
 .td-day-drawer-foot button:disabled { opacity: 0.55; cursor: default; }
+
+.td-closed-summary { min-height: 430px; display: flex; flex-direction: column; justify-content: center; padding: 26px 0 64px; max-width: 760px; }
+.td-closed-kicker { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg-3); margin-bottom: 10px; }
+.td-closed-summary h2 { margin: 0; font-family: var(--font-display); font-size: 42px; font-weight: 400; line-height: 1.02; letter-spacing: -0.03em; color: var(--burnham); }
+.td-closed-goal { margin: 14px 0 0; max-width: 620px; color: color-mix(in oklab, var(--burnham) 76%, transparent); font-size: 17px; line-height: 1.45; }
+.td-closed-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; max-width: 620px; margin-top: 34px; border-top: 1px solid var(--border-1); border-bottom: 1px solid var(--border-1); }
+.td-closed-grid > div { padding: 18px 18px 16px 0; }
+.td-closed-grid span { display: block; font-family: var(--font-display); font-size: 30px; line-height: 1; color: var(--burnham); letter-spacing: -0.02em; }
+.td-closed-grid label { display: block; margin-top: 7px; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fg-3); }
+.td-closed-next { margin-top: 22px; display: flex; flex-direction: column; gap: 6px; max-width: 620px; padding: 14px 0; border-bottom: 1px solid var(--border-1); }
+.td-closed-next span { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-3); }
+.td-closed-next strong { font-size: 14px; color: var(--burnham); font-weight: 500; }
+.td-closed-actions { margin-top: 22px; }
+.td-closed-actions button { border: 0; background: transparent; color: var(--shuttle); padding: 6px 8px; margin-left: -8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+.td-closed-actions button:hover { background: color-mix(in oklab, var(--mercury) 35%, transparent); color: var(--burnham); }
 
 /* group header (when grouped by milestone) */
 .td-group-hd { display: flex; align-items: baseline; gap: 10px; padding: 16px 0 8px; }
@@ -275,6 +292,20 @@
 .td-tw-foot button { background: transparent; border: 0; padding: 4px 6px; color: var(--shuttle); font-size: 11px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; border-radius: 4px; }
 .td-tw-foot button:hover { color: var(--burnham); }
 .td-tw-empty { font-size: 11.5px; color: var(--fg-3); font-style: italic; padding: 4px 0; }
+.td-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--fg-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+.td-mini-btn:hover { background: var(--card-2); color: var(--fg); }
 
 /* ── Next steps rows (people feed → This Week KPIs) ──────── */
 .td-ns-empty { font-size: 11.5px; color: var(--fg-3); font-style: italic; padding: 4px 0; }

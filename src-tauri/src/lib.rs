@@ -16,6 +16,68 @@ fn open_url_in_browser(url: String) {
     { let _ = std::process::Command::new("xdg-open").arg(&url).spawn(); }
 }
 
+fn file_url_from_path(path_or_url: &str) -> Result<String, String> {
+    if path_or_url.starts_with("file://") || path_or_url.starts_with("http://") || path_or_url.starts_with("https://") {
+        return Ok(path_or_url.to_string());
+    }
+    let canonical = std::fs::canonicalize(path_or_url).map_err(|_| "File not found".to_string())?;
+    let raw = canonical.to_string_lossy();
+    let mut encoded = String::from("file://");
+    for byte in raw.as_bytes() {
+        let keep = byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'.' | b'_' | b'~');
+        if keep {
+            encoded.push(*byte as char);
+        } else {
+            encoded.push_str(&format!("%{:02X}", byte));
+        }
+    }
+    Ok(encoded)
+}
+
+#[tauri::command]
+fn open_file_in_default_browser(path_or_url: String) -> Result<(), String> {
+    let url = file_url_from_path(&path_or_url)?;
+    #[cfg(target_os = "macos")]
+    {
+        let temp = std::env::temp_dir().join(format!(
+            "rethink-open-{}.html",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| "Could not prepare browser open".to_string())?
+                .as_millis()
+        ));
+        let escaped_url = url.replace('&', "&amp;").replace('"', "&quot;").replace('<', "&lt;");
+        let html = format!(
+            "<!doctype html><meta charset=\"utf-8\"><meta http-equiv=\"refresh\" content=\"0; url={}\"><script>location.replace(\"{}\");</script>",
+            escaped_url,
+            url.replace('\\', "\\\\").replace('"', "\\\"")
+        );
+        std::fs::write(&temp, html).map_err(|_| "Could not prepare browser open".to_string())?;
+        let temp_url = file_url_from_path(temp.to_string_lossy().as_ref())?;
+        let escaped = temp_url.replace('\\', "\\\\").replace('"', "\\\"");
+        let script = format!("open location \"{}\"", escaped);
+        std::process::Command::new("osascript")
+            .args(["-e", &script])
+            .spawn()
+            .map_err(|_| "Could not open browser".to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &url])
+            .spawn()
+            .map_err(|_| "Could not open browser".to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map_err(|_| "Could not open browser".to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn read_local_file_base64(path: String) -> Result<String, String> {
     let canonical = std::fs::canonicalize(&path).map_err(|_| "File not found".to_string())?;
@@ -61,7 +123,7 @@ pub fn run() {
 
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![open_url_in_browser, read_local_file_base64])
+    .invoke_handler(tauri::generate_handler![open_url_in_browser, open_file_in_default_browser, read_local_file_base64])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

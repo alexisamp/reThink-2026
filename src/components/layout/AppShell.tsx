@@ -4,7 +4,7 @@ import {
   House, BookBookmark, Users, Buildings, Target,
   Star, Flame, ChartBar, Gear, List as ListIcon,
   MagnifyingGlass, CaretDown, CaretRight,
-  SignOut, ArrowLeft,
+  SignOut, ArrowLeft, CheckSquare,
 } from '@phosphor-icons/react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
@@ -12,9 +12,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useLists } from '@/hooks/useLists'
 import CommandPalette from '@/components/CommandPalette'
 import SettingsModal from '@/components/SettingsModal'
-import CaptureModal from '@/components/CaptureModal'
 import type { UpdaterState } from '@/hooks/useUpdater'
-import type { Capture } from '@/types'
 
 const SIDEBAR_KEY = 'rethink-sidebar-collapsed'
 const CRM_KEY = 'rethink-crm-collapsed'
@@ -119,7 +117,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
   const [listsOpen, setListsOpen] = useState(() => localStorage.getItem(LISTS_KEY) !== 'false')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [captureToOpen, setCaptureToOpen] = useState<Capture | null>(null)
+  const [reviewCount, setReviewCount] = useState(0)
   const [zoom, setZoom] = useState<ZoomLevel>(() => {
     const saved = parseInt(localStorage.getItem(ZOOM_KEY) ?? '100', 10)
     return (ZOOM_OPTIONS.includes(saved as ZoomLevel) ? saved : 100) as ZoomLevel
@@ -129,10 +127,6 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
     setZoom(level)
     localStorage.setItem(ZOOM_KEY, String(level))
   }, [])
-  const handleOpenCapture = useCallback((capture: Capture) => {
-    setCaptureToOpen(capture)
-  }, [])
-
   const toggleCollapsed = useCallback(() => {
     setCollapsed(prev => {
       const next = !prev
@@ -152,10 +146,28 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
     'cmd+k': () => setPaletteOpen(true),
     'cmd+\\': toggleCollapsed,
     'cmd+1': () => navigate('/today'),
-    'cmd+2': () => navigate('/plan'),
-    'cmd+3': () => navigate('/people'),
+    'cmd+2': () => navigate('/review'),
+    'cmd+3': () => navigate('/plan'),
     'cmd+4': () => navigate('/playbook'),
   })
+
+  useEffect(() => {
+    let cancelled = false
+    const loadReviewCount = async () => {
+      const { count } = await supabase
+        .from('review_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('status', 'pending')
+      if (!cancelled) setReviewCount(count ?? 0)
+    }
+    loadReviewCount()
+    const interval = window.setInterval(loadReviewCount, 60_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [user.id])
 
   const showUpdateDot = updater.status === 'available' || updater.status === 'ready'
 
@@ -212,6 +224,12 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         {/* Main nav */}
         <nav className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
           <NavItem path="/today" icon={<House size={16} />} label="Today" collapsed={collapsed} />
+          <NavItem
+            path="/review"
+            icon={<CheckSquare size={16} />}
+            label={reviewCount > 0 ? `Review (${reviewCount})` : 'Review'}
+            collapsed={collapsed}
+          />
           <NavItem path="/playbook" icon={<BookBookmark size={16} />} label="Playbook" collapsed={collapsed} />
 
           <SectionDivider collapsed={collapsed} />
@@ -382,7 +400,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         {children}
       </main>
 
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onOpenCapture={handleOpenCapture} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
       <SettingsModal
         open={settingsOpen}
@@ -392,13 +410,6 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         onZoomChange={setZoomLevel}
       />
 
-      <CaptureModal
-        capture={captureToOpen}
-        onClose={() => setCaptureToOpen(null)}
-        goals={[]}
-        milestones={[]}
-        onUpdate={() => {}}
-      />
     </div>
   )
 }

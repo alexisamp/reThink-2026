@@ -3,9 +3,9 @@
 // Journal (collapsible + drag-to-reorder, persisted). Wired to live Supabase data.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Target, ChartLineUp, UsersThree, PencilSimple, Timer, Play, Pause, X, Check, Moon } from '@phosphor-icons/react'
+import { Target, ChartLineUp, UsersThree, PencilSimple, Timer, Play, Pause, X, Check, Moon, CheckSquare, ArrowCounterClockwise } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
-import type { Todo, Milestone, Goal, Review, TodoContentSegment, TodoMentionKind } from '@/types'
+import type { Todo, Milestone, Goal, Review, TodoContentSegment, TodoMentionKind, ReviewItem } from '@/types'
 import MilestonePanel from '@/components/MilestonePanel'
 import DayStartDrawer from '@/components/DayStartDrawer'
 import EndOfDayDrawer from '@/components/EndOfDayDrawer'
@@ -18,6 +18,7 @@ import FocusTimer from './today/FocusTimer'
 import { useFocusTimer } from './today/useFocusTimer'
 import type { GroupBy, Mention, TodoMilestoneOption } from './today/types'
 import { companyImage, createCrmObject, firstRelation, mentionFromCompany, mentionFromContact, mentionFromOpportunity } from '@/lib/crmObjects'
+import { acceptReviewItem, dismissReviewItem, REVIEW_TARGET_LABELS } from '@/lib/reviewQueue'
 
 function fmtClock(seconds: number): string {
   const m = Math.floor(seconds / 60), s = seconds % 60
@@ -45,10 +46,34 @@ interface OpportunityMentionRow {
   company_id?: string | null
   company?: RelationCompany | RelationCompany[] | null
 }
-type TodayReviewRow = Pick<Review, 'notes' | 'one_thing' | 'energy_level' | 'tomorrow_reviewed'>
+type TodayReviewRow = Pick<Review, 'notes' | 'one_thing' | 'one_thing_done' | 'energy_level' | 'tomorrow_reviewed' | 'day_locked_at'>
+interface DayCloseSummary {
+  removedTodoIds: string[]
+  carriedCount: number
+  clearedCount: number
+  completedCount: number
+  pendingCount: number
+  energyLevel: number | null
+  goalDone: boolean | null
+  tomorrowGoal?: string
+}
 
 const GROUP_KEY = 'rethink.today.groupBy'
 const FALLBACK_COLORS = ['#3E7A4E', '#536471', '#7A3E68', '#3E5F7A', '#9A6B4F']
+
+function shouldFallbackWithoutContentSegments(error: { message?: string; code?: string } | null) {
+  if (!error) return false
+  return /content_segments|schema cache|column .*does not exist/i.test(`${error.code ?? ''} ${error.message ?? ''}`)
+}
+
+function legacyTextFromContentSegments(segments: TodoContentSegment[], fallback: string) {
+  if (!segments.some(segment => segment.type !== 'text')) return fallback
+  return segments.map(segment => {
+    if (segment.type === 'text') return segment.text
+    if (segment.type === 'mention') return `[[mention:${segment.kind}:${segment.id}]]`
+    return segment.label
+  }).join('').replace(/\s{2,}/g, ' ').trim()
+}
 
 function localDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -95,6 +120,9 @@ export default function Today() {
   const [startOpen, setStartOpen] = useState(false)
   const [endOpen, setEndOpen] = useState(false)
   const [focusOpen, setFocusOpen] = useState(false)
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([])
+  const [dayClosed, setDayClosed] = useState(false)
+  const [closedSummary, setClosedSummary] = useState<DayCloseSummary | null>(null)
   const focus = useFocusTimer(userId)
   const [twRefresh, setTwRefresh] = useState(0)
   const journalTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -141,16 +169,17 @@ export default function Today() {
       if (!user || cancelled) return
       setUserId(user.id)
 
-      const [todosRes, overdueTodosRes, msTodosRes, msRes, goalsRes, reviewRes, contactsRes, companiesRes, oppsRes] = await Promise.all([
+      const [todosRes, overdueTodosRes, msTodosRes, msRes, goalsRes, reviewRes, contactsRes, companiesRes, oppsRes, reviewQueueRes] = await Promise.all([
         supabase.from('todos').select('*').eq('user_id', user.id).eq('date', today).order('sort_order').order('created_at'),
         supabase.from('todos').select('*').eq('user_id', user.id).lt('date', today).eq('completed', false).order('date').order('sort_order').order('created_at'),
         supabase.from('todos').select('id, milestone_id, completed').eq('user_id', user.id).not('milestone_id', 'is', null),
         supabase.from('milestones').select('*').eq('user_id', user.id).neq('status', 'COMPLETE').order('target_date', { nullsFirst: false }),
         supabase.from('goals').select('id, text, alias, color, emoji').eq('user_id', user.id).eq('goal_type', 'ACTIVE').order('position'),
-        supabase.from('reviews').select('notes, one_thing, energy_level, tomorrow_reviewed').eq('user_id', user.id).eq('date', today).maybeSingle(),
+        supabase.from('reviews').select('notes, one_thing, one_thing_done, energy_level, tomorrow_reviewed, day_locked_at').eq('user_id', user.id).eq('date', today).maybeSingle(),
         supabase.from('outreach_logs').select('id, name, profile_photo_url, company, job_title, email').eq('user_id', user.id).order('name'),
         supabase.from('companies').select('id, name, logo_url, domain, sector, headline').eq('user_id', user.id).order('name'),
         supabase.from('opportunities').select('id, title, stage, type, company_id, company:companies(id, name, logo_url, domain)').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('review_items').select('*').eq('user_id', user.id).eq('status', 'pending').order('created_at', { ascending: false }).limit(3),
       ])
       if (cancelled) return
 
@@ -171,11 +200,22 @@ export default function Today() {
       setMsTodos((msTodosRes.data ?? []) as MsTodo[])
       setMilestones((msRes.data ?? []) as Milestone[])
       setMentionOptions([...peopleOptions, ...companyOptions, ...oppOptions])
+      setReviewItems((reviewQueueRes.data ?? []) as ReviewItem[])
       const gl = (goalsRes.data ?? []) as GoalLite[]
       setGoals(gl)
       setGoalsMap(new Map(gl.map(g => [g.id, g])))
       if (!journalInit.current) { setJournal(review?.notes ?? ''); journalInit.current = true }
       setDailyGoal(review?.one_thing ?? '')
+      setDayClosed(Boolean(review?.tomorrow_reviewed || review?.day_locked_at))
+      setClosedSummary(review?.tomorrow_reviewed || review?.day_locked_at ? {
+        removedTodoIds: [],
+        carriedCount: 0,
+        clearedCount: 0,
+        completedCount: todoList.filter(t => t.completed).length,
+        pendingCount: todoList.filter(t => !t.completed).length,
+        energyLevel: review?.energy_level ?? null,
+        goalDone: review?.one_thing_done ?? null,
+      } : null)
       if (!review?.one_thing && !sessionStorage.getItem(`rethink.today.goalSkipped:${today}`)) setStartOpen(true)
       loadMentions(user.id, todoList)
     })()
@@ -230,10 +270,12 @@ export default function Today() {
 
   const milestoneOptions: TodoMilestoneOption[] = useMemo(() => {
     return [...milestones]
+      .filter(m => m.focused)
       .sort((a, b) =>
         ((a.position ?? 999) - (b.position ?? 999)) ||
         (a.target_date ?? '9999-12-31').localeCompare(b.target_date ?? '9999-12-31') ||
         a.text.localeCompare(b.text))
+      .slice(0, 6)
       .map(m => {
         const g = goalsMap.get(m.goal_id)
         const prog = msProgress.get(m.id) ?? { done: 0, total: 0 }
@@ -336,13 +378,28 @@ export default function Today() {
     if (links?.companyId !== undefined) patch.company_id = links.companyId
     if (links?.opportunityId !== undefined) patch.opportunity_id = links.opportunityId
     setTodos(prev => prev.map(x => x.id === id ? { ...x, ...patch } : x))
-    await supabase.from('todos').update({
+    const updatePayload = {
       text,
       content_segments: contentSegments,
       ...(links?.contactId !== undefined ? { contact_id: links.contactId } : {}),
       ...(links?.companyId !== undefined ? { company_id: links.companyId } : {}),
       ...(links?.opportunityId !== undefined ? { opportunity_id: links.opportunityId } : {}),
-    }).eq('id', id)
+    }
+    const { error } = await supabase.from('todos').update(updatePayload).eq('id', id)
+    if (shouldFallbackWithoutContentSegments(error)) {
+      const { error: fallbackError } = await supabase
+        .from('todos')
+        .update({
+          text: legacyTextFromContentSegments(contentSegments, text),
+          ...(links?.contactId !== undefined ? { contact_id: links.contactId } : {}),
+          ...(links?.companyId !== undefined ? { company_id: links.companyId } : {}),
+          ...(links?.opportunityId !== undefined ? { opportunity_id: links.opportunityId } : {}),
+        })
+        .eq('id', id)
+      if (fallbackError) console.error('editTodoText fallback failed:', fallbackError)
+    } else if (error) {
+      console.error('editTodoText failed:', error)
+    }
     if (userId && links) loadMentions(userId, todos.map(x => x.id === id ? { ...x, ...patch } as Todo : x))
   }
   const addTodo = async (text: string, milestoneId: string | null, contentSegments: TodoContentSegment[], links: TodoLinks = {}) => {
@@ -350,9 +407,9 @@ export default function Today() {
     const milestone = milestoneId ? milestones.find(m => m.id === milestoneId) : null
     const selectedOpp = links.opportunityId ? mentionOptions.find(m => m.kind === 'opportunity' && m.id === links.opportunityId) : null
     const companyId = links.companyId ?? selectedOpp?.companyId ?? null
-    const tempId = `temp-${crypto.randomUUID()}`
+    const todoId = crypto.randomUUID()
     const optimisticTodo: Todo = {
-      id: tempId,
+      id: todoId,
       text,
       user_id: userId,
       date: today,
@@ -375,36 +432,40 @@ export default function Today() {
       created_at: new Date().toISOString(),
     }
     setTodos(prev => [...prev, optimisticTodo])
-    if (milestoneId) setMsTodos(prev => [...prev, { id: tempId, milestone_id: milestoneId, completed: false }])
+    if (milestoneId) setMsTodos(prev => [...prev, { id: todoId, milestone_id: milestoneId, completed: false }])
 
-    const { data } = await supabase.from('todos').insert({
-      text, user_id: userId, date: today,
+    const insertPayload = {
+      id: todoId, text, user_id: userId, date: today,
       content_segments: contentSegments,
       milestone_id: milestoneId, goal_id: milestone?.goal_id ?? null,
       contact_id: links.contactId ?? null,
       company_id: companyId,
       opportunity_id: links.opportunityId ?? null,
-    }).select().single()
-    if (data) {
-      const todo = {
-        ...(data as Todo),
-        text,
-        content_segments: contentSegments,
-        milestone_id: milestoneId,
-        goal_id: milestone?.goal_id ?? null,
-        contact_id: links.contactId ?? null,
-        company_id: companyId,
-        opportunity_id: links.opportunityId ?? null,
-      }
-      setTodos(prev => prev.map(item => item.id === tempId ? todo : item))
-      if (milestoneId) {
-        setMsTodos(prev => prev.map(item => item.id === tempId ? { id: data.id, milestone_id: milestoneId, completed: false } : item))
-      }
-      loadMentions(userId, [...todos, todo])
-    } else {
-      setTodos(prev => prev.filter(item => item.id !== tempId))
-      if (milestoneId) setMsTodos(prev => prev.filter(item => item.id !== tempId))
     }
+    const { error } = await supabase.from('todos').insert(insertPayload)
+    if (shouldFallbackWithoutContentSegments(error)) {
+      const { error: fallbackError } = await supabase
+        .from('todos')
+        .insert({
+          id: todoId,
+          text: legacyTextFromContentSegments(contentSegments, text),
+          user_id: userId,
+          date: today,
+          milestone_id: milestoneId,
+          goal_id: milestone?.goal_id ?? null,
+          contact_id: links.contactId ?? null,
+          company_id: companyId,
+          opportunity_id: links.opportunityId ?? null,
+        })
+      if (fallbackError) {
+        console.error('addTodo fallback failed:', fallbackError)
+        return
+      }
+    } else if (error) {
+      console.error('addTodo failed:', error)
+      return
+    }
+    loadMentions(userId, [...todos, optimisticTodo])
   }
 
   const changeTodoMilestone = async (id: string, milestoneId: string | null) => {
@@ -471,11 +532,84 @@ export default function Today() {
 
   const setGroup = (g: GroupBy) => { setGroupBy(g); localStorage.setItem(GROUP_KEY, g) }
 
+  const reopenDay = async () => {
+    if (!userId) return
+    setDayClosed(false)
+    const ids = closedSummary?.removedTodoIds ?? []
+    const reviewPayload = { user_id: userId, date: today, tomorrow_reviewed: false, day_locked_at: null }
+    const { error } = await supabase.from('reviews').upsert(reviewPayload, { onConflict: 'user_id,date' })
+    if (error) {
+      await supabase.from('reviews').upsert({ user_id: userId, date: today, tomorrow_reviewed: false }, { onConflict: 'user_id,date' })
+    }
+    if (ids.length > 0) {
+      await supabase.from('todos').update({ date: today }).in('id', ids)
+      const { data } = await supabase.from('todos').select('*').in('id', ids)
+      if (data) {
+        setTodos(prev => {
+          const byId = new Map(prev.map(t => [t.id, t]))
+          ;(data as Todo[]).forEach(t => byId.set(t.id, t))
+          return [...byId.values()]
+        })
+        setMsTodos(prev => {
+          const byId = new Map(prev.map(t => [t.id, t]))
+          ;(data as Todo[]).forEach(t => {
+            if (t.milestone_id) byId.set(t.id, { id: t.id, milestone_id: t.milestone_id, completed: t.completed })
+          })
+          return [...byId.values()]
+        })
+      }
+    }
+    setClosedSummary(null)
+  }
+
+  const quickDismissReview = async (item: ReviewItem) => {
+    setReviewItems(prev => prev.filter(x => x.id !== item.id))
+    const result = await dismissReviewItem(item)
+    if (!result.ok) setReviewItems(prev => [item, ...prev])
+  }
+
+  const quickAcceptReview = async (item: ReviewItem) => {
+    const result = await acceptReviewItem(item, item.proposed_payload, item.contact_id)
+    if (!result.ok) {
+      navigate('/review')
+      return
+    }
+    setReviewItems(prev => prev.filter(x => x.id !== item.id))
+    setTwRefresh(n => n + 1)
+  }
+
   // ── rail sections ──────────────────────────────────────────────
   const sections: RailSectionDef[] = userId ? [
     {
+      id: 'review', title: 'Review', icon: <CheckSquare size={13} />, count: reviewItems.length,
+      body: reviewItems.length === 0 ? (
+        <div className="td-tw-empty">No external items waiting.</div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {reviewItems.map(item => (
+            <div key={item.id} className="rounded-lg border border-mercury bg-white px-2.5 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono">{item.source}</span>
+                <span className="text-[9px] text-shuttle/50">{REVIEW_TARGET_LABELS[item.proposed_target]}</span>
+              </div>
+              <p className="mt-1 text-[12px] font-medium text-burnham leading-snug line-clamp-2">{item.title}</p>
+              <div className="mt-2 flex items-center gap-1.5">
+                <button className="td-mini-btn" onClick={() => quickAcceptReview(item)}>accept</button>
+                <button className="td-mini-btn" onClick={() => quickDismissReview(item)}>dismiss</button>
+              </div>
+            </div>
+          ))}
+          <div className="td-tw-foot">
+            <button onClick={() => navigate('/review')}>
+              <span>Open review queue</span>
+            </button>
+          </div>
+        </div>
+      ),
+    },
+    {
       id: 'milestones', title: 'Milestones', icon: <Target size={13} />, count: milestoneRows.length,
-      body: <MilestoneRows rows={milestoneRows} activeId={expandedMs} onExpand={setExpandedMs} onManage={() => navigate('/milestone-plan')} />,
+      body: <MilestoneRows rows={milestoneRows} activeId={expandedMs} onExpand={setExpandedMs} onManage={() => navigate('/plan')} />,
     },
     {
       id: 'thisweek', title: 'This week', icon: <ChartLineUp size={13} />, tone: 'lagging',
@@ -496,7 +630,7 @@ export default function Today() {
             onChange={e => onJournalChange(e.target.value)}
           />
           <div className="td-tw-foot">
-            <button onClick={() => navigate('/library')}>
+            <button onClick={() => navigate('/plan')}>
               <span>Open journal</span>
             </button>
           </div>
@@ -510,7 +644,7 @@ export default function Today() {
       <div className="td-page-hd">
         <span className="date">{todayLabel}</span>
         <span className="sep">·</span>
-        <span className="day-state">day in progress</span>
+        <span className="day-state">{dayClosed ? 'day closed' : 'day in progress'}</span>
         <span className="hd-spacer" />
         {focus.complete ? (
           <div className="td-focus-live done" title={focus.intention || 'Focus complete'}>
@@ -532,9 +666,15 @@ export default function Today() {
             <Timer size={13} /> focus
           </button>
         )}
-        <button className="hd-act" onClick={() => setEndOpen(true)} title="Close the day">
-          <Moon size={13} /> close
-        </button>
+        {dayClosed ? (
+          <button className="hd-act" onClick={reopenDay} title="Reopen the day">
+            <ArrowCounterClockwise size={13} /> reopen
+          </button>
+        ) : (
+          <button className="hd-act" onClick={() => setEndOpen(true)} title="Close the day">
+            <Moon size={13} /> close
+          </button>
+        )}
       </div>
 
       {dailyGoal && (
@@ -544,34 +684,70 @@ export default function Today() {
         </div>
       )}
 
-      <div className="td-two-col">
-        <div className="td-main-col">
-          <TodoList
-            todos={todos}
-            milestoneName={milestoneName}
-            milestoneColor={milestoneColor}
-            milestoneTotal={milestoneTotal}
-            milestoneOrder={milestoneOrder}
-            resolveMentions={resolveMentions}
-            mentionOptions={mentionOptions}
-            milestoneOptions={milestoneOptions}
-            groupBy={groupBy}
-            onChangeGroup={setGroup}
-            onToggle={toggleTodo}
-            onDelete={deleteTodo}
-            onStar={starTodo}
-            onToggleWaiting={toggleWaiting}
-            onEditText={editTodoText}
-            onAdd={addTodo}
-            onCreateMention={createMention}
-            onChangeMilestone={changeTodoMilestone}
-            onMilestoneClick={setExpandedMs}
-            onReorder={reorderTodos}
-          />
-        </div>
+      {dayClosed ? (
+        <section className="td-closed-summary">
+          <div className="td-closed-kicker">day summary</div>
+          <h2>{closedSummary?.goalDone === true ? 'One thing landed.' : closedSummary?.goalDone === false ? 'Day closed, still in motion.' : 'Day closed.'}</h2>
+          {dailyGoal && (
+            <p className="td-closed-goal">{dailyGoal}</p>
+          )}
+          <div className="td-closed-grid">
+            <div>
+              <span>{closedSummary?.completedCount ?? todos.filter(t => t.completed).length}</span>
+              <label>done today</label>
+            </div>
+            <div>
+              <span>{closedSummary?.carriedCount ?? 0}</span>
+              <label>carried to tomorrow</label>
+            </div>
+            <div>
+              <span>{closedSummary?.energyLevel ?? '–'}</span>
+              <label>energy</label>
+            </div>
+          </div>
+          {closedSummary?.tomorrowGoal && (
+            <div className="td-closed-next">
+              <span>tomorrow</span>
+              <strong>{closedSummary.tomorrowGoal}</strong>
+            </div>
+          )}
+          <div className="td-closed-actions">
+            <button onClick={reopenDay}>
+              <ArrowCounterClockwise size={14} />
+              Reopen day
+            </button>
+          </div>
+        </section>
+      ) : (
+        <div className="td-two-col">
+          <div className="td-main-col">
+            <TodoList
+              todos={todos}
+              milestoneName={milestoneName}
+              milestoneColor={milestoneColor}
+              milestoneTotal={milestoneTotal}
+              milestoneOrder={milestoneOrder}
+              resolveMentions={resolveMentions}
+              mentionOptions={mentionOptions}
+              milestoneOptions={milestoneOptions}
+              groupBy={groupBy}
+              onChangeGroup={setGroup}
+              onToggle={toggleTodo}
+              onDelete={deleteTodo}
+              onStar={starTodo}
+              onToggleWaiting={toggleWaiting}
+              onEditText={editTodoText}
+              onAdd={addTodo}
+              onCreateMention={createMention}
+              onChangeMilestone={changeTodoMilestone}
+              onMilestoneClick={setExpandedMs}
+              onReorder={reorderTodos}
+            />
+          </div>
 
-        <RightRail sections={sections} />
-      </div>
+          <RightRail sections={sections} />
+        </div>
+      )}
 
       {userId && expandedMilestone && (
         <MilestonePanel
@@ -621,9 +797,12 @@ export default function Today() {
           userId={userId}
           dailyGoal={dailyGoal}
           onClose={() => setEndOpen(false)}
-          onComplete={({ tomorrowGoal, removedTodoIds }) => {
+          onComplete={(summary) => {
+            const { tomorrowGoal, removedTodoIds } = summary
             if (tomorrowGoal) sessionStorage.removeItem(`rethink.today.goalSkipped:${today}`)
             setTodos(prev => prev.filter(t => !removedTodoIds.includes(t.id)))
+            setClosedSummary(summary)
+            setDayClosed(true)
             setEndOpen(false)
           }}
         />

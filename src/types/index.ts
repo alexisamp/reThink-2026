@@ -275,7 +275,7 @@ export interface MonthlyKpiEntry {
   updated_at: string
 }
 
-export type NavRoute = '/today' | '/monthly' | '/strategy' | '/dashboard' | '/weekly-review' | '/library' | '/people'
+export type NavRoute = '/today' | '/review' | '/plan' | '/playbook' | '/people' | '/lists'
 
 export type CaptureType = 'idea' | 'learning' | 'reflection' | 'decision' | 'win' | 'question'
 
@@ -445,6 +445,35 @@ export interface Interaction {
   next_step_owner?: 'me' | 'them' | null
   channel?: 'whatsapp' | 'linkedin' | 'exit5' | 'x' | 'email' | 'call' | 'in_person' | 'other' | null
   created_at: string
+}
+
+// ─── Review Queue ────────────────────────────────────────────────────────────
+
+export type ReviewSource = 'notion' | 'conversations'
+export type ReviewStatus = 'pending' | 'accepted' | 'dismissed'
+export type ReviewTarget =
+  | 'contact_fact'
+  | 'interaction'
+  | 'next_step'
+  | 'todo'
+  | 'value_log'
+  | 'playbook_entry'
+
+export interface ReviewItem {
+  id: string
+  user_id: string
+  source: ReviewSource
+  source_external_id: string | null
+  source_url: string | null
+  title: string
+  body: string | null
+  proposed_target: ReviewTarget
+  proposed_payload: Record<string, unknown>
+  contact_id: string | null
+  status: ReviewStatus
+  reviewed_at: string | null
+  created_at: string
+  updated_at: string
 }
 
 // Backward compat alias — remove after all callers migrated to Contact

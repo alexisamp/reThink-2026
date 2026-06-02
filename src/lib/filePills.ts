@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import type { TodoFileSegment } from '@/lib/todoContent'
 import { importSpreadsheetToSheets } from '@/lib/googleDrive'
-import { openLink } from '@/lib/openLink'
+import { openFileInBrowser, openLink } from '@/lib/openLink'
 
 const SPREADSHEET_EXTENSIONS = new Set(['xlsx', 'xls', 'csv'])
 const MIME_BY_EXTENSION: Record<string, string> = {
@@ -131,10 +131,11 @@ export function isSpreadsheetFileName(name: string) {
   return SPREADSHEET_EXTENSIONS.has(extensionFromName(name))
 }
 
-export function openTodoFile(file: TodoFileSegment) {
+export async function openTodoFile(file: TodoFileSegment) {
   if (file.url) {
-    openLink(file.url)
+    if (file.source === 'local' || file.url.startsWith('file://')) await openFileInBrowser(file.path ?? file.url)
+    else openLink(file.url)
     return
   }
-  if (file.path) openLink(fileUrl(file.path))
+  if (file.path) await openFileInBrowser(file.path)
 }

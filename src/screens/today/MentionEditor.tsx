@@ -14,6 +14,7 @@ import {
 } from '@/lib/todoContent'
 import { hasStrongCrmMatch, rankCrmObjects } from '@/lib/crmObjects'
 import { chooseTodoFile, fileSegmentFromUrl, isSpreadsheetFileName, openTodoFile, spreadsheetFileToSegment } from '@/lib/filePills'
+import { driveFileToSegment, searchDriveFiles, type DriveFileResult } from '@/lib/googleDrive'
 
 const KIND_LABEL: Record<TodoMentionKind, string> = {
   person: 'People',
@@ -81,6 +82,20 @@ function fileKindLabel(file: Pick<TodoFileSegment, 'label' | 'openMode' | 'mimeT
   if (label.endsWith('.md') || file.mimeType === 'text/markdown') return 'MD'
   if (label.endsWith('.txt') || file.mimeType === 'text/plain') return 'TXT'
   return 'File'
+}
+
+function driveFileKindLabel(file: Pick<DriveFileResult, 'name' | 'mimeType'>) {
+  if (file.mimeType === 'application/vnd.google-apps.spreadsheet') return 'Sheet'
+  if (file.mimeType === 'application/vnd.google-apps.document') return 'Doc'
+  if (file.mimeType === 'application/vnd.google-apps.presentation') return 'Slide'
+  if (file.mimeType === 'application/pdf') return 'PDF'
+  if (file.name.toLowerCase().endsWith('.md') || file.mimeType === 'text/markdown') return 'MD'
+  if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || file.mimeType === 'text/csv') return 'Sheet'
+  return 'File'
+}
+
+function fileSearchQuery(query: string) {
+  return query.replace(/^file\b/i, '').trim()
 }
 
 export function FileChip({
@@ -496,12 +511,22 @@ function FilePicker({
   selected,
   style,
   importing,
+  query,
+  driveResults,
+  driveSearching,
+  driveError,
   onChoose,
+  onPickDrive,
 }: {
   selected: number
   style: CSSProperties
   importing: boolean
+  query: string
+  driveResults: DriveFileResult[]
+  driveSearching: boolean
+  driveError: string | null
   onChoose: () => void
+  onPickDrive: (file: DriveFileResult) => void
 }) {
   return (
     <div className="td-mention-picker td-file-picker fixed" style={style}>
@@ -518,7 +543,35 @@ function FilePicker({
           <span className="sub">Excel and CSV files are converted to Google Sheets</span>
         </span>
       </button>
-      <div className="td-mention-empty compact">Paste a Drive, Docs, Sheets, or PDF URL to create a file pill.</div>
+      <div className="td-file-picker-divider" />
+      {driveError ? (
+        <div className="td-mention-empty compact">{driveError}</div>
+      ) : driveSearching ? (
+        <div className="td-mention-empty compact">Searching Drive…</div>
+      ) : driveResults.length > 0 ? (
+        driveResults.map((file, index) => (
+          <button
+            key={file.id}
+            type="button"
+            className={`td-mention-row td-drive-row${selected === index + 1 ? ' active' : ''}`}
+            onMouseDown={e => { e.preventDefault(); onPickDrive(file) }}
+          >
+            <span className="td-mention-avatar sq">
+              {file.iconLink ? <img src={file.iconLink} alt="" /> : driveFileKindLabel(file)}
+            </span>
+            <span className="td-mention-copy">
+              <span className="name">{file.name}</span>
+              <span className="sub">
+                {[driveFileKindLabel(file), file.modifiedTime ? new Date(file.modifiedTime).toLocaleDateString() : null].filter(Boolean).join(' · ')}
+              </span>
+            </span>
+          </button>
+        ))
+      ) : (
+        <div className="td-mention-empty compact">
+          {query ? `No Drive files match "${query}".` : 'Type after /file to search Drive. Paste a Drive, Docs, Sheets, or PDF URL to create a pill.'}
+        </div>
+      )}
     </div>
   )
 }
@@ -558,6 +611,9 @@ export default function MentionEditor({
   const [selectedChip, setSelectedChip] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [fileBusy, setFileBusy] = useState(false)
+  const [driveResults, setDriveResults] = useState<DriveFileResult[]>([])
+  const [driveSearching, setDriveSearching] = useState(false)
+  const [driveError, setDriveError] = useState<string | null>(null)
   const usedKeys = useMemo(() => new Set(initialSegments
     .filter((s): s is { type: 'mention'; mention: Mention } => s.type === 'mention')
     .map(s => mentionKey(s.mention))), [initialSegments])
@@ -569,6 +625,39 @@ export default function MentionEditor({
     () => trigger?.type === 'milestone' ? milestoneActions(milestoneOptions, trigger.query, currentMilestoneId) : [],
     [trigger, milestoneOptions, currentMilestoneId],
   )
+  const driveQuery = trigger?.type === 'file' ? fileSearchQuery(trigger.query) : ''
+
+  useEffect(() => {
+    if (trigger?.type !== 'file') {
+      setDriveResults([])
+      setDriveSearching(false)
+      setDriveError(null)
+      return
+    }
+    let cancelled = false
+    setDriveSearching(true)
+    setDriveError(null)
+    const timer = window.setTimeout(() => {
+      searchDriveFiles(driveQuery, driveQuery ? 8 : 5)
+        .then(files => {
+          if (cancelled) return
+          setDriveResults(files)
+          setDriveError(null)
+        })
+        .catch(err => {
+          if (cancelled) return
+          setDriveResults([])
+          setDriveError(err instanceof Error ? err.message : 'Reconnect Google in Settings to search Drive.')
+        })
+        .finally(() => {
+          if (!cancelled) setDriveSearching(false)
+        })
+    }, driveQuery ? 180 : 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [trigger?.type, driveQuery])
 
   const setFileBusyState = (busy: boolean) => {
     fileBusyRef.current = busy
@@ -641,6 +730,10 @@ export default function MentionEditor({
     } finally {
       setFileBusyState(false)
     }
+  }
+
+  const pickDriveFile = (file: DriveFileResult) => {
+    insertFile(driveFileToSegment(file), triggerRef.current?.cloneRange() ?? null)
   }
 
   const pickAction = async (action: PickerAction) => {
@@ -798,7 +891,7 @@ export default function MentionEditor({
           if (!chip) return
           e.preventDefault()
           if (chip.dataset.mention === 'true') onOpenMention(chipToMention(chip))
-          if (chip.dataset.file === 'true') openTodoFile(chipToFile(chip))
+          if (chip.dataset.file === 'true') void openTodoFile(chipToFile(chip))
         }}
         onClick={() => refreshTrigger()}
         onBlur={() => {
@@ -809,7 +902,7 @@ export default function MentionEditor({
         }}
         onKeyDown={e => {
           if (trigger) {
-            const listLength = trigger.type === 'mention' ? actions.length : trigger.type === 'file' ? 1 : msActions.length
+            const listLength = trigger.type === 'mention' ? actions.length : trigger.type === 'file' ? 1 + driveResults.length : msActions.length
             if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(i => listLength ? (i + 1) % listLength : 0); return }
             if (e.key === 'ArrowUp') { e.preventDefault(); setSelected(i => listLength ? (i - 1 + listLength) % listLength : 0); return }
             if ((e.key === 'Enter' || e.key === 'Tab') && trigger.type === 'mention') {
@@ -824,7 +917,8 @@ export default function MentionEditor({
             }
             if ((e.key === 'Enter' || e.key === 'Tab') && trigger.type === 'file') {
               e.preventDefault()
-              void chooseFile()
+              if (selected > 0 && driveResults[selected - 1]) pickDriveFile(driveResults[selected - 1])
+              else void chooseFile()
               return
             }
             if (e.key === 'Escape') { e.preventDefault(); setTrigger(null); return }
@@ -853,7 +947,19 @@ export default function MentionEditor({
         trigger.type === 'mention'
           ? <MentionPicker actions={actions} selected={selected} style={pickerStyle} onPick={action => { void pickAction(action) }} />
           : trigger.type === 'file'
-            ? <FilePicker selected={selected} style={pickerStyle} importing={fileBusy} onChoose={() => { void chooseFile() }} />
+            ? (
+              <FilePicker
+                selected={selected}
+                style={pickerStyle}
+                importing={fileBusy}
+                query={driveQuery}
+                driveResults={driveResults}
+                driveSearching={driveSearching}
+                driveError={driveError}
+                onChoose={() => { void chooseFile() }}
+                onPickDrive={pickDriveFile}
+              />
+            )
             : <MilestonePicker actions={msActions} selected={selected} style={pickerStyle} onPick={pickMilestone} />
       )}
     </div>

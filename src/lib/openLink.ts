@@ -15,3 +15,12 @@ export function openLink(url: string): void {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 }
+
+export async function openFileInBrowser(pathOrUrl: string): Promise<void> {
+  if (!pathOrUrl) return
+  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+    await invoke('open_file_in_default_browser', { pathOrUrl })
+    return
+  }
+  window.open(pathOrUrl, '_blank', 'noopener,noreferrer')
+}

@@ -666,7 +666,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                 <SettingCard
                   icon={<ArrowClockwise size={16} className="text-shuttle/60" />}
                   label="Google Calendar, Gmail & Drive"
-                  description="Grant access to meetings, email interactions, and spreadsheet imports."
+                  description="Grant access to meetings, email interactions, Drive search, and spreadsheet imports."
                 >
                   <div className="flex items-center gap-2 mt-1">
                     {googleConnected && googleDriveConnected ? (
@@ -680,7 +680,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                     ) : googleConnected ? (
                       <div className="flex items-center gap-1.5 text-sm">
                         <WarningCircle size={15} className="text-shuttle/50" weight="fill" />
-                        <span className="text-shuttle/70">Reconnect to enable Drive imports</span>
+                        <span className="text-shuttle/70">Reconnect to enable Drive search and imports</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5 text-sm">
@@ -699,7 +699,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                     </button>
                   </div>
                   <p className="text-xs text-shuttle/40 mt-2">
-                    Reconnecting grants access to: see meetings with your contacts · auto-log email interactions · import Excel files to Google Sheets
+                    Reconnecting grants access to: see meetings with your contacts · auto-log email interactions · search Drive files · import Excel files to Google Sheets
                   </p>
                 </SettingCard>
 
