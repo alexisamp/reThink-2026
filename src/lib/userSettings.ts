@@ -22,6 +22,8 @@ export interface UserSettings {
   gradeA: number                 // % threshold for A grade (default 90)
   gradeB: number                 // % threshold for B grade (default 75)
   gradeC: number                 // % threshold for C grade (default 60)
+  // CRM
+  crmWeeklyConvTarget: number    // Jacob's single KPI — conversations per week (default 6)
 }
 
 const DEFAULTS: UserSettings = {
@@ -43,6 +45,7 @@ const DEFAULTS: UserSettings = {
   gradeA: 90,
   gradeB: 75,
   gradeC: 60,
+  crmWeeklyConvTarget: 6,
 }
 
 const KEY = 'rethink_settings'

@@ -3,21 +3,65 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, CaretRight, PencilSimple, Check, Plus,
   WhatsappLogo, LinkedinLogo, TwitterLogo, Star, Briefcase,
-  Trash, Target, User, ArrowSquareOut, X,
+  Trash, Target, User, ArrowSquareOut, X, ArrowUp, ArrowDown, Scales,
+  EnvelopeSimple,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useValueLogs } from '@/hooks/useValueLogs'
 import ContactFacts from '@/components/ContactFacts'
 import ContactListMemberships from '@/components/ContactListMemberships'
+import ContactTodosFiles from '@/components/ContactTodosFiles'
 import { strengthBucket, strengthLabel, strengthNormalized, strengthVsTier } from '@/lib/connectionStrength'
-import type { Contact, Interaction, ContactChannel, Opportunity, ValueLog } from '@/types'
+import { computeLedger, type LedgerBucket } from '@/lib/valueLedger'
+import { syncGmailInteractions } from '@/lib/gmail'
+import type { Contact, Interaction, ContactChannel, Opportunity, ValueLog, ValueDirection, ContactFact, ContactMilestone } from '@/types'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function daysSince(dateStr: string | null): number | null {
   if (!dateStr) return null
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
+}
+
+const MILESTONE_EMOJIS: Record<ContactMilestone['type'], string> = {
+  birthday_contact: '🎂',
+  birthday_child: '👶',
+  birthday_partner: '💑',
+  anniversary: '🎉',
+  anniversary_work: '💼',
+  custom: '📅',
+}
+
+/** Days until the next occurrence of a milestone (MM-DD recurring, or ISO date). null if past/none. */
+function milestoneDaysUntil(m: ContactMilestone): number | null {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  if (m.date_mm_dd && /^\d{2}-\d{2}$/.test(m.date_mm_dd)) {
+    const [month, day] = m.date_mm_dd.split('-').map(n => parseInt(n, 10))
+    let next = new Date(today.getFullYear(), month - 1, day)
+    if (next < today) next = new Date(today.getFullYear() + 1, month - 1, day)
+    return Math.round((next.getTime() - today.getTime()) / 86400000)
+  }
+  if (m.date_full) {
+    const d = new Date(m.date_full); d.setHours(0, 0, 0, 0)
+    const diff = Math.round((d.getTime() - today.getTime()) / 86400000)
+    return diff >= 0 ? diff : null
+  }
+  return null
+}
+
+/** Color classes for a value-ledger bucket: green = healthy net giver, red = you owe / net taker. */
+function ledgerTone(bucket: LedgerBucket): { text: string; bg: string; border: string } {
+  switch (bucket) {
+    case 'champion':
+    case 'healthy':
+      return { text: 'text-pastel', bg: 'bg-pastel/15', border: 'border-pastel/50' }
+    case 'neutral':
+      return { text: 'text-shuttle', bg: 'bg-mercury/30', border: 'border-mercury' }
+    case 'owe_them':
+    case 'taker':
+      return { text: 'text-red-400', bg: 'bg-red-50', border: 'border-red-200' }
+  }
 }
 
 function formatAgo(days: number | null): string {
@@ -322,7 +366,7 @@ function PulseCard({ contact }: { contact: Contact }) {
 
 // ── main component ────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'interactions' | 'notes' | 'opportunities'
+type Tab = 'overview' | 'interactions' | 'files' | 'notes' | 'opportunities'
 
 export default function PersonDetail() {
   const { id } = useParams<{ id: string }>()
@@ -333,6 +377,8 @@ export default function PersonDetail() {
   const [interactions, setInteractions] = useState<Interaction[]>([])
   const [channels, setChannels] = useState<ContactChannel[]>([])
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
+  const [starterFacts, setStarterFacts] = useState<ContactFact[]>([])
+  const [milestones, setMilestones] = useState<ContactMilestone[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('overview')
   const [addingInteraction, setAddingInteraction] = useState(false)
@@ -342,6 +388,9 @@ export default function PersonDetail() {
   const [addingValueLog, setAddingValueLog] = useState(false)
   const [newVLType, setNewVLType] = useState<ValueLog['type']>('introduction')
   const [newVLDesc, setNewVLDesc] = useState('')
+  const [newVLDirection, setNewVLDirection] = useState<ValueDirection>('given')
+  const [gmailSyncing, setGmailSyncing] = useState(false)
+  const [gmailMsg, setGmailMsg] = useState<string | null>(null)
   const [notesDraft, setNotesDraft] = useState('')
   const [notesSaving, setNotesSaving] = useState(false)
   const [linkedinFetching, setLinkedinFetching] = useState(false)
@@ -357,7 +406,7 @@ export default function PersonDetail() {
   const load = useCallback(async () => {
     if (!id || !user) return
     setLoading(true)
-    const [{ data: c }, { data: ints }, { data: chans }, oppsResult] = await Promise.all([
+    const [{ data: c }, { data: ints }, { data: chans }, oppsResult, { data: facts }, { data: miles }] = await Promise.all([
       supabase.from('outreach_logs').select('*').eq('id', id).single(),
       supabase.from('interactions').select('*').eq('contact_id', id).order('interaction_date', { ascending: false }),
       supabase.from('contact_channels').select('*').eq('outreach_log_id', id),
@@ -371,12 +420,16 @@ export default function PersonDetail() {
           const { data } = await supabase.from('opportunities').select('*, company:companies(*)').in('id', ids)
           return { data: (data ?? []) as Opportunity[] }
         }),
+      supabase.from('contact_facts').select('*').eq('contact_id', id).eq('importance', 3).order('created_at', { ascending: false }).limit(5),
+      supabase.from('contact_milestones').select('*').eq('contact_id', id).order('date_mm_dd'),
     ])
     setContact(c ?? null)
     setNotesDraft(c?.notes ?? '')
     setInteractions(ints ?? [])
     setChannels(chans ?? [])
     setOpportunities(oppsResult.data ?? [])
+    setStarterFacts((facts ?? []) as ContactFact[])
+    setMilestones((miles ?? []) as ContactMilestone[])
     setLoading(false)
   }, [id, user])
 
@@ -490,9 +543,27 @@ export default function PersonDetail() {
 
   const submitValueLog = async () => {
     if (!id) return
-    await addValueLog({ outreach_log_id: id, type: newVLType, description: newVLDesc.trim() || undefined })
+    await addValueLog({ outreach_log_id: id, type: newVLType, description: newVLDesc.trim() || undefined, direction: newVLDirection })
     setNewVLDesc('')
     setAddingValueLog(false)
+  }
+
+  const syncGmail = async () => {
+    if (!id || !contact?.email) return
+    setGmailSyncing(true)
+    setGmailMsg(null)
+    const res = await syncGmailInteractions({
+      contactId: id,
+      contactEmail: contact.email,
+      attioRecordId: contact.attio_record_id ?? null,
+      category: contact.category ?? null,
+    })
+    setGmailSyncing(false)
+    if (res.error) setGmailMsg(res.error)
+    else {
+      setGmailMsg(res.synced > 0 ? `Synced ${res.synced} email thread${res.synced === 1 ? '' : 's'}` : 'No new email threads')
+      if (res.synced > 0) await load()
+    }
   }
 
   if (loading) {
@@ -511,7 +582,22 @@ export default function PersonDetail() {
   const lastDays = daysSince(contact.last_interaction_at)
   const initials = contact.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
   const valueGiven = valueLogs.length
+  const ledger = computeLedger(valueLogs)
   const interactionCount = interactions.length
+
+  // Conversation starters — upcoming dates + top facts to remember (Jacob's Two-Thirds ammo).
+  const upcomingMilestones = milestones
+    .map(m => ({ m, days: milestoneDaysUntil(m) }))
+    .filter(x => x.days != null && x.days <= (x.m.show_days_before || 30))
+    .sort((a, b) => (a.days ?? 0) - (b.days ?? 0))
+  const birthdayMmDd = contact.birthday && /(\d{2})-(\d{2})$/.test(contact.birthday)
+    ? contact.birthday.match(/(\d{2})-(\d{2})$/)![0]
+    : null
+  const hasBirthdayMilestone = milestones.some(m => m.type === 'birthday_contact')
+  const birthdayDays = birthdayMmDd && !hasBirthdayMilestone
+    ? milestoneDaysUntil({ date_mm_dd: birthdayMmDd } as ContactMilestone)
+    : null
+  const hasStarters = starterFacts.length > 0 || upcomingMilestones.length > 0 || (birthdayDays != null && birthdayDays <= 30)
   const activeOpps = opportunities.filter(o => o.stage === 'active' || o.stage === 'negotiating')
 
   return (
@@ -528,7 +614,7 @@ export default function PersonDetail() {
 
       {/* ── tabs ── */}
       <div className="flex items-center gap-0 px-5 bg-white border-b border-mercury shrink-0">
-        {(['overview', 'interactions', 'notes', 'opportunities'] as Tab[]).map(t => (
+        {(['overview', 'interactions', 'files', 'notes', 'opportunities'] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -612,6 +698,33 @@ export default function PersonDetail() {
           {/* ── OVERVIEW tab ── */}
           {tab === 'overview' && (
             <div className="flex flex-col gap-4">
+              {/* Conversation starters — what to bring up next time */}
+              {hasStarters && (
+                <div className="bg-pastel/10 border border-pastel/40 rounded-lg px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-burnham/60 mb-2">Conversation starters</p>
+                  <div className="flex flex-col gap-1.5">
+                    {birthdayDays != null && birthdayDays <= 30 && (
+                      <div className="flex items-center gap-2 text-[12px] text-midnight">
+                        <span>🎂</span>
+                        <span>Birthday {birthdayDays === 0 ? 'today' : `in ${birthdayDays}d`}</span>
+                      </div>
+                    )}
+                    {upcomingMilestones.map(({ m, days }) => (
+                      <div key={m.id} className="flex items-center gap-2 text-[12px] text-midnight">
+                        <span>{MILESTONE_EMOJIS[m.type] ?? '📅'}</span>
+                        <span>{m.label} {days === 0 ? 'today' : `in ${days}d`}</span>
+                      </div>
+                    ))}
+                    {starterFacts.map(f => (
+                      <div key={f.id} className="flex items-start gap-2 text-[12px] text-midnight">
+                        <Star size={11} weight="fill" className="text-pastel mt-0.5 shrink-0" />
+                        <span>{f.label ? <span className="text-shuttle">{f.label}: </span> : null}{f.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* personal_context — prominent block */}
               {contact.personal_context && (
                 <div className="bg-gossip/20 border border-gossip/40 rounded-lg px-4 py-3">
@@ -724,10 +837,10 @@ export default function PersonDetail() {
                 )}
               </div>
 
-              {/* Value logs */}
+              {/* Value Ledger — given vs received (Jacob's reciprocity imbalance) */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50">Value Given</p>
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50">Value Ledger</p>
                   <button
                     onClick={() => setAddingValueLog(true)}
                     className="flex items-center gap-1 text-[11px] text-burnham hover:underline"
@@ -736,8 +849,44 @@ export default function PersonDetail() {
                   </button>
                 </div>
 
+                {/* Balance summary bar */}
+                {valueLogs.length > 0 && (() => {
+                  const tone = ledgerTone(ledger.bucket)
+                  return (
+                    <div className={`flex flex-col gap-1.5 mb-3 p-3 rounded-lg border ${tone.bg} ${tone.border}`}>
+                      <div className="flex items-center gap-2">
+                        <Scales size={15} weight="bold" className={tone.text} />
+                        <span className={`text-[12px] font-semibold ${tone.text}`}>{ledger.label}</span>
+                        <span className={`text-[11px] font-bold ml-auto ${tone.text}`}>
+                          {ledger.balance > 0 ? '+' : ''}{ledger.balance}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-shuttle">
+                        <span className="flex items-center gap-1"><ArrowUp size={10} weight="bold" className="text-pastel" /> Given {ledger.given}</span>
+                        <span className="flex items-center gap-1"><ArrowDown size={10} weight="bold" className="text-shuttle/60" /> Received {ledger.received}</span>
+                      </div>
+                      <p className="text-[11px] text-shuttle/80 leading-snug">{ledger.suggestion}</p>
+                    </div>
+                  )
+                })()}
+
                 {addingValueLog && (
                   <div className="flex flex-col gap-2 mb-3 p-3 bg-white border border-mercury rounded-lg">
+                    {/* Direction toggle */}
+                    <div className="flex gap-1 p-0.5 bg-mercury/30 rounded-lg">
+                      <button
+                        onClick={() => setNewVLDirection('given')}
+                        className={`flex-1 flex items-center justify-center gap-1 text-[11px] py-1 rounded-md transition-colors ${newVLDirection === 'given' ? 'bg-white text-burnham shadow-sm font-medium' : 'text-shuttle'}`}
+                      >
+                        <ArrowUp size={11} weight="bold" /> I gave
+                      </button>
+                      <button
+                        onClick={() => setNewVLDirection('received')}
+                        className={`flex-1 flex items-center justify-center gap-1 text-[11px] py-1 rounded-md transition-colors ${newVLDirection === 'received' ? 'bg-white text-burnham shadow-sm font-medium' : 'text-shuttle'}`}
+                      >
+                        <ArrowDown size={11} weight="bold" /> I received
+                      </button>
+                    </div>
                     <select
                       value={newVLType}
                       onChange={e => setNewVLType(e.target.value as ValueLog['type'])}
@@ -755,31 +904,37 @@ export default function PersonDetail() {
                     />
                     <div className="flex gap-2">
                       <button onClick={submitValueLog} className="text-[11px] px-3 py-1 bg-burnham text-gossip rounded">Save</button>
-                      <button onClick={() => setAddingValueLog(false)} className="text-[11px] px-3 py-1 text-shuttle hover:text-burnham">Cancel</button>
+                      <button onClick={() => { setAddingValueLog(false); setNewVLDirection('given') }} className="text-[11px] px-3 py-1 text-shuttle hover:text-burnham">Cancel</button>
                     </div>
                   </div>
                 )}
 
                 {valueLogs.length === 0 && !addingValueLog ? (
-                  <p className="text-[12px] text-mercury italic">No value logs yet.</p>
+                  <p className="text-[12px] text-mercury italic">No value exchanged yet. Give first.</p>
                 ) : (
                   <div className="flex flex-col gap-1.5">
-                    {valueLogs.map(vl => (
-                      <div key={vl.id} className={`flex items-center gap-2 px-2 py-1.5 border rounded-lg group ${vl.type === 'candor' ? 'bg-pastel/20 border-pastel' : 'bg-white border-mercury'}`}>
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-gossip text-burnham rounded flex items-center gap-1">
-                          <span>{VALUE_TYPE_EMOJIS[vl.type] ?? ''}</span>
-                          <span>{VALUE_TYPE_LABELS[vl.type] ?? vl.type}</span>
-                        </span>
-                        <p className="text-[12px] text-shuttle flex-1 truncate">{vl.description || '—'}</p>
-                        <span className="text-[10px] text-mercury">{vl.date}</span>
-                        <button
-                          onClick={() => removeValueLog(vl.id)}
-                          className="opacity-0 group-hover:opacity-100 text-mercury hover:text-red-400 transition-opacity"
-                        >
-                          <Trash size={10} />
-                        </button>
-                      </div>
-                    ))}
+                    {valueLogs.map(vl => {
+                      const received = vl.direction === 'received'
+                      return (
+                        <div key={vl.id} className={`flex items-center gap-2 px-2 py-1.5 border rounded-lg group ${vl.type === 'candor' ? 'bg-pastel/20 border-pastel' : 'bg-white border-mercury'}`}>
+                          {received
+                            ? <ArrowDown size={12} weight="bold" className="text-shuttle/60 shrink-0" />
+                            : <ArrowUp size={12} weight="bold" className="text-pastel shrink-0" />}
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-gossip text-burnham rounded flex items-center gap-1">
+                            <span>{VALUE_TYPE_EMOJIS[vl.type] ?? ''}</span>
+                            <span>{VALUE_TYPE_LABELS[vl.type] ?? vl.type}</span>
+                          </span>
+                          <p className="text-[12px] text-shuttle flex-1 truncate">{vl.description || '—'}</p>
+                          <span className="text-[10px] text-mercury">{vl.date}</span>
+                          <button
+                            onClick={() => removeValueLog(vl.id)}
+                            className="opacity-0 group-hover:opacity-100 text-mercury hover:text-red-400 transition-opacity"
+                          >
+                            <Trash size={10} />
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -791,12 +946,24 @@ export default function PersonDetail() {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <p className="text-[13px] font-semibold text-midnight">All Interactions ({interactions.length})</p>
-                <button
-                  onClick={() => setAddingInteraction(v => !v)}
-                  className="flex items-center gap-1 text-[11px] px-3 py-1.5 bg-burnham text-gossip rounded-lg"
-                >
-                  <Plus size={11} /> Log
-                </button>
+                <div className="flex items-center gap-2">
+                  {gmailMsg && <span className="text-[10px] text-shuttle/60">{gmailMsg}</span>}
+                  {contact.email && (
+                    <button
+                      onClick={syncGmail}
+                      disabled={gmailSyncing}
+                      className="flex items-center gap-1 text-[11px] px-3 py-1.5 border border-mercury text-shuttle rounded-lg hover:border-burnham hover:text-burnham transition-colors disabled:opacity-50"
+                    >
+                      <EnvelopeSimple size={11} /> {gmailSyncing ? 'Syncing…' : 'Sync Gmail'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setAddingInteraction(v => !v)}
+                    className="flex items-center gap-1 text-[11px] px-3 py-1.5 bg-burnham text-gossip rounded-lg"
+                  >
+                    <Plus size={11} /> Log
+                  </button>
+                </div>
               </div>
 
               {addingInteraction && (
@@ -840,6 +1007,11 @@ export default function PersonDetail() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* ── FILES tab ── */}
+          {tab === 'files' && id && user && (
+            <ContactTodosFiles contactId={id} userId={user.id} />
           )}
 
           {/* ── NOTES tab ── */}

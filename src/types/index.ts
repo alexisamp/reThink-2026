@@ -449,7 +449,7 @@ export interface Interaction {
 
 // ─── Review Queue ────────────────────────────────────────────────────────────
 
-export type ReviewSource = 'notion' | 'conversations'
+export type ReviewSource = 'conversations' | 'manual'
 export type ReviewStatus = 'pending' | 'accepted' | 'dismissed'
 export type ReviewTarget =
   | 'contact_fact'
@@ -549,6 +549,8 @@ export type ValueLogType =
   | 'introduction' | 'content' | 'referral' | 'advice'
   | 'endorsement' | 'opportunity' | 'candor' | 'other'
 
+export type ValueDirection = 'given' | 'received'
+
 export interface ValueLog {
   id: string
   user_id: string
@@ -556,6 +558,7 @@ export interface ValueLog {
   type: ValueLogType
   description: string | null
   date: string
+  direction: ValueDirection
   created_at: string
 }
 
