@@ -1,10 +1,11 @@
 // NextSteps — people feed that nourishes the This Week KPIs.
-//  🟢 scheduled  : a contact with a planned next step this week (interactions.next_step_date)
-//  🟠 reach-out  : a Tier 1/2 contact overdue per cadence (last_interaction_at vs tier cadence)
+//  🟢 scheduled  : a contact with a planned/overdue next step (interactions.next_step)
+//  🟠 reach-out  : a contact overdue per cadence, birthday soon, or value owed
+// Data comes from the shared useRelationshipBrief hook (same source the People → Focus tab uses).
 // Each action logs an interaction today → auto-feeds the weekly KPIs (interactions / tier touches).
-import { useCallback, useEffect, useState } from 'react'
 import { Check, PaperPlaneTilt, UsersThree } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
+import { useRelationshipBrief, type BriefItem } from '@/hooks/useRelationshipBrief'
 
 interface NSItem {
   contactId: string
@@ -13,10 +14,7 @@ interface NSItem {
   status: 'scheduled' | 'reach-out'
   when: string
   feeds: string
-  sortKey: number   // lower = more urgent / sooner
 }
-
-const DEFAULT_CADENCE: Record<number, number> = { 1: 14, 2: 30, 3: 90 }
 
 function fmtWhen(dateStr: string, today: string): string {
   const d = new Date(dateStr + 'T12:00:00')
@@ -24,8 +22,26 @@ function fmtWhen(dateStr: string, today: string): string {
   const diff = Math.round((d.getTime() - t.getTime()) / 86400000)
   if (diff === 0) return 'Today'
   if (diff === 1) return 'Tomorrow'
+  if (diff < 0) return `${-diff}d late`
   if (diff > 1 && diff < 7) return d.toLocaleDateString('en-US', { weekday: 'short' })
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+/** Map a BriefItem from the shared hook into the existing NextSteps row shape. */
+function toNSItem(b: BriefItem, today: string): NSItem {
+  const scheduled = b.primaryReason === 'overdue_next_step' || b.primaryReason === 'upcoming_next_step'
+  let when = b.reasonLabel
+  if (scheduled && b.nextStepDate) when = fmtWhen(b.nextStepDate, today)
+  else if (b.primaryReason === 'cadence_overdue') when = b.daysSinceContact != null ? `Cold ${b.daysSinceContact}d` : 'New'
+  else if (b.primaryReason === 'birthday_upcoming' && b.birthdayInDays != null) when = `🎂 ${b.birthdayInDays}d`
+  return {
+    contactId: b.contactId,
+    name: b.name,
+    avatar: b.avatar,
+    status: scheduled ? 'scheduled' : 'reach-out',
+    when,
+    feeds: b.reasonLabel,
+  }
 }
 
 interface Props {
@@ -37,90 +53,8 @@ interface Props {
 }
 
 export default function NextSteps({ userId, today, weekEnd, onActioned, onManage }: Props) {
-  const [items, setItems] = useState<NSItem[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const load = useCallback(async () => {
-    if (!userId) return
-
-    // tier cadence config from profile (fallback to defaults)
-    const { data: profile } = await supabase
-      .from('profiles').select('tier_cadence_config').eq('id', userId).maybeSingle()
-    const cadenceCfg = (profile?.tier_cadence_config ?? null) as Record<string, { days: number }> | null
-    const cadenceFor = (tier: number) =>
-      cadenceCfg?.[String(tier)]?.days ?? DEFAULT_CADENCE[tier] ?? 60
-
-    // 1) scheduled — interactions with a next step this week
-    const { data: scheduledRows } = await supabase
-      .from('interactions')
-      .select('contact_id, next_step, next_step_date')
-      .eq('user_id', userId)
-      .not('next_step_date', 'is', null)
-      .gte('next_step_date', today)
-      .lte('next_step_date', weekEnd)
-      .order('next_step_date')
-
-    const scheduledIds = [...new Set((scheduledRows ?? []).map(r => r.contact_id).filter(Boolean))] as string[]
-
-    // 2) reach-out — Tier 1/2 contacts overdue per cadence
-    const { data: contactRows } = await supabase
-      .from('outreach_logs')
-      .select('id, name, profile_photo_url, tier, last_interaction_at')
-      .eq('user_id', userId)
-      .in('tier', [1, 2])
-
-    // resolve names/avatars for scheduled contacts
-    const contactById = new Map<string, { name: string; avatar: string | null; tier: number | null }>()
-    ;(contactRows ?? []).forEach(c => contactById.set(c.id, { name: c.name, avatar: c.profile_photo_url ?? null, tier: c.tier }))
-    const missing = scheduledIds.filter(id => !contactById.has(id))
-    if (missing.length) {
-      const { data: extra } = await supabase
-        .from('outreach_logs').select('id, name, profile_photo_url, tier').in('id', missing)
-      ;(extra ?? []).forEach(c => contactById.set(c.id, { name: c.name, avatar: c.profile_photo_url ?? null, tier: c.tier }))
-    }
-
-    const out: NSItem[] = []
-    const seen = new Set<string>()
-
-    // scheduled first
-    ;(scheduledRows ?? []).forEach(r => {
-      if (!r.contact_id || seen.has(r.contact_id)) return
-      const c = contactById.get(r.contact_id)
-      if (!c) return
-      seen.add(r.contact_id)
-      const d = new Date((r.next_step_date as string) + 'T12:00:00')
-      out.push({
-        contactId: r.contact_id, name: c.name, avatar: c.avatar,
-        status: 'scheduled', when: fmtWhen(r.next_step_date as string, today),
-        feeds: 'Convos', sortKey: d.getTime(),
-      })
-    })
-
-    // reach-out
-    const reachOut: NSItem[] = []
-    ;(contactRows ?? []).forEach(c => {
-      if (seen.has(c.id)) return
-      const tier = c.tier ?? 3
-      const cad = cadenceFor(tier)
-      let daysSince: number
-      if (!c.last_interaction_at) daysSince = 9999
-      else daysSince = Math.floor((Date.now() - new Date(c.last_interaction_at).getTime()) / 86400000)
-      if (daysSince <= cad) return  // not yet due
-      reachOut.push({
-        contactId: c.id, name: c.name, avatar: c.profile_photo_url ?? null,
-        status: 'reach-out',
-        when: daysSince >= 9999 ? 'New' : `Cold ${daysSince}d`,
-        feeds: 'Tier 1/2',
-        sortKey: -daysSince,   // most overdue first
-      })
-    })
-    reachOut.sort((a, b) => a.sortKey - b.sortKey)
-
-    setItems([...out, ...reachOut.slice(0, 4)])
-    setLoading(false)
-  }, [userId, today, weekEnd])
-
-  useEffect(() => { load() }, [load])
+  const { items: brief, loading, reload } = useRelationshipBrief(userId, { limit: 5, today, weekEnd })
+  const items = brief.map(b => toNSItem(b, today))
 
   const logTouch = async (item: NSItem) => {
     await supabase.from('interactions').insert({
@@ -131,8 +65,8 @@ export default function NextSteps({ userId, today, weekEnd, onActioned, onManage
       interaction_date: today,
     })
     await supabase.from('outreach_logs').update({ last_interaction_at: new Date().toISOString() }).eq('id', item.contactId)
-    setItems(prev => prev.filter(i => i.contactId !== item.contactId))
     onActioned?.()
+    reload()
   }
 
   return (

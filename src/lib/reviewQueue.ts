@@ -165,6 +165,7 @@ export async function acceptReviewItem(
       type: oneOf(payload.type, VALUE_TYPES, 'other'),
       description: textFrom(item, payload, 'description', 'value', 'text'),
       date: str(payload, 'date') || today,
+      direction: oneOf(payload.direction, ['given', 'received'] as const, 'given'),
     })
     error = res.error
   }

@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  MagnifyingGlass, Plus, Users, Funnel, Table, Kanban,
+  MagnifyingGlass, Plus, Users, Funnel, Table, Kanban, Lightning,
   WhatsappLogo, LinkedinLogo, X, TwitterLogo,
   DotOutline,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Contact, ContactStatus } from '@/types'
 import { useContacts } from '@/hooks/useContacts'
+import PeopleFocus from '@/components/PeopleFocus'
 import OutreachPanel from '@/components/OutreachPanel'
 import { TierInfoHelper } from '@/components/TierInfoHelper'
 import MergeContactsModal from '@/components/MergeContactsModal'
@@ -294,7 +295,7 @@ function KanbanCard({ contact, onClick }: { contact: Contact; onClick: () => voi
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-type ViewMode = 'table' | 'kanban'
+type ViewMode = 'focus' | 'table' | 'kanban'
 
 export default function People() {
   const navigate = useNavigate()
@@ -471,6 +472,13 @@ export default function People() {
         <div className="flex items-center gap-2">
           {/* View toggle */}
           <div className="flex items-center gap-0.5 bg-mercury/20 rounded-lg p-0.5">
+            <button
+              onClick={() => setViewMode('focus')}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === 'focus' ? 'bg-white shadow-sm text-burnham' : 'text-shuttle/50 hover:text-shuttle'}`}
+              title="Focus — who to talk to"
+            >
+              <Lightning size={14} />
+            </button>
             <button
               onClick={() => setViewMode('table')}
               className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-white shadow-sm text-burnham' : 'text-shuttle/50 hover:text-shuttle'}`}
@@ -695,7 +703,10 @@ export default function People() {
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {loading ? (
+        {viewMode === 'focus' ? (
+          /* ── Focus view (manager / daily relationship brief) ──────────── */
+          <PeopleFocus userId={userId} />
+        ) : loading ? (
           <div className="flex items-center justify-center h-32">
             <div className="w-5 h-5 border-[1.5px] border-mercury border-t-burnham rounded-full animate-spin" />
           </div>
