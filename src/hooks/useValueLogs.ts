@@ -27,11 +27,17 @@ export function useValueLogs(userId: string | null, outreachLogId?: string) {
     type: ValueLog['type']
     description?: string
     date?: string
+    direction?: ValueLog['direction']
   }) => {
     if (!userId) return null
     const { data, error } = await supabase
       .from('value_logs')
-      .insert({ ...input, user_id: userId, date: input.date ?? new Date().toISOString().split('T')[0] })
+      .insert({
+        ...input,
+        user_id: userId,
+        date: input.date ?? new Date().toISOString().split('T')[0],
+        direction: input.direction ?? 'given',
+      })
       .select()
       .single()
     if (!error) await load()
@@ -43,5 +49,8 @@ export function useValueLogs(userId: string | null, outreachLogId?: string) {
     setLogs(prev => prev.filter(l => l.id !== id))
   }, [])
 
-  return { logs, loading, add, remove, reload: load }
+  const logsGiven = logs.filter(l => l.direction === 'given')
+  const logsReceived = logs.filter(l => l.direction === 'received')
+
+  return { logs, logsGiven, logsReceived, loading, add, remove, reload: load }
 }
