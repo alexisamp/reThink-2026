@@ -301,7 +301,7 @@ export default function People() {
   const navigate = useNavigate()
   const [userId, setUserId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<ViewMode>('table')
+  const [viewMode, setViewMode] = useState<ViewMode>('focus')
   const [outreachPanelOpen, setOutreachPanelOpen] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -467,31 +467,36 @@ export default function People() {
             </span>
             <h1 className="text-base font-semibold text-burnham">People</h1>
           </div>
-          <span className="text-[11px] text-shuttle/40 font-mono">{filtered.length}</span>
+          <span className="text-[11px] text-shuttle/40 font-mono">
+            {viewMode === 'focus' ? contacts.length : filtered.length}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           {/* View toggle */}
           <div className="flex items-center gap-0.5 bg-mercury/20 rounded-lg p-0.5">
             <button
               onClick={() => setViewMode('focus')}
-              className={`p-1.5 rounded-md transition-colors ${viewMode === 'focus' ? 'bg-white shadow-sm text-burnham' : 'text-shuttle/50 hover:text-shuttle'}`}
-              title="Focus — who to talk to"
+              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${viewMode === 'focus' ? 'bg-white shadow-sm text-burnham' : 'text-shuttle/50 hover:text-shuttle'}`}
+              title="Focus - who to talk to"
             >
               <Lightning size={14} />
+              <span>Focus</span>
             </button>
             <button
               onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-white shadow-sm text-burnham' : 'text-shuttle/50 hover:text-shuttle'}`}
+              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${viewMode === 'table' ? 'bg-white shadow-sm text-burnham' : 'text-shuttle/50 hover:text-shuttle'}`}
               title="Table view"
             >
               <Table size={14} />
+              <span>Table</span>
             </button>
             <button
               onClick={() => setViewMode('kanban')}
-              className={`p-1.5 rounded-md transition-colors ${viewMode === 'kanban' ? 'bg-white shadow-sm text-burnham' : 'text-shuttle/50 hover:text-shuttle'}`}
+              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium transition-colors ${viewMode === 'kanban' ? 'bg-white shadow-sm text-burnham' : 'text-shuttle/50 hover:text-shuttle'}`}
               title="Kanban view"
             >
               <Kanban size={14} />
+              <span>Kanban</span>
             </button>
           </div>
           <button
@@ -505,6 +510,7 @@ export default function People() {
       </header>
 
       {/* ── Filter bar ─────────────────────────────────────────────────────── */}
+      {viewMode !== 'focus' && (
       <div className="flex items-center gap-3 px-6 py-2.5 border-b border-mercury/30 shrink-0 flex-wrap">
         <div className="relative">
           <MagnifyingGlass size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-shuttle/40" />
@@ -583,6 +589,7 @@ export default function People() {
           <span>Sorted by last contact</span>
         </div>
       </div>
+      )}
 
       {/* ── Bulk action bar (shows when ≥1 selected) ──────────────────────── */}
       {selectedIds.size > 0 && (
