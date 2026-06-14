@@ -1,34 +1,39 @@
-import { useState, useEffect, type CSSProperties } from 'react'
-import { useNavigate } from 'react-router-dom'
-import {
-  Buildings, CalendarBlank, CurrencyDollar, MagnifyingGlass, Plus, Target, Table, Kanban,
-  Flag, Funnel, ArrowBendUpRight,
-} from '@phosphor-icons/react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useOpportunities } from '@/hooks/useOpportunities'
 import CrmTable, { type CrmColumn } from '@/components/crm/CrmTable'
 import RecordPeek from '@/components/crm/RecordPeek'
+import {
+  Icon, CompanyCell, AbmChip, StageChip, FilterCell, CloserCell, NextStepCell, Mono,
+  AccountStageChip,
+} from '@/components/crm/cells'
+import { ICP_CFG } from '@/lib/crmConfig'
 import type { Opportunity, OpportunityStage, OpportunityType, Company } from '@/types'
 
-// ── constants ─────────────────────────────────────────────────────────────────
-
+const TYPE_LABELS: Record<OpportunityType, string> = {
+  job: 'Job', consulting: 'Consulting', business: 'Business', partnership: 'Partnership', other: 'Other',
+}
 const STAGES: OpportunityStage[] = ['exploring', 'active', 'negotiating', 'won', 'lost']
 
-const STAGE_COLORS: Record<OpportunityStage, string> = {
-  exploring: 'text-shuttle bg-mercury',
-  active: 'text-burnham bg-gossip',
-  negotiating: 'text-yellow-800 bg-yellow-100',
-  won: 'text-green-800 bg-green-100',
-  lost: 'text-red-700 bg-red-100',
+// Map real opp stage → handoff STAGE_CFG key for StageChip.
+const STAGE_MAP: Record<OpportunityStage, string> = {
+  exploring: 'prospect', active: 'qualified', negotiating: 'closing', won: 'won', lost: 'prospect',
+}
+// CLOSER score (1–6) derived from stage when not explicitly scored.
+const CLOSER_BY_STAGE: Record<OpportunityStage, number> = {
+  exploring: 2, active: 3, negotiating: 4, won: 6, lost: 1,
 }
 
-const TYPE_LABELS: Record<OpportunityType, string> = {
-  job: 'Job', consulting: 'Consulting', business: 'Business',
-  partnership: 'Partnership', other: 'Other',
+function normIcp(v: string | null | undefined): string | null {
+  if (!v) return null
+  const s = v.toLowerCase().trim()
+  if (s === 'icp1' || s === 'icp2' || s === 'icp3') return s
+  if (/\b1\b|seed|series\s*a/.test(s)) return 'icp1'
+  if (/\b2\b|series\s*b|saas/.test(s)) return 'icp2'
+  if (/\b3\b|network|b2b/.test(s)) return 'icp3'
+  return null
 }
-
-// ── helpers ───────────────────────────────────────────────────────────────────
 
 function formatValue(n: number | null): string {
   if (n === null) return '—'
@@ -36,15 +41,9 @@ function formatValue(n: number | null): string {
   if (n >= 1000) return `$${(n / 1000).toFixed(0)}k`
   return `$${n}`
 }
-
-function daysUntil(dateStr: string | null): number | null {
-  if (!dateStr) return null
-  return Math.floor((new Date(dateStr).getTime() - Date.now()) / 86400000)
-}
-
 function formatTarget(dateStr: string | null): string {
   if (!dateStr) return '—'
-  const days = daysUntil(dateStr)!
+  const days = Math.floor((new Date(dateStr).getTime() - Date.now()) / 86400000)
   if (days < 0) return `${Math.abs(days)}d overdue`
   if (days === 0) return 'Today'
   if (days < 7) return `${days}d`
@@ -52,16 +51,8 @@ function formatTarget(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-// ── add opp modal ─────────────────────────────────────────────────────────────
-
-function AddOppForm({
-  companies,
-  onSave,
-  onCancel,
-}: {
-  companies: Company[]
-  onSave: (data: Partial<Opportunity>) => Promise<void>
-  onCancel: () => void
+function AddOppForm({ companies, onSave, onCancel }: {
+  companies: Company[]; onSave: (data: Partial<Opportunity>) => Promise<void>; onCancel: () => void
 }) {
   const [title, setTitle] = useState('')
   const [type, setType] = useState<OpportunityType>('job')
@@ -69,308 +60,153 @@ function AddOppForm({
   const [companyId, setCompanyId] = useState('')
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
-
   const save = async () => {
     if (!title.trim()) return
     setSaving(true)
-    await onSave({
-      title: title.trim(),
-      type,
-      stage,
-      company_id: companyId || null,
-      estimated_value: value ? Number(value) : null,
-    })
+    await onSave({ title: title.trim(), type, stage, company_id: companyId || null, estimated_value: value ? Number(value) : null })
     setSaving(false)
   }
-
   return (
     <div className="flex items-center gap-3 px-6 py-3 bg-white border-b border-mercury flex-wrap">
-      <input
-        value={title}
-        onChange={e => setTitle(e.target.value)}
-        placeholder="Opportunity title *"
+      <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Opportunity title *" autoFocus
         className="flex-1 min-w-[200px] text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham"
-        autoFocus
-        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onCancel() }}
-      />
-      <select
-        value={type}
-        onChange={e => setType(e.target.value as OpportunityType)}
-        className="text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham"
-      >
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onCancel() }} />
+      <select value={type} onChange={e => setType(e.target.value as OpportunityType)} className="text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham">
         {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
       </select>
-      <select
-        value={stage}
-        onChange={e => setStage(e.target.value as OpportunityStage)}
-        className="text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham"
-      >
+      <select value={stage} onChange={e => setStage(e.target.value as OpportunityStage)} className="text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham">
         {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
       </select>
-      <select
-        value={companyId}
-        onChange={e => setCompanyId(e.target.value)}
-        className="text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham"
-      >
+      <select value={companyId} onChange={e => setCompanyId(e.target.value)} className="text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham">
         <option value="">— No company</option>
         {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
       </select>
-      <input
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        placeholder="Est. value ($)"
-        type="number"
-        className="w-28 text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham"
-      />
-      <button onClick={save} disabled={saving || !title.trim()} className="px-3 py-1.5 bg-burnham text-gossip text-sm rounded disabled:opacity-50">
-        Save
-      </button>
+      <input value={value} onChange={e => setValue(e.target.value)} placeholder="Est. value ($)" type="number" className="w-28 text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham" />
+      <button onClick={save} disabled={saving || !title.trim()} className="px-3 py-1.5 bg-burnham text-gossip text-sm rounded disabled:opacity-50">Save</button>
       <button onClick={onCancel} className="text-sm text-shuttle hover:text-burnham">Cancel</button>
     </div>
   )
 }
 
-// ── main screen ───────────────────────────────────────────────────────────────
-
 export default function PeopleOpportunities() {
   const { user } = useAuth()
-  const navigate = useNavigate()
-  const { opportunities, loading, upsert, updateStage } = useOpportunities(user?.id ?? null)
+  const { opportunities, loading, upsert } = useOpportunities(user?.id ?? null)
   const [companies, setCompanies] = useState<Company[]>([])
-  const [search, setSearch] = useState('')
-  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table')
   const [showAdd, setShowAdd] = useState(false)
   const [peekId, setPeekId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
-    supabase.from('companies').select('*').eq('user_id', user.id).order('name')
-      .then(({ data }) => setCompanies(data ?? []))
+    supabase.from('companies').select('*').eq('user_id', user.id).order('name').then(({ data }) => setCompanies(data ?? []))
   }, [user])
 
-  const filtered = opportunities.filter(o =>
-    o.title.toLowerCase().includes(search.toLowerCase()) ||
-    (o.company?.name ?? '').toLowerCase().includes(search.toLowerCase())
-  )
-  const peek = filtered.find(row => row.id === peekId) ?? null
-  const peekIndex = peek ? filtered.findIndex(row => row.id === peek.id) : -1
+  const rows = opportunities
+  const peek = rows.find(o => o.id === peekId) ?? null
+  const peekIndex = peek ? rows.findIndex(o => o.id === peek.id) : -1
+  const mark = (o: Opportunity) => (o.company?.name?.[0] ?? o.title[0] ?? '?').toUpperCase()
 
   const columns: CrmColumn<Opportunity>[] = [
-    {
-      key: 'title',
-      label: 'Opportunity',
-      locked: true,
-      width: 'minmax(220px, 1.4fr)',
-      icon: <Target size={12} />,
-      render: opp => <span className="font-medium text-burnham">{opp.title}</span>,
-    },
-    {
-      key: 'stage',
-      label: 'Stage',
-      width: '150px',
-      render: opp => (
-        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${STAGE_COLORS[opp.stage]}`}>
-          {opp.stage}
-        </span>
-      ),
-    },
-    {
-      key: 'company',
-      label: 'Company',
-      width: 'minmax(150px, 1fr)',
-      icon: <Buildings size={12} />,
-      render: opp => <span className="text-shuttle">{opp.company?.name ?? '—'}</span>,
-    },
-    {
-      key: 'type',
-      label: 'Type',
-      width: '120px',
-      render: opp => <span className="text-shuttle">{TYPE_LABELS[opp.type]}</span>,
-    },
-    {
-      key: 'value',
-      label: 'Value',
-      width: '110px',
-      align: 'right',
-      icon: <CurrencyDollar size={12} />,
-      render: opp => <span className="font-medium text-burnham">{formatValue(opp.estimated_value)}</span>,
-    },
-    {
-      key: 'target',
-      label: 'Target',
-      width: '120px',
-      icon: <CalendarBlank size={12} />,
-      render: opp => (
-        <span className={daysUntil(opp.target_date) !== null && daysUntil(opp.target_date)! < 0 ? 'text-red-500' : 'text-shuttle'}>
-          {formatTarget(opp.target_date)}
-        </span>
-      ),
-    },
+    { key: 'title', label: 'Opportunity', icon: <Icon name="target" size={12} />, width: '210px', locked: true, render: o => <span className="crm-name"><span className="crm-av sq logo opp">{mark(o)}</span><span className="link">{o.title}</span></span> },
+    { key: 'company', label: 'Company', icon: <Icon name="buildings" size={12} />, width: '160px', render: o => o.company ? <CompanyCell name={o.company.name} mark={mark(o)} /> : <span className="crm-empty">—</span> },
+    { key: 'icp', label: 'ICP', icon: <Icon name="crosshair" size={12} />, width: '120px', render: o => { const icp = normIcp(o.company?.icp); return icp ? <AbmChip cfg={ICP_CFG} value={icp} kind="icp" accent /> : <span className="crm-empty">—</span> } },
+    { key: 'stage', label: 'Stage', icon: <Icon name="flag" size={12} />, width: '130px', render: o => <StageChip stage={STAGE_MAP[o.stage]} /> },
+    { key: 'value', label: 'Value', icon: <Icon name="currency-dollar" size={12} />, width: '92px', align: 'right', render: o => <Mono dim={o.estimated_value == null}>{formatValue(o.estimated_value)}</Mono> },
+    { key: 'filter', label: 'Decision filter', icon: <Icon name="funnel" size={12} />, width: '108px', render: o => <FilterCell pass={o.decision_filter_pass ?? false} /> },
+    { key: 'closer', label: 'CLOSER', icon: <Icon name="squares-four" size={12} />, width: '146px', render: o => <CloserCell score={CLOSER_BY_STAGE[o.stage]} /> },
+    { key: 'next', label: 'Next step', icon: <Icon name="arrow-bend-up-right" size={12} />, width: 'minmax(210px, 1fr)', render: o => <NextStepCell value={o.notes} /> },
+    // available attributes
+    { key: 'type', label: 'Type', icon: <Icon name="tag" size={12} />, width: '120px', defaultOff: true, render: o => <span className="crm-chip muted">{TYPE_LABELS[o.type]}</span> },
+    { key: 'target', label: 'Target', icon: <Icon name="calendar-blank" size={12} />, width: '110px', align: 'right', defaultOff: true, render: o => <Mono dim>{formatTarget(o.target_date)}</Mono> },
   ]
 
   const handleSave = async (data: Partial<Opportunity>) => {
     if (!user) return
     await upsert({
-      title: data.title ?? '',
-      type: data.type ?? 'other',
-      stage: data.stage ?? 'exploring',
-      company_id: data.company_id ?? null,
-      estimated_value: data.estimated_value ?? null,
-      target_date: null,
-      notes: null,
-      decision_filter_pass: null,
-      interview_prep: null,
-      interview_map: null,
-      negotiation_prep: null,
+      title: data.title ?? '', type: data.type ?? 'other', stage: data.stage ?? 'exploring',
+      company_id: data.company_id ?? null, estimated_value: data.estimated_value ?? null,
+      target_date: null, notes: null, decision_filter_pass: null,
+      interview_prep: null, interview_map: null, negotiation_prep: null,
     })
     setShowAdd(false)
   }
 
   return (
     <div className="ppl-page">
-      {/* header */}
       <header className="ppl-hd">
         <div className="ppl-hd-l">
           <h1 className="ppl-title">Opportunities</h1>
           <p className="ppl-sub">Each one is a network of stakeholders, not a pipeline row. Who's in, who's missing, what's the gap.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-shuttle" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search..."
-              className="pl-8 pr-3 py-1.5 text-sm border border-mercury rounded-lg focus:outline-none focus:border-burnham bg-white w-40"
-            />
-          </div>
-          {/* view toggle */}
-          <div className="flex border border-mercury rounded-lg overflow-hidden">
-            <button
-              onClick={() => setViewMode('table')}
-              className={`p-1.5 transition-colors ${viewMode === 'table' ? 'bg-burnham text-gossip' : 'text-shuttle hover:bg-mercury'}`}
-            >
-              <Table size={16} />
-            </button>
-            <button
-              onClick={() => setViewMode('kanban')}
-              className={`p-1.5 transition-colors ${viewMode === 'kanban' ? 'bg-burnham text-gossip' : 'text-shuttle hover:bg-mercury'}`}
-            >
-              <Kanban size={16} />
-            </button>
-          </div>
-          <button
-            onClick={() => setShowAdd(v => !v)}
-            className="crm-tool primary"
-          >
-            <Plus size={14} /> <span>New opportunity</span>
-          </button>
-        </div>
       </header>
 
-      {showAdd && (
-        <AddOppForm companies={companies} onSave={handleSave} onCancel={() => setShowAdd(false)} />
-      )}
+      {showAdd && <AddOppForm companies={companies} onSave={handleSave} onCancel={() => setShowAdd(false)} />}
 
       {loading ? (
         <div className="flex items-center justify-center flex-1 text-shuttle text-sm">Loading...</div>
       ) : (
-        <div>
-          <CrmTable
-            entity="opportunities"
-            title="Pipeline"
-            viewName="Table"
-            rows={filtered}
-            columns={columns}
-            view={viewMode}
-            onViewChange={v => setViewMode(v as 'table' | 'kanban')}
-            views={[
-              { id: 'table', label: 'Table', type: 'table' },
-              { id: 'kanban', label: 'Kanban', type: 'kanban' },
-            ]}
-            addLabel="New Opportunity"
-            onAdd={() => setShowAdd(true)}
-            onRowClick={opp => setPeekId(opp.id)}
-            storageKey="opportunities"
-            kanban={{
-              groupLabel: 'Stage',
-              stages: STAGES.map(stage => ({
-                id: stage,
-                label: stage,
-                color: {
-                  exploring: '#9CA3AF',
-                  active: '#79D65E',
-                  negotiating: '#EAB308',
-                  won: '#22C55E',
-                  lost: '#F87171',
-                }[stage],
-              })),
-              groupValue: opp => opp.stage,
-              cardColumns: ['company', 'value', 'target'],
-              onMove: (opp, stage) => updateStage(opp.id, (stage ?? 'exploring') as OpportunityStage),
-            }}
-          />
-        </div>
+        <CrmTable
+          entity="opportunities"
+          viewName="Active pipeline"
+          sortLabel="Stage"
+          rows={rows}
+          columns={columns}
+          addLabel="New opportunity"
+          onAdd={() => setShowAdd(v => !v)}
+          onRowClick={o => setPeekId(o.id)}
+          selectedId={peekId}
+          storageKey="opportunities-abm"
+        />
       )}
 
       <RecordPeek
         open={Boolean(peek)}
         title={peek?.title ?? ''}
         subtitle={peek ? [peek.company?.name, TYPE_LABELS[peek.type]].filter(Boolean).join(' · ') : undefined}
-        eyebrow="Opportunity"
-        highlights={peek ? [
-          { label: 'Stage', icon: <Flag size={13} />, value: peek.stage },
-          { label: 'Value', icon: <CurrencyDollar size={13} />, value: formatValue(peek.estimated_value) },
-          { label: 'Decision filter', icon: <Funnel size={13} />, value: peek.decision_filter_pass == null ? '—' : peek.decision_filter_pass ? 'Pass' : 'Fail' },
-          { label: 'Next step', icon: <ArrowBendUpRight size={13} />, value: peek.notes || '—' },
-        ] : []}
+        eyebrow="Active pipeline"
         fields={peek ? [
-          { label: 'Value', icon: <CurrencyDollar size={12} />, value: formatValue(peek.estimated_value) },
-          { label: 'Company', icon: <Buildings size={12} />, value: peek.company?.name || '—' },
+          { label: 'Value', icon: <Icon name="currency-dollar" size={12} />, value: formatValue(peek.estimated_value) },
+          { label: 'Company', icon: <Icon name="buildings" size={12} />, value: peek.company?.name || '—' },
         ] : []}
-        recommendedMove={peek?.notes ? {
-          verb: peek.notes,
-          detail: peek.target_date ? `Target ${formatTarget(peek.target_date)}` : 'Opportunity next step.',
-          action: peek.notes,
-          accent: 'var(--moss)',
-        } : null}
+        highlights={peek ? [
+          { label: 'Stage', icon: <Icon name="flag" size={13} />, value: <StageChip stage={STAGE_MAP[peek.stage]} /> },
+          { label: 'Value', icon: <Icon name="currency-dollar" size={13} />, value: <Mono>{formatValue(peek.estimated_value)}</Mono> },
+          { label: 'Decision filter', icon: <Icon name="funnel" size={13} />, value: <FilterCell pass={peek.decision_filter_pass ?? false} /> },
+          { label: 'Next step', icon: <Icon name="arrow-bend-up-right" size={13} />, value: <NextStepCell value={peek.notes} /> },
+        ] : []}
+        overviewBeforeHighlights
         onClose={() => setPeekId(null)}
-        onOpenFull={() => peek && navigate(`/people/opportunities/${peek.id}`)}
-        onPrev={peekIndex > 0 ? () => setPeekId(filtered[peekIndex - 1].id) : undefined}
-        onNext={peekIndex >= 0 && peekIndex < filtered.length - 1 ? () => setPeekId(filtered[peekIndex + 1].id) : undefined}
+        onPrev={peekIndex > 0 ? () => setPeekId(rows[peekIndex - 1].id) : undefined}
+        onNext={peekIndex >= 0 && peekIndex < rows.length - 1 ? () => setPeekId(rows[peekIndex + 1].id) : undefined}
       >
-        <div className="peek-block-label spaced">Account <span className="peek-hint">this role hangs off the account</span></div>
-        <div className="opp-acct">
-          <div className="opp-acct-top">
-            <span className="crm-name">
-              <span className="crm-av sq logo">{peek?.company?.name?.[0] ?? '?'}</span>
-              <span>{peek?.company?.name || 'No company'}</span>
-            </span>
-          </div>
-        </div>
-
-        <div className="peek-block-label spaced">Objective</div>
-        <p className="peek-objective">{peek?.notes || `${TYPE_LABELS[peek?.type ?? 'other']} opportunity`}</p>
-        {peek?.target_date && <div className="peek-ms-line"><Flag size={12} />{formatTarget(peek.target_date)}</div>}
-
-        <div className="peek-block-label spaced">Stakeholder map <span className="peek-hint">cast from the account roster</span></div>
-        <div className="peek-stakeholders">
-          <div className="stk-row ghost" style={{ '--stk': 'var(--fg-3)' } as CSSProperties}>
-            <div className="stk-hd">
-              <span className="stk-ghost-av">?</span>
-              <span className="stk-name">No stakeholders mapped</span>
-              <span className="stk-role">unknown</span>
-              <span className="stk-touch">not mapped</span>
+        {peek && (
+          <>
+            <div className="peek-block-label spaced">Account <span className="peek-hint">this role hangs off the account</span></div>
+            <div className="opp-acct">
+              <div className="opp-acct-top">
+                <CompanyCell name={peek.company?.name ?? null} mark={mark(peek)} />
+                {normIcp(peek.company?.icp) && <AbmChip cfg={ICP_CFG} value={normIcp(peek.company?.icp)} kind="icp" accent />}
+                {peek.company?.account_stage && <AccountStageChip stage={peek.company.account_stage} />}
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div className="peek-block-label spaced">Gaps to close</div>
-        <ul className="peek-gaps">
-          <li><Target size={12} /> {peek?.interview_prep ? 'Review interview prep' : 'Map the stakeholder path'}</li>
-        </ul>
+            <div className="peek-block-label spaced">Objective</div>
+            <p className="peek-objective">{peek.notes || `${TYPE_LABELS[peek.type]} opportunity${peek.company ? ` with ${peek.company.name}` : ''}.`}</p>
+            {peek.target_date && <div className="peek-ms-line"><Icon name="flag" size={12} />{formatTarget(peek.target_date)}</div>}
+
+            <div className="peek-block-label spaced">Stakeholder map <span className="peek-hint">cast from the account roster</span></div>
+            <div className="peek-stakeholders">
+              <div className="stk-row ghost">
+                <div className="stk-hd">
+                  <span className="stk-ghost-av"><Icon name="user-circle-dashed" size={20} /></span>
+                  <span className="stk-name">No stakeholders mapped</span>
+                  <span className="stk-role">unknown</span>
+                  <span className="stk-touch">not mapped</span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </RecordPeek>
-
     </div>
   )
 }
