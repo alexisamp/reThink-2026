@@ -1,11 +1,11 @@
 // Today — daily cockpit, rebuilt to the reThink design bundle.
-// Main column = todos (the hero). Right rail = Milestones / This Week / Next Steps /
+// Main column = todos (the hero). Right rail = Milestones / This Week / Agenda /
 // Journal (collapsible + drag-to-reorder, persisted). Wired to live Supabase data.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Target, ChartLineUp, UsersThree, PencilSimple, Timer, Play, Pause, X, Check, Moon, CheckSquare, ArrowCounterClockwise } from '@phosphor-icons/react'
+import { Archive, ArrowCounterClockwise, ArrowDown, CalendarBlank, CalendarDots, Check, ChartLineUp, MoonStars, Pause, PencilSimple, Play, Plus, Target, Timer, TrashSimple, X } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
-import type { Todo, Milestone, Goal, Review, TodoContentSegment, TodoMentionKind, ReviewItem } from '@/types'
+import type { Todo, Milestone, Goal, Review, TodoContentSegment, TodoMentionKind } from '@/types'
 import MilestonePanel from '@/components/MilestonePanel'
 import DayStartDrawer from '@/components/DayStartDrawer'
 import EndOfDayDrawer from '@/components/EndOfDayDrawer'
@@ -13,12 +13,10 @@ import TodoList from './today/TodoList'
 import RightRail, { type RailSectionDef } from './today/RightRail'
 import MilestoneRows, { type MilestoneRowData } from './today/MilestoneRows'
 import ThisWeek from './today/ThisWeek'
-import NextSteps from './today/NextSteps'
 import FocusTimer from './today/FocusTimer'
 import { useFocusTimer } from './today/useFocusTimer'
 import type { GroupBy, Mention, TodoMilestoneOption } from './today/types'
 import { companyImage, createCrmObject, firstRelation, mentionFromCompany, mentionFromContact, mentionFromOpportunity } from '@/lib/crmObjects'
-import { acceptReviewItem, dismissReviewItem, REVIEW_TARGET_LABELS } from '@/lib/reviewQueue'
 
 function fmtClock(seconds: number): string {
   const m = Math.floor(seconds / 60), s = seconds % 60
@@ -46,9 +44,11 @@ interface OpportunityMentionRow {
   company_id?: string | null
   company?: RelationCompany | RelationCompany[] | null
 }
-type TodayReviewRow = Pick<Review, 'notes' | 'one_thing' | 'one_thing_done' | 'energy_level' | 'tomorrow_reviewed' | 'day_locked_at'>
+type TodayReviewRow = Pick<Review, 'notes' | 'one_thing' | 'one_thing_done' | 'energy_level' | 'tomorrow_focus' | 'tomorrow_reviewed' | 'day_locked_at'>
 interface DayCloseSummary {
   removedTodoIds: string[]
+  removedBacklogIds?: string[]
+  plannedItems?: Array<{ id: string; text: string; src: 'pending' | 'backlog' | 'new' }>
   carriedCount: number
   clearedCount: number
   completedCount: number
@@ -89,6 +89,224 @@ function formatDue(target: string | null, today: string): { label: string | null
   return { label: `${days}d`, urgent: days <= 7 }
 }
 
+function addDays(base: string, n: number) {
+  const d = new Date(base + 'T00:00:00')
+  d.setDate(d.getDate() + n)
+  return localDate(d)
+}
+
+function relLabel(dateKey: string | null | undefined, todayK: string) {
+  if (!dateKey) return null
+  const diff = Math.round((new Date(dateKey).getTime() - new Date(todayK).getTime()) / 86400000)
+  if (diff <= 0) return 'today'
+  if (diff === 1) return 'tomorrow'
+  if (diff < 7) return `in ${diff}d`
+  if (diff < 14) return 'next week'
+  return new Date(dateKey + 'T00:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
+}
+
+function ObjectiveBar({
+  objective,
+  onChange,
+}: {
+  objective: string
+  onChange: (value: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(objective || '')
+  useEffect(() => setText(objective || ''), [objective])
+  const commit = () => {
+    onChange(text.trim())
+    setEditing(false)
+  }
+  return (
+    <div className="objective-bar" onClick={() => !editing && setEditing(true)}>
+      <span className="obj-icon"><Target size={13} weight="bold" /></span>
+      <span className="obj-label">Day objective</span>
+      {editing ? (
+        <input
+          autoFocus
+          className="obj-input"
+          value={text}
+          placeholder="What's the one big thing today?"
+          onChange={e => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') commit()
+            if (e.key === 'Escape') {
+              setText(objective || '')
+              setEditing(false)
+            }
+          }}
+        />
+      ) : (
+        <span className={`obj-text${objective ? '' : ' empty'}`}>{objective || "Set today's objective..."}</span>
+      )}
+      <span className="obj-edit"><PencilSimple size={12} /></span>
+    </div>
+  )
+}
+
+function BacklogBin({
+  count,
+  armed,
+  onOpen,
+  onDropTodo,
+}: {
+  count: number
+  armed?: boolean
+  onOpen: () => void
+  onDropTodo?: (id: string) => void
+}) {
+  const [over, setOver] = useState(false)
+  return (
+    <button
+      className={`backlog-bin${armed ? ' armed' : ''}${over ? ' over' : ''}`}
+      onClick={onOpen}
+      title="Backlog — drag a todo here to park it"
+      onDragOver={e => {
+        if (e.dataTransfer.types.includes('text/todo-id')) {
+          e.preventDefault()
+          setOver(true)
+        }
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={e => {
+        const id = e.dataTransfer.getData('text/todo-id')
+        setOver(false)
+        if (id) onDropTodo?.(id)
+      }}
+    >
+      <Archive size={14} />
+      <span className="bl-word">Backlog</span>
+      {count > 0 && <span className="bl-count">{count}</span>}
+    </button>
+  )
+}
+
+function ReturnDatePicker({
+  value,
+  todayK,
+  onPick,
+}: {
+  value: string | null | undefined
+  todayK: string
+  onPick: (value: string | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const wrap = useRef<HTMLSpanElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+  const label = relLabel(value, todayK)
+  return (
+    <span ref={wrap} style={{ position: 'relative' }}>
+      <button className={`bl-date${value ? '' : ' empty'}`} onClick={() => setOpen(o => !o)}>
+        <CalendarBlank size={10} />
+        {label || 'no date'}
+      </button>
+      {open && (
+        <div className="date-popover" style={{ top: '100%', right: 0, marginTop: 6, minWidth: 200 }}>
+          <button onClick={() => { onPick(addDays(todayK, 1)); setOpen(false) }}>Tomorrow<span className="meta">auto</span></button>
+          <button onClick={() => { onPick(addDays(todayK, 3)); setOpen(false) }}>In 3 days<span className="meta">auto</span></button>
+          <button onClick={() => { onPick(addDays(todayK, 7)); setOpen(false) }}>Next week<span className="meta">auto</span></button>
+          <div className="sep" />
+          <input type="date" value={value || ''} min={todayK} onChange={e => onPick(e.target.value || null)} />
+          <div className="sep" />
+          <button onClick={() => { onPick(null); setOpen(false) }} className="bl-clear">No date · manual only</button>
+        </div>
+      )}
+    </span>
+  )
+}
+
+function BacklogPanel({
+  items,
+  todayK,
+  onClose,
+  onDropTodo,
+  onRestore,
+  onSetDate,
+  onRemove,
+}: {
+  items: Todo[]
+  todayK: string
+  onClose: () => void
+  onDropTodo?: (id: string) => void
+  onRestore: (id: string) => void
+  onSetDate: (id: string, value: string | null) => void
+  onRemove: (id: string) => void
+}) {
+  const [dropOver, setDropOver] = useState(false)
+  return (
+    <>
+      <div className="bl-scrim" onClick={onClose} />
+      <aside className="bl-panel" role="dialog" aria-label="Backlog">
+        <header className="bl-hd">
+          <div className="bl-hd-title">
+            <Archive size={15} />
+            <h3>Backlog</h3>
+            <span className="bl-hd-count">{items.length}</span>
+          </div>
+          <button className="bl-close" onClick={onClose} title="Close"><X size={13} /></button>
+        </header>
+        <p className="bl-sub">Tasks on hold — not deleted. Pull one back with <b>+</b>, or give it a tentative date so it returns on its own.</p>
+        <div
+          className={`bl-list${dropOver ? ' drop' : ''}`}
+          onDragOver={(e) => {
+            if (!onDropTodo) return
+            if (e.dataTransfer.types.includes('text/todo-id')) {
+              e.preventDefault()
+              setDropOver(true)
+            }
+          }}
+          onDragLeave={() => setDropOver(false)}
+          onDrop={(e) => {
+            setDropOver(false)
+            const id = e.dataTransfer.getData('text/todo-id')
+            if (id && onDropTodo) onDropTodo(id)
+          }}
+        >
+          {items.length === 0 && (
+            <div className="bl-empty">
+              <Archive size={22} />
+              <span>Nothing on hold.</span>
+              <small>Park a todo from Today to clear it without deleting it.</small>
+            </div>
+          )}
+          {items.map(it => (
+            <div className="bl-item" key={it.id}>
+              <button className="bl-restore" onClick={() => onRestore(it.id)} title="Bring back to Today"><Plus size={12} /></button>
+              <span className="bl-text">{it.text}</span>
+              <ReturnDatePicker value={it.return_date} todayK={todayK} onPick={d => onSetDate(it.id, d)} />
+              <button className="bl-trash" onClick={() => onRemove(it.id)} title="Delete for good"><TrashSimple size={12} /></button>
+            </div>
+          ))}
+        </div>
+        {items.some(i => i.return_date) && (
+          <div className="bl-foot"><CalendarBlank size={11} /> Dated items flow back into Today when that day starts.</div>
+        )}
+      </aside>
+    </>
+  )
+}
+
+function AgendaRows({ items = [] }: { items?: Array<never> }) {
+  if (!items.length) {
+    return <div className="ns-empty">No meetings booked. A quiet week — or time to reach out.</div>
+  }
+  return (
+    <div className="agenda">
+      <div className="ag-feeds"><ArrowDown size={10} />{items.length} this week feed <b>Scheduled</b></div>
+    </div>
+  )
+}
+
 export default function Today() {
   const navigate = useNavigate()
   const today = localDate()
@@ -107,6 +325,9 @@ export default function Today() {
 
   const [userId, setUserId] = useState<string | null>(null)
   const [todos, setTodos] = useState<Todo[]>([])
+  const [backlog, setBacklog] = useState<Todo[]>([])
+  const [backlogOpen, setBacklogOpen] = useState(false)
+  const [dragArmed, setDragArmed] = useState(false)
   const [msTodos, setMsTodos] = useState<MsTodo[]>([])      // all milestone-linked todos (for progress)
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [goalsMap, setGoalsMap] = useState<Map<string, GoalLite>>(new Map())
@@ -117,14 +338,14 @@ export default function Today() {
   const [expandedMs, setExpandedMs] = useState<string | null>(null)
   const [journal, setJournal] = useState('')
   const [dailyGoal, setDailyGoal] = useState('')
+  const [userName, setUserName] = useState<string | null>(null)
   const [startOpen, setStartOpen] = useState(false)
   const [endOpen, setEndOpen] = useState(false)
   const [focusOpen, setFocusOpen] = useState(false)
-  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([])
   const [dayClosed, setDayClosed] = useState(false)
   const [closedSummary, setClosedSummary] = useState<DayCloseSummary | null>(null)
   const focus = useFocusTimer(userId)
-  const [twRefresh, setTwRefresh] = useState(0)
+  const [twRefresh] = useState(0)
   const journalTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const journalInit = useRef(false)
 
@@ -168,28 +389,41 @@ export default function Today() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user || cancelled) return
       setUserId(user.id)
+      const rawName = typeof user.user_metadata?.full_name === 'string'
+        ? user.user_metadata.full_name
+        : typeof user.user_metadata?.name === 'string'
+          ? user.user_metadata.name
+          : user.email?.split('@')[0]
+      setUserName(rawName ? rawName.split(/\s+/)[0] : null)
 
-      const [todosRes, overdueTodosRes, msTodosRes, msRes, goalsRes, reviewRes, contactsRes, companiesRes, oppsRes, reviewQueueRes] = await Promise.all([
-        supabase.from('todos').select('*').eq('user_id', user.id).eq('date', today).order('sort_order').order('created_at'),
-        supabase.from('todos').select('*').eq('user_id', user.id).lt('date', today).eq('completed', false).order('date').order('sort_order').order('created_at'),
+      const [todosRes, overdueTodosRes, dueBacklogRes, backlogRes, msTodosRes, msRes, goalsRes, reviewRes, contactsRes, companiesRes, oppsRes] = await Promise.all([
+        supabase.from('todos').select('*').eq('user_id', user.id).eq('date', today).is('backlog_at', null).order('sort_order').order('created_at'),
+        supabase.from('todos').select('*').eq('user_id', user.id).lt('date', today).eq('completed', false).is('backlog_at', null).order('date').order('sort_order').order('created_at'),
+        supabase.from('todos').select('*').eq('user_id', user.id).eq('completed', false).not('backlog_at', 'is', null).not('return_date', 'is', null).lte('return_date', today).order('return_date').order('created_at'),
+        supabase.from('todos').select('*').eq('user_id', user.id).eq('completed', false).not('backlog_at', 'is', null).order('backlog_at', { ascending: false }),
         supabase.from('todos').select('id, milestone_id, completed').eq('user_id', user.id).not('milestone_id', 'is', null),
         supabase.from('milestones').select('*').eq('user_id', user.id).neq('status', 'COMPLETE').order('target_date', { nullsFirst: false }),
         supabase.from('goals').select('id, text, alias, color, emoji').eq('user_id', user.id).eq('goal_type', 'ACTIVE').order('position'),
-        supabase.from('reviews').select('notes, one_thing, one_thing_done, energy_level, tomorrow_reviewed, day_locked_at').eq('user_id', user.id).eq('date', today).maybeSingle(),
+        supabase.from('reviews').select('notes, one_thing, one_thing_done, energy_level, tomorrow_focus, tomorrow_reviewed, day_locked_at').eq('user_id', user.id).eq('date', today).maybeSingle(),
         supabase.from('outreach_logs').select('id, name, profile_photo_url, company, job_title, email').eq('user_id', user.id).order('name'),
         supabase.from('companies').select('id, name, logo_url, domain, sector, headline').eq('user_id', user.id).order('name'),
         supabase.from('opportunities').select('id, title, stage, type, company_id, company:companies(id, name, logo_url, domain)').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('review_items').select('*').eq('user_id', user.id).eq('status', 'pending').order('created_at', { ascending: false }).limit(3),
       ])
       if (cancelled) return
 
       const overdueTodos = ((overdueTodosRes.data ?? []) as Todo[]).map(t => ({ ...t, date: today }))
+      const dueBacklogTodos = ((dueBacklogRes.data ?? []) as Todo[]).map(t => ({ ...t, date: today, backlog_at: null, return_date: null }))
       if (overdueTodos.length > 0) {
         supabase.from('todos').update({ date: today }).in('id', overdueTodos.map(t => t.id)).then(() => {})
       }
+      if (dueBacklogTodos.length > 0) {
+        supabase.from('todos').update({ date: today, backlog_at: null, return_date: null }).in('id', dueBacklogTodos.map(t => t.id)).then(() => {})
+      }
       const byTodo = new Map<string, Todo>()
-      ;[...overdueTodos, ...((todosRes.data ?? []) as Todo[])].forEach(t => byTodo.set(t.id, t))
+      ;[...dueBacklogTodos, ...overdueTodos, ...((todosRes.data ?? []) as Todo[])].forEach(t => byTodo.set(t.id, t))
       const todoList = [...byTodo.values()]
+      const restoredIds = new Set(dueBacklogTodos.map(t => t.id))
+      const backlogList = ((backlogRes.data ?? []) as Todo[]).filter(t => !restoredIds.has(t.id))
       const peopleOptions: Mention[] = (contactsRes.data ?? []).map(c => mentionFromContact(c))
       const companyOptions: Mention[] = (companiesRes.data ?? []).map(c => mentionFromCompany(c))
       const oppOptions: Mention[] = ((oppsRes.data ?? []) as OpportunityMentionRow[])
@@ -197,10 +431,10 @@ export default function Today() {
         .map(o => mentionFromOpportunity(o))
       const review = reviewRes.data as TodayReviewRow | null
       setTodos(todoList)
+      setBacklog(backlogList)
       setMsTodos((msTodosRes.data ?? []) as MsTodo[])
       setMilestones((msRes.data ?? []) as Milestone[])
       setMentionOptions([...peopleOptions, ...companyOptions, ...oppOptions])
-      setReviewItems((reviewQueueRes.data ?? []) as ReviewItem[])
       const gl = (goalsRes.data ?? []) as GoalLite[]
       setGoals(gl)
       setGoalsMap(new Map(gl.map(g => [g.id, g])))
@@ -215,8 +449,13 @@ export default function Today() {
         pendingCount: todoList.filter(t => !t.completed).length,
         energyLevel: review?.energy_level ?? null,
         goalDone: review?.one_thing_done ?? null,
+        tomorrowGoal: review?.tomorrow_focus ?? undefined,
       } : null)
-      if (!review?.one_thing && !sessionStorage.getItem(`rethink.today.goalSkipped:${today}`)) setStartOpen(true)
+      const dayStartKey = `rethink.today.started:${today}`
+      if (!review?.one_thing && !localStorage.getItem(dayStartKey)) {
+        localStorage.setItem(dayStartKey, '1')
+        setStartOpen(true)
+      }
       loadMentions(user.id, todoList)
     })()
     return () => { cancelled = true }
@@ -344,17 +583,37 @@ export default function Today() {
       await supabase.from('todos').delete().eq('id', id)
     }
   }
+  const parkTodo = async (id: string) => {
+    const t = todos.find(x => x.id === id)
+    if (!t) return
+    const patch = { backlog_at: new Date().toISOString(), return_date: null, date: null }
+    setTodos(prev => prev.filter(x => x.id !== id))
+    setBacklog(prev => [{ ...t, ...patch }, ...prev])
+    setBacklogOpen(true)
+    await supabase.from('todos').update(patch).eq('id', id)
+  }
+  const restoreBacklogTodo = async (id: string) => {
+    const t = backlog.find(x => x.id === id)
+    if (!t) return
+    const restored: Todo = { ...t, date: today, backlog_at: null, return_date: null }
+    setBacklog(prev => prev.filter(x => x.id !== id))
+    setTodos(prev => [...prev, restored])
+    await supabase.from('todos').update({ date: today, backlog_at: null, return_date: null }).eq('id', id)
+    if (userId) loadMentions(userId, [...todos, restored])
+  }
+  const setBacklogReturnDate = async (id: string, returnDate: string | null) => {
+    setBacklog(prev => prev.map(x => x.id === id ? { ...x, return_date: returnDate } : x))
+    await supabase.from('todos').update({ return_date: returnDate }).eq('id', id)
+  }
+  const deleteBacklogTodo = async (id: string) => {
+    setBacklog(prev => prev.filter(x => x.id !== id))
+    await supabase.from('todos').delete().eq('id', id)
+  }
   const starTodo = async (id: string) => {
     const t = todos.find(x => x.id === id); if (!t) return
     const next = !t.is_featured
     setTodos(prev => prev.map(x => x.id === id ? { ...x, is_featured: next } : x))
     await supabase.from('todos').update({ is_featured: next }).eq('id', id)
-  }
-  const toggleWaiting = async (id: string) => {
-    const t = todos.find(x => x.id === id); if (!t) return
-    const next = !t.waiting
-    setTodos(prev => prev.map(x => x.id === id ? { ...x, waiting: next } : x))
-    await supabase.from('todos').update({ waiting: next }).eq('id', id)
   }
   const createMention = useCallback(async (kind: TodoMentionKind, name: string, companyId?: string | null) => {
     if (!userId) return null
@@ -562,165 +821,93 @@ export default function Today() {
     setClosedSummary(null)
   }
 
-  const quickDismissReview = async (item: ReviewItem) => {
-    setReviewItems(prev => prev.filter(x => x.id !== item.id))
-    const result = await dismissReviewItem(item)
-    if (!result.ok) setReviewItems(prev => [item, ...prev])
-  }
-
-  const quickAcceptReview = async (item: ReviewItem) => {
-    const result = await acceptReviewItem(item, item.proposed_payload, item.contact_id)
-    if (!result.ok) {
-      navigate('/review')
-      return
-    }
-    setReviewItems(prev => prev.filter(x => x.id !== item.id))
-    setTwRefresh(n => n + 1)
-  }
-
   // ── rail sections ──────────────────────────────────────────────
   const sections: RailSectionDef[] = userId ? [
     {
-      id: 'review', title: 'Review', icon: <CheckSquare size={13} />, count: reviewItems.length,
-      body: reviewItems.length === 0 ? (
-        <div className="td-tw-empty">No external items waiting.</div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {reviewItems.map(item => (
-            <div key={item.id} className="rounded-lg border border-mercury bg-white px-2.5 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono">{item.source}</span>
-                <span className="text-[9px] text-shuttle/50">{REVIEW_TARGET_LABELS[item.proposed_target]}</span>
-              </div>
-              <p className="mt-1 text-[12px] font-medium text-burnham leading-snug line-clamp-2">{item.title}</p>
-              <div className="mt-2 flex items-center gap-1.5">
-                <button className="td-mini-btn" onClick={() => quickAcceptReview(item)}>accept</button>
-                <button className="td-mini-btn" onClick={() => quickDismissReview(item)}>dismiss</button>
-              </div>
-            </div>
-          ))}
-          <div className="td-tw-foot">
-            <button onClick={() => navigate('/review')}>
-              <span>Open review queue</span>
-            </button>
-          </div>
-        </div>
-      ),
-    },
-    {
       id: 'milestones', title: 'Milestones', icon: <Target size={13} />, count: milestoneRows.length,
-      body: <MilestoneRows rows={milestoneRows} activeId={expandedMs} onExpand={setExpandedMs} onManage={() => navigate('/plan')} />,
+      body: <MilestoneRows rows={milestoneRows} activeId={expandedMs} onExpand={setExpandedMs} onManage={() => navigate('/milestones')} />,
     },
     {
       id: 'thisweek', title: 'This week', icon: <ChartLineUp size={13} />, tone: 'lagging',
-      body: <ThisWeek key={twRefresh} userId={userId} weekDates={weekDates} today={today} onManage={() => navigate('/plan')} />,
+      body: <ThisWeek key={twRefresh} userId={userId} weekDates={weekDates} today={today} onManage={() => navigate('/milestones')} />,
     },
     {
-      id: 'nextsteps', title: 'Next steps', icon: <UsersThree size={13} />,
-      body: <NextSteps userId={userId} today={today} weekEnd={weekDates[6]} onActioned={() => setTwRefresh(n => n + 1)} onManage={() => navigate('/people')} />,
+      id: 'agenda', title: 'Agenda', icon: <CalendarDots size={13} />, count: 0,
+      body: <AgendaRows />,
     },
     {
       id: 'journal', title: 'Journal', icon: <PencilSimple size={13} />,
       body: (
         <>
           <textarea
-            className="td-journal-area"
+            className="journal-area"
             placeholder="What's on your mind?"
             value={journal}
             onChange={e => onJournalChange(e.target.value)}
           />
-          <div className="td-tw-foot">
-            <button onClick={() => navigate('/plan')}>
-              <span>Open journal</span>
-            </button>
-          </div>
         </>
       ),
     },
   ] : []
 
   return (
-    <div className="td-page">
-      <div className="td-page-hd">
-        <span className="date">{todayLabel}</span>
-        <span className="sep">·</span>
-        <span className="day-state">{dayClosed ? 'day closed' : 'day in progress'}</span>
-        <span className="hd-spacer" />
+    <div className="page">
+      <div className="day-bar">
+        <div className="day-bar-l">
+          <h1 className="day-date">{todayLabel}</h1>
+          <span className="day-state"><span className="day-pip" /> {dayClosed ? 'day closed' : 'day in progress'}</span>
+        </div>
+        <div className="day-bar-r">
         {focus.complete ? (
-          <div className="td-focus-live done" title={focus.intention || 'Focus complete'}>
+          <div className="day-timer" title={focus.intention || 'Focus complete'}>
             <Check size={12} weight="bold" />
-            <span className="time">done</span>
-            <button onClick={focus.dismiss} title="Dismiss"><X size={12} /></button>
+            <span className="dt-clock">done</span>
+            <button className="dt-toggle" onClick={focus.dismiss} title="Dismiss"><X size={12} /></button>
           </div>
         ) : focus.active ? (
-          <div className={`td-focus-live${focus.running ? ' running' : ''}`} title={focus.intention || 'Focus session'}>
-            <span className="dot" />
-            <span className="time">{fmtClock(focus.remaining)}</span>
-            <button onClick={focus.running ? focus.pause : focus.resume} title={focus.running ? 'Pause' : 'Resume'}>
+          <div className={`day-timer${focus.running ? ' running' : ''}`} title={focus.intention || 'Focus session'}>
+            <button className="dt-toggle" onClick={focus.running ? focus.pause : focus.resume} title={focus.running ? 'Pause' : 'Resume'}>
               {focus.running ? <Pause size={12} weight="fill" /> : <Play size={12} weight="fill" />}
             </button>
-            <button onClick={focus.cancel} title="Cancel"><X size={12} /></button>
+            <span className="dt-clock">{fmtClock(focus.remaining)}</span>
+            <button className={`dt-focus${focus.intention ? ' set' : ''}`} onClick={() => setFocusOpen(true)}>
+              <Target size={12} />
+              <span className="dt-focus-tx">{focus.intention || 'Focus'}</span>
+            </button>
+            <button className="dt-toggle" onClick={focus.cancel} title="Cancel"><X size={12} /></button>
           </div>
         ) : (
-          <button className="hd-act" onClick={() => setFocusOpen(true)} title="Start a focus session">
-            <Timer size={13} /> focus
+          <button className="backlog-bin" onClick={() => setFocusOpen(true)} title="Start a focus session">
+            <Timer size={13} />
+            <span className="bl-word">Focus</span>
           </button>
         )}
+        <BacklogBin count={backlog.length} armed={dragArmed} onOpen={() => setBacklogOpen(true)} onDropTodo={parkTodo} />
         {dayClosed ? (
-          <button className="hd-act" onClick={reopenDay} title="Reopen the day">
-            <ArrowCounterClockwise size={13} /> reopen
+          <button className="close-day-btn" onClick={reopenDay} title="Reopen the day">
+            <ArrowCounterClockwise size={13} /> Reopen
           </button>
         ) : (
-          <button className="hd-act" onClick={() => setEndOpen(true)} title="Close the day">
-            <Moon size={13} /> close
+          <button className="close-day-btn" onClick={() => setEndOpen(true)} title="Close the day">
+            <MoonStars size={13} /> Close day
           </button>
         )}
+        </div>
       </div>
 
-      {dailyGoal && (
-        <div className="td-day-goal">
-          <span className="label">one thing</span>
-          <button onClick={() => setStartOpen(true)}>{dailyGoal}</button>
-        </div>
+      {!dayClosed && (
+        <ObjectiveBar
+          objective={dailyGoal}
+          onChange={async value => {
+            setDailyGoal(value)
+            if (userId) await supabase.from('reviews').upsert({ user_id: userId, date: today, one_thing: value }, { onConflict: 'user_id,date' })
+          }}
+        />
       )}
 
-      {dayClosed ? (
-        <section className="td-closed-summary">
-          <div className="td-closed-kicker">day summary</div>
-          <h2>{closedSummary?.goalDone === true ? 'One thing landed.' : closedSummary?.goalDone === false ? 'Day closed, still in motion.' : 'Day closed.'}</h2>
-          {dailyGoal && (
-            <p className="td-closed-goal">{dailyGoal}</p>
-          )}
-          <div className="td-closed-grid">
-            <div>
-              <span>{closedSummary?.completedCount ?? todos.filter(t => t.completed).length}</span>
-              <label>done today</label>
-            </div>
-            <div>
-              <span>{closedSummary?.carriedCount ?? 0}</span>
-              <label>carried to tomorrow</label>
-            </div>
-            <div>
-              <span>{closedSummary?.energyLevel ?? '–'}</span>
-              <label>energy</label>
-            </div>
-          </div>
-          {closedSummary?.tomorrowGoal && (
-            <div className="td-closed-next">
-              <span>tomorrow</span>
-              <strong>{closedSummary.tomorrowGoal}</strong>
-            </div>
-          )}
-          <div className="td-closed-actions">
-            <button onClick={reopenDay}>
-              <ArrowCounterClockwise size={14} />
-              Reopen day
-            </button>
-          </div>
-        </section>
-      ) : (
-        <div className="td-two-col">
-          <div className="td-main-col">
+      {!dayClosed && (
+        <div className="two-col">
+          <div className="main-col">
             <TodoList
               todos={todos}
               milestoneName={milestoneName}
@@ -735,18 +922,30 @@ export default function Today() {
               onToggle={toggleTodo}
               onDelete={deleteTodo}
               onStar={starTodo}
-              onToggleWaiting={toggleWaiting}
               onEditText={editTodoText}
               onAdd={addTodo}
               onCreateMention={createMention}
               onChangeMilestone={changeTodoMilestone}
               onMilestoneClick={setExpandedMs}
               onReorder={reorderTodos}
+              onDragArm={setDragArmed}
             />
           </div>
 
           <RightRail sections={sections} />
         </div>
+      )}
+
+      {backlogOpen && (
+        <BacklogPanel
+          items={backlog}
+          todayK={today}
+          onClose={() => setBacklogOpen(false)}
+          onDropTodo={parkTodo}
+          onRestore={restoreBacklogTodo}
+          onSetDate={setBacklogReturnDate}
+          onRemove={deleteBacklogTodo}
+        />
       )}
 
       {userId && expandedMilestone && (
@@ -785,26 +984,47 @@ export default function Today() {
           today={today}
           userId={userId}
           initialGoal={dailyGoal}
-          onClose={() => { sessionStorage.setItem(`rethink.today.goalSkipped:${today}`, '1'); setStartOpen(false) }}
-          onSave={(goal) => { setDailyGoal(goal); setStartOpen(false) }}
+          todos={todos}
+          userName={userName}
+          onClose={() => { localStorage.setItem(`rethink.today.started:${today}`, '1'); setStartOpen(false) }}
+          onSave={(goal) => { localStorage.setItem(`rethink.today.started:${today}`, '1'); setDailyGoal(goal); setStartOpen(false) }}
         />
       )}
 
       {userId && endOpen && (
         <EndOfDayDrawer
           todos={todos}
+          backlog={backlog}
           today={today}
           userId={userId}
           dailyGoal={dailyGoal}
           onClose={() => setEndOpen(false)}
           onComplete={(summary) => {
-            const { tomorrowGoal, removedTodoIds } = summary
-            if (tomorrowGoal) sessionStorage.removeItem(`rethink.today.goalSkipped:${today}`)
+            const { removedTodoIds, removedBacklogIds } = summary
             setTodos(prev => prev.filter(t => !removedTodoIds.includes(t.id)))
+            if (removedBacklogIds?.length) setBacklog(prev => prev.filter(t => !removedBacklogIds.includes(t.id)))
             setClosedSummary(summary)
             setDayClosed(true)
             setEndOpen(false)
           }}
+        />
+      )}
+
+      {userId && dayClosed && (
+        <EndOfDayDrawer
+          todos={todos}
+          backlog={backlog}
+          today={today}
+          userId={userId}
+          dailyGoal={dailyGoal}
+          committed
+          savedNote={journal}
+          savedPlan={closedSummary?.plannedItems}
+          savedTomorrowObjective={closedSummary?.tomorrowGoal}
+          onClose={() => {}}
+          onReopen={reopenDay}
+          onNewDay={() => navigate('/today')}
+          onComplete={() => {}}
         />
       )}
     </div>

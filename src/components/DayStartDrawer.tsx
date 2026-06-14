@@ -1,20 +1,50 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, Sun, X } from '@phosphor-icons/react'
+import { Info, Star, SunHorizon, Target } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
+import type { Todo } from '@/types'
 
 interface DayStartDrawerProps {
   today: string
   userId: string
   initialGoal?: string | null
+  todos?: Todo[]
+  userName?: string | null
+  closedYesterday?: boolean
+  yesterdayNote?: string | null
   onClose: () => void
   onSave: (goal: string) => void
 }
 
-export default function DayStartDrawer({ today, userId, initialGoal, onClose, onSave }: DayStartDrawerProps) {
+function cleanTodoText(text: string) {
+  return text.replace(/\[\[mention:(person|company|opportunity):[^\]]+\]\]/g, '').replace(/\s{2,}/g, ' ').trim()
+}
+
+function todoTag(todo: Todo) {
+  if (todo.backlog_at) return { label: 'from backlog', cls: 'backlog' }
+  if (todo.return_date === todo.date) return { label: 'due today', cls: 'due' }
+  return null
+}
+
+export default function DayStartDrawer({
+  today,
+  userId,
+  initialGoal,
+  todos = [],
+  userName,
+  closedYesterday = true,
+  yesterdayNote,
+  onClose,
+  onSave,
+}: DayStartDrawerProps) {
   const [goal, setGoal] = useState(initialGoal ?? '')
   const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const dayLabel = new Date(today + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+  const hour = new Date().getHours()
+  const greetingBase = hour < 12 ? 'Good morning' : hour < 19 ? 'Good afternoon' : 'Good evening'
+  const greeting = `${greetingBase}${userName ? `, ${userName}` : ''}.`
+  const activeTodos = todos.filter(t => !t.completed)
+  const featured = activeTodos.find(t => t.is_featured)
 
   useEffect(() => {
     setGoal(initialGoal ?? '')
@@ -35,36 +65,69 @@ export default function DayStartDrawer({ today, userId, initialGoal, onClose, on
   }
 
   return (
-    <>
-      <div className="td-drawer-bg" onClick={onClose} />
-      <div className="td-day-drawer start">
-        <div className="td-day-drawer-hd">
-          <span className="icon"><Sun size={15} weight="fill" /></span>
-          <div>
-            <h2>Start the day</h2>
-            <p>{dayLabel}</p>
-          </div>
-          <button className="close" onClick={onClose} title="Close"><X size={15} /></button>
-        </div>
-        <div className="td-day-drawer-body">
-          <div className="td-day-block primary">
-            <label>One thing</label>
+    <div className="day-screen start-screen">
+      <div className="ds-inner">
+        <header className="ds-head">
+          <div className="ds-eyebrow start"><span className="ds-dot" /> {dayLabel}</div>
+        </header>
+
+        <h1 className="ds-title">{greeting}</h1>
+
+        <section className="st-objective">
+          <div className="st-obj-label"><Target size={12} /> Day objective</div>
+          {closedYesterday && goal ? (
+            <p className="st-obj-text">{goal}</p>
+          ) : (
             <input
               ref={inputRef}
+              className="st-obj-input"
               value={goal}
               onChange={e => setGoal(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onClose() }}
-              placeholder="What needs to be true by tonight?"
+              placeholder="What's the one big thing today?"
             />
+          )}
+          {!closedYesterday && (
+            <span className="st-hint"><Info size={11} /> You didn't close yesterday — set the objective and dive in.</span>
+          )}
+          {closedYesterday && yesterdayNote && (
+            <div className="st-recall"><span><Info size={12} /></span>{yesterdayNote}</div>
+          )}
+        </section>
+
+        <section className="st-summary">
+          <div className="st-sum-hd">
+            <span className="st-sum-title">On your list today</span>
+            <span className="st-sum-count">{activeTodos.length} {activeTodos.length === 1 ? 'task' : 'tasks'}</span>
           </div>
-        </div>
-        <div className="td-day-drawer-foot">
-          <button onClick={save} disabled={saving || !goal.trim()}>
-            {saving ? 'Saving…' : 'Set goal'}
-            {!saving && <ArrowRight size={13} weight="bold" />}
+          {activeTodos.length === 0 ? (
+            <div className="st-empty">Clean slate. Start by adding the first thing of the day.</div>
+          ) : (
+            <ul className="st-list">
+              {activeTodos.map(todo => {
+                const tag = todoTag(todo)
+                return (
+                  <li className="st-row" key={todo.id}>
+                    <span className={`st-bullet${todo.is_featured ? ' star' : ''}`}>{todo.is_featured ? <Star size={9} weight="fill" /> : null}</span>
+                    <span className="st-row-text">{cleanTodoText(todo.text)}</span>
+                    {tag && <span className={`st-tag ${tag.cls}`}>{tag.label}</span>}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          {featured && (
+            <div className="st-onething"><Star size={11} weight="fill" /> Your one thing: <b>{cleanTodoText(featured.text)}</b></div>
+          )}
+        </section>
+
+        <footer className="ds-foot">
+          <button className="ds-cta start" onClick={save} disabled={saving || !goal.trim()}>
+            {saving ? 'Saving...' : 'Start the day'}
+            {!saving && <SunHorizon size={16} weight="bold" />}
           </button>
-        </div>
+        </footer>
       </div>
-    </>
+    </div>
   )
 }

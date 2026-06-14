@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  House, BookOpen, Timer, Check, Target, Flag, CheckSquare, Plus, Users, ChartBar, FileText,
+  House, BookOpen, Timer, Check, Target, Flag, CheckSquare, Plus, Users, FileText,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Goal, Milestone, Todo, TodoMentionKind } from '@/types'
@@ -169,9 +169,9 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
   const navCommands: Command[] = [
     { id: 'today',    label: 'Go to Today',         Icon: House,         shortcut: '⌘1', group: 'nav', action: () => { navigate('/today');        onClose() } },
     { id: 'review',   label: 'Go to Review Queue',   Icon: CheckSquare,   shortcut: '⌘2', group: 'nav', action: () => { navigate('/review');       onClose() } },
-    { id: 'plan',     label: 'Go to Plan',           Icon: ChartBar,      shortcut: '⌘3', group: 'nav', action: () => { navigate('/plan');         onClose() } },
+    { id: 'playbook', label: 'Go to Playbook',       Icon: BookOpen,      shortcut: '⌘3', group: 'nav', action: () => { navigate('/playbook');     onClose() } },
+    { id: 'goals',    label: 'Go to Goals',          Icon: Target,        shortcut: '⌘4', group: 'nav', action: () => { navigate('/milestones');   onClose() } },
     { id: 'people',   label: 'Go to People',         Icon: Users,                         group: 'nav', action: () => { navigate('/people');       onClose() } },
-    { id: 'playbook', label: 'Go to Playbook',       Icon: BookOpen,      shortcut: '⌘4', group: 'nav', action: () => { navigate('/playbook');     onClose() } },
     { id: 'timer',    label: 'Start Focus Timer',    Icon: Timer,                         group: 'nav', action: () => { navigate('/today'); onStartTimer?.(); onClose() } },
   ]
 
@@ -206,7 +206,7 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
         Icon: Target,
         score,
         badge: 'Goal',
-        action: () => { navigate('/plan'); onClose() },
+        action: () => { navigate('/milestones'); onClose() },
       }))
 
     milestones
@@ -220,7 +220,7 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
         Icon: Flag,
         score,
         badge: 'Milestone',
-        action: () => { onClose() },
+        action: () => { navigate('/milestones'); onClose() },
       }))
 
     recentTodos

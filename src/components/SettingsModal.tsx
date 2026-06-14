@@ -10,7 +10,7 @@ import { useFunnelConfig } from '@/hooks/useFunnelConfig'
 import { FUNNEL_STAGE_ORDER, UNDELETABLE_STAGES } from '@/lib/funnelDefaults'
 import type { ContactStatus, Profile } from '@/types'
 import { useUserSettings } from '@/lib/userSettings'
-import { consumeGoogleDriveScopeRequested, GOOGLE_OAUTH_SCOPES_STRING, hasGoogleDriveScope, markGoogleDriveScopeRequested } from '@/lib/googleDrive'
+import { consumeGoogleDriveScopeRequested, GOOGLE_OAUTH_SCOPES_STRING, hasGoogleDriveScope, markGoogleDriveScopeRequested, persistGoogleProviderSession } from '@/lib/googleDrive'
 
 interface SettingsModalProps {
   open: boolean
@@ -106,16 +106,12 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
       setGoogleConnected(hasToken)
       setGoogleDriveConnected(hasToken && hasGoogleDriveScope(storedScopes))
       setGoogleEmail(hasToken ? (session?.user?.email ?? null) : null)
-      // If provider_token is present (just came back from OAuth), persist it so extension can use it
+      // If provider_token is present (just came back from OAuth), persist it so extension can use it.
+      // Store the requested Google scopes idempotently; relying on the localStorage reconnect flag
+      // can race with useAuth during the OAuth redirect.
       if (session?.provider_token) {
-        const includeDriveScope = consumeGoogleDriveScopeRequested()
-        supabase.auth.updateUser({
-          data: {
-            google_access_token: session.provider_token,
-            ...(includeDriveScope ? { google_scopes: GOOGLE_OAUTH_SCOPES_STRING } : {}),
-          },
-        })
-        if (includeDriveScope) setGoogleDriveConnected(true)
+        consumeGoogleDriveScopeRequested()
+        persistGoogleProviderSession(session).then(() => setGoogleDriveConnected(true)).catch(() => {})
       }
     })
   }, [open])

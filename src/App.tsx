@@ -10,6 +10,7 @@ import AppShell from '@/components/layout/AppShell'
 import Assessment from '@/screens/Assessment'
 import Today from '@/screens/Today'
 import ReviewQueue from '@/screens/ReviewQueue'
+import Conversations from '@/screens/Conversations'
 import People from '@/screens/People'
 import PersonDetail from '@/screens/PersonDetail'
 import PeopleCompanies from '@/screens/PeopleCompanies'
@@ -18,7 +19,7 @@ import ListDetail from '@/screens/ListDetail'
 import CompanyDetail from '@/screens/CompanyDetail'
 import PeopleOpportunities from '@/screens/PeopleOpportunities'
 import OpportunityDetail from '@/screens/OpportunityDetail'
-import Plan from '@/screens/Plan'
+import MilestonePlan from '@/screens/MilestonePlan'
 import Playbook from '@/screens/Playbook'
 import ContactDetailDrawer from '@/components/ContactDetailDrawer'
 import { checkNotificationTriggers, formatNotificationMessage } from '@/lib/notifications'
@@ -181,6 +182,9 @@ export default function App() {
         {/* Compact mode — standalone window, no AppShell */}
         <Route path="/compact" element={<CompactMode />} />
 
+        {/* Conversations — standalone app, no reThink AppShell/sidebar */}
+        <Route path="/conversations" element={user ? <Conversations /> : <Navigate to="/login" replace />} />
+
         {/* Assessment (needs auth, no workbook required) */}
         <Route
           path="/assessment/*"
@@ -203,14 +207,14 @@ export default function App() {
                   <Route path="/" element={<Navigate to="/today" replace />} />
                   <Route path="/today" element={<Today />} />
                   <Route path="/review" element={<ReviewQueue />} />
-                  <Route path="/strategy" element={<Navigate to="/plan" replace />} />
-                  <Route path="/monthly" element={<Navigate to="/plan" replace />} />
-                  <Route path="/monthly/:goalId" element={<Navigate to="/plan" replace />} />
-                  <Route path="/dashboard" element={<Navigate to="/plan" replace />} />
-                  <Route path="/dashboard/goal/:id" element={<Navigate to="/plan" replace />} />
-                  <Route path="/weekly-review" element={<Navigate to="/plan" replace />} />
-                  <Route path="/library" element={<Navigate to="/plan" replace />} />
-                  <Route path="/year" element={<Navigate to="/plan" replace />} />
+                  <Route path="/strategy" element={<Navigate to="/milestones" replace />} />
+                  <Route path="/monthly" element={<Navigate to="/milestones" replace />} />
+                  <Route path="/monthly/:goalId" element={<Navigate to="/milestones" replace />} />
+                  <Route path="/dashboard" element={<Navigate to="/milestones" replace />} />
+                  <Route path="/dashboard/goal/:id" element={<Navigate to="/milestones" replace />} />
+                  <Route path="/weekly-review" element={<Navigate to="/milestones" replace />} />
+                  <Route path="/library" element={<Navigate to="/milestones" replace />} />
+                  <Route path="/year" element={<Navigate to="/milestones" replace />} />
                   <Route path="/people" element={<People />} />
                   <Route path="/people/companies" element={<PeopleCompanies />} />
                   <Route path="/people/companies/:id" element={<CompanyDetail />} />
@@ -219,8 +223,9 @@ export default function App() {
                   <Route path="/people/:id" element={<PersonDetail />} />
                   <Route path="/lists" element={<Lists />} />
                   <Route path="/lists/:id" element={<ListDetail />} />
-                  <Route path="/plan" element={<Plan />} />
-                  <Route path="/milestone-plan" element={<Navigate to="/plan" replace />} />
+                  <Route path="/milestones" element={<MilestonePlan />} />
+                  <Route path="/plan" element={<Navigate to="/milestones" replace />} />
+                  <Route path="/milestone-plan" element={<Navigate to="/milestones" replace />} />
                   <Route path="/playbook" element={<Playbook />} />
                   <Route path="*" element={<Navigate to="/today" replace />} />
                 </Routes>

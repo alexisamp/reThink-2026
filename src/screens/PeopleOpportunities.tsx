@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  MagnifyingGlass, Plus, Target, Table, Kanban,
-  DotOutline,
+  Buildings, CalendarBlank, CurrencyDollar, MagnifyingGlass, Plus, Target, Table, Kanban,
+  Flag, Funnel, ArrowBendUpRight,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useOpportunities } from '@/hooks/useOpportunities'
+import CrmTable, { type CrmColumn } from '@/components/crm/CrmTable'
+import RecordPeek from '@/components/crm/RecordPeek'
 import type { Opportunity, OpportunityStage, OpportunityType, Company } from '@/types'
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -19,14 +21,6 @@ const STAGE_COLORS: Record<OpportunityStage, string> = {
   negotiating: 'text-yellow-800 bg-yellow-100',
   won: 'text-green-800 bg-green-100',
   lost: 'text-red-700 bg-red-100',
-}
-
-const STAGE_DOT_COLORS: Record<OpportunityStage, string> = {
-  exploring: 'text-shuttle',
-  active: 'text-pastel',
-  negotiating: 'text-yellow-500',
-  won: 'text-green-500',
-  lost: 'text-red-400',
 }
 
 const TYPE_LABELS: Record<OpportunityType, string> = {
@@ -136,172 +130,6 @@ function AddOppForm({
   )
 }
 
-// ── table view ────────────────────────────────────────────────────────────────
-
-function TableView({
-  opps,
-  onRowClick,
-}: {
-  opps: Opportunity[]
-  onRowClick: (id: string) => void
-}) {
-  return (
-    <div className="flex-1 overflow-auto">
-      <table className="w-full text-[12px] border-collapse">
-        <thead>
-          <tr className="border-b border-mercury bg-white sticky top-0 z-10">
-            <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Title</th>
-            <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Stage</th>
-            <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Company</th>
-            <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Type</th>
-            <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Est. Value</th>
-            <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Target Date</th>
-          </tr>
-        </thead>
-        <tbody>
-          {opps.length === 0 ? (
-            <tr>
-              <td colSpan={6} className="text-center py-12">
-                <Target size={32} className="text-mercury mx-auto mb-2" />
-                <p className="text-shuttle text-sm">No opportunities yet.</p>
-              </td>
-            </tr>
-          ) : (
-            opps.map(opp => (
-              <tr
-                key={opp.id}
-                onClick={() => onRowClick(opp.id)}
-                className="border-b border-mercury hover:bg-gossip/20 cursor-pointer transition-colors"
-              >
-                <td className="px-3 py-1.5">
-                  <p className="font-medium text-midnight">{opp.title}</p>
-                </td>
-                <td className="px-3 py-1.5">
-                  <div className="flex items-center gap-1">
-                    <DotOutline size={16} weight="fill" className={STAGE_DOT_COLORS[opp.stage]} />
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STAGE_COLORS[opp.stage]}`}>
-                      {opp.stage}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-3 py-1.5 text-shuttle">
-                  {opp.company?.name ?? '—'}
-                </td>
-                <td className="px-3 py-1.5">
-                  <span className="text-xs px-2 py-0.5 bg-mercury text-midnight rounded">{TYPE_LABELS[opp.type]}</span>
-                </td>
-                <td className="px-3 py-1.5 font-medium text-midnight">
-                  {formatValue(opp.estimated_value)}
-                </td>
-                <td className="px-3 py-1.5 text-shuttle text-xs">
-                  <span className={daysUntil(opp.target_date) !== null && daysUntil(opp.target_date)! < 0 ? 'text-red-500' : ''}>
-                    {formatTarget(opp.target_date)}
-                  </span>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-// ── kanban card ───────────────────────────────────────────────────────────────
-
-function KanbanCard({ opp, onClick }: { opp: Opportunity; onClick: () => void }) {
-  return (
-    <div
-      onClick={onClick}
-      className="p-3 bg-white border border-mercury rounded-lg cursor-pointer hover:border-burnham hover:shadow-sm transition-all"
-    >
-      <p className="text-sm font-medium text-midnight mb-1">{opp.title}</p>
-      {opp.company?.name && (
-        <p className="text-xs text-shuttle mb-2">{opp.company.name}</p>
-      )}
-      <div className="flex items-center gap-1 flex-wrap">
-        <span className="text-xs px-1.5 py-0.5 bg-mercury text-shuttle rounded">{TYPE_LABELS[opp.type]}</span>
-        {opp.estimated_value && (
-          <span className="text-xs text-burnham font-medium">{formatValue(opp.estimated_value)}</span>
-        )}
-        {opp.target_date && (
-          <span className={`text-xs ml-auto ${daysUntil(opp.target_date)! < 0 ? 'text-red-500' : 'text-shuttle'}`}>
-            {formatTarget(opp.target_date)}
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── kanban view ───────────────────────────────────────────────────────────────
-
-function KanbanView({
-  opps,
-  onCardClick,
-  onStageChange,
-}: {
-  opps: Opportunity[]
-  onCardClick: (id: string) => void
-  onStageChange: (id: string, stage: OpportunityStage) => Promise<void>
-}) {
-  const [dragging, setDragging] = useState<string | null>(null)
-
-  const byStage = STAGES.reduce((acc, s) => {
-    acc[s] = opps.filter(o => o.stage === s)
-    return acc
-  }, {} as Record<OpportunityStage, Opportunity[]>)
-
-  return (
-    <div className="flex-1 overflow-x-auto overflow-y-hidden">
-      <div className="flex gap-3 h-full px-4 py-4 min-w-max">
-        {STAGES.map(stage => (
-          <div
-            key={stage}
-            className="flex flex-col w-64 flex-shrink-0"
-            onDragOver={e => e.preventDefault()}
-            onDrop={async e => {
-              e.preventDefault()
-              const id = e.dataTransfer.getData('opp-id')
-              if (id && id !== dragging) {
-                await onStageChange(id, stage)
-              }
-              setDragging(null)
-            }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <DotOutline size={16} weight="fill" className={STAGE_DOT_COLORS[stage]} />
-              <span className="text-xs font-semibold uppercase tracking-wide text-shuttle capitalize">{stage}</span>
-              <span className="ml-auto text-xs text-mercury">{byStage[stage].length}</span>
-            </div>
-            <div className="flex flex-col gap-2 flex-1 overflow-y-auto min-h-[100px] p-2 bg-mercury/30 rounded-lg">
-              {byStage[stage].map(opp => (
-                <div
-                  key={opp.id}
-                  draggable
-                  onDragStart={e => {
-                    e.dataTransfer.setData('opp-id', opp.id)
-                    setDragging(opp.id)
-                  }}
-                  onDragEnd={() => setDragging(null)}
-                  className={dragging === opp.id ? 'opacity-50' : ''}
-                >
-                  <KanbanCard opp={opp} onClick={() => onCardClick(opp.id)} />
-                </div>
-              ))}
-              {byStage[stage].length === 0 && (
-                <div className="flex-1 flex items-center justify-center">
-                  <p className="text-xs text-mercury">Drop here</p>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // ── main screen ───────────────────────────────────────────────────────────────
 
 export default function PeopleOpportunities() {
@@ -312,6 +140,7 @@ export default function PeopleOpportunities() {
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table')
   const [showAdd, setShowAdd] = useState(false)
+  const [peekId, setPeekId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -323,6 +152,61 @@ export default function PeopleOpportunities() {
     o.title.toLowerCase().includes(search.toLowerCase()) ||
     (o.company?.name ?? '').toLowerCase().includes(search.toLowerCase())
   )
+  const peek = filtered.find(row => row.id === peekId) ?? null
+  const peekIndex = peek ? filtered.findIndex(row => row.id === peek.id) : -1
+
+  const columns: CrmColumn<Opportunity>[] = [
+    {
+      key: 'title',
+      label: 'Opportunity',
+      locked: true,
+      width: 'minmax(220px, 1.4fr)',
+      icon: <Target size={12} />,
+      render: opp => <span className="font-medium text-burnham">{opp.title}</span>,
+    },
+    {
+      key: 'stage',
+      label: 'Stage',
+      width: '150px',
+      render: opp => (
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${STAGE_COLORS[opp.stage]}`}>
+          {opp.stage}
+        </span>
+      ),
+    },
+    {
+      key: 'company',
+      label: 'Company',
+      width: 'minmax(150px, 1fr)',
+      icon: <Buildings size={12} />,
+      render: opp => <span className="text-shuttle">{opp.company?.name ?? '—'}</span>,
+    },
+    {
+      key: 'type',
+      label: 'Type',
+      width: '120px',
+      render: opp => <span className="text-shuttle">{TYPE_LABELS[opp.type]}</span>,
+    },
+    {
+      key: 'value',
+      label: 'Value',
+      width: '110px',
+      align: 'right',
+      icon: <CurrencyDollar size={12} />,
+      render: opp => <span className="font-medium text-burnham">{formatValue(opp.estimated_value)}</span>,
+    },
+    {
+      key: 'target',
+      label: 'Target',
+      width: '120px',
+      icon: <CalendarBlank size={12} />,
+      render: opp => (
+        <span className={daysUntil(opp.target_date) !== null && daysUntil(opp.target_date)! < 0 ? 'text-red-500' : 'text-shuttle'}>
+          {formatTarget(opp.target_date)}
+        </span>
+      ),
+    },
+  ]
 
   const handleSave = async (data: Partial<Opportunity>) => {
     if (!user) return
@@ -343,13 +227,12 @@ export default function PeopleOpportunities() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#FAFAFA]">
+    <div className="ppl-page">
       {/* header */}
-      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-mercury/60">
-        <div className="flex items-center gap-2">
-          <Target size={16} className="text-shuttle" />
-          <h1 className="text-base font-semibold text-burnham">Opportunities</h1>
-          <span className="text-[11px] text-shuttle/40 font-mono">{opportunities.length}</span>
+      <header className="ppl-hd">
+        <div className="ppl-hd-l">
+          <h1 className="ppl-title">Opportunities</h1>
+          <p className="ppl-sub">Each one is a network of stakeholders, not a pipeline row. Who's in, who's missing, what's the gap.</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -378,12 +261,12 @@ export default function PeopleOpportunities() {
           </div>
           <button
             onClick={() => setShowAdd(v => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-burnham text-gossip text-sm rounded-lg hover:opacity-90 transition-opacity"
+            className="crm-tool primary"
           >
-            <Plus size={14} /> New Opportunity
+            <Plus size={14} /> <span>New opportunity</span>
           </button>
         </div>
-      </div>
+      </header>
 
       {showAdd && (
         <AddOppForm companies={companies} onSave={handleSave} onCancel={() => setShowAdd(false)} />
@@ -391,19 +274,103 @@ export default function PeopleOpportunities() {
 
       {loading ? (
         <div className="flex items-center justify-center flex-1 text-shuttle text-sm">Loading...</div>
-      ) : viewMode === 'table' ? (
-        <TableView opps={filtered} onRowClick={id => navigate(`/people/opportunities/${id}`)} />
       ) : (
-        <KanbanView
-          opps={filtered}
-          onCardClick={id => navigate(`/people/opportunities/${id}`)}
-          onStageChange={updateStage}
-        />
+        <div>
+          <CrmTable
+            entity="opportunities"
+            title="Pipeline"
+            viewName="Table"
+            rows={filtered}
+            columns={columns}
+            view={viewMode}
+            onViewChange={v => setViewMode(v as 'table' | 'kanban')}
+            views={[
+              { id: 'table', label: 'Table', type: 'table' },
+              { id: 'kanban', label: 'Kanban', type: 'kanban' },
+            ]}
+            addLabel="New Opportunity"
+            onAdd={() => setShowAdd(true)}
+            onRowClick={opp => setPeekId(opp.id)}
+            storageKey="opportunities"
+            kanban={{
+              groupLabel: 'Stage',
+              stages: STAGES.map(stage => ({
+                id: stage,
+                label: stage,
+                color: {
+                  exploring: '#9CA3AF',
+                  active: '#79D65E',
+                  negotiating: '#EAB308',
+                  won: '#22C55E',
+                  lost: '#F87171',
+                }[stage],
+              })),
+              groupValue: opp => opp.stage,
+              cardColumns: ['company', 'value', 'target'],
+              onMove: (opp, stage) => updateStage(opp.id, (stage ?? 'exploring') as OpportunityStage),
+            }}
+          />
+        </div>
       )}
 
-      <div className="px-6 py-2 bg-white border-t border-mercury text-xs text-shuttle">
-        {filtered.length} {filtered.length === 1 ? 'opportunity' : 'opportunities'}
-      </div>
+      <RecordPeek
+        open={Boolean(peek)}
+        title={peek?.title ?? ''}
+        subtitle={peek ? [peek.company?.name, TYPE_LABELS[peek.type]].filter(Boolean).join(' · ') : undefined}
+        eyebrow="Opportunity"
+        highlights={peek ? [
+          { label: 'Stage', icon: <Flag size={13} />, value: peek.stage },
+          { label: 'Value', icon: <CurrencyDollar size={13} />, value: formatValue(peek.estimated_value) },
+          { label: 'Decision filter', icon: <Funnel size={13} />, value: peek.decision_filter_pass == null ? '—' : peek.decision_filter_pass ? 'Pass' : 'Fail' },
+          { label: 'Next step', icon: <ArrowBendUpRight size={13} />, value: peek.notes || '—' },
+        ] : []}
+        fields={peek ? [
+          { label: 'Value', icon: <CurrencyDollar size={12} />, value: formatValue(peek.estimated_value) },
+          { label: 'Company', icon: <Buildings size={12} />, value: peek.company?.name || '—' },
+        ] : []}
+        recommendedMove={peek?.notes ? {
+          verb: peek.notes,
+          detail: peek.target_date ? `Target ${formatTarget(peek.target_date)}` : 'Opportunity next step.',
+          action: peek.notes,
+          accent: 'var(--moss)',
+        } : null}
+        onClose={() => setPeekId(null)}
+        onOpenFull={() => peek && navigate(`/people/opportunities/${peek.id}`)}
+        onPrev={peekIndex > 0 ? () => setPeekId(filtered[peekIndex - 1].id) : undefined}
+        onNext={peekIndex >= 0 && peekIndex < filtered.length - 1 ? () => setPeekId(filtered[peekIndex + 1].id) : undefined}
+      >
+        <div className="peek-block-label spaced">Account <span className="peek-hint">this role hangs off the account</span></div>
+        <div className="opp-acct">
+          <div className="opp-acct-top">
+            <span className="crm-name">
+              <span className="crm-av sq logo">{peek?.company?.name?.[0] ?? '?'}</span>
+              <span>{peek?.company?.name || 'No company'}</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="peek-block-label spaced">Objective</div>
+        <p className="peek-objective">{peek?.notes || `${TYPE_LABELS[peek?.type ?? 'other']} opportunity`}</p>
+        {peek?.target_date && <div className="peek-ms-line"><Flag size={12} />{formatTarget(peek.target_date)}</div>}
+
+        <div className="peek-block-label spaced">Stakeholder map <span className="peek-hint">cast from the account roster</span></div>
+        <div className="peek-stakeholders">
+          <div className="stk-row ghost" style={{ '--stk': 'var(--fg-3)' } as CSSProperties}>
+            <div className="stk-hd">
+              <span className="stk-ghost-av">?</span>
+              <span className="stk-name">No stakeholders mapped</span>
+              <span className="stk-role">unknown</span>
+              <span className="stk-touch">not mapped</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="peek-block-label spaced">Gaps to close</div>
+        <ul className="peek-gaps">
+          <li><Target size={12} /> {peek?.interview_prep ? 'Review interview prep' : 'Map the stakeholder path'}</li>
+        </ul>
+      </RecordPeek>
+
     </div>
   )
 }

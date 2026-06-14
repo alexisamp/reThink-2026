@@ -141,6 +141,7 @@ export function useContacts(
       personal_context: input.personal_context ?? null,
       health_score: 1,
       attio_record_id: input.existing_attio_record_id ?? null,
+      referred_by: input.referred_by ?? null,
       birthday: null,
       links: [],
     }

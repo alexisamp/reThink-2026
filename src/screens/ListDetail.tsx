@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Plus, MagnifyingGlass, Users, PencilSimple } from '@phosphor-icons/react'
+import { Briefcase, Clock, MagnifyingGlass, NotePencil, PencilSimple, Plus, User, Users } from '@phosphor-icons/react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLists, useListMemberships } from '@/hooks/useLists'
 import { supabase } from '@/lib/supabase'
+import CrmTable, { type CrmColumn } from '@/components/crm/CrmTable'
+import RecordPeek from '@/components/crm/RecordPeek'
 import ListEditorModal from '@/components/ListEditorModal'
 import type { Contact, List, ListMembership } from '@/types'
 
@@ -11,18 +13,45 @@ interface EnrichedMember extends ListMembership {
   contact: Contact
 }
 
+type HandoffListKind = 'job' | 'consult' | 'mentor' | 'board' | 'family' | 'default'
+
+function handoffListKind(list?: List): HandoffListKind {
+  const name = list?.name.toLowerCase() ?? ''
+  if (name.includes('job')) return 'job'
+  if (name.includes('consult')) return 'consult'
+  if (name.includes('mentor')) return 'mentor'
+  if (name.includes('board')) return 'board'
+  if (name.includes('family')) return 'family'
+  return 'default'
+}
+
+function handoffAttr(kind: HandoffListKind) {
+  return {
+    job: { key: 'role', label: 'Role', empty: '—' },
+    consult: { key: 'engagement', label: 'Engagement', empty: '—' },
+    mentor: { key: 'focus', label: 'Focus', empty: '—' },
+    board: { key: 'seat', label: 'Seat', empty: '—' },
+    family: { key: 'relation', label: 'Relation', empty: '—' },
+    default: { key: 'role', label: 'Role', empty: '—' },
+  }[kind]
+}
+
 export default function ListDetail() {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
   const navigate = useNavigate()
   const { lists, reload: reloadLists } = useLists(user?.id)
-  const { memberships, moveStage, addToList, removeFromList, reload } = useListMemberships(user?.id, { listId: id })
+  const { memberships, moveStage, addToList, reload } = useListMemberships(user?.id, { listId: id })
   const [contactsById, setContactsById] = useState<Record<string, Contact>>({})
   const [showAdd, setShowAdd] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
-  const [dragOver, setDragOver] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('kanban')
+  const [peekId, setPeekId] = useState<string | null>(null)
 
   const list: List | undefined = lists.find(l => l.id === id)
+  const listKind = handoffListKind(list)
+  const attr = handoffAttr(listKind)
+  const cadenceList = listKind === 'board' || listKind === 'family'
 
   // Load contacts for each membership
   useEffect(() => {
@@ -49,40 +78,83 @@ export default function ListDetail() {
       .filter(m => m.contact) as EnrichedMember[],
     [memberships, contactsById],
   )
+  const peekIndex = enriched.findIndex(member => member.id === peekId)
+  const peekMember = peekIndex >= 0 ? enriched[peekIndex] : null
 
-  const byStage = useMemo(() => {
-    const groups: Record<string, EnrichedMember[]> = {}
-    if (!list) return groups
-    for (const s of list.stages) groups[s.key] = []
-    for (const m of enriched) {
-      const key = m.current_stage
-      if (!groups[key]) groups[key] = []
-      groups[key].push(m)
-    }
-    return groups
-  }, [list, enriched])
-
-  function onDragStart(e: React.DragEvent, membershipId: string) {
-    e.dataTransfer.setData('text/plain', membershipId)
-    e.dataTransfer.effectAllowed = 'move'
-  }
-
-  function onDragOver(e: React.DragEvent, stageKey: string) {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    setDragOver(stageKey)
-  }
-
-  function onDrop(e: React.DragEvent, stageKey: string) {
-    e.preventDefault()
-    setDragOver(null)
-    const membershipId = e.dataTransfer.getData('text/plain')
-    if (!membershipId) return
-    const m = memberships.find(m => m.id === membershipId)
-    if (m && m.current_stage !== stageKey) {
-      moveStage(membershipId, stageKey)
-    }
-  }
+  const columns: CrmColumn<EnrichedMember>[] = useMemo(() => [
+    {
+      key: 'person',
+      label: 'Person',
+      locked: true,
+      width: 'minmax(220px, 1.4fr)',
+      icon: <Users size={12} />,
+      render: member => (
+        <span className="crm-name">
+          {member.contact.profile_photo_url ? (
+            <span className="crm-av"><img src={member.contact.profile_photo_url} alt="" /></span>
+          ) : (
+            <span className="crm-av">
+              {member.contact.name[0]?.toUpperCase()}
+            </span>
+          )}
+          <span className="min-w-0">
+            <span className="link">{member.contact.name}</span>
+            <span className="block truncate text-[10px] text-shuttle">{[member.contact.job_title, member.contact.company].filter(Boolean).join(' @ ') || '—'}</span>
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: 'stage',
+      label: cadenceList ? 'Cadence' : 'Stage',
+      width: '130px',
+      icon: <NotePencil size={12} />,
+      render: member => {
+        const stage = list?.stages.find(s => s.key === member.current_stage)
+        return (
+          <span className="crm-chip stage" style={{ '--chip': stage?.color ?? list?.color ?? '#3E7A4E' } as CSSProperties}>
+            <span className="seg" style={{ background: stage?.color ?? list?.color ?? '#3E7A4E' }} />
+            {stage?.label ?? member.current_stage}
+          </span>
+        )
+      },
+    },
+    {
+      key: attr.key,
+      label: attr.label,
+      width: listKind === 'job' ? '180px' : '160px',
+      icon: <Briefcase size={12} />,
+      render: member => <span className={listKind === 'board' ? 'crm-chip muted' : 'crm-soft'}>{String((member.attributes?.[attr.key] ?? (attr.key === 'role' ? member.contact.job_title : '')) || attr.empty)}</span>,
+    },
+    {
+      key: 'cadence',
+      label: 'Cadence',
+      width: '110px',
+      defaultOff: cadenceList,
+      icon: <Clock size={12} />,
+      render: member => <span className="text-shuttle">{String(member.attributes?.cadence ?? '—')}</span>,
+    },
+    {
+      key: attr.key === 'relation' ? 'record_relation' : 'relation',
+      label: 'Relation',
+      width: '130px',
+      defaultOff: true,
+      render: member => <span className="text-shuttle">{String(member.attributes?.relation ?? member.contact.relationship_domain ?? '—')}</span>,
+    },
+    {
+      key: 'notes',
+      label: listKind === 'family' ? 'Coming up' : cadenceList ? 'Why on the board' : 'Next step',
+      width: 'minmax(230px, 1fr)',
+      icon: <NotePencil size={12} />,
+      render: member => <span className="text-shuttle">{member.notes || String(member.attributes?.notes ?? '—')}</span>,
+    },
+    {
+      key: 'stage_age',
+      label: 'Stage Age',
+      width: '100px',
+      render: member => <span className="text-shuttle">{daysAgo(member.stage_changed_at)}d</span>,
+    },
+  ], [attr.empty, attr.key, attr.label, cadenceList, list?.color, list?.stages, listKind])
 
   if (!list) {
     return (
@@ -98,122 +170,70 @@ export default function ListDetail() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#FAFAFA]">
-      <header className="flex items-center justify-between px-6 py-3.5 border-b border-mercury/60 bg-white">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/lists')} className="text-shuttle hover:text-burnham">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="flex items-center gap-2">
-            {list.icon && <span className="text-xl">{list.icon}</span>}
-            <h1 className="text-base font-semibold text-burnham">{list.name}</h1>
-            <span className="text-[11px] text-shuttle/40 font-mono">{enriched.length}</span>
+    <div className="ppl-page wide">
+      <header className="list-hd">
+        <span className="list-pip" style={{ background: list.color ?? 'var(--burnham)' }}>{list.icon || <Users size={18} weight="fill" />}</span>
+        <div className="list-hd-txt">
+          <div className="list-hd-top">
+            <h1 className="list-title">{list.name}</h1>
+            <span className="list-obj"><User size={11} /> People</span>
+            <span className="list-count">{enriched.length} {enriched.length === 1 ? 'entry' : 'entries'}</span>
           </div>
-          {list.purpose && <p className="text-xs text-shuttle truncate max-w-md ml-2">{list.purpose}</p>}
+          <p className="list-sub">{list.purpose || 'A contextual relationship funnel with list-specific attributes.'}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => navigate('/lists')} className="crm-tool ghost">
+            <span>All lists</span>
+          </button>
           <button
             onClick={() => setShowEditor(true)}
-            className="text-xs text-shuttle hover:text-burnham px-2 py-1 rounded hover:bg-mercury/30 transition-colors flex items-center gap-1"
+            className="crm-tool ghost"
             title="Edit list"
           >
             <PencilSimple size={12} />
-            Edit
+            <span>Edit</span>
           </button>
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 bg-burnham hover:bg-burnham/90 text-gossip text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+            className="crm-tool primary"
           >
             <Plus size={13} />
-            Add contact
+            <span>Add contact</span>
           </button>
         </div>
       </header>
 
-      <div className="flex-1 overflow-auto px-6 py-4">
-        <div className="flex gap-3 min-h-full overflow-x-auto">
-          {list.stages.map(stage => {
-            const column = byStage[stage.key] ?? []
-            const isDragTarget = dragOver === stage.key
-            return (
-              <div
-                key={stage.key}
-                className={`w-72 shrink-0 bg-white rounded-xl border ${isDragTarget ? 'border-burnham' : 'border-mercury'} transition-colors flex flex-col`}
-                onDragOver={e => onDragOver(e, stage.key)}
-                onDragLeave={() => setDragOver(null)}
-                onDrop={e => onDrop(e, stage.key)}
-              >
-                <div className="flex items-center justify-between px-3 py-2 border-b border-mercury">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-shuttle">{stage.label}</h3>
-                    <span className="text-[11px] text-shuttle/60 bg-mercury/30 px-1.5 py-0.5 rounded">{column.length}</span>
-                  </div>
-                </div>
-                {stage.description && (
-                  <p className="text-[10px] text-shuttle/60 px-3 py-1.5 border-b border-mercury bg-[#FAFAFA]">
-                    {stage.description}
-                  </p>
-                )}
-                <div className="flex-1 p-2 space-y-1.5 overflow-auto">
-                  {column.map(m => (
-                    <div
-                      key={m.id}
-                      draggable
-                      onDragStart={e => onDragStart(e, m.id)}
-                      onClick={() => navigate(`/people/${m.contact.id}`)}
-                      className="p-2.5 bg-white border border-mercury hover:border-burnham rounded-lg cursor-pointer transition-colors group"
-                    >
-                      <div className="flex items-center gap-2">
-                        {m.contact.profile_photo_url ? (
-                          <img src={m.contact.profile_photo_url} alt="" className="w-7 h-7 rounded-full object-cover" />
-                        ) : (
-                          <div className="w-7 h-7 rounded-full bg-gossip flex items-center justify-center text-[11px] font-semibold text-burnham">
-                            {m.contact.name[0]?.toUpperCase()}
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-midnight truncate">{m.contact.name}</p>
-                          {m.contact.job_title && (
-                            <p className="text-[10px] text-shuttle truncate">
-                              {m.contact.job_title}{m.contact.company ? ` @ ${m.contact.company}` : ''}
-                            </p>
-                          )}
-                        </div>
-                        {m.contact.tier != null && (
-                          <span className="text-[9px] px-1.5 py-0.5 bg-mercury text-shuttle rounded-full">T{m.contact.tier}</span>
-                        )}
-                      </div>
-                      {m.notes && (
-                        <p className="text-[10px] text-shuttle/70 mt-1.5 line-clamp-2 italic">{m.notes}</p>
-                      )}
-                      <div className="flex items-center justify-between mt-1.5">
-                        <span className="text-[9px] text-shuttle/50">
-                          {daysAgo(m.stage_changed_at)}d in stage
-                        </span>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            if (confirm(`Remove ${m.contact.name} from this list?`)) {
-                              removeFromList(m.id)
-                            }
-                          }}
-                          className="text-[9px] text-shuttle/0 group-hover:text-shuttle hover:text-red-600 transition-colors"
-                        >
-                          remove
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {column.length === 0 && (
-                    <div className="text-center py-6 text-[11px] text-shuttle/40">
-                      Drop contacts here
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+      <div>
+        <CrmTable
+          entity="list members"
+          title={list.purpose ?? undefined}
+          viewName="Kanban"
+          rows={enriched}
+          columns={columns}
+          view={viewMode}
+          onViewChange={v => setViewMode(v as 'table' | 'kanban')}
+          views={[
+            { id: 'table', label: 'Table', type: 'table' },
+            { id: 'kanban', label: 'Kanban', type: 'kanban' },
+          ]}
+          addLabel="Add contact"
+          onAdd={() => setShowAdd(true)}
+          onRowClick={member => setPeekId(member.id)}
+          storageKey={`list.${list.id}`}
+          kanban={{
+            stages: list.stages.map((stage, index) => ({
+              id: stage.key,
+              label: stage.label,
+              color: list.color ?? ['#79D65E', '#3E7A4E', '#94A3B8', '#EAB308', '#F87171'][index % 5],
+            })),
+            groupValue: member => member.current_stage,
+            groupLabel: cadenceList ? 'Cadence' : 'Stage',
+            cardColumns: [attr.key, 'notes', 'stage_age'],
+            onMove: (member, stage) => {
+              if (stage && member.current_stage !== stage) return moveStage(member.id, stage)
+            },
+          }}
+        />
       </div>
 
       {showAdd && (
@@ -221,8 +241,8 @@ export default function ListDetail() {
           list={list}
           existingIds={new Set(memberships.map(m => m.contact_id))}
           onClose={() => setShowAdd(false)}
-          onAdded={async (contactId, stage, notes) => {
-            await addToList(contactId, list.id, stage, notes)
+          onAdded={async (contactId, stage, notes, attributes) => {
+            await addToList(contactId, list.id, stage, notes, attributes)
             setShowAdd(false)
           }}
         />
@@ -240,8 +260,46 @@ export default function ListDetail() {
           }}
         />
       )}
+
+      {peekMember && (
+        <RecordPeek
+          open
+          title={peekMember.contact.name}
+          subtitle={[peekMember.contact.job_title, peekMember.contact.company].filter(Boolean).join(' @ ') || 'List member'}
+          eyebrow={list.name}
+          avatar={<ListPeekAvatar contact={peekMember.contact} />}
+          index={peekIndex}
+          total={enriched.length}
+          highlights={[
+            { label: 'Stage', value: list.stages.find(s => s.key === peekMember.current_stage)?.label ?? peekMember.current_stage },
+            { label: 'Age', value: `${daysAgo(peekMember.stage_changed_at)}d in stage` },
+          ]}
+          fields={[
+            { label: 'Role', value: String(peekMember.attributes?.role ?? peekMember.contact.job_title ?? '—') },
+            { label: 'Cadence', value: String(peekMember.attributes?.cadence ?? '—') },
+            { label: 'Relation', value: String(peekMember.attributes?.relation ?? peekMember.contact.relationship_domain ?? '—') },
+            { label: 'Notes', value: peekMember.notes || String(peekMember.attributes?.notes ?? '—'), wide: true },
+          ]}
+          onClose={() => setPeekId(null)}
+          onOpenFull={() => navigate(`/people/${peekMember.contact.id}`)}
+          onPrev={() => setPeekId(enriched[(peekIndex - 1 + enriched.length) % enriched.length].id)}
+          onNext={() => setPeekId(enriched[(peekIndex + 1) % enriched.length].id)}
+        >
+          <div className="peek-captured">
+            <div className="peek-section-hd"><span>Why in this list</span></div>
+            <ul className="peek-why">
+              <li><span className="why-dot" /> {peekMember.notes || String(peekMember.attributes?.notes ?? list.purpose ?? 'No list note yet.')}</li>
+            </ul>
+          </div>
+        </RecordPeek>
+      )}
     </div>
   )
+}
+
+function ListPeekAvatar({ contact }: { contact: Contact }) {
+  if (contact.profile_photo_url) return <img src={contact.profile_photo_url} alt="" />
+  return <span>{contact.name.trim().slice(0, 2).toUpperCase()}</span>
 }
 
 function daysAgo(iso: string): number {
@@ -254,7 +312,7 @@ interface AddContactProps {
   list: List
   existingIds: Set<string>
   onClose: () => void
-  onAdded: (contactId: string, stage: string, notes?: string) => void
+  onAdded: (contactId: string, stage: string, notes?: string, attributes?: Record<string, unknown>) => void
 }
 
 function AddContactToListModal({ list, existingIds, onClose, onAdded }: AddContactProps) {
@@ -264,6 +322,9 @@ function AddContactToListModal({ list, existingIds, onClose, onAdded }: AddConta
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
   const [stage, setStage] = useState<string>(list.stages[0]?.key ?? '')
   const [notes, setNotes] = useState('')
+  const [role, setRole] = useState('')
+  const [cadence, setCadence] = useState('')
+  const [relation, setRelation] = useState('')
 
   useEffect(() => {
     if (!user) return
@@ -356,6 +417,35 @@ function AddContactToListModal({ list, existingIds, onClose, onAdded }: AddConta
                 className="w-full text-xs border border-mercury rounded-lg px-2 py-1.5 focus:outline-none focus:border-burnham"
               />
             </div>
+            <div className="grid grid-cols-3 gap-2">
+              <label className="block">
+                <span className="block text-[11px] text-shuttle mb-1">Role</span>
+                <input
+                  value={role}
+                  onChange={e => setRole(e.target.value)}
+                  placeholder="Champion"
+                  className="w-full text-xs border border-mercury rounded-lg px-2 py-1.5 focus:outline-none focus:border-burnham"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-[11px] text-shuttle mb-1">Cadence</span>
+                <input
+                  value={cadence}
+                  onChange={e => setCadence(e.target.value)}
+                  placeholder="Monthly"
+                  className="w-full text-xs border border-mercury rounded-lg px-2 py-1.5 focus:outline-none focus:border-burnham"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-[11px] text-shuttle mb-1">Relation</span>
+                <input
+                  value={relation}
+                  onChange={e => setRelation(e.target.value)}
+                  placeholder="Investor"
+                  className="w-full text-xs border border-mercury rounded-lg px-2 py-1.5 focus:outline-none focus:border-burnham"
+                />
+              </label>
+            </div>
           </div>
         )}
 
@@ -364,7 +454,12 @@ function AddContactToListModal({ list, existingIds, onClose, onAdded }: AddConta
             Cancel
           </button>
           <button
-            onClick={() => selectedContactId && onAdded(selectedContactId, stage, notes || undefined)}
+            onClick={() => selectedContactId && onAdded(selectedContactId, stage, notes || undefined, {
+              ...(role.trim() ? { role: role.trim() } : {}),
+              ...(cadence.trim() ? { cadence: cadence.trim() } : {}),
+              ...(relation.trim() ? { relation: relation.trim() } : {}),
+              ...(notes.trim() ? { notes: notes.trim() } : {}),
+            })}
             disabled={!selectedContactId}
             className="px-3 py-1.5 bg-burnham text-gossip text-xs rounded-lg disabled:opacity-40"
           >

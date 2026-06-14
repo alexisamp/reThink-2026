@@ -1,11 +1,17 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, List as ListIcon, Archive, PencilSimple, TrashSimple } from '@phosphor-icons/react'
+import { Plus, List as ListIcon, Archive, PencilSimple, TrashSimple, Rows, Users } from '@phosphor-icons/react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLists, LIST_TEMPLATES } from '@/hooks/useLists'
 import { supabase } from '@/lib/supabase'
 import ListEditorModal from '@/components/ListEditorModal'
+import CrmTable, { type CrmColumn } from '@/components/crm/CrmTable'
 import type { List as ListType } from '@/types'
+
+interface ListRow extends ListType {
+  member_count: number
+  kind: 'template' | 'custom'
+}
 
 export default function Lists() {
   const { user } = useAuth()
@@ -14,6 +20,7 @@ export default function Lists() {
   const [showEditor, setShowEditor] = useState(false)
   const [editing, setEditing] = useState<ListType | null>(null)
   const [memberCounts, setMemberCounts] = useState<Record<string, number>>({})
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table')
 
   useEffect(() => {
     if (!user || lists.length === 0) {
@@ -43,6 +50,77 @@ export default function Lists() {
     [lists],
   )
 
+  const rows: ListRow[] = useMemo(() => lists.map(list => ({
+    ...list,
+    member_count: memberCounts[list.id] ?? 0,
+    kind: LIST_TEMPLATES.some(template => template.name === list.name) ? 'template' : 'custom',
+  })), [lists, memberCounts])
+
+  const columns: CrmColumn<ListRow>[] = [
+    {
+      key: 'name',
+      label: 'List',
+      locked: true,
+      width: 'minmax(240px, 1.4fr)',
+      icon: <ListIcon size={12} />,
+      render: list => (
+        <span className="crm-name">
+          <span className="crm-av sq logo" style={{ background: list.color ?? 'var(--burnham)' }}>{list.icon || list.name[0]?.toUpperCase()}</span>
+          <span className="link">{list.name}</span>
+        </span>
+      ),
+    },
+    {
+      key: 'members',
+      label: 'People',
+      width: '92px',
+      align: 'right',
+      icon: <Users size={12} />,
+      render: list => <span className="crm-mono">{list.member_count}</span>,
+    },
+    {
+      key: 'kind',
+      label: 'Type',
+      width: '110px',
+      render: list => <span className="crm-chip muted">{list.kind}</span>,
+    },
+    {
+      key: 'stages',
+      label: 'Stages',
+      width: 'minmax(220px, 1fr)',
+      render: list => (
+        <span className="flex min-w-0 flex-wrap gap-1">
+          {list.stages.slice(0, 4).map(stage => (
+            <span key={stage.key} className="crm-chip stage" style={{ '--chip': stage.color ?? list.color ?? '#3E7A4E' } as CSSProperties}>
+              <span className="seg" style={{ background: stage.color ?? list.color ?? '#3E7A4E' }} />
+              {stage.label}
+            </span>
+          ))}
+          {list.stages.length > 4 && <span className="crm-empty">+{list.stages.length - 4}</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'purpose',
+      label: 'Purpose',
+      width: 'minmax(260px, 1.2fr)',
+      render: list => <span className="crm-next">{list.purpose || 'Add list purpose.'}</span>,
+    },
+    {
+      key: 'actions',
+      label: '',
+      width: '118px',
+      align: 'right',
+      render: list => (
+        <span className="flex items-center justify-end gap-1">
+          <button onClick={e => onEditClick(list, e)} className="crm-tool ghost !p-1.5" title="Edit"><PencilSimple size={12} /></button>
+          <button onClick={e => onArchiveClick(list, e)} className="crm-tool ghost !p-1.5" title="Archive"><Archive size={12} /></button>
+          <button onClick={e => onDeleteClick(list, e)} className="crm-tool ghost !p-1.5" title="Delete"><TrashSimple size={12} /></button>
+        </span>
+      ),
+    },
+  ]
+
   function onTemplateClick(templateKey: string) {
     createFromTemplate(templateKey)
   }
@@ -52,20 +130,20 @@ export default function Lists() {
     setShowEditor(true)
   }
 
-  function onEditClick(list: ListType, e: React.MouseEvent) {
+  function onEditClick(list: ListType, e: ReactMouseEvent) {
     e.stopPropagation()
     setEditing(list)
     setShowEditor(true)
   }
 
-  function onArchiveClick(list: ListType, e: React.MouseEvent) {
+  function onArchiveClick(list: ListType, e: ReactMouseEvent) {
     e.stopPropagation()
     if (confirm(`Archive "${list.name}"? Memberships stay but the list is hidden.`)) {
       archiveList(list.id)
     }
   }
 
-  function onDeleteClick(list: ListType, e: React.MouseEvent) {
+  function onDeleteClick(list: ListType, e: ReactMouseEvent) {
     e.stopPropagation()
     if (confirm(`Delete "${list.name}" permanently? All memberships will be lost.`)) {
       deleteList(list.id)
@@ -73,134 +151,96 @@ export default function Lists() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#FAFAFA]">
-      <header className="flex items-center justify-between px-6 py-3.5 border-b border-mercury/60 bg-white">
-        <div className="flex items-center gap-2">
-          <ListIcon size={18} weight="duotone" className="text-shuttle" />
-          <h1 className="text-base font-semibold text-burnham">Lists</h1>
-          <span className="text-[11px] text-shuttle/40 font-mono">{lists.length}</span>
+    <div className="ppl-page wide">
+      <header className="ppl-hd">
+        <div className="ppl-hd-l">
+          <h1 className="ppl-title">Lists</h1>
+          <p className="ppl-sub">Contextual relationship funnels for fundraising, hiring, clients, advisors, and custom operating lists.</p>
         </div>
         <button
           onClick={onCustomClick}
-          className="flex items-center gap-1.5 bg-burnham hover:bg-burnham/90 text-gossip text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+          className="crm-tool primary"
         >
           <Plus size={13} />
-          New List
+          <span>New list</span>
         </button>
       </header>
 
-      <div className="flex-1 overflow-auto px-6 py-6">
-        {loading ? (
-          <div className="text-center text-shuttle py-12">Loading…</div>
-        ) : !hasLists ? (
-          <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-8">
-              <ListIcon size={36} className="mx-auto mb-2 text-mercury" />
-              <h2 className="text-lg font-semibold text-burnham mb-1">No lists yet</h2>
-              <p className="text-sm text-shuttle">
-                Lists are your contextual funnels — fundraising, hiring, clients, advisors.
-                Start with a template or create your own.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {LIST_TEMPLATES.map(t => (
-                <button
-                  key={t.key}
-                  onClick={() => onTemplateClick(t.key)}
-                  className="text-left p-4 bg-white border border-mercury rounded-xl hover:border-burnham transition-colors"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xl">{t.icon}</span>
-                    <span className="font-semibold text-midnight">{t.name}</span>
-                  </div>
-                  <p className="text-xs text-shuttle mb-3 leading-relaxed">{t.purpose}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {t.stages.slice(0, 4).map(s => (
-                      <span key={s.key} className="text-[10px] px-1.5 py-0.5 bg-mercury/40 text-shuttle rounded">
-                        {s.label}
-                      </span>
-                    ))}
-                    {t.stages.length > 4 && (
-                      <span className="text-[10px] px-1.5 py-0.5 text-shuttle/60">
-                        +{t.stages.length - 4}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              ))}
-              <button
-                onClick={onCustomClick}
-                className="text-left p-4 bg-white border border-dashed border-mercury rounded-xl hover:border-burnham transition-colors flex flex-col items-center justify-center min-h-[140px]"
-              >
-                <Plus size={24} className="text-shuttle/50 mb-1" />
-                <span className="text-sm font-medium text-shuttle">Custom list</span>
-                <span className="text-[11px] text-shuttle/60 mt-1">Build your own stages</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-              {lists.map(list => {
-                const count = memberCounts[list.id] ?? 0
-                return (
-                  <button
-                    key={list.id}
-                    onClick={() => navigate(`/lists/${list.id}`)}
-                    className="text-left p-4 bg-white border border-mercury rounded-xl hover:border-burnham transition-colors group relative"
-                    style={{ borderLeftColor: list.color ?? undefined, borderLeftWidth: list.color ? 3 : 1 }}
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        {list.icon && <span className="text-lg">{list.icon}</span>}
-                        <span className="font-semibold text-midnight">{list.name}</span>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={e => onEditClick(list, e)} className="p-1 text-shuttle hover:text-burnham" title="Edit">
-                          <PencilSimple size={12} />
-                        </button>
-                        <button onClick={e => onArchiveClick(list, e)} className="p-1 text-shuttle hover:text-burnham" title="Archive">
-                          <Archive size={12} />
-                        </button>
-                        <button onClick={e => onDeleteClick(list, e)} className="p-1 text-shuttle hover:text-red-600" title="Delete">
-                          <TrashSimple size={12} />
-                        </button>
-                      </div>
-                    </div>
-                    {list.purpose && (
-                      <p className="text-xs text-shuttle mb-3 line-clamp-2 leading-relaxed">{list.purpose}</p>
-                    )}
-                    <div className="flex items-center justify-between text-[11px] text-shuttle/70">
-                      <span>{count} {count === 1 ? 'person' : 'people'}</span>
-                      <span>{list.stages.length} stages</span>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+      {loading ? (
+        <div className="py-12 text-center text-[12px] text-shuttle">Loading...</div>
+      ) : hasLists ? (
+        <CrmTable
+          entity="lists"
+          title="All lists"
+          viewName="All lists"
+          rows={rows}
+          columns={columns}
+          view={viewMode}
+          onViewChange={v => setViewMode(v as 'table' | 'kanban')}
+          views={[
+            { id: 'table', label: 'Table', type: 'table' },
+            { id: 'kanban', label: 'Kanban', type: 'kanban' },
+          ]}
+          addLabel="New list"
+          onAdd={onCustomClick}
+          onRowClick={list => navigate(`/lists/${list.id}`)}
+          storageKey="lists"
+          kanban={{
+            groupLabel: 'Type',
+            stages: [
+              { id: 'template', label: 'Template lists', color: '#3E7A4E' },
+              { id: 'custom', label: 'Custom lists', color: '#94A3B8' },
+            ],
+            groupValue: list => list.kind,
+            cardColumns: ['members', 'stages', 'purpose'],
+          }}
+        />
+      ) : (
+        <section className="fsec">
+          <header className="fsec-hd">
+            <h3>No lists yet</h3>
+            <span className="fsec-rule" />
+            <span className="fsec-hint">start with a template or create your own stages</span>
+          </header>
+        </section>
+      )}
 
-            {/* templates below existing lists */}
-            <div>
-              <h3 className="text-xs font-semibold text-shuttle uppercase tracking-wide mb-2">Add from template</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {LIST_TEMPLATES.filter(t => !existingTemplateKeys.has(t.name)).map(t => (
-                  <button
-                    key={t.key}
-                    onClick={() => onTemplateClick(t.key)}
-                    className="text-left p-3 bg-white/60 border border-dashed border-mercury rounded-xl hover:bg-white hover:border-burnham transition-colors"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span>{t.icon}</span>
-                      <span className="text-sm font-medium text-midnight">{t.name}</span>
-                    </div>
-                    <p className="text-[11px] text-shuttle line-clamp-2">{t.purpose}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+      <section className="fsec mt-6">
+        <header className="fsec-hd">
+          <h3>Add from template</h3>
+          <span className="fsec-count">{LIST_TEMPLATES.filter(t => !existingTemplateKeys.has(t.name)).length}</span>
+          <span className="fsec-rule" />
+          <span className="fsec-hint">prebuilt relationship funnels</span>
+        </header>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {LIST_TEMPLATES.filter(t => !existingTemplateKeys.has(t.name)).map(t => (
+            <button
+              key={t.key}
+              onClick={() => onTemplateClick(t.key)}
+              className="crm-trow !grid-cols-[32px_1fr_auto] rounded-lg border border-dashed border-mercury bg-white text-left"
+              style={{ gridTemplateColumns: '32px 1fr auto' }}
+            >
+              <span className="crm-cell"><span className="crm-av sq logo" style={{ background: t.color }}>{t.icon}</span></span>
+              <span className="crm-cell min-w-0">
+                <span className="min-w-0">
+                  <span className="block truncate text-[12.5px] font-medium text-burnham">{t.name}</span>
+                  <span className="block truncate text-[11px] text-shuttle">{t.purpose}</span>
+                </span>
+              </span>
+              <span className="crm-cell r"><Rows size={12} /> {t.stages.length}</span>
+            </button>
+          ))}
+          <button
+            onClick={onCustomClick}
+            className="crm-trow !grid-cols-[32px_1fr_auto] rounded-lg border border-dashed border-mercury bg-white text-left"
+            style={{ gridTemplateColumns: '32px 1fr auto' }}
+          >
+            <span className="crm-cell"><Plus size={14} /></span>
+            <span className="crm-cell"><span><span className="block text-[12.5px] font-medium text-burnham">Custom list</span><span className="block text-[11px] text-shuttle">Build your own stages</span></span></span>
+            <span className="crm-cell r">Create</span>
+          </button>
+        </div>
+      </section>
 
       {showEditor && (
         <ListEditorModal

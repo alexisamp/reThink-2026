@@ -115,34 +115,30 @@ export default function MilestonePlan() {
     return (
       <div
         onClick={() => setExpandedMs(m.id)}
-        className="group relative w-full flex items-center gap-3 pl-4 pr-3 py-3 bg-white rounded-xl cursor-pointer transition-all hover:-translate-y-px"
-        style={{ boxShadow: 'var(--shadow-card)' }}
+        className={`msc-card group${isComplete ? ' done' : ''}`}
+        style={{ '--c': c } as React.CSSProperties}
       >
-        <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full" style={{ background: c, opacity: isComplete ? 0.4 : 1 }} />
-        <span className="text-[17px] leading-none shrink-0" style={{ filter: isComplete ? 'grayscale(0.6)' : 'none' }}>{emojiOf(m)}</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={`text-[13.5px] font-medium truncate ${isComplete ? 'text-shuttle/50 line-through' : 'text-burnham'}`}>{m.text}</span>
-            {isComplete && <Check size={12} weight="bold" className="text-moss shrink-0" />}
-          </div>
-          <div className="flex items-center gap-2.5 mt-1.5">
-            <div className="h-[3px] w-24 rounded-full overflow-hidden" style={{ background: `color-mix(in oklab, ${c} 16%, var(--mercury))` }}>
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: c }} />
-            </div>
-            <span className="text-[10px] font-mono" style={{ color: `color-mix(in oklab, ${c} 60%, #000)` }}>{cnt.done}/{cnt.total}</span>
-            {due && <span className={`text-[10px] font-mono ${due.urgent ? 'font-semibold' : 'text-shuttle/45'}`} style={due.urgent ? { color: c } : undefined}>· {due.label}</span>}
-          </div>
+        <div className="msc-card-top">
+          <span className="msc-emoji" style={{ filter: isComplete ? 'grayscale(0.6)' : 'none' }}>{emojiOf(m)}</span>
+          <span className="msc-name">{m.text}</span>
+          {due && <span className={`msc-due${due.urgent ? ' urgent' : ''}`}>{due.label}</span>}
         </div>
-        <button onClick={e => toggleFocus(m, e)} title={m.focused ? 'In Today' : 'Show in Today'}
-          className={`shrink-0 p-1.5 rounded-lg transition-all ${m.focused ? 'text-white' : 'text-shuttle/30 hover:text-shuttle/60 opacity-0 group-hover:opacity-100'}`}
-          style={m.focused ? { background: c } : undefined}>
-          <Star size={13} weight={m.focused ? 'fill' : 'regular'} />
-        </button>
-        <button onClick={e => archive(m, e)} title="Archive"
-          className="shrink-0 p-1.5 rounded-lg text-shuttle/25 hover:text-burnham hover:bg-mercury/40 opacity-0 group-hover:opacity-100 transition-all">
-          <Archive size={13} />
-        </button>
-        <CaretRight size={13} className="shrink-0 text-shuttle/25 group-hover:text-shuttle/50 transition-colors" />
+        <div className="msc-prog">
+          <div className="msc-bar">
+            <span style={{ width: `${pct}%` }} />
+          </div>
+          <span className="msc-frac">{cnt.done}<span className="msc-frac-d">/{cnt.total}</span></span>
+          {isComplete && <Check size={12} weight="bold" className="text-moss shrink-0" />}
+        </div>
+        <div className="msc-link">
+          <button onClick={e => toggleFocus(m, e)} title={m.focused ? 'In Today' : 'Show in Today'} className="msc-chip">
+            <Star size={11} weight={m.focused ? 'fill' : 'regular'} /> {m.focused ? 'Today' : 'Focus'}
+          </button>
+          <button onClick={e => archive(m, e)} title="Archive" className="msc-chip">
+            <Archive size={11} /> Archive
+          </button>
+          <span className="ml-auto text-shuttle/40"><CaretRight size={13} /></span>
+        </div>
       </div>
     )
   }
@@ -151,24 +147,30 @@ export default function MilestonePlan() {
   const roadmap = [...pending].sort((a, b) => (a.target_date ?? '9999-12-31').localeCompare(b.target_date ?? '9999-12-31'))
 
   return (
-    <div className="min-h-screen bg-canvas font-sans">
+    <div className="page msc-page">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-canvas/90 backdrop-blur border-b border-mercury/40 px-8 py-4 flex items-center gap-4">
-        <button onClick={() => navigate(-1)} className="text-shuttle/40 hover:text-burnham transition-colors p-1 rounded"><ArrowLeft size={16} /></button>
-        <h1 className="font-serif text-[22px] text-burnham" style={{ letterSpacing: '-0.022em' }}>Milestones</h1>
-        <span className="text-[10px] font-mono text-shuttle/40">{pending.length} active · {focusedCount} in Today</span>
+      <header className="msc-hd">
+        <div className="msc-hd-l">
+          <button onClick={() => navigate(-1)} className="crm-tool ghost mb-3"><ArrowLeft size={13} /><span>Back</span></button>
+          <h1 className="msc-title">Milestones</h1>
+          <p className="msc-sub">Goals hold milestones. Milestones hold the tasks — and the people, accounts and next step that actually move them.</p>
+        </div>
+        <div className="msc-hd-stat">
+          <span className="msc-hd-num">{focusedCount}<span className="msc-hd-den">/{pending.length}</span></span>
+          <span className="msc-hd-lbl">in Today</span>
+        </div>
         {/* view toggle */}
-        <div className="ml-auto flex items-center gap-0.5 bg-mercury/30 rounded-lg p-0.5">
-          <button onClick={() => setView('overview')} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${view === 'overview' ? 'bg-white text-burnham shadow-sm' : 'text-shuttle hover:text-burnham'}`}>
-            <SquaresFour size={12} /> Overview
+        <div className="ppl-tabs">
+          <button onClick={() => setView('overview')} className={`ppl-tab ${view === 'overview' ? 'active' : ''}`}>
+            <SquaresFour size={12} /> <span>Overview</span>
           </button>
-          <button onClick={() => setView('roadmap')} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${view === 'roadmap' ? 'bg-white text-burnham shadow-sm' : 'text-shuttle hover:text-burnham'}`}>
-            <ChartLineUp size={12} /> Roadmap
+          <button onClick={() => setView('roadmap')} className={`ppl-tab ${view === 'roadmap' ? 'active' : ''}`}>
+            <ChartLineUp size={12} /> <span>Roadmap</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-3xl mx-auto px-8 py-10">
+      <div className="goal-list">
         {loading ? (
           <p className="text-[13px] text-shuttle/40">Loading…</p>
         ) : view === 'overview' ? (
@@ -177,31 +179,40 @@ export default function MilestonePlan() {
               const list = pending.filter(m => m.goal_id === g.id)
               const gc = g.color ?? '#3E7A4E'
               return (
-                <div key={g.id}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full" style={{ background: gc }} />
-                    <h2 className="text-[13px] font-semibold text-burnham">{g.emoji ? `${g.emoji} ` : ''}{g.alias ?? g.text}</h2>
-                    <span className="text-[10px] font-mono text-shuttle/35">{list.length}</span>
-                    <div className="flex-1 h-px bg-mercury/40" />
-                  </div>
-                  <div className="space-y-2">
+                <section key={g.id} className="goal-sec" style={{ '--c': gc } as React.CSSProperties}>
+                  <header className="goal-hd">
+                    <span className="goal-emoji">{g.emoji ?? '🎯'}</span>
+                    <div className="goal-hd-txt">
+                      <div className="goal-hd-top">
+                        <h2 className="goal-name">{g.alias ?? g.text}</h2>
+                        <span className="goal-area">{list.length} milestones</span>
+                      </div>
+                      <p className="goal-north">{g.text}</p>
+                    </div>
+                    <div className="goal-stat">
+                      <div className="goal-stat-line"><span className="goal-stat-num">{list.filter(m => m.status === 'COMPLETE').length}<span className="goal-stat-den">/{list.length}</span></span><span className="goal-stat-lbl">done</span></div>
+                      <div className="goal-stat-bar"><span style={{ width: `${list.length ? (list.filter(m => m.status === 'COMPLETE').length / list.length) * 100 : 0}%` }} /></div>
+                    </div>
+                  </header>
+                  <div className="goal-grid">
                     {list.map(m => <Card key={m.id} m={m} />)}
                     {addingForGoal === g.id ? (
-                      <div className="flex items-center gap-2 pl-4 pr-3 py-2.5 bg-white rounded-xl" style={{ boxShadow: 'var(--shadow-card)' }}>
-                        <Plus size={13} className="text-shuttle/40 shrink-0" />
-                        <input autoFocus value={newText} onChange={e => setNewText(e.target.value)}
-                          onBlur={() => addMilestone(g.id)}
-                          onKeyDown={e => { if (e.key === 'Enter') addMilestone(g.id); if (e.key === 'Escape') { setNewText(''); setAddingForGoal(null) } }}
-                          placeholder="New milestone…" className="flex-1 text-[13px] text-burnham bg-transparent border-0 outline-none placeholder-shuttle/30" />
+                      <div className="msc-card add active">
+                        <div className="msc-addrow">
+                          <Plus size={13} />
+                          <input autoFocus value={newText} onChange={e => setNewText(e.target.value)}
+                            onBlur={() => addMilestone(g.id)}
+                            onKeyDown={e => { if (e.key === 'Enter') addMilestone(g.id); if (e.key === 'Escape') { setNewText(''); setAddingForGoal(null) } }}
+                            placeholder="New milestone..." />
+                        </div>
                       </div>
                     ) : (
-                      <button onClick={() => { setAddingForGoal(g.id); setNewText('') }}
-                        className="flex items-center gap-2 pl-4 py-2 text-[12px] text-shuttle/40 hover:text-burnham transition-colors">
-                        <Plus size={13} /> Add milestone
+                      <button onClick={() => { setAddingForGoal(g.id); setNewText('') }} className="msc-card add">
+                        <span className="msc-addlbl"><Plus size={13} /> Add milestone</span>
                       </button>
                     )}
                   </div>
-                </div>
+                </section>
               )
             })}
             {goals.length === 0 && <p className="text-[13px] text-shuttle/40">No active goals. Create goals first to plan milestones.</p>}

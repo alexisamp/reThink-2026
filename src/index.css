@@ -1,4 +1,12 @@
 @import './styles/design-tokens.css';
+@import './styles/rethink-kit/styles.css';
+@import './styles/rethink-kit/crm.css';
+@import './styles/rethink-kit/review.css';
+@import './styles/rethink-kit/playbook.css';
+@import './styles/rethink-kit/milestones.css';
+@import './styles/rethink-kit/day.css';
+@import './styles/rethink-kit/abm.css';
+@import './styles/rethink-kit/story.css';
 @import './styles/today.css';
 
 @tailwind base;

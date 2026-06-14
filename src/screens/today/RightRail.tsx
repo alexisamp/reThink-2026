@@ -1,4 +1,4 @@
-// RightRail — draggable + collapsible sections (Milestones, This Week, Next Steps,
+// RightRail — draggable + collapsible sections (Milestones, This Week, Agenda,
 // Journal). Order + per-section open state persist in localStorage. Reorder uses
 // @dnd-kit/sortable (the native HTML5 version dropped without persisting).
 import { useEffect, useState, type ReactNode } from 'react'
@@ -75,29 +75,29 @@ function SortableSection({ sec, open, onToggle }: {
     position: isDragging ? ('relative' as const) : undefined,
   }
   return (
-    <section ref={setNodeRef} style={style} className={`td-rail-sec${sec.tone ? ' tone-' + sec.tone : ''}${isDragging ? ' dragging' : ''}`}>
-      <header className="td-rail-sec-hd">
+    <section ref={setNodeRef} style={style} className={`rail-sec${sec.tone ? ' tone-' + sec.tone : ''}${isDragging ? ' dragging' : ''}`}>
+      <header className="rail-sec-hd">
         <button className="grip" title="Drag to reorder" {...attributes} {...listeners}>
           <DotsSixVertical size={13} />
         </button>
-        <button className="td-rail-sec-toggle" onClick={() => onToggle(sec.id)}>
+        <button className="rail-sec-toggle" onClick={() => onToggle(sec.id)}>
           {sec.icon}
           <span className="label">{sec.title}</span>
           {!open && sec.count != null && <span className="count">· {sec.count}</span>}
         </button>
-        <div className="td-rail-sec-actions">
+        <div className="rail-sec-actions">
           <button className="caret" onClick={() => onToggle(sec.id)} title={open ? 'Collapse' : 'Expand'}>
             {open ? <CaretDown size={11} /> : <CaretRight size={11} />}
           </button>
         </div>
       </header>
-      {open && <div className="td-rail-sec-body">{sec.body}</div>}
+      {open && <div className="rail-sec-body">{sec.body}</div>}
     </section>
   )
 }
 
-const DEFAULT_ORDER: RailSectionId[] = ['milestones', 'thisweek', 'nextsteps', 'journal']
-const DEFAULT_OPEN: Record<string, boolean> = { milestones: true, thisweek: true, nextsteps: true, journal: false }
+const DEFAULT_ORDER: RailSectionId[] = ['milestones', 'thisweek', 'agenda', 'journal']
+const DEFAULT_OPEN: Record<string, boolean> = { milestones: true, thisweek: true, agenda: true, journal: false }
 
 export default function RightRail({ sections }: { sections: RailSectionDef[] }) {
   const { layout, toggle, reorder } = useRailLayout(DEFAULT_ORDER, DEFAULT_OPEN)
@@ -111,7 +111,7 @@ export default function RightRail({ sections }: { sections: RailSectionDef[] }) 
   }
 
   return (
-    <aside className="td-rail">
+    <aside className="rail">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={layout.order} strategy={verticalListSortingStrategy}>
           {layout.order.map(id => {

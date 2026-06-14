@@ -1,6 +1,7 @@
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 use base64::{engine::general_purpose, Engine as _};
+use serde_json::Value;
 
 #[tauri::command]
 fn open_url_in_browser(url: String) {
@@ -92,6 +93,94 @@ fn read_local_file_base64(path: String) -> Result<String, String> {
     Ok(general_purpose::STANDARD.encode(bytes))
 }
 
+#[tauri::command]
+fn read_conversations_staged_outputs() -> Result<Value, String> {
+    let home = std::env::var("HOME").map_err(|_| "Could not resolve home directory".to_string())?;
+    let db_path = std::path::Path::new(&home)
+        .join("Library")
+        .join("Application Support")
+        .join("Conversations")
+        .join("conv.db");
+    if !db_path.exists() {
+        return Err("Conversations local database not found".to_string());
+    }
+    let query = r#"
+      SELECT
+        id,
+        run_id,
+        source_key,
+        target,
+        contact_id,
+        interaction_date,
+        title,
+        body,
+        payload_json,
+        status,
+        supabase_id,
+        error,
+        created_at,
+        updated_at,
+        confirmed_at
+      FROM ai_staged_outputs
+      WHERE status IN ('pending', 'failed')
+      ORDER BY created_at ASC
+      LIMIT 500;
+    "#;
+    let output = std::process::Command::new("/usr/bin/sqlite3")
+        .arg("-json")
+        .arg(db_path)
+        .arg(query)
+        .output()
+        .map_err(|_| "Could not run sqlite3".to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    let text = String::from_utf8(output.stdout).map_err(|_| "Conversations database returned invalid UTF-8".to_string())?;
+    serde_json::from_str(&text).map_err(|_| "Could not parse Conversations staged outputs".to_string())
+}
+
+#[tauri::command]
+fn mark_conversations_staged_outputs(ids: Vec<i64>, status: String, error: Option<String>) -> Result<(), String> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    if !matches!(status.as_str(), "synced" | "rejected" | "failed") {
+        return Err("Invalid staged output status".to_string());
+    }
+    let home = std::env::var("HOME").map_err(|_| "Could not resolve home directory".to_string())?;
+    let db_path = std::path::Path::new(&home)
+        .join("Library")
+        .join("Application Support")
+        .join("Conversations")
+        .join("conv.db");
+    if !db_path.exists() {
+        return Err("Conversations local database not found".to_string());
+    }
+    let id_list = ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
+    let escaped_status = status.replace('\'', "''");
+    let escaped_error = error
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| format!("'{}'", value.replace('\'', "''")))
+        .unwrap_or_else(|| "NULL".to_string());
+    let confirmed = if status == "synced" || status == "rejected" { ", confirmed_at = unixepoch() * 1000" } else { "" };
+    let query = format!(
+        "UPDATE ai_staged_outputs SET status = '{}', error = {}, updated_at = unixepoch() * 1000{} WHERE id IN ({});",
+        escaped_status,
+        escaped_error,
+        confirmed,
+        id_list
+    );
+    let output = std::process::Command::new("/usr/bin/sqlite3")
+        .arg(db_path)
+        .arg(query)
+        .output()
+        .map_err(|_| "Could not run sqlite3".to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -123,7 +212,7 @@ pub fn run() {
 
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![open_url_in_browser, open_file_in_default_browser, read_local_file_base64])
+    .invoke_handler(tauri::generate_handler![open_url_in_browser, open_file_in_default_browser, read_local_file_base64, read_conversations_staged_outputs, mark_conversations_staged_outputs])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
