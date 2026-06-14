@@ -13,6 +13,68 @@ export const LIST_TEMPLATES: Array<{
   stages: ListStage[]
 }> = [
   {
+    key: 'job',
+    name: 'Job search',
+    purpose: 'People tied to a role you are pursuing or filling. Move each from research to offer.',
+    icon: '💼',
+    color: '#3B82F6',
+    stages: [
+      { key: 'researching', label: 'Researching', description: 'Learning the person, account, or role.' },
+      { key: 'applied', label: 'Applied', description: 'Application, intro, or first ask is in motion.' },
+      { key: 'interviewing', label: 'Interviewing', description: 'Active conversation or interview loop.' },
+      { key: 'offer', label: 'Offer', description: 'Offer, negotiation, or decision stage.' },
+    ],
+  },
+  {
+    key: 'consult',
+    name: 'Consulting pipeline',
+    purpose: 'Fractional and advisory engagements. Track scoping through to an active retainer.',
+    icon: '🤝',
+    color: '#3E7A4E',
+    stages: [
+      { key: 'prospect', label: 'Prospect', description: 'Possible engagement or client fit.' },
+      { key: 'scoping', label: 'Scoping', description: 'Problem, shape, and offer are being defined.' },
+      { key: 'proposal', label: 'Proposal', description: 'Proposal, pricing, or terms are in review.' },
+      { key: 'active', label: 'Active', description: 'Engagement is live.' },
+    ],
+  },
+  {
+    key: 'mentor',
+    name: 'Mentors',
+    purpose: 'The people who sharpen your thinking. Keep each relationship live and reciprocal.',
+    icon: '🎯',
+    color: '#8A6A86',
+    stages: [
+      { key: 'prospect', label: 'Prospect', description: 'Someone who could become a mentor.' },
+      { key: 'reaching', label: 'Reaching out', description: 'Warm-up, ask, or first conversation in motion.' },
+      { key: 'active', label: 'Active', description: 'Mentorship relationship is active.' },
+    ],
+  },
+  {
+    key: 'board',
+    name: 'Personal board',
+    purpose: 'Your personal board of directors. No pipeline — just a cadence you owe each seat.',
+    icon: '🪑',
+    color: '#0B4B33',
+    stages: [
+      { key: 'weekly', label: 'Weekly', description: 'Weekly cadence.' },
+      { key: 'monthly', label: 'Monthly', description: 'Monthly cadence.' },
+      { key: 'quarterly', label: 'Quarterly', description: 'Quarterly cadence.' },
+    ],
+  },
+  {
+    key: 'family',
+    name: 'Family',
+    purpose: 'The people who come before the work. Stay close on a rhythm, not a deadline.',
+    icon: '♥',
+    color: '#D97706',
+    stages: [
+      { key: 'weekly', label: 'Weekly', description: 'Weekly cadence.' },
+      { key: 'monthly', label: 'Monthly', description: 'Monthly cadence.' },
+      { key: 'quarterly', label: 'Quarterly', description: 'Quarterly cadence.' },
+    ],
+  },
+  {
     key: 'fundraising',
     name: 'Fundraising',
     purpose: 'Investors and capital partners you are actively raising from.',
@@ -181,6 +243,7 @@ export function useListMemberships(
     listId: string,
     stage: string,
     notes?: string,
+    attributes: Record<string, unknown> = {},
   ): Promise<ListMembership | null> => {
     if (!userId) return null
     const { data, error } = await supabase
@@ -191,6 +254,7 @@ export function useListMemberships(
         user_id: userId,
         current_stage: stage,
         notes: notes ?? null,
+        attributes,
       })
       .select()
       .single()

@@ -5,7 +5,7 @@ Personal operating system for daily focus, relationship work, planning, and posi
 ## Product Map
 
 - `Today` — daily cockpit: one thing, todos, milestones, next steps, journal, and review summary.
-- `Review` — Notion and Conversations suggestions are accepted, edited, or dismissed before they write canonical data.
+- `Review` — Conversations and manual suggestions are accepted, edited, or dismissed before they write canonical data.
 - `People` / `Companies` / `Opportunities` — relationship CRM and active pipeline.
 - `Lists` — contextual relationship funnels.
 - `Plan` — weekly and monthly planning surface.
@@ -49,6 +49,7 @@ Supabase migrations live in `supabase/migrations`.
 
 Current notable migration:
 
-- `0005_review_queue.sql` adds `review_items` with RLS and duplicate prevention for external-source suggestions.
+- `0005_review_queue.sql` adds `review_items` with RLS and duplicate prevention for Conversations/manual suggestions.
+- `0007_review_queue_sources.sql` updates the review source constraint so Notion is not treated as a data source.
 
 Apply migrations before using Review Queue in a fresh environment.

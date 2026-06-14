@@ -43,7 +43,7 @@ export function useKeyboardShortcuts(shortcuts: ShortcutMap) {
 
 /**
  * App-level navigation shortcuts.
- * ⌘1 → Today, ⌘2 → Plan, ⌘3 → People, ⌘4 → Playbook
+ * ⌘1 → Today, ⌘2 → Goals, ⌘3 → People, ⌘4 → Playbook
  * @deprecated Use the shortcuts defined in AppShell instead.
  */
 export function useNavShortcuts() {
@@ -51,7 +51,7 @@ export function useNavShortcuts() {
 
   useKeyboardShortcuts({
     'cmd+1': () => navigate('/today'),
-    'cmd+2': () => navigate('/plan'),
+    'cmd+2': () => navigate('/milestones'),
     'cmd+3': () => navigate('/people'),
     'cmd+4': () => navigate('/playbook'),
   })

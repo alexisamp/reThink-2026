@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
-import { X, Check, ArrowRight, Moon } from '@phosphor-icons/react'
+import { useMemo, useState, type DragEvent } from 'react'
+import { ArrowBendDownRight, ArrowCounterClockwise, ArrowRight, CheckCircle, DotsSixVertical, MoonStars, Plus, X } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Todo } from '@/types'
 
@@ -7,15 +7,32 @@ function cleanTodoText(text: string) {
   return text.replace(/\[\[mention:(person|company|opportunity):[^\]]+\]\]/g, '').replace(/\s{2,}/g, ' ').trim()
 }
 
+type PlanSource = 'pending' | 'backlog' | 'new'
+
+interface PlanItem {
+  id: string
+  text: string
+  src: PlanSource
+}
+
 interface EndOfDayDrawerProps {
   todos: Todo[]
+  backlog?: Todo[]
   today: string
   userId: string
   dailyGoal?: string | null
+  committed?: boolean
+  savedNote?: string | null
+  savedPlan?: PlanItem[]
+  savedTomorrowObjective?: string | null
   onClose: () => void
+  onReopen?: () => void
+  onNewDay?: () => void
   onComplete: (result: {
     tomorrowGoal?: string
+    plannedItems?: PlanItem[]
     removedTodoIds: string[]
+    removedBacklogIds?: string[]
     carriedCount: number
     clearedCount: number
     completedCount: number
@@ -25,23 +42,48 @@ interface EndOfDayDrawerProps {
   }) => void
 }
 
-export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClose, onComplete }: EndOfDayDrawerProps) {
-  const pending = useMemo(() => todos.filter(t => !t.completed), [todos])
-  const [carry, setCarry] = useState<Record<string, boolean>>({})
-  const [tomorrowObjective, setTomorrowObjective] = useState('')
-  const [energyLevel, setEnergyLevel] = useState<number | null>(null)
-  const [goalDone, setGoalDone] = useState<boolean | null>(null)
-  const [saving, setSaving] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const dayLabel = new Date(today + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+function PlanChip({ item }: { item: PlanItem }) {
+  return (
+    <button
+      className="cd-chip"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'copy'
+        e.dataTransfer.setData('text/plan-src', JSON.stringify(item))
+      }}
+      title="Drag into tomorrow"
+    >
+      <DotsSixVertical size={11} />
+      <span>{item.text}</span>
+      <span className="cd-chip-src">{item.src === 'backlog' ? 'backlog' : 'pending'}</span>
+    </button>
+  )
+}
 
-  useEffect(() => {
-    // Default: carry all pending todos
-    const init: Record<string, boolean> = {}
-    pending.forEach(t => { init[t.id] = true })
-    setCarry(init)
-    setTimeout(() => inputRef.current?.focus(), 100)
-  }, [pending])
+export default function EndOfDayDrawer({
+  todos,
+  backlog = [],
+  today,
+  userId,
+  dailyGoal,
+  committed = false,
+  savedNote,
+  savedPlan,
+  savedTomorrowObjective,
+  onClose,
+  onReopen,
+  onNewDay,
+  onComplete,
+}: EndOfDayDrawerProps) {
+  const pending = useMemo(() => todos.filter(t => !t.completed), [todos])
+  const [plan, setPlan] = useState<PlanItem[]>(savedPlan ?? [])
+  const [draft, setDraft] = useState('')
+  const [tomorrowObjective, setTomorrowObjective] = useState(savedTomorrowObjective ?? '')
+  const [dayNote, setDayNote] = useState(savedNote ?? '')
+  const [goalDone, setGoalDone] = useState<boolean | null>(null)
+  const [over, setOver] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const dayLabel = new Date(today + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   const tomorrow = (() => {
     const [y, m, day] = today.split('-').map(Number)
@@ -49,39 +91,72 @@ export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClos
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   })()
 
-  const handleClose = async () => {
-    setSaving(true)
-    let removedTodoIds: string[] = []
-    let carriedCount = 0
-    let clearedCount = 0
+  const sources = useMemo<PlanItem[]>(() => [
+    ...pending.map(t => ({ id: t.id, text: cleanTodoText(t.text), src: 'pending' as const })),
+    ...backlog.map(t => ({ id: t.id, text: cleanTodoText(t.text), src: 'backlog' as const })),
+  ], [backlog, pending])
+  const planIds = new Set(plan.map(p => p.id))
+  const palette = sources.filter(s => !planIds.has(s.id))
+
+  const addPlan = (item: PlanItem) => {
+    setPlan(prev => prev.some(p => p.id === item.id) ? prev : [...prev, item])
+  }
+
+  const commitDraft = () => {
+    const text = draft.trim()
+    if (!text) return
+    addPlan({ id: `new-${Date.now()}`, text, src: 'new' })
+    setDraft('')
+  }
+
+  const onDropPlan = (e: DragEvent<HTMLDivElement>) => {
+    setOver(false)
+    const raw = e.dataTransfer.getData('text/plan-src')
+    if (!raw) return
     try {
-      // Carry selected todos to tomorrow
-      const toCarry = pending.filter(t => carry[t.id]).map(t => t.id)
-      carriedCount = toCarry.length
-      if (toCarry.length > 0) {
-        await supabase.from('todos').update({ date: tomorrow }).in('id', toCarry)
+      addPlan(JSON.parse(raw) as PlanItem)
+    } catch {
+      // Ignore malformed drag payloads from outside this flow.
+    }
+  }
+
+  const handleCloseDay = async () => {
+    setSaving(true)
+    const carriedPendingIds = plan.filter(p => p.src === 'pending').map(p => p.id)
+    const carriedBacklogIds = plan.filter(p => p.src === 'backlog').map(p => p.id)
+    const newItems = plan.filter(p => p.src === 'new')
+    try {
+      if (carriedPendingIds.length > 0) {
+        await supabase.from('todos').update({ date: tomorrow }).in('id', carriedPendingIds)
       }
-      const toClear = pending.filter(t => !carry[t.id]).map(t => t.id)
-      clearedCount = toClear.length
-      if (toClear.length > 0) {
-        await supabase.from('todos').update({ date: null }).in('id', toClear)
+      if (carriedBacklogIds.length > 0) {
+        await supabase.from('todos').update({ date: tomorrow, backlog_at: null, return_date: null }).in('id', carriedBacklogIds)
       }
-      removedTodoIds = [...toCarry, ...toClear]
-      // Save tomorrow's objective as tomorrow's review.one_thing
+      if (newItems.length > 0) {
+        await supabase.from('todos').insert(newItems.map((item, index) => ({
+          id: crypto.randomUUID(),
+          user_id: userId,
+          text: item.text,
+          date: tomorrow,
+          completed: false,
+          waiting: false,
+          sort_order: index,
+          is_featured: false,
+        })))
+      }
       if (tomorrowObjective.trim()) {
         await supabase.from('reviews').upsert(
           { user_id: userId, date: tomorrow, one_thing: tomorrowObjective.trim() },
-          { onConflict: 'user_id,date' }
+          { onConflict: 'user_id,date' },
         )
       }
-      // Mark today as complete. one_thing_done is backed by a migration, but the
-      // fallback keeps older databases from blocking the close-day flow.
       const reviewPayload = {
         user_id: userId,
         date: today,
         tomorrow_reviewed: true,
         day_locked_at: new Date().toISOString(),
-        ...(energyLevel !== null ? { energy_level: energyLevel } : {}),
+        notes: dayNote.trim() || undefined,
+        tomorrow_focus: tomorrowObjective.trim() || undefined,
         ...(goalDone !== null ? { one_thing_done: goalDone } : {}),
       }
       const { error } = await supabase.from('reviews').upsert(reviewPayload, { onConflict: 'user_id,date' })
@@ -91,7 +166,8 @@ export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClos
           date: today,
           tomorrow_reviewed: true,
           day_locked_at: reviewPayload.day_locked_at,
-          ...(energyLevel !== null ? { energy_level: energyLevel } : {}),
+          notes: dayNote.trim() || undefined,
+          tomorrow_focus: tomorrowObjective.trim() || undefined,
         }, { onConflict: 'user_id,date' })
       }
     } catch (err) {
@@ -100,121 +176,127 @@ export default function EndOfDayDrawer({ todos, today, userId, dailyGoal, onClos
       setSaving(false)
       onComplete({
         tomorrowGoal: tomorrowObjective.trim() || undefined,
-        removedTodoIds,
-        carriedCount,
-        clearedCount,
+        plannedItems: plan,
+        removedTodoIds: carriedPendingIds,
+        removedBacklogIds: carriedBacklogIds,
+        carriedCount: carriedPendingIds.length + carriedBacklogIds.length + newItems.length,
+        clearedCount: 0,
         completedCount: todos.filter(t => t.completed).length,
         pendingCount: pending.length,
-        energyLevel,
+        energyLevel: null,
         goalDone,
       })
     }
   }
 
   return (
-    <>
-      {/* Backdrop */}
-      <div className="td-drawer-bg" onClick={onClose} />
-
-      {/* Drawer */}
-      <div className="td-day-drawer close-day">
-        {/* Header */}
-        <div className="td-day-drawer-hd">
-          <span className="icon"><Moon size={15} weight="fill" /></span>
-          <div>
-            <h2>Close the day</h2>
-            <p>{dayLabel}</p>
+    <div className="day-screen close-screen">
+      <div className="ds-inner">
+        <header className="ds-head">
+          <div className="ds-eyebrow">
+            <span className="ds-dot" />
+            {committed ? 'Day closed' : 'Close the day'} · {dayLabel}
           </div>
-          <button className="close" onClick={onClose} title="Close"><X size={15} /></button>
-        </div>
+          <button className="ds-x" onClick={onClose} title="Back without closing"><X size={15} /></button>
+        </header>
 
-        {/* Content */}
-        <div className="td-day-drawer-body">
+        <h1 className="ds-title">{committed ? 'Day closed. Rest well.' : "Let's close the day."}</h1>
 
-          {dailyGoal && (
-            <div className="td-day-block">
-              <label>Today's goal</label>
-              <p className="td-day-goal-text">{dailyGoal}</p>
-              <div className="td-day-segment">
-                <button className={goalDone === true ? 'on' : ''} onClick={() => setGoalDone(true)}>Done</button>
-                <button className={goalDone === false ? 'on' : ''} onClick={() => setGoalDone(false)}>Not yet</button>
-              </div>
-            </div>
-          )}
-
-          {/* Pending todos */}
-          {pending.length > 0 ? (
-            <div className="td-day-block">
-              <label>Carry to tomorrow?</label>
-              <div className="td-day-carry">
-                {pending.map(todo => (
-                  <label key={todo.id}>
-                    <input
-                      type="checkbox"
-                      checked={carry[todo.id] ?? false}
-                      onChange={e => setCarry(prev => ({ ...prev, [todo.id]: e.target.checked }))}
-                    />
-                    <span className={carry[todo.id] ? '' : 'skip'}>
-                      {cleanTodoText(todo.text)}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="td-day-done">
-              <Check size={16} weight="bold" />
-              <p>All todos done today.</p>
-            </div>
-          )}
-
-          {/* Energy level */}
-          <div className="td-day-block">
-            <label>Energy level</label>
-            <div className="td-energy-grid">
-              {[1,2,3,4,5,6,7,8,9,10].map(n => (
-                <button
-                  key={n}
-                  onClick={() => setEnergyLevel(prev => prev === n ? null : n)}
-                  className={energyLevel === n ? 'on' : ''}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
+        <section className="cd-block">
+          <div className="cd-label"><span className="cd-num">01</span> Today's objective</div>
+          <p className="cd-objective">{dailyGoal || <em className="cd-muted">You didn't set an objective today.</em>}</p>
+          <div className="cd-met">
+            <button className={`cd-met-btn yes${goalDone === true ? ' on' : ''}`} onClick={() => setGoalDone(true)}>
+              <CheckCircle size={16} /> Nailed it
+            </button>
+            <button className={`cd-met-btn no${goalDone === false ? ' on' : ''}`} onClick={() => setGoalDone(false)}>
+              <ArrowBendDownRight size={16} /> Carry it over
+            </button>
           </div>
+        </section>
 
-          {/* Tomorrow's objective */}
-          <div className="td-day-block">
-            <label>Tomorrow's one thing</label>
-            <input
-              ref={inputRef}
-              value={tomorrowObjective}
-              onChange={e => setTomorrowObjective(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleClose()}
-              placeholder="What will make tomorrow a win?"
-            />
-          </div>
+        <section className="cd-block">
+          <div className="cd-label"><span className="cd-num">02</span> Note for the day</div>
+          <textarea
+            className="cd-note"
+            rows={3}
+            placeholder="What happened today? One line for tomorrow's you..."
+            value={dayNote}
+            onChange={e => setDayNote(e.target.value)}
+            disabled={committed}
+          />
+        </section>
 
-        </div>
-
-        {/* Footer */}
-        <div className="td-day-drawer-foot">
-          <button
-            onClick={handleClose}
-            disabled={saving}
+        <section className="cd-block">
+          <div className="cd-label"><span className="cd-num">03</span> Set up tomorrow</div>
+          <div
+            className={`cd-plan${over ? ' over' : ''}`}
+            onDragOver={(e) => {
+              if (!committed && e.dataTransfer.types.includes('text/plan-src')) {
+                e.preventDefault()
+                setOver(true)
+              }
+            }}
+            onDragLeave={() => setOver(false)}
+            onDrop={onDropPlan}
           >
-            {saving ? (
-              <span>Saving...</span>
-            ) : (
-              <>
-                <span>Close the day</span>
-                <ArrowRight size={14} weight="bold" />
-              </>
+            {plan.length === 0 && <div className="cd-plan-empty">Drag items up from below, or type a task for tomorrow.</div>}
+            {plan.map(item => (
+              <div className="cd-plan-row" key={item.id}>
+                <span className="cd-plan-dot" />
+                <span className="cd-plan-text">{item.text}</span>
+                {!committed && <button onClick={() => setPlan(prev => prev.filter(p => p.id !== item.id))} title="Remove"><X size={11} /></button>}
+              </div>
+            ))}
+            {!committed && (
+              <div className="cd-plan-add">
+                <Plus size={12} />
+                <input
+                  placeholder="Add a task for tomorrow..."
+                  value={draft}
+                  onChange={e => setDraft(e.target.value)}
+                  onBlur={commitDraft}
+                  onKeyDown={e => { if (e.key === 'Enter') commitDraft() }}
+                />
+              </div>
             )}
-          </button>
-        </div>
+          </div>
+
+          {!committed && palette.length > 0 && (
+            <div className="cd-palette">
+              <span className="cd-palette-lbl">Pending &amp; backlog — drag whatever you want to move:</span>
+              <div className="cd-chips">
+                {palette.map(item => <PlanChip key={`${item.src}-${item.id}`} item={item} />)}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="cd-block">
+          <div className="cd-label"><span className="cd-num">04</span> Tomorrow's objective</div>
+          <input
+            className="cd-next"
+            placeholder="What's the one big thing tomorrow?"
+            value={tomorrowObjective}
+            onChange={e => setTomorrowObjective(e.target.value)}
+            disabled={committed}
+          />
+        </section>
+
+        <footer className="ds-foot">
+          {!committed ? (
+            <button className="ds-cta" onClick={handleCloseDay} disabled={saving}>
+              {saving ? 'Saving...' : 'Close day'} {!saving && <MoonStars size={15} />}
+            </button>
+          ) : (
+            <div className="cd-committed">
+              <button className="ds-ghost" onClick={onReopen}><ArrowCounterClockwise size={13} /> Reopen today</button>
+              <button className="ds-cta" onClick={onNewDay}>Start a new day <ArrowRight size={14} /></button>
+            </div>
+          )}
+        </footer>
+        {committed && <p className="cd-persist">This screen stays until you reopen the day — or midnight rolls into a new one.</p>}
       </div>
-    </>
+    </div>
   )
 }

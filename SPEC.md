@@ -126,7 +126,7 @@ WhatsApp · LinkedIn · Exit5 · X(Twitter). Keyboard switch ⌘1/⌘2/⌘3/⌘4
 - **D. Habits** — daily checkboxes, tagged to goal. Streak count visible. No grades.
 
 **Right sidebar (collapsible):**
-- **Review:** top pending Notion/Conversations suggestions with quick accept/dismiss and link to Review Queue.
+- **Review:** top pending Conversations/manual suggestions with quick accept/dismiss and link to Review Queue.
 - **Pulse:** energy slider 1-10 + summary (habits done, todos completed, conversations logged).
 - **Journal:** free-form notes.
 - **Next Steps:** pending from recent `interactions WHERE next_step_owner='me' AND next_step_date <= today`. Shows person + text + days since conversation. Actions: mark done / snooze.
@@ -184,9 +184,9 @@ See Section 8 for full content. Summary: markdown-first, quarterly-update discip
 
 ### 4.5 REVIEW QUEUE — external-source gate
 
-**Purpose:** Notion and Conversations suggestions do not become canonical relationship data until Alexis reviews them.
+**Purpose:** Conversations and manual suggestions do not become canonical relationship data until Alexis reviews them.
 
-**Sources v1:** `notion`, `conversations`.
+**Sources v1:** `conversations`, `manual`. Notion is a UI/style direction in this phase, not a data source.
 
 **Targets v1:** `contact_fact`, `interaction`, `next_step`, `todo`, `value_log`, `playbook_entry`.
 

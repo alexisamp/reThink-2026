@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MagnifyingGlass, Plus, Buildings, CaretUpDown, Users, UsersThree, MapPin } from '@phosphor-icons/react'
+import { MagnifyingGlass, Plus, Buildings, Users, UsersThree, MapPin, ChartLineUp, RocketLaunch, Target, Briefcase } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import CrmTable, { type CrmColumn } from '@/components/crm/CrmTable'
+import RecordPeek from '@/components/crm/RecordPeek'
 import type { Company } from '@/types'
 
 interface CompanyRow extends Company {
@@ -10,6 +12,15 @@ interface CompanyRow extends Company {
   active_opps: number
   last_interaction_at: string | null
 }
+
+const COMPANY_STAGES = [
+  { id: null, label: 'Unstaged', color: '#9CA3AF' },
+  { id: 'research', label: 'Research', color: '#94A3B8' },
+  { id: 'qualified', label: 'Qualified', color: '#79D65E' },
+  { id: 'active', label: 'Active', color: '#3E7A4E' },
+  { id: 'customer', label: 'Customer', color: '#22C55E' },
+  { id: 'nurture', label: 'Nurture', color: '#EAB308' },
+]
 
 function daysSince(dateStr: string | null): number | null {
   if (!dateStr) return null
@@ -68,6 +79,8 @@ export default function PeopleCompanies() {
   const [newSector, setNewSector] = useState('')
   const [newDomain, setNewDomain] = useState('')
   const [saving, setSaving] = useState(false)
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table')
+  const [peekId, setPeekId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -141,15 +154,106 @@ export default function PeopleCompanies() {
     r.name.toLowerCase().includes(search.toLowerCase()) ||
     (r.sector ?? '').toLowerCase().includes(search.toLowerCase())
   )
+  const peek = filtered.find(row => row.id === peekId) ?? null
+  const peekIndex = peek ? filtered.findIndex(row => row.id === peek.id) : -1
+
+  const updateAccountStage = async (company: CompanyRow, stage: string | null) => {
+    setRows(prev => prev.map(row => row.id === company.id ? { ...row, account_stage: stage } : row))
+    await supabase.from('companies').update({ account_stage: stage }).eq('id', company.id)
+  }
+
+  const columns: CrmColumn<CompanyRow>[] = [
+    {
+      key: 'company',
+      label: 'Company',
+      locked: true,
+      width: 'minmax(250px, 1.5fr)',
+      icon: <Buildings size={12} />,
+      render: row => (
+        <span className="flex min-w-0 items-center gap-2.5">
+          <CompanyAvatar company={row} size={8} />
+          <span className="min-w-0">
+            <span className="block truncate font-medium text-burnham">{row.name}</span>
+            <span className="block truncate text-[10px] text-shuttle/60">{row.headline || row.domain || '—'}</span>
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: 'stage',
+      label: 'Stage',
+      width: '130px',
+      render: row => <span className="text-shuttle capitalize">{row.account_stage || '—'}</span>,
+    },
+    {
+      key: 'icp',
+      label: 'ICP',
+      width: '120px',
+      defaultOff: true,
+      render: row => <span className="text-shuttle">{row.icp || '—'}</span>,
+    },
+    {
+      key: 'motion',
+      label: 'Motion',
+      width: '120px',
+      defaultOff: true,
+      render: row => <span className="text-shuttle">{row.motion || '—'}</span>,
+    },
+    {
+      key: 'sector',
+      label: 'Industry',
+      width: '150px',
+      render: row => row.sector ? <span className="rounded bg-mercury px-2 py-0.5 text-[11px] text-burnham">{row.sector}</span> : <span className="text-shuttle">—</span>,
+    },
+    {
+      key: 'employees',
+      label: 'Employees',
+      width: '110px',
+      icon: <Users size={12} />,
+      render: row => <span className="text-burnham">{formatNumber(row.employees_count ?? row.members_on_linkedin)}</span>,
+    },
+    {
+      key: 'location',
+      label: 'HQ',
+      width: '170px',
+      icon: <MapPin size={12} />,
+      render: row => <span className="text-shuttle">{row.hq_location || '—'}</span>,
+    },
+    {
+      key: 'people',
+      label: 'People',
+      width: '90px',
+      icon: <UsersThree size={12} />,
+      render: row => <span className={row.people_count > 0 ? 'font-medium text-burnham' : 'text-shuttle/40'}>{row.people_count || '—'}</span>,
+    },
+    {
+      key: 'opps',
+      label: 'Opps',
+      width: '80px',
+      render: row => <span className={row.active_opps > 0 ? 'font-medium text-burnham' : 'text-shuttle/40'}>{row.active_opps || '—'}</span>,
+    },
+    {
+      key: 'next_step',
+      label: 'Next Step',
+      width: 'minmax(160px, 1fr)',
+      defaultOff: true,
+      render: row => <span className="text-shuttle">{row.next_step || '—'}</span>,
+    },
+    {
+      key: 'last',
+      label: 'Last Contact',
+      width: '110px',
+      render: row => <span className="text-shuttle">{formatAgo(daysSince(row.last_interaction_at))}</span>,
+    },
+  ]
 
   return (
-    <div className="flex flex-col h-full bg-[#FAFAFA]">
+    <div className="ppl-page wide">
       {/* header */}
-      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-mercury/60">
-        <div className="flex items-center gap-2">
-          <Buildings size={16} className="text-shuttle" />
-          <h1 className="text-base font-semibold text-burnham">Companies</h1>
-          <span className="text-[11px] text-shuttle/40 font-mono">{rows.length}</span>
+      <header className="ppl-hd">
+        <div className="ppl-hd-l">
+          <h1 className="ppl-title">Companies</h1>
+          <p className="ppl-sub">Every organization in your orbit — who you know inside, what's open there, and the next move.</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -163,12 +267,12 @@ export default function PeopleCompanies() {
           </div>
           <button
             onClick={() => setShowAdd(v => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-burnham text-gossip text-sm rounded-lg hover:opacity-90 transition-opacity"
+            className="crm-tool primary"
           >
-            <Plus size={14} /> New Company
+            <Plus size={14} /> <span>New</span>
           </button>
         </div>
-      </div>
+      </header>
 
       {/* add form */}
       {showAdd && (
@@ -204,112 +308,87 @@ export default function PeopleCompanies() {
         </div>
       )}
 
-      {/* table */}
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-[12px] border-collapse">
-          <thead>
-            <tr className="border-b border-mercury bg-white sticky top-0 z-10">
-              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle w-[280px]">
-                <div className="flex items-center gap-1">Company <CaretUpDown size={10} /></div>
-              </th>
-              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Industry</th>
-              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">
-                <div className="flex items-center gap-1"><Users size={11} />Employees</div>
-              </th>
-              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">
-                <div className="flex items-center gap-1"><UsersThree size={11} />Followers</div>
-              </th>
-              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">
-                <div className="flex items-center gap-1"><MapPin size={11} />HQ</div>
-              </th>
-              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">People</th>
-              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Opps</th>
-              <th className="text-left px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-shuttle">Last Contact</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={8} className="text-center py-12 text-shuttle">Loading...</td>
-              </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="text-center py-12">
-                  <Buildings size={32} className="text-mercury mx-auto mb-2" />
-                  <p className="text-shuttle text-sm">
-                    {search ? 'No companies match your search.' : 'No companies yet. Add your first company above.'}
-                  </p>
-                </td>
-              </tr>
-            ) : (
-              filtered.map(row => {
-                const employees = row.employees_count ?? row.members_on_linkedin
-                return (
-                <tr
-                  key={row.id}
-                  onClick={() => navigate(`/people/companies/${row.id}`)}
-                  className="border-b border-mercury hover:bg-gossip/20 cursor-pointer transition-colors"
-                >
-                  <td className="px-3 py-1.5">
-                    <div className="flex items-center gap-2.5">
-                      <CompanyAvatar company={row} size={8} />
-                      <div className="min-w-0">
-                        <p className="font-medium text-midnight truncate">{row.name}</p>
-                        {row.headline
-                          ? <p className="text-[11px] text-shuttle truncate">{row.headline}</p>
-                          : row.domain && <p className="text-[11px] text-shuttle">{row.domain}</p>}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-3 py-1.5 text-shuttle">
-                    {row.sector ? (
-                      <span className="px-2 py-0.5 bg-mercury text-midnight rounded text-xs">{row.sector}</span>
-                    ) : '—'}
-                  </td>
-                  <td className="px-3 py-1.5 text-shuttle text-xs">
-                    {employees != null ? (
-                      <span className="text-midnight font-medium">{formatNumber(employees)}</span>
-                    ) : row.size ? (
-                      <span className="text-shuttle">{row.size}</span>
-                    ) : '—'}
-                  </td>
-                  <td className="px-3 py-1.5 text-shuttle text-xs">
-                    {row.followers_count != null
-                      ? <span className="text-midnight font-medium">{formatNumber(row.followers_count)}</span>
-                      : '—'}
-                  </td>
-                  <td className="px-3 py-1.5 text-shuttle text-xs max-w-[200px] truncate" title={row.hq_location ?? undefined}>
-                    {row.hq_location || '—'}
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <span className={`font-medium ${row.people_count > 0 ? 'text-midnight' : 'text-mercury'}`}>
-                      {row.people_count}
-                    </span>
-                  </td>
-                  <td className="px-3 py-1.5">
-                    {row.active_opps > 0 ? (
-                      <span className="px-2 py-0.5 bg-gossip text-burnham rounded-full text-xs font-medium">
-                        {row.active_opps}
-                      </span>
-                    ) : (
-                      <span className="text-mercury">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-1.5 text-shuttle text-xs">
-                    {formatAgo(daysSince(row.last_interaction_at))}
-                  </td>
-                </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
+      <div>
+        {loading ? (
+          <div className="flex h-40 items-center justify-center text-sm text-shuttle">Loading...</div>
+        ) : (
+          <CrmTable
+            entity="companies"
+            title={search ? `Search: ${search}` : 'Accounts'}
+            viewName="Table"
+            rows={filtered}
+            columns={columns}
+            view={viewMode}
+            onViewChange={v => setViewMode(v as 'table' | 'kanban')}
+            views={[
+              { id: 'table', label: 'Table', type: 'table' },
+              { id: 'kanban', label: 'Kanban', type: 'kanban' },
+            ]}
+            addLabel="New Company"
+            onAdd={() => setShowAdd(true)}
+            onRowClick={row => setPeekId(row.id)}
+            storageKey="companies"
+            kanban={{
+              groupLabel: 'Account stage',
+              stages: COMPANY_STAGES,
+              groupValue: row => row.account_stage ?? null,
+              cardColumns: ['sector', 'people', 'opps', 'next_step'],
+              onMove: updateAccountStage,
+            }}
+          />
+        )}
       </div>
 
-      {/* footer */}
-      <div className="px-6 py-2 bg-white border-t border-mercury text-xs text-shuttle">
-        {filtered.length} {filtered.length === 1 ? 'company' : 'companies'}
-      </div>
+      <RecordPeek
+        open={Boolean(peek)}
+        title={peek?.name ?? ''}
+        subtitle={peek ? [peek.sector, peek.hq_location].filter(Boolean).join(' · ') || peek.domain || undefined : undefined}
+        eyebrow="Company"
+        highlights={peek ? [
+          { label: 'Annual revenue', icon: <ChartLineUp size={13} />, value: '—' },
+          { label: 'Funding', icon: <RocketLaunch size={13} />, value: '—' },
+          { label: 'Linked people', icon: <Users size={13} />, value: `${peek.people_count} people` },
+          { label: 'Open opportunities', icon: <Target size={13} />, value: peek.active_opps },
+          { label: 'Headcount', icon: <UsersThree size={13} />, value: formatNumber(peek.employees_count) || peek.size || '—' },
+          { label: 'Industry', icon: <Briefcase size={13} />, value: peek.sector || '—' },
+        ] : []}
+        fields={peek ? [
+          { label: 'Name', icon: <Buildings size={12} />, value: peek.name },
+          { label: 'People', icon: <Users size={12} />, value: peek.people_count },
+          { label: 'Opportunities', icon: <Target size={12} />, value: peek.active_opps },
+        ] : []}
+        recommendedMove={peek?.next_step ? {
+          verb: peek.next_step,
+          detail: peek.key_insight || peek.notes || 'Account next step from the company record.',
+          action: peek.next_step,
+          accent: 'var(--moss)',
+        } : null}
+        onClose={() => setPeekId(null)}
+        onOpenFull={() => peek && navigate(`/people/companies/${peek.id}`)}
+        onPrev={peekIndex > 0 ? () => setPeekId(filtered[peekIndex - 1].id) : undefined}
+        onNext={peekIndex >= 0 && peekIndex < filtered.length - 1 ? () => setPeekId(filtered[peekIndex + 1].id) : undefined}
+      >
+        <div className="peek-block-label spaced">Account strategy</div>
+        <div className="peek-captured">
+          <div className="pk-cap">
+            <span className="pk-cap-ic">◎</span>
+            <span className="pk-cap-tx">{peek?.icp || 'No ICP set'}{peek?.account_stage ? ` · ${peek.account_stage}` : ''}</span>
+          </div>
+          <div className="pk-cap">
+            <span className="pk-cap-ic">↗</span>
+            <span className="pk-cap-tx">{peek?.motion || peek?.source || 'No account motion captured yet.'}</span>
+          </div>
+        </div>
+        <div className="peek-block-label spaced">Recent signals</div>
+        <div className="peek-signals">
+          <div className="pk-signal">
+            <span className="pk-sig-ic">•</span>
+            <span className="pk-sig-tx">{peek?.key_insight || peek?.notes || 'No recent signals captured yet.'}</span>
+            <span className="pk-sig-when">{formatAgo(daysSince(peek?.last_interaction_at ?? null))}</span>
+          </div>
+        </div>
+      </RecordPeek>
+
     </div>
   )
 }

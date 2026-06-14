@@ -187,6 +187,8 @@ export interface Todo {
   waiting?: boolean
   completed_at: string | null
   date: string | null
+  backlog_at?: string | null
+  return_date?: string | null
   sort_order: number
   url: string | null
   outreach_log_id: string | null
@@ -380,6 +382,7 @@ export interface ListMembership {
   entered_at: string
   stage_changed_at: string
   notes: string | null
+  attributes?: Record<string, unknown>
   created_at: string
 }
 
@@ -449,7 +452,7 @@ export interface Interaction {
 
 // ─── Review Queue ────────────────────────────────────────────────────────────
 
-export type ReviewSource = 'notion' | 'conversations'
+export type ReviewSource = 'notion' | 'conversations' | 'manual'
 export type ReviewStatus = 'pending' | 'accepted' | 'dismissed'
 export type ReviewTarget =
   | 'contact_fact'
@@ -505,6 +508,11 @@ export interface Company {
   founded_year: number | null
   hq_location: string | null
   last_enriched_at: string | null
+  icp?: string | null
+  account_stage?: string | null
+  source?: string | null
+  motion?: string | null
+  next_step?: string | null
 }
 
 export type OpportunityType = 'job' | 'consulting' | 'business' | 'partnership' | 'other'
@@ -543,6 +551,30 @@ export interface OpportunityContact {
   opportunity_id: string
   outreach_log_id: string
   role: 'champion' | 'contact' | 'decision_maker' | 'blocker' | null
+}
+
+export interface ContactIntroduction {
+  id: string
+  user_id: string
+  source_contact_id: string
+  connector_contact_id: string | null
+  introduced_contact_id: string | null
+  introduced_to_contact_id: string | null
+  connector_name: string | null
+  introduced_person_name: string | null
+  introduced_person_company: string | null
+  introduced_to_name: string | null
+  introduced_to_company: string | null
+  relationship_context: string | null
+  status: 'requested' | 'offered' | 'made' | 'received'
+  direction: 'given' | 'received'
+  confidence: 'low' | 'medium' | 'high'
+  source_channel: string
+  source_interaction_date: string
+  source_external_id: string
+  source_value_log_id: string | null
+  created_at: string
+  updated_at: string
 }
 
 export type ValueLogType =

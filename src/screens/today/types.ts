@@ -2,7 +2,7 @@
 
 export type GroupBy = 'priority' | 'milestone'
 
-export type RailSectionId = 'review' | 'milestones' | 'thisweek' | 'nextsteps' | 'journal'
+export type RailSectionId = 'milestones' | 'thisweek' | 'agenda' | 'journal'
 
 export interface Mention {
   id?: string

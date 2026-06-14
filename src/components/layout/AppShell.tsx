@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   House, BookBookmark, Users, Buildings, Target,
-  Star, Flame, ChartBar, Gear, List as ListIcon,
+  Star, Flame, Gear, List as ListIcon,
   MagnifyingGlass, CaretDown, CaretRight,
   SignOut, ArrowLeft, CheckSquare,
 } from '@phosphor-icons/react'
@@ -57,17 +57,12 @@ function NavItem({ path, icon, label, collapsed, onClick, indent, iconColor }: N
       <button
         onClick={handleClick}
         className={[
-          'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-all duration-150',
-          indent && !collapsed ? 'pl-5 text-[11px]' : 'text-[12px]',
-          isActive
-            ? 'bg-gossip/70 text-burnham font-medium'
-            : 'text-shuttle hover:bg-mercury/50 hover:text-burnham',
+          'sb-row',
+          isActive ? 'active' : '',
+          indent ? 'indent' : '',
         ].join(' ')}
       >
-        {isActive && (
-          <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-burnham rounded-r" />
-        )}
-        <span className={['shrink-0 flex items-center justify-center', iconColor ?? ''].join(' ')}>
+        <span className={iconColor ?? ''}>
           {icon}
         </span>
         {!collapsed && <span className="truncate">{label}</span>}
@@ -82,8 +77,8 @@ function NavItem({ path, icon, label, collapsed, onClick, indent, iconColor }: N
   )
 }
 
-function SectionDivider({ collapsed }: { collapsed: boolean }) {
-  return <div className={['border-t border-mercury/60 my-1', collapsed ? 'mx-1' : 'mx-0'].join(' ')} />
+function SectionDivider({ collapsed: _collapsed }: { collapsed: boolean }) {
+  return <div className="sb-divider" />
 }
 
 function SectionHeader({
@@ -101,7 +96,7 @@ function SectionHeader({
   return (
     <button
       onClick={onToggle}
-      className="w-full flex items-center gap-1 px-2 py-1 text-[10px] font-semibold uppercase tracking-widest text-shuttle/60 hover:text-shuttle transition-colors"
+      className="sb-eyebrow w-full"
     >
       {open ? <CaretDown size={9} weight="bold" /> : <CaretRight size={9} weight="bold" />}
       {label}
@@ -147,8 +142,8 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
     'cmd+\\': toggleCollapsed,
     'cmd+1': () => navigate('/today'),
     'cmd+2': () => navigate('/review'),
-    'cmd+3': () => navigate('/plan'),
-    'cmd+4': () => navigate('/playbook'),
+    'cmd+3': () => navigate('/playbook'),
+    'cmd+4': () => navigate('/milestones'),
   })
 
   useEffect(() => {
@@ -175,45 +170,36 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
   const fullName = user.user_metadata?.full_name as string | undefined
   const initials = (fullName || user.email || 'U')[0].toUpperCase()
 
-  const sidebarWidth = collapsed ? 'w-12' : 'w-[200px]'
-  const contentMargin = collapsed ? 'ml-12' : 'ml-[200px]'
   const sidebarPx = collapsed ? '48px' : '200px'
 
   return (
     <div
-      className="flex min-h-screen bg-canvas text-burnham font-sans"
+      className="shell"
       style={{ '--sidebar-width': sidebarPx } as React.CSSProperties}
     >
       {/* Left sidebar */}
       <aside
         className={[
-          'fixed top-0 left-0 h-screen z-30 flex flex-col bg-sidebar border-r border-mercury/50',
-          'transition-all duration-200 overflow-hidden',
-          sidebarWidth,
+          'sidebar',
+          collapsed ? 'collapsed' : 'expanded',
         ].join(' ')}
       >
         {/* Logo */}
-        <div className={['flex items-center gap-2.5 px-3 py-4 shrink-0', collapsed ? 'justify-center' : ''].join(' ')}>
-          <img src="/logo-sm.png" alt="reThink" className="w-6 h-6 shrink-0 rounded-sm" />
+        <div className="sb-brand">
+          <img src="/logo.png" alt="reThink" />
           {!collapsed && (
-            <span className="text-[13px] font-semibold text-burnham truncate tracking-[-0.01em]">reThink 2026</span>
+            <span className="word">reThink 2026</span>
           )}
         </div>
 
         {/* Quick actions / search */}
-        <div className="px-2 pb-1 shrink-0">
-          <button
-            onClick={() => setPaletteOpen(true)}
-            className={[
-              'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-shuttle hover:bg-mercury/50 hover:text-burnham transition-all',
-              collapsed ? 'justify-center' : '',
-            ].join(' ')}
-          >
+        <div className="shrink-0">
+          <button onClick={() => setPaletteOpen(true)} className="sb-search w-[calc(100%-16px)]">
             <MagnifyingGlass size={14} className="shrink-0" />
             {!collapsed && (
               <>
-                <span className="flex-1 text-left">Quick actions</span>
-                <span className="text-[10px] font-mono bg-mercury/40 px-1.5 py-0.5 rounded">⌘K</span>
+                <span className="label">Quick actions</span>
+                <span className="shortcut">⌘K</span>
               </>
             )}
           </button>
@@ -222,7 +208,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         <SectionDivider collapsed={collapsed} />
 
         {/* Main nav */}
-        <nav className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto py-1">
           <NavItem path="/today" icon={<House size={16} />} label="Today" collapsed={collapsed} />
           <NavItem
             path="/review"
@@ -231,6 +217,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
             collapsed={collapsed}
           />
           <NavItem path="/playbook" icon={<BookBookmark size={16} />} label="Playbook" collapsed={collapsed} />
+          <NavItem path="/milestones" icon={<Target size={16} />} label="Goals" collapsed={collapsed} />
 
           <SectionDivider collapsed={collapsed} />
 
@@ -240,21 +227,21 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
             <>
               <NavItem
                 path="/people"
-                icon={<span className="w-3.5 h-3.5 rounded-sm bg-[#1A1A1A] flex items-center justify-center"><Users size={9} weight="fill" className="text-white" /></span>}
+                icon={<span className="sb-pip" style={{ background: 'var(--midnight)' }}><Users size={9} weight="fill" /></span>}
                 label="People"
                 collapsed={collapsed}
                 indent
               />
               <NavItem
                 path="/people/companies"
-                icon={<span className="w-3.5 h-3.5 rounded-sm bg-shuttle flex items-center justify-center"><Buildings size={9} weight="fill" className="text-white" /></span>}
+                icon={<span className="sb-pip" style={{ background: 'var(--shuttle)' }}><Buildings size={9} weight="fill" /></span>}
                 label="Companies"
                 collapsed={collapsed}
                 indent
               />
               <NavItem
                 path="/people/opportunities"
-                icon={<span className="w-3.5 h-3.5 rounded-sm bg-burnham flex items-center justify-center"><Target size={9} weight="fill" className="text-gossip" /></span>}
+                icon={<span className="sb-pip" style={{ background: 'var(--burnham)' }}><Target size={9} weight="fill" /></span>}
                 label="Opportunities"
                 collapsed={collapsed}
                 indent
@@ -270,8 +257,8 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
             <>
               <NavItem
                 path="/lists"
-                icon={<span className="w-3.5 h-3.5 rounded-sm bg-burnham flex items-center justify-center"><ListIcon size={9} weight="fill" className="text-white" /></span>}
-                label="All Lists"
+                icon={<span className="sb-pip" style={{ background: 'var(--burnham)' }}><ListIcon size={9} weight="fill" /></span>}
+                label="All lists"
                 collapsed={collapsed}
                 indent
               />
@@ -285,7 +272,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
                       <span className="text-[13px] leading-none">{l.icon}</span>
                     ) : (
                       <span
-                        className="w-3.5 h-3.5 rounded-sm"
+                        className="sb-pip"
                         style={{ backgroundColor: l.color ?? '#9CA3AF' }}
                       />
                     )
@@ -313,43 +300,35 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
             </>
           )}
 
-          <SectionDivider collapsed={collapsed} />
-
-          <NavItem path="/plan" icon={<ChartBar size={16} />} label="Plan" collapsed={collapsed} />
         </nav>
 
         {/* Bottom: profile + settings + collapse toggle */}
-        <div className="shrink-0 px-2 pb-3 space-y-0.5 border-t border-mercury/60 pt-2">
+        <div className="sb-footer">
           {/* User avatar + name */}
-          <div className={['flex items-center gap-2 px-2 py-1.5', collapsed ? 'justify-center' : ''].join(' ')}>
-            <div className="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 ring-mercury relative">
+          <div className="sb-user">
+            <span className="av">
               {avatarUrl ? (
-                <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+                <img src={avatarUrl} alt="" />
               ) : (
-                <div className="w-full h-full bg-burnham flex items-center justify-center text-white text-[10px] font-bold">
-                  {initials}
-                </div>
+                initials
               )}
               {showUpdateDot && (
                 <span className="absolute top-0 right-0 w-2 h-2 bg-pastel border border-white rounded-full" />
               )}
-            </div>
+            </span>
             {!collapsed && (
-              <span className="text-[11px] text-burnham truncate font-medium">{fullName || user.email}</span>
+              <span>{fullName || user.email}</span>
             )}
           </div>
 
           <button
             onClick={() => setSettingsOpen(true)}
-            className={[
-              'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-sm text-shuttle hover:bg-mercury/50 hover:text-burnham transition-all',
-              collapsed ? 'justify-center' : '',
-            ].join(' ')}
+            className="sb-row w-[calc(100%-16px)]"
           >
             <Gear size={15} className="shrink-0" />
             {!collapsed && (
               <>
-                <span className="flex-1 text-left text-[11px]">Settings</span>
+                <span className="flex-1 text-left">Settings</span>
                 {showUpdateDot && (
                   <span className="text-[10px] font-medium text-pastel bg-gossip/40 px-1.5 py-0.5 rounded-full">update</span>
                 )}
@@ -359,13 +338,10 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
 
           <button
             onClick={() => supabase.auth.signOut()}
-            className={[
-              'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-sm text-shuttle hover:bg-mercury/50 hover:text-burnham transition-all',
-              collapsed ? 'justify-center' : '',
-            ].join(' ')}
+            className="sb-row w-[calc(100%-16px)]"
           >
             <SignOut size={15} className="shrink-0" />
-            {!collapsed && <span className="text-[11px]">Sign out</span>}
+            {!collapsed && <span>Sign out</span>}
           </button>
 
           <SectionDivider collapsed={collapsed} />
@@ -374,10 +350,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
           <button
             onClick={toggleCollapsed}
             title={collapsed ? 'Expand sidebar (⌘\\)' : 'Collapse sidebar (⌘\\)'}
-            className={[
-              'w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs text-shuttle/60 hover:bg-mercury/50 hover:text-burnham transition-all',
-              collapsed ? 'justify-center' : '',
-            ].join(' ')}
+            className="sb-row w-[calc(100%-16px)]"
           >
             {collapsed ? (
               <ArrowLeft size={13} className="rotate-180" />
@@ -385,7 +358,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
               <>
                 <ListIcon size={13} />
                 <span>Collapse</span>
-                <span className="ml-auto text-[10px] font-mono bg-mercury/40 px-1 py-0.5 rounded">⌘\</span>
+                <span className="shortcut ml-auto">⌘\</span>
               </>
             )}
           </button>
@@ -394,7 +367,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
 
       {/* Main content */}
       <main
-        className={['flex-1 min-h-screen transition-all duration-200 bg-[#F4F4F4]', contentMargin].join(' ')}
+        className="main"
         style={{ zoom: zoom / 100 }}
       >
         {children}

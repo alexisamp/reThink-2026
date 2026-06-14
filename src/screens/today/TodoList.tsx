@@ -1,16 +1,10 @@
 // TodoList — Today's todos (the HERO). Priority / milestone grouping, featured
 // star, milestone + mention chips, AM/PM block, inline edit, add, done section.
 // Visual contract ported from the reThink design bundle (TodoList.jsx).
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, Star, TrashSimple, CaretDown, DotsSixVertical, HourglassMedium } from '@phosphor-icons/react'
-import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { Check, Star, TrashSimple, CaretDown, DotsSixVertical } from '@phosphor-icons/react'
+import { arrayMove } from '@dnd-kit/sortable'
 import type { Todo, TodoContentSegment, TodoMentionKind } from '@/types'
 import MentionEditor, { FileChip, MentionChip as RichMentionChip } from './MentionEditor'
 import type { GroupBy, Mention, TodoMilestoneOption } from './types'
@@ -168,20 +162,26 @@ interface RowProps {
   onToggle: (id: string) => void
   onDelete: (id: string) => void
   onStar: (id: string) => void
-  onToggleWaiting: (id: string) => void
   onEditText: (id: string, text: string, contentSegments: TodoContentSegment[], links?: TodoLinks) => void
   onCreateMention: (kind: TodoMentionKind, name: string, companyId?: string | null) => Promise<Mention | null>
   onChangeMilestone: (id: string, milestoneId: string | null) => void
   onMilestoneClick?: (id: string) => void
-  dragRef?: (el: HTMLElement | null) => void
-  dragStyle?: CSSProperties
-  dragHandle?: ReactNode
+  dragState?: {
+    dragId: string | null
+    overId: string | null
+    grabbableId: string | null
+    setGrabbableId: (id: string | null) => void
+    onDragStart: (id: string, e: DragEvent<HTMLDivElement>) => void
+    onDragEnter: (id: string, e: DragEvent<HTMLDivElement>) => void
+    onDrop: (id: string, e: DragEvent<HTMLDivElement>) => void
+    onDragEnd: () => void
+  }
 }
 
 function TodoRow({
   todo, priorityNumber, milestone, hideMilestone, mentions, mentionOptions, milestoneOptions, milestoneColor,
-  onToggle, onDelete, onStar, onToggleWaiting, onEditText, onCreateMention, onChangeMilestone, onMilestoneClick,
-  dragRef, dragStyle, dragHandle,
+  onToggle, onDelete, onStar, onEditText, onCreateMention, onChangeMilestone, onMilestoneClick,
+  dragState,
 }: RowProps) {
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
@@ -241,11 +241,34 @@ function TodoRow({
   }
   const cancel = () => { setEditing(false) }
 
+  const draggable = Boolean(dragState && !todo.completed)
+  const isDragging = dragState?.dragId === todo.id
+  const isOver = dragState?.overId === todo.id && dragState?.dragId !== todo.id
+  const grabbable = dragState?.grabbableId === todo.id
+
   return (
-    <div ref={dragRef} style={dragStyle} className={`td-todo${editing ? ' editing' : ''}${todo.is_featured ? ' featured' : ''}${todo.completed ? ' done' : ''}${todo.waiting ? ' waiting' : ''}`}>
-      {dragHandle}
+    <div
+      draggable={draggable && grabbable}
+      onDragStart={e => dragState?.onDragStart(todo.id, e)}
+      onDragEnter={e => dragState?.onDragEnter(todo.id, e)}
+      onDragOver={e => { if (draggable) e.preventDefault() }}
+      onDrop={e => dragState?.onDrop(todo.id, e)}
+      onDragEnd={dragState?.onDragEnd}
+      className={`todo td-todo${editing ? ' editing' : ''}${todo.is_featured ? ' featured' : ''}${todo.completed ? ' done' : ''}${todo.waiting ? ' waiting' : ''}${isDragging ? ' dragging' : ''}${isOver ? ' drop-over' : ''}`}
+    >
+      {draggable && (
+        <span
+          className="todo-grip grip-todo"
+          title="Drag to reorder, or drop in Backlog"
+          onMouseDown={() => dragState?.setGrabbableId(todo.id)}
+          onMouseUp={() => dragState?.setGrabbableId(null)}
+          onMouseLeave={() => dragState?.setGrabbableId(null)}
+        >
+          <DotsSixVertical size={12} />
+        </span>
+      )}
       <span className="pri">{priorityNumber ?? ''}</span>
-      <button className={`td-cb${todo.completed ? ' checked' : ''}`} onClick={() => onToggle(todo.id)} aria-label="Toggle done">
+      <button className={`cb td-cb${todo.completed ? ' checked' : ''}`} onClick={() => onToggle(todo.id)} aria-label="Toggle done">
         {todo.completed && <Check size={9} weight="bold" />}
       </button>
       <div className="text-area" onClick={() => !editing && !todo.completed && setEditing(true)}>
@@ -277,11 +300,6 @@ function TodoRow({
                   onOpenDetail={() => { if (todo.milestone_id && onMilestoneClick) onMilestoneClick(todo.milestone_id) }}
                 />
               )}
-              {todo.waiting && (
-                <button className="td-chip-waiting clickable" onClick={(e) => { e.stopPropagation(); onToggleWaiting(todo.id) }}>
-                  <HourglassMedium size={10} /> on hold
-                </button>
-              )}
             </span>
           </>
         )}
@@ -295,38 +313,14 @@ function TodoRow({
         >
           <Star size={12} weight={todo.is_featured ? 'fill' : 'regular'} />
         </button>
-        <button
-          className={`hold${todo.waiting ? ' on' : ''}`}
-          title={todo.waiting ? 'Remove on hold' : 'Mark on hold'}
-          onClick={() => onToggleWaiting(todo.id)}
-        >
-          <HourglassMedium size={12} weight={todo.waiting ? 'fill' : 'regular'} />
-        </button>
         <button title="Delete" onClick={() => onDelete(todo.id)}><TrashSimple size={12} /></button>
       </span>
     </div>
   )
 }
 
-function SortableTodoRow(props: RowProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.todo.id })
-  const style: CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    position: isDragging ? 'relative' : undefined,
-    zIndex: isDragging ? 20 : undefined,
-  }
-  const handle = (
-    <button className="grip-todo" {...attributes} {...listeners} title="Drag to reorder" aria-label="Drag to reorder">
-      <DotsSixVertical size={11} />
-    </button>
-  )
-  return <TodoRow {...props} dragRef={setNodeRef} dragStyle={style} dragHandle={handle} />
-}
-
 function AddTodo({
-  onAdd, mentionOptions, milestoneOptions, onCreateMention, label = 'Type a todo...',
+  onAdd, mentionOptions, milestoneOptions, onCreateMention, label = 'Add a task',
 }: {
   onAdd: (text: string, milestoneId: string | null, contentSegments: TodoContentSegment[], links: TodoLinks) => void
   mentionOptions: Mention[]
@@ -367,19 +361,19 @@ function AddTodo({
 
   if (!editing) {
     return (
-      <button className="td-add empty-row" onClick={() => setEditing(true)}>
-        <span className="td-cb ghost" />
+      <button className="add-todo td-add empty-row" onClick={() => setEditing(true)}>
+        <span className="cb td-cb ghost" />
         <span className="td-add-placeholder">{label}</span>
       </button>
     )
   }
   return (
-    <div className="td-add">
-      <span className="td-cb" />
+    <div className="add-todo td-add">
+      <span className="cb td-cb" />
       <MentionEditor
         key={editorKey}
         autoFocus
-        placeholder="Type a todo...  @ for CRM, / for milestone"
+        placeholder="What's next?"
         initialSegments={[]}
         mentionOptions={mentionOptions}
         milestoneOptions={milestoneOptions}
@@ -447,31 +441,64 @@ interface TodoListProps {
   onToggle: (id: string) => void
   onDelete: (id: string) => void
   onStar: (id: string) => void
-  onToggleWaiting: (id: string) => void
   onEditText: (id: string, text: string, contentSegments: TodoContentSegment[], links?: TodoLinks) => void
   onAdd: (text: string, milestoneId: string | null, contentSegments: TodoContentSegment[], links?: TodoLinks) => void
   onCreateMention: (kind: TodoMentionKind, name: string, companyId?: string | null) => Promise<Mention | null>
   onChangeMilestone: (id: string, milestoneId: string | null) => void
   onMilestoneClick: (id: string) => void
   onReorder?: (orderedActiveIds: string[]) => void
+  onDragArm?: (armed: boolean) => void
 }
 
 export default function TodoList({
   todos, milestoneName, milestoneColor, milestoneTotal, milestoneOrder, resolveMentions, mentionOptions, milestoneOptions,
-  groupBy, onChangeGroup, onToggle, onDelete, onStar, onToggleWaiting, onEditText, onAdd, onCreateMention, onChangeMilestone, onMilestoneClick, onReorder,
+  groupBy, onChangeGroup, onToggle, onDelete, onStar, onEditText, onAdd, onCreateMention, onChangeMilestone, onMilestoneClick, onReorder, onDragArm,
 }: TodoListProps) {
   const active = todos.filter(t => !t.completed)
   const done = todos.filter(t => t.completed)
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
+  const [grabbableId, setGrabbableId] = useState<string | null>(null)
 
-  const handleDragEnd = (e: DragEndEvent) => {
-    const { active: a, over } = e
-    if (!over || a.id === over.id || !onReorder) return
+  const reorderByDrop = (fromId: string, toId: string) => {
+    if (fromId === toId || !onReorder) return
     const ids = active.map(t => t.id)
-    const from = ids.indexOf(a.id as string)
-    const to = ids.indexOf(over.id as string)
+    const from = ids.indexOf(fromId)
+    const to = ids.indexOf(toId)
     if (from < 0 || to < 0) return
     onReorder(arrayMove(ids, from, to))
+  }
+  const dragState = {
+    dragId,
+    overId,
+    grabbableId,
+    setGrabbableId,
+    onDragStart: (id: string, e: DragEvent<HTMLDivElement>) => {
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/todo-id', id)
+      setDragId(id)
+      onDragArm?.(true)
+    },
+    onDragEnter: (id: string, e: DragEvent<HTMLDivElement>) => {
+      if (!dragId) return
+      e.preventDefault()
+      setOverId(id)
+    },
+    onDrop: (id: string, e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      const fromId = e.dataTransfer.getData('text/todo-id') || dragId
+      if (fromId) reorderByDrop(fromId, id)
+      setDragId(null)
+      setOverId(null)
+      setGrabbableId(null)
+      onDragArm?.(false)
+    },
+    onDragEnd: () => {
+      setDragId(null)
+      setOverId(null)
+      setGrabbableId(null)
+      onDragArm?.(false)
+    },
   }
 
   // priority numbers global to active list (1..3)
@@ -495,8 +522,8 @@ export default function TodoList({
   })()
 
   return (
-    <section className="td-section">
-      <div className="td-section-hd">
+    <section className="section td-section">
+      <div className="section-hd td-section-hd">
         <h3>Today's todos</h3>
         <div className="rule" />
         <span className="count">{active.length} active · {done.length} done</span>
@@ -505,20 +532,17 @@ export default function TodoList({
 
       {groupBy === 'priority' && (
         <>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={active.map(t => t.id)} strategy={verticalListSortingStrategy}>
-              {active.map(t => (
-                <SortableTodoRow
-                  key={t.id} todo={t} priorityNumber={priMap.get(t.id)}
-                  milestone={milestoneName(t.milestone_id)} mentions={resolveMentions(t)}
-                  mentionOptions={mentionOptions}
-                  milestoneOptions={milestoneOptions}
-                  milestoneColor={milestoneColor(t.milestone_id)}
-                  onToggle={onToggle} onDelete={onDelete} onStar={onStar} onToggleWaiting={onToggleWaiting} onEditText={onEditText} onCreateMention={onCreateMention} onChangeMilestone={onChangeMilestone} onMilestoneClick={onMilestoneClick}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
+          {active.map(t => (
+            <TodoRow
+              key={t.id} todo={t} priorityNumber={priMap.get(t.id)}
+              milestone={milestoneName(t.milestone_id)} mentions={resolveMentions(t)}
+              mentionOptions={mentionOptions}
+              milestoneOptions={milestoneOptions}
+              milestoneColor={milestoneColor(t.milestone_id)}
+              dragState={dragState}
+              onToggle={onToggle} onDelete={onDelete} onStar={onStar} onEditText={onEditText} onCreateMention={onCreateMention} onChangeMilestone={onChangeMilestone} onMilestoneClick={onMilestoneClick}
+            />
+          ))}
           {active.length === 0 && (
             <div className="td-ms-empty">Nothing yet. Add the first thing that matters today.</div>
           )}
@@ -550,7 +574,8 @@ export default function TodoList({
                 mentionOptions={mentionOptions}
                 milestoneOptions={milestoneOptions}
                 milestoneColor={milestoneColor(t.milestone_id)}
-                onToggle={onToggle} onDelete={onDelete} onStar={onStar} onToggleWaiting={onToggleWaiting} onEditText={onEditText} onCreateMention={onCreateMention} onChangeMilestone={onChangeMilestone} onMilestoneClick={onMilestoneClick}
+                dragState={dragState}
+                onToggle={onToggle} onDelete={onDelete} onStar={onStar} onEditText={onEditText} onCreateMention={onCreateMention} onChangeMilestone={onChangeMilestone} onMilestoneClick={onMilestoneClick}
               />
             ))}
             <AddTodo
@@ -578,7 +603,7 @@ export default function TodoList({
               mentionOptions={mentionOptions}
               milestoneOptions={milestoneOptions}
               milestoneColor={milestoneColor(t.milestone_id)}
-              onToggle={onToggle} onDelete={onDelete} onStar={onStar} onToggleWaiting={onToggleWaiting} onEditText={onEditText} onCreateMention={onCreateMention} onChangeMilestone={onChangeMilestone} onMilestoneClick={onMilestoneClick}
+              onToggle={onToggle} onDelete={onDelete} onStar={onStar} onEditText={onEditText} onCreateMention={onCreateMention} onChangeMilestone={onChangeMilestone} onMilestoneClick={onMilestoneClick}
             />
           ))}
         </div>

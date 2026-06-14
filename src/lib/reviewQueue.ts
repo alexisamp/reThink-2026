@@ -61,6 +61,42 @@ function textFrom(item: ReviewItem, payload: ReviewPayload, ...keys: string[]): 
   return item.body?.trim() || item.title
 }
 
+function compactName(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function sameLooseName(a: unknown, b: unknown): boolean {
+  const clean = (value: unknown) =>
+    typeof value === 'string'
+      ? value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '')
+      : ''
+  const left = clean(a)
+  const right = clean(b)
+  return Boolean(left && right && left === right)
+}
+
+function isKeyDatePayload(payload: ReviewPayload): boolean {
+  return payload.category === 'key_date' || Boolean(str(payload, 'event_type') || str(payload, 'date_value') || str(payload, 'date_precision'))
+}
+
+function hasIntroductionPayload(payload: ReviewPayload): boolean {
+  return payload.type === 'introduction' ||
+    payload.type === 'referral' ||
+    Boolean(
+      str(payload, 'introduced_person_name') ||
+      str(payload, 'introduced_to_name') ||
+      str(payload, 'connector_name') ||
+      str(payload, 'introduced_person_company') ||
+      str(payload, 'introduced_to_company') ||
+      str(payload, 'relationship_context') ||
+      str(payload, 'introduction_status')
+    )
+}
+
+function missingOptionalTable(error: { message?: string; code?: string } | null | undefined) {
+  return error?.code === '42P01' || /relation .* does not exist/i.test(error?.message ?? '')
+}
+
 async function markReviewed(item: ReviewItem, status: 'accepted' | 'dismissed', payload?: ReviewPayload, contactId?: string | null) {
   const patch: Record<string, unknown> = {
     status,
@@ -94,17 +130,34 @@ export async function acceptReviewItem(
 
   if (target === 'contact_fact') {
     const importance = Math.min(3, Math.max(1, Math.round(num(payload, 'importance') ?? 2)))
-    const res = await supabase.from('contact_facts').insert({
-      user_id: item.user_id,
-      contact_id: contactId,
-      category: oneOf(payload.category, FACT_CATEGORIES, 'other'),
-      label: str(payload, 'label'),
-      value: textFrom(item, payload, 'value', 'text', 'fact'),
-      importance,
-      expires_at: str(payload, 'expires_at'),
-      source: item.source === 'conversations' ? 'chat_capture' : 'import',
-    })
-    error = res.error
+    if (isKeyDatePayload(payload)) {
+      const res = await supabase.from('contact_key_dates').insert({
+        user_id: item.user_id,
+        contact_id: contactId,
+        event_type: str(payload, 'event_type') || 'important_date',
+        subject: str(payload, 'subject') || str(payload, 'label') || textFrom(item, payload, 'value', 'text', 'fact'),
+        relation: str(payload, 'relation'),
+        date_value: str(payload, 'date_value') || str(payload, 'date'),
+        date_precision: str(payload, 'date_precision') || 'unknown',
+        description: str(payload, 'description') || textFrom(item, payload, 'value', 'text', 'fact'),
+        source: item.source === 'conversations' ? 'chat_capture' : 'import',
+        source_interaction_date: str(payload, 'interaction_date') || str(payload, 'date') || null,
+      })
+      error = res.error
+    }
+    if (!isKeyDatePayload(payload) || missingOptionalTable(error)) {
+      const res = await supabase.from('contact_facts').insert({
+        user_id: item.user_id,
+        contact_id: contactId,
+        category: oneOf(payload.category, FACT_CATEGORIES, 'other'),
+        label: str(payload, 'label') || (isKeyDatePayload(payload) ? str(payload, 'subject') || str(payload, 'event_type') : null),
+        value: textFrom(item, payload, 'value', 'text', 'fact', 'description'),
+        importance,
+        expires_at: str(payload, 'expires_at'),
+        source: item.source === 'conversations' ? 'chat_capture' : 'import',
+      })
+      error = res.error
+    }
   }
 
   if (target === 'interaction') {
@@ -166,8 +219,32 @@ export async function acceptReviewItem(
       description: textFrom(item, payload, 'description', 'value', 'text'),
       date: str(payload, 'date') || today,
       direction: oneOf(payload.direction, ['given', 'received'] as const, 'given'),
-    })
+    }).select('id').single()
     error = res.error
+    const valueLogId = res.data?.id ?? null
+    if (!error && valueLogId && hasIntroductionPayload(payload)) {
+      const intro = await supabase.from('contact_introductions').upsert({
+        user_id: item.user_id,
+        source_contact_id: contactId,
+        connector_contact_id: sameLooseName(payload.connector_name, payload.source_contact_name) ? contactId : null,
+        introduced_contact_id: null,
+        introduced_to_contact_id: null,
+        connector_name: compactName(payload.connector_name),
+        introduced_person_name: compactName(payload.introduced_person_name),
+        introduced_person_company: compactName(payload.introduced_person_company),
+        introduced_to_name: compactName(payload.introduced_to_name),
+        introduced_to_company: compactName(payload.introduced_to_company),
+        relationship_context: compactName(payload.relationship_context) ?? textFrom(item, payload, 'description', 'value', 'text'),
+        status: compactName(payload.introduction_status) ?? (payload.type === 'referral' ? 'made' : 'made'),
+        direction: oneOf(payload.direction, ['given', 'received'] as const, 'given'),
+        confidence: compactName(payload.confidence) ?? 'medium',
+        source_channel: str(payload, 'source_channel') || str(payload, 'channel') || (item.source === 'conversations' ? 'whatsapp' : item.source),
+        source_interaction_date: str(payload, 'date') || today,
+        source_external_id: item.source_external_id ?? item.id,
+        source_value_log_id: valueLogId,
+      }, { onConflict: 'user_id,source_external_id' })
+      if (!missingOptionalTable(intro.error)) error = intro.error
+    }
   }
 
   if (target === 'playbook_entry') {
@@ -192,6 +269,9 @@ export async function acceptReviewItem(
   }
 
   if (error) return { ok: false, error: error.message }
+  if (item.id.startsWith('local-ai-staged:') || item.id.startsWith('remote-ai-staged:')) {
+    return { ok: true }
+  }
   const reviewError = await markReviewed(item, 'accepted', payload, contactId)
   return reviewError ? { ok: false, error: reviewError.message } : { ok: true }
 }
