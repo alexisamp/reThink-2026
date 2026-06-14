@@ -1,39 +1,59 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { MagnifyingGlass, Plus, Buildings, Users, UsersThree, MapPin, ChartLineUp, RocketLaunch, Target, Briefcase } from '@phosphor-icons/react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import CrmTable, { type CrmColumn } from '@/components/crm/CrmTable'
 import RecordPeek from '@/components/crm/RecordPeek'
+import {
+  Icon, CompanyCell, AbmChip, AccountStageChip, CoverageMini, PeopleStack,
+  NextStepCell, Mono, Avatar, AbmStrategyBlock, CoverageStrip,
+  type StackPerson,
+} from '@/components/crm/cells'
+import {
+  ICP_CFG, ACCOUNT_SOURCE_CFG, MOTION_CFG, ACCOUNT_STAGE_CFG, ACCOUNT_STAGE_ORDER,
+} from '@/lib/crmConfig'
+import { accountCoverage, personForCoverage, type CoveragePerson, type Coverage } from '@/lib/abm'
 import type { Company } from '@/types'
 
 interface CompanyRow extends Company {
-  people_count: number
+  people: StackPerson[]
   active_opps: number
   last_interaction_at: string | null
+  _icp: string | null
+  _stage: string | null
+  _cov: Coverage | null
 }
 
-const COMPANY_STAGES = [
-  { id: null, label: 'Unstaged', color: '#9CA3AF' },
-  { id: 'research', label: 'Research', color: '#94A3B8' },
-  { id: 'qualified', label: 'Qualified', color: '#79D65E' },
-  { id: 'active', label: 'Active', color: '#3E7A4E' },
-  { id: 'customer', label: 'Customer', color: '#22C55E' },
-  { id: 'nurture', label: 'Nurture', color: '#EAB308' },
-]
-
-function daysSince(dateStr: string | null): number | null {
-  if (!dateStr) return null
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
+// Real `icp` is free text — map onto the handoff's closed ICP keys.
+function normIcp(v: string | null | undefined): string | null {
+  if (!v) return null
+  const s = v.toLowerCase().trim()
+  if (s === 'icp1' || s === 'icp2' || s === 'icp3') return s
+  if (/\b1\b|seed|series\s*a/.test(s)) return 'icp1'
+  if (/\b2\b|series\s*b|saas/.test(s)) return 'icp2'
+  if (/\b3\b|network|b2b/.test(s)) return 'icp3'
+  return null
 }
 
-function formatAgo(days: number | null): string {
-  if (days === null) return '—'
-  if (days === 0) return 'Today'
-  if (days < 7) return `${days}d ago`
-  if (days < 30) return `${Math.floor(days / 7)}w ago`
-  if (days < 365) return `${Math.floor(days / 30)}mo ago`
-  return `${Math.floor(days / 365)}y ago`
+// Real `account_stage` → handoff stage key (keep raw if unknown; chip renders it).
+function normStage(v: string | null | undefined): string | null {
+  if (!v) return null
+  const s = v.toLowerCase().trim()
+  if (ACCOUNT_STAGE_CFG[s]) return s
+  if (/qualified|research|prospect/.test(s)) return 'target'
+  if (/active|engaged/.test(s)) return 'conversation'
+  if (/customer|won|opportunit/.test(s)) return 'opportunity'
+  return v
+}
+
+function normMotion(v: string | null | undefined): string | null {
+  if (!v) return null
+  const s = v.toLowerCase().trim()
+  return MOTION_CFG[s] ? s : null
+}
+function normSource(v: string | null | undefined): string | null {
+  if (!v) return null
+  const s = v.toLowerCase().trim()
+  return ACCOUNT_SOURCE_CFG[s] ? s : null
 }
 
 function formatNumber(n: number | null | undefined): string {
@@ -42,72 +62,53 @@ function formatNumber(n: number | null | undefined): string {
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
   return n.toString()
 }
-
-function CompanyAvatar({ company, size = 8 }: { company: Company; size?: number }) {
-  const logoSrc = company.logo_url
-    || (company.domain
-      ? `https://www.google.com/s2/favicons?domain=${company.domain}&sz=128`
-      : null)
-
-  const dim = `w-${size} h-${size}`
-  if (logoSrc) {
-    return (
-      <img
-        src={logoSrc}
-        alt={company.name}
-        className={`${dim} rounded object-cover border border-mercury bg-white`}
-        onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-      />
-    )
-  }
-  const letter = company.name[0]?.toUpperCase() ?? '?'
-  return (
-    <div className={`${dim} rounded bg-gossip flex items-center justify-center text-burnham font-semibold text-sm border border-pastel`}>
-      {letter}
-    </div>
-  )
+function formatAgo(iso: string | null): string {
+  if (!iso) return '—'
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
+  if (days <= 0) return 'Today'
+  if (days < 7) return `${days}d`
+  if (days < 30) return `${Math.floor(days / 7)}w`
+  if (days < 365) return `${Math.floor(days / 30)}mo`
+  return `${Math.floor(days / 365)}y`
 }
 
 export default function PeopleCompanies() {
   const { user } = useAuth()
-  const navigate = useNavigate()
   const [rows, setRows] = useState<CompanyRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const [view, setView] = useState('table')
+  const [peekId, setPeekId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [newName, setNewName] = useState('')
   const [newSector, setNewSector] = useState('')
-  const [newDomain, setNewDomain] = useState('')
   const [saving, setSaving] = useState(false)
-  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table')
-  const [peekId, setPeekId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
     load()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   async function load() {
     if (!user) return
     setLoading(true)
-
     const [{ data: companies }, { data: contacts }, { data: opps }] = await Promise.all([
       supabase.from('companies').select('*').eq('user_id', user.id).order('name'),
-      supabase.from('outreach_logs').select('id, company_id, last_interaction_at').eq('user_id', user.id),
+      supabase.from('contacts').select('id, name, company, company_id, job_title, connection_strength, last_interaction_at, profile_photo_url, tier').eq('user_id', user.id),
       supabase.from('opportunities').select('id, company_id, stage').eq('user_id', user.id),
     ])
 
-    const contactsByCompany = new Map<string, Array<{ id: string; company_id: string | null; last_interaction_at: string | null }>>()
-    for (const c of (contacts ?? [])) {
-      if (!c.company_id) continue
-      const arr = contactsByCompany.get(c.company_id) ?? []
-      arr.push(c)
-      contactsByCompany.set(c.company_id, arr)
+    // people grouped per company (by id and by name, since contacts can carry either)
+    const byId = new Map<string, typeof contacts>()
+    const byName = new Map<string, typeof contacts>()
+    for (const c of contacts ?? []) {
+      if (c.company_id) { const a = byId.get(c.company_id) ?? []; a.push(c); byId.set(c.company_id, a) }
+      if (c.company) { const k = c.company.toLowerCase(); const a = byName.get(k) ?? []; a.push(c); byName.set(k, a) }
     }
+    const coveragePeople: CoveragePerson[] = (contacts ?? []).map(personForCoverage)
 
     const oppsByCompany = new Map<string, number>()
-    for (const o of (opps ?? [])) {
+    for (const o of opps ?? []) {
       if (!o.company_id) continue
       if (['exploring', 'active', 'negotiating'].includes(o.stage)) {
         oppsByCompany.set(o.company_id, (oppsByCompany.get(o.company_id) ?? 0) + 1)
@@ -115,20 +116,19 @@ export default function PeopleCompanies() {
     }
 
     const enriched: CompanyRow[] = (companies ?? []).map(co => {
-      const people = contactsByCompany.get(co.id) ?? []
-      const lastInt = people
-        .map(p => p.last_interaction_at)
-        .filter((x): x is string => x !== null)
-        .sort()
-        .pop() ?? null
+      const people = byId.get(co.id) ?? byName.get(co.name.toLowerCase()) ?? []
+      const lastInt = people.map(p => p.last_interaction_at).filter((x): x is string => !!x).sort().pop() ?? null
+      const _icp = normIcp(co.icp)
       return {
         ...co,
-        people_count: people.length,
+        people: people.map(p => ({ id: p.id, name: p.name, avatar: p.profile_photo_url })),
         active_opps: oppsByCompany.get(co.id) ?? 0,
         last_interaction_at: lastInt,
+        _icp,
+        _stage: normStage(co.account_stage),
+        _cov: accountCoverage({ name: co.name, icp: _icp }, coveragePeople),
       }
     })
-
     setRows(enriched)
     setLoading(false)
   }
@@ -136,259 +136,143 @@ export default function PeopleCompanies() {
   const addCompany = async () => {
     if (!user || !newName.trim()) return
     setSaving(true)
-    await supabase.from('companies').insert({
-      user_id: user.id,
-      name: newName.trim(),
-      sector: newSector.trim() || null,
-      domain: newDomain.trim() || null,
-    })
-    setNewName('')
-    setNewSector('')
-    setNewDomain('')
-    setShowAdd(false)
-    setSaving(false)
+    await supabase.from('companies').insert({ user_id: user.id, name: newName.trim(), sector: newSector.trim() || null })
+    setNewName(''); setNewSector(''); setShowAdd(false); setSaving(false)
     await load()
   }
 
-  const filtered = rows.filter(r =>
-    r.name.toLowerCase().includes(search.toLowerCase()) ||
-    (r.sector ?? '').toLowerCase().includes(search.toLowerCase())
-  )
-  const peek = filtered.find(row => row.id === peekId) ?? null
-  const peekIndex = peek ? filtered.findIndex(row => row.id === peek.id) : -1
-
-  const updateAccountStage = async (company: CompanyRow, stage: string | null) => {
-    setRows(prev => prev.map(row => row.id === company.id ? { ...row, account_stage: stage } : row))
-    await supabase.from('companies').update({ account_stage: stage }).eq('id', company.id)
+  const moveStage = async (row: CompanyRow, stage: string | null) => {
+    setRows(prev => prev.map(r => r.id === row.id ? { ...r, _stage: stage, account_stage: stage } : r))
+    await supabase.from('companies').update({ account_stage: stage }).eq('id', row.id)
   }
 
-  const columns: CrmColumn<CompanyRow>[] = [
-    {
-      key: 'company',
-      label: 'Company',
-      locked: true,
-      width: 'minmax(250px, 1.5fr)',
-      icon: <Buildings size={12} />,
-      render: row => (
-        <span className="flex min-w-0 items-center gap-2.5">
-          <CompanyAvatar company={row} size={8} />
-          <span className="min-w-0">
-            <span className="block truncate font-medium text-burnham">{row.name}</span>
-            <span className="block truncate text-[10px] text-shuttle/60">{row.headline || row.domain || '—'}</span>
-          </span>
-        </span>
-      ),
-    },
-    {
-      key: 'stage',
-      label: 'Stage',
-      width: '130px',
-      render: row => <span className="text-shuttle capitalize">{row.account_stage || '—'}</span>,
-    },
-    {
-      key: 'icp',
-      label: 'ICP',
-      width: '120px',
-      defaultOff: true,
-      render: row => <span className="text-shuttle">{row.icp || '—'}</span>,
-    },
-    {
-      key: 'motion',
-      label: 'Motion',
-      width: '120px',
-      defaultOff: true,
-      render: row => <span className="text-shuttle">{row.motion || '—'}</span>,
-    },
-    {
-      key: 'sector',
-      label: 'Industry',
-      width: '150px',
-      render: row => row.sector ? <span className="rounded bg-mercury px-2 py-0.5 text-[11px] text-burnham">{row.sector}</span> : <span className="text-shuttle">—</span>,
-    },
-    {
-      key: 'employees',
-      label: 'Employees',
-      width: '110px',
-      icon: <Users size={12} />,
-      render: row => <span className="text-burnham">{formatNumber(row.employees_count ?? row.members_on_linkedin)}</span>,
-    },
-    {
-      key: 'location',
-      label: 'HQ',
-      width: '170px',
-      icon: <MapPin size={12} />,
-      render: row => <span className="text-shuttle">{row.hq_location || '—'}</span>,
-    },
-    {
-      key: 'people',
-      label: 'People',
-      width: '90px',
-      icon: <UsersThree size={12} />,
-      render: row => <span className={row.people_count > 0 ? 'font-medium text-burnham' : 'text-shuttle/40'}>{row.people_count || '—'}</span>,
-    },
-    {
-      key: 'opps',
-      label: 'Opps',
-      width: '80px',
-      render: row => <span className={row.active_opps > 0 ? 'font-medium text-burnham' : 'text-shuttle/40'}>{row.active_opps || '—'}</span>,
-    },
-    {
-      key: 'next_step',
-      label: 'Next Step',
-      width: 'minmax(160px, 1fr)',
-      defaultOff: true,
-      render: row => <span className="text-shuttle">{row.next_step || '—'}</span>,
-    },
-    {
-      key: 'last',
-      label: 'Last Contact',
-      width: '110px',
-      render: row => <span className="text-shuttle">{formatAgo(daysSince(row.last_interaction_at))}</span>,
-    },
+  const peek = rows.find(r => r.id === peekId) ?? null
+  const peekIndex = peek ? rows.findIndex(r => r.id === peek.id) : -1
+
+  const columns: CrmColumn<CompanyRow>[] = useMemo(() => [
+    { key: 'name', label: 'Company', icon: <Icon name="buildings" size={12} />, width: '190px', locked: true, render: r => <CompanyCell name={r.name} mark={r.name[0]?.toUpperCase()} /> },
+    { key: 'icp', label: 'ICP', icon: <Icon name="crosshair" size={12} />, width: '150px', render: r => r._icp ? <AbmChip cfg={ICP_CFG} value={r._icp} kind="icp" accent /> : <span className="crm-chip muted">Connector</span> },
+    { key: 'stage', label: 'Stage', icon: <Icon name="flag" size={12} />, width: '128px', render: r => <AccountStageChip stage={r._stage} /> },
+    { key: 'coverage', label: 'Coverage', icon: <Icon name="users-three" size={12} />, width: '96px', render: r => <CoverageMini cov={r._cov} icp={r._icp} /> },
+    { key: 'people', label: 'Who you know', icon: <Icon name="users" size={12} />, width: '128px', render: r => <PeopleStack people={r.people} /> },
+    { key: 'next', label: 'Next step', icon: <Icon name="arrow-bend-up-right" size={12} />, width: 'minmax(240px, 1fr)', render: r => <NextStepCell value={r.next_step} /> },
+    // available attributes
+    { key: 'source', label: 'Source', icon: <Icon name="magnet" size={12} />, width: '128px', defaultOff: true, render: r => normSource(r.source) ? <AbmChip cfg={ACCOUNT_SOURCE_CFG} value={normSource(r.source)} kind="src" /> : <span className="crm-empty">—</span> },
+    { key: 'motion', label: 'Motion', icon: <Icon name="crosshair" size={12} />, width: '170px', defaultOff: true, render: r => normMotion(r.motion) ? <AbmChip cfg={MOTION_CFG} value={normMotion(r.motion)} kind="mot" /> : <span className="crm-empty">—</span> },
+    { key: 'opps', label: 'Opportunities', icon: <Icon name="target" size={12} />, width: '108px', align: 'right', defaultOff: true, render: r => <Mono dim={!r.active_opps}>{r.active_opps || '—'}</Mono> },
+    { key: 'industry', label: 'Industry', icon: <Icon name="briefcase" size={12} />, width: '150px', defaultOff: true, render: r => r.sector ? <span className="crm-chip muted">{r.sector}</span> : <span className="crm-empty">—</span> },
+    { key: 'last', label: 'Last activity', icon: <Icon name="clock" size={12} />, width: '96px', align: 'right', defaultOff: true, render: r => <Mono dim>{formatAgo(r.last_interaction_at)}</Mono> },
+  ], [])
+
+  const views = [
+    { id: 'table', label: 'All companies', type: 'table' as const },
+    { id: 'stage', label: 'By stage', type: 'kanban' as const },
+    { id: 'icp', label: 'By ICP', type: 'kanban' as const },
   ]
+
+  const kanban = view === 'stage'
+    ? {
+        groupLabel: 'Stage',
+        stages: [{ id: null, label: 'Unstaged', color: 'var(--mercury)' }, ...ACCOUNT_STAGE_ORDER.map(id => ({ id, label: ACCOUNT_STAGE_CFG[id].label!, color: ACCOUNT_STAGE_CFG[id].color }))],
+        groupValue: (r: CompanyRow) => (r._stage && ACCOUNT_STAGE_CFG[r._stage] ? r._stage : null),
+        cardColumns: ['icp', 'coverage', 'next'],
+        onMove: moveStage,
+      }
+    : view === 'icp'
+    ? {
+        groupLabel: 'ICP',
+        stages: [...Object.keys(ICP_CFG).map(id => ({ id, label: `${ICP_CFG[id].label} · ${ICP_CFG[id].tag}`, color: ICP_CFG[id].color })), { id: null, label: 'Connector / investor', color: 'var(--shuttle)' }],
+        groupValue: (r: CompanyRow) => r._icp,
+        cardColumns: ['stage', 'coverage', 'next'],
+      }
+    : undefined
 
   return (
     <div className="ppl-page wide">
-      {/* header */}
       <header className="ppl-hd">
         <div className="ppl-hd-l">
           <h1 className="ppl-title">Companies</h1>
-          <p className="ppl-sub">Every organization in your orbit — who you know inside, what's open there, and the next move.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-shuttle" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search companies..."
-              className="pl-8 pr-3 py-1.5 text-sm border border-mercury rounded-lg focus:outline-none focus:border-burnham bg-white w-48"
-            />
-          </div>
-          <button
-            onClick={() => setShowAdd(v => !v)}
-            className="crm-tool primary"
-          >
-            <Plus size={14} /> <span>New</span>
-          </button>
+          <p className="ppl-sub">The account is the unit. ICP sets the play, coverage shows who's inside, next step keeps it moving.</p>
         </div>
       </header>
 
-      {/* add form */}
       {showAdd && (
         <div className="flex items-center gap-3 px-6 py-3 bg-white border-b border-mercury">
-          <input
-            value={newName}
-            onChange={e => setNewName(e.target.value)}
-            placeholder="Company name *"
+          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Company name *" autoFocus
             className="flex-1 text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham"
-            autoFocus
-            onKeyDown={e => { if (e.key === 'Enter') addCompany(); if (e.key === 'Escape') setShowAdd(false) }}
-          />
-          <input
-            value={newSector}
-            onChange={e => setNewSector(e.target.value)}
-            placeholder="Sector"
-            className="w-36 text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham"
-          />
-          <input
-            value={newDomain}
-            onChange={e => setNewDomain(e.target.value)}
-            placeholder="Domain (e.g. acme.com)"
-            className="w-48 text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham"
-          />
-          <button
-            onClick={addCompany}
-            disabled={saving || !newName.trim()}
-            className="px-3 py-1.5 bg-burnham text-gossip text-sm rounded disabled:opacity-50"
-          >
-            Save
-          </button>
+            onKeyDown={e => { if (e.key === 'Enter') addCompany(); if (e.key === 'Escape') setShowAdd(false) }} />
+          <input value={newSector} onChange={e => setNewSector(e.target.value)} placeholder="Industry"
+            className="w-44 text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham" />
+          <button onClick={addCompany} disabled={saving || !newName.trim()} className="px-3 py-1.5 bg-burnham text-gossip text-sm rounded disabled:opacity-50">Save</button>
           <button onClick={() => setShowAdd(false)} className="text-sm text-shuttle hover:text-burnham">Cancel</button>
         </div>
       )}
 
-      <div>
-        {loading ? (
-          <div className="flex h-40 items-center justify-center text-sm text-shuttle">Loading...</div>
-        ) : (
-          <CrmTable
-            entity="companies"
-            title={search ? `Search: ${search}` : 'Accounts'}
-            viewName="Table"
-            rows={filtered}
-            columns={columns}
-            view={viewMode}
-            onViewChange={v => setViewMode(v as 'table' | 'kanban')}
-            views={[
-              { id: 'table', label: 'Table', type: 'table' },
-              { id: 'kanban', label: 'Kanban', type: 'kanban' },
-            ]}
-            addLabel="New Company"
-            onAdd={() => setShowAdd(true)}
-            onRowClick={row => setPeekId(row.id)}
-            storageKey="companies"
-            kanban={{
-              groupLabel: 'Account stage',
-              stages: COMPANY_STAGES,
-              groupValue: row => row.account_stage ?? null,
-              cardColumns: ['sector', 'people', 'opps', 'next_step'],
-              onMove: updateAccountStage,
-            }}
-          />
-        )}
-      </div>
+      {loading ? (
+        <div className="flex h-40 items-center justify-center text-sm text-shuttle">Loading...</div>
+      ) : (
+        <CrmTable
+          entity="companies"
+          viewName="All companies"
+          sortLabel="Stage"
+          rows={rows}
+          columns={columns}
+          view={view}
+          onViewChange={setView}
+          views={views}
+          addLabel="New company"
+          onAdd={() => setShowAdd(v => !v)}
+          onRowClick={r => setPeekId(r.id)}
+          selectedId={peekId}
+          storageKey="companies-abm"
+          kanban={kanban}
+        />
+      )}
 
       <RecordPeek
         open={Boolean(peek)}
         title={peek?.name ?? ''}
-        subtitle={peek ? [peek.sector, peek.hq_location].filter(Boolean).join(' · ') || peek.domain || undefined : undefined}
-        eyebrow="Company"
-        highlights={peek ? [
-          { label: 'Annual revenue', icon: <ChartLineUp size={13} />, value: '—' },
-          { label: 'Funding', icon: <RocketLaunch size={13} />, value: '—' },
-          { label: 'Linked people', icon: <Users size={13} />, value: `${peek.people_count} people` },
-          { label: 'Open opportunities', icon: <Target size={13} />, value: peek.active_opps },
-          { label: 'Headcount', icon: <UsersThree size={13} />, value: formatNumber(peek.employees_count) || peek.size || '—' },
-          { label: 'Industry', icon: <Briefcase size={13} />, value: peek.sector || '—' },
-        ] : []}
+        subtitle={peek?.sector || peek?.hq_location || undefined}
+        eyebrow="All companies"
+        avatar={peek ? <Avatar src={peek.logo_url} name={peek.name} sq size={40} /> : undefined}
         fields={peek ? [
-          { label: 'Name', icon: <Buildings size={12} />, value: peek.name },
-          { label: 'People', icon: <Users size={12} />, value: peek.people_count },
-          { label: 'Opportunities', icon: <Target size={12} />, value: peek.active_opps },
+          { label: 'Name', icon: <Icon name="buildings" size={12} />, value: peek.name },
+          { label: 'People', icon: <Icon name="users" size={12} />, value: peek.people.length },
+          { label: 'Opportunities', icon: <Icon name="target" size={12} />, value: peek.active_opps },
         ] : []}
-        recommendedMove={peek?.next_step ? {
-          verb: peek.next_step,
-          detail: peek.key_insight || peek.notes || 'Account next step from the company record.',
-          action: peek.next_step,
-          accent: 'var(--moss)',
-        } : null}
+        highlights={peek ? [
+          { label: 'Annual revenue', icon: <Icon name="chart-line-up" size={13} />, value: '—' },
+          { label: 'Funding', icon: <Icon name="rocket-launch" size={13} />, value: '—' },
+          { label: 'Linked people', icon: <Icon name="users" size={13} />, value: `${peek.people.length} people` },
+          { label: 'Open opportunities', icon: <Icon name="target" size={13} />, value: peek.active_opps },
+          { label: 'Headcount', icon: <Icon name="users-three" size={13} />, value: formatNumber(peek.employees_count) },
+          { label: 'Industry', icon: <Icon name="briefcase" size={13} />, value: peek.sector || '—' },
+        ] : []}
+        overviewBeforeHighlights
         onClose={() => setPeekId(null)}
-        onOpenFull={() => peek && navigate(`/people/companies/${peek.id}`)}
-        onPrev={peekIndex > 0 ? () => setPeekId(filtered[peekIndex - 1].id) : undefined}
-        onNext={peekIndex >= 0 && peekIndex < filtered.length - 1 ? () => setPeekId(filtered[peekIndex + 1].id) : undefined}
+        onPrev={peekIndex > 0 ? () => setPeekId(rows[peekIndex - 1].id) : undefined}
+        onNext={peekIndex >= 0 && peekIndex < rows.length - 1 ? () => setPeekId(rows[peekIndex + 1].id) : undefined}
       >
-        <div className="peek-block-label spaced">Account strategy</div>
-        <div className="peek-captured">
-          <div className="pk-cap">
-            <span className="pk-cap-ic">◎</span>
-            <span className="pk-cap-tx">{peek?.icp || 'No ICP set'}{peek?.account_stage ? ` · ${peek.account_stage}` : ''}</span>
-          </div>
-          <div className="pk-cap">
-            <span className="pk-cap-ic">↗</span>
-            <span className="pk-cap-tx">{peek?.motion || peek?.source || 'No account motion captured yet.'}</span>
-          </div>
-        </div>
-        <div className="peek-block-label spaced">Recent signals</div>
-        <div className="peek-signals">
-          <div className="pk-signal">
-            <span className="pk-sig-ic">•</span>
-            <span className="pk-sig-tx">{peek?.key_insight || peek?.notes || 'No recent signals captured yet.'}</span>
-            <span className="pk-sig-when">{formatAgo(daysSince(peek?.last_interaction_at ?? null))}</span>
-          </div>
-        </div>
+        {peek && (
+          <>
+            <div className="peek-block-label">Account strategy</div>
+            <AbmStrategyBlock company={{ icp: peek._icp, source: normSource(peek.source), motion: normMotion(peek.motion), stage: peek._stage, reason: peek.key_insight, gtm: peek.description, nextStep: peek.next_step }} />
+            <div className="peek-block-label spaced">Account coverage <Icon name="users-three" size={11} /></div>
+            <CoverageStrip cov={peek._cov} icp={peek._icp} />
+            <div className="peek-block-label spaced">Linked people <span className="peek-count">{peek.people.length}</span></div>
+            {peek.people.length ? (
+              <div className="peek-linked">
+                {peek.people.map(p => (
+                  <div className="pk-person" key={p.id}>
+                    <Avatar src={p.avatar} name={p.name} size={28} />
+                    <div className="pk-person-txt"><span className="pk-person-name">{p.name}</span></div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="peek-empty-lists">No one mapped inside yet — a company you can't reach.</p>}
+          </>
+        )}
       </RecordPeek>
-
     </div>
   )
 }
