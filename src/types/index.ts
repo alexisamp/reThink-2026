@@ -452,7 +452,7 @@ export interface Interaction {
 
 // ─── Review Queue ────────────────────────────────────────────────────────────
 
-export type ReviewSource = 'conversations' | 'manual'
+export type ReviewSource = 'notion' | 'conversations' | 'manual'
 export type ReviewStatus = 'pending' | 'accepted' | 'dismissed'
 export type ReviewTarget =
   | 'contact_fact'
