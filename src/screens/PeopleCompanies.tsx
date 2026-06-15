@@ -252,13 +252,8 @@ export default function PeopleCompanies() {
         onClose={() => setPeekId(null)}
         onPrev={peekIndex > 0 ? () => setPeekId(rows[peekIndex - 1].id) : undefined}
         onNext={peekIndex >= 0 && peekIndex < rows.length - 1 ? () => setPeekId(rows[peekIndex + 1].id) : undefined}
-      >
-        {peek && (
+        belowHighlights={peek && (
           <>
-            <div className="peek-block-label">Account strategy</div>
-            <AbmStrategyBlock company={{ icp: peek._icp, source: normSource(peek.source), motion: normMotion(peek.motion), stage: peek._stage, reason: peek.key_insight, gtm: peek.description, nextStep: peek.next_step }} />
-            <div className="peek-block-label spaced">Account coverage <Icon name="users-three" size={11} /></div>
-            <CoverageStrip cov={peek._cov} icp={peek._icp} />
             <div className="peek-block-label spaced">Linked people <span className="peek-count">{peek.people.length}</span></div>
             {peek.people.length ? (
               <div className="peek-linked">
@@ -270,6 +265,27 @@ export default function PeopleCompanies() {
                 ))}
               </div>
             ) : <p className="peek-empty-lists">No one mapped inside yet — a company you can't reach.</p>}
+            {(peek.key_insight || peek.notes) && (
+              <>
+                <div className="peek-block-label spaced">Recent signals <Icon name="pulse" size={11} /></div>
+                <div className="peek-signals">
+                  <div className="pk-signal">
+                    <span className="pk-sig-ic"><Icon name="pulse" size={12} /></span>
+                    <span className="pk-sig-tx">{peek.key_insight || peek.notes}</span>
+                    <span className="pk-sig-when">{formatAgo(peek.last_interaction_at)}</span>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      >
+        {peek && (
+          <>
+            <div className="peek-block-label">Account strategy</div>
+            <AbmStrategyBlock company={{ icp: peek._icp, source: normSource(peek.source), motion: normMotion(peek.motion), stage: peek._stage, reason: peek.key_insight, gtm: peek.description, nextStep: peek.next_step }} />
+            <div className="peek-block-label spaced">Account coverage <Icon name="users-three" size={11} /></div>
+            <CoverageStrip cov={peek._cov} icp={peek._icp} />
           </>
         )}
       </RecordPeek>

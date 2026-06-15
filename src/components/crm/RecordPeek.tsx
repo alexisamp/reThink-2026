@@ -58,6 +58,7 @@ interface RecordPeekProps {
   overviewBeforeHighlights?: boolean
   activityTitle?: string
   children?: ReactNode
+  belowHighlights?: ReactNode
   index?: number | null
   total?: number
   onClose: () => void
@@ -117,6 +118,7 @@ export default function RecordPeek({
   overviewBeforeHighlights = false,
   activityTitle = 'Activity',
   children,
+  belowHighlights,
   index,
   total,
   onClose,
@@ -241,6 +243,7 @@ export default function RecordPeek({
                     </>
                   )}
                   {!overviewBeforeHighlights && children && <div className="peek-body">{children}</div>}
+                  {belowHighlights && <div className="peek-body">{belowHighlights}</div>}
                 </>
               )}
               {tab === 'Activity' && (
