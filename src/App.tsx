@@ -10,7 +10,6 @@ import AppShell from '@/components/layout/AppShell'
 import Assessment from '@/screens/Assessment'
 import Today from '@/screens/Today'
 import ReviewQueue from '@/screens/ReviewQueue'
-import Conversations from '@/screens/Conversations'
 import People from '@/screens/People'
 import PersonDetail from '@/screens/PersonDetail'
 import PeopleCompanies from '@/screens/PeopleCompanies'
@@ -181,9 +180,6 @@ export default function App() {
 
         {/* Compact mode — standalone window, no AppShell */}
         <Route path="/compact" element={<CompactMode />} />
-
-        {/* Conversations — standalone app, no reThink AppShell/sidebar */}
-        <Route path="/conversations" element={user ? <Conversations /> : <Navigate to="/login" replace />} />
 
         {/* Assessment (needs auth, no workbook required) */}
         <Route
