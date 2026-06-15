@@ -18,6 +18,7 @@ import CrmTable, { type CrmColumn } from '@/components/crm/CrmTable'
 import ConversationsDrawer from '@/components/crm/ConversationsDrawer'
 import NewPersonPeek from '@/components/crm/NewPersonPeek'
 import RecordPeek from '@/components/crm/RecordPeek'
+import { TierChip, ValueBar } from '@/components/crm/cells'
 import { TierInfoHelper } from '@/components/TierInfoHelper'
 import MergeContactsModal from '@/components/MergeContactsModal'
 
@@ -258,6 +259,8 @@ export default function People() {
 
   // Contact channels (loaded separately)
   const [channels, setChannels] = useState<Array<{ outreach_log_id: string; channel: string }>>([])
+  // Value ledger per contact (given/received counts) for the List "Value" column
+  const [ledgerByContact, setLedgerByContact] = useState<Map<string, { given: number; received: number }>>(new Map())
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -272,6 +275,26 @@ export default function People() {
       .from('contact_channels')
       .select('outreach_log_id, channel')
       .then(({ data }) => setChannels(data ?? []))
+  }, [userId])
+
+  // Load value ledger (given/received per contact) for the List "Value" column
+  useEffect(() => {
+    if (!userId) return
+    supabase
+      .from('value_logs')
+      .select('outreach_log_id, direction')
+      .eq('user_id', userId)
+      .then(({ data }) => {
+        const map = new Map<string, { given: number; received: number }>()
+        for (const row of (data ?? []) as Array<{ outreach_log_id: string | null; direction: string }>) {
+          if (!row.outreach_log_id) continue
+          const cur = map.get(row.outreach_log_id) ?? { given: 0, received: 0 }
+          if (row.direction === 'given') cur.given += 1
+          else if (row.direction === 'received') cur.received += 1
+          map.set(row.outreach_log_id, cur)
+        }
+        setLedgerByContact(map)
+      })
   }, [userId])
 
   useEffect(() => {
@@ -731,20 +754,13 @@ export default function People() {
       key: 'value',
       label: 'Value',
       width: '104px',
-      render: contact => (
-        <span className={`val-bar ${contact.tier === 1 ? 'owe' : 'even'}`}>
-          <span className="val-num">{contact.tier === 1 ? '-1' : '0'}</span>
-          <span className="val-lbl">{contact.tier === 1 ? 'you owe' : 'even'}</span>
-        </span>
-      ),
+      render: contact => <ValueBar ledger={ledgerByContact.get(contact.id) ?? null} />,
     },
     {
       key: 'tier',
       label: 'Tier',
       width: '84px',
-      render: contact => contact.tier
-        ? <span className="crm-chip tier" style={{ '--chip': contact.tier === 1 ? '#3E7A4E' : contact.tier === 2 ? '#D97706' : '#64748B' } as CSSProperties}>T{contact.tier}</span>
-        : <span className="crm-empty">—</span>,
+      render: contact => <TierChip tier={contact.tier} />,
     },
     {
       key: 'company',
@@ -778,7 +794,7 @@ export default function People() {
       width: 'minmax(220px, 1fr)',
       render: contact => <span className="crm-next">{contact.notes || contact.looking_for || 'Add the next move.'}</span>,
     },
-  ], [channels])
+  ], [channels, ledgerByContact])
 
   return (
     <div className="ppl-page">
