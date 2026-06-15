@@ -20,6 +20,17 @@ import NewPersonPeek from '@/components/crm/NewPersonPeek'
 import RecordPeek from '@/components/crm/RecordPeek'
 import { TierChip, ValueBar, RelStatus } from '@/components/crm/cells'
 import { relFromContact } from '@/lib/abm'
+
+// Source label for an Activity row — matches the handoff peek (text "· WhatsApp"),
+// derived from the interaction's channel/type provenance.
+const INTERACTION_LABEL: Record<string, string> = {
+  whatsapp: 'WhatsApp', linkedin: 'LinkedIn', linkedin_msg: 'LinkedIn',
+  email: 'Gmail', call: 'Phone', virtual_coffee: 'Video call',
+  in_person: 'In person', x: 'X', exit5: 'Exit Five', other: 'Note',
+}
+function interactionLabel(i: { channel?: string | null; type?: string | null }): string | undefined {
+  return INTERACTION_LABEL[i.channel ?? ''] ?? INTERACTION_LABEL[i.type ?? '']
+}
 import { TierInfoHelper } from '@/components/TierInfoHelper'
 import MergeContactsModal from '@/components/MergeContactsModal'
 
@@ -1077,9 +1088,9 @@ export default function People() {
         listItems={[tierEditor, <span className="peek-tag">Recently contacted</span>].filter(Boolean)}
         docs={docsFromTodos(peekTodos)}
         activity={peekInteractions.map(interaction => ({
-          text: <><strong>You</strong> logged {interaction.type}{interaction.notes ? ` · ${interaction.notes}` : ''}</>,
+          text: <><strong>You</strong> {interaction.notes || `logged ${interaction.type.replace('_', ' ')}`}</>,
           when: interaction.interaction_date,
-          source: interaction.next_step || undefined,
+          source: interactionLabel(interaction),
         }))}
         onClose={() => setPeekContactId(null)}
         onPrev={peekIndex > 0 ? () => setPeekContactId(filtered[peekIndex - 1].id) : undefined}
