@@ -18,7 +18,8 @@ import CrmTable, { type CrmColumn } from '@/components/crm/CrmTable'
 import ConversationsDrawer from '@/components/crm/ConversationsDrawer'
 import NewPersonPeek from '@/components/crm/NewPersonPeek'
 import RecordPeek from '@/components/crm/RecordPeek'
-import { TierChip, ValueBar } from '@/components/crm/cells'
+import { TierChip, ValueBar, RelStatus } from '@/components/crm/cells'
+import { relFromContact } from '@/lib/abm'
 import { TierInfoHelper } from '@/components/TierInfoHelper'
 import MergeContactsModal from '@/components/MergeContactsModal'
 
@@ -737,7 +738,7 @@ export default function People() {
       key: 'status',
       label: 'Status',
       width: '116px',
-      render: contact => <span className="crm-pill">{contact.status}</span>,
+      render: contact => <RelStatus value={relFromContact(contact.connection_strength, contact.last_interaction_at)} />,
     },
     {
       key: 'this_week',
