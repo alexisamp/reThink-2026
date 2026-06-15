@@ -281,7 +281,6 @@ export default function ListDetail() {
             { label: 'Notes', value: peekMember.notes || String(peekMember.attributes?.notes ?? '—'), wide: true },
           ]}
           onClose={() => setPeekId(null)}
-          onOpenFull={() => navigate(`/people/${peekMember.contact.id}`)}
           onPrev={() => setPeekId(enriched[(peekIndex - 1 + enriched.length) % enriched.length].id)}
           onNext={() => setPeekId(enriched[(peekIndex + 1) % enriched.length].id)}
         >

@@ -61,7 +61,6 @@ interface RecordPeekProps {
   index?: number | null
   total?: number
   onClose: () => void
-  onOpenFull?: () => void
   onPrev?: () => void
   onNext?: () => void
 }
@@ -121,7 +120,6 @@ export default function RecordPeek({
   index,
   total,
   onClose,
-  onOpenFull,
   onPrev,
   onNext,
 }: RecordPeekProps) {
@@ -156,11 +154,6 @@ export default function RecordPeek({
           </div>
           {total && index != null ? <span className="peek-pos">{index + 1} of {total} in {eyebrow}</span> : <span className="peek-pos">{eyebrow}</span>}
           <span className="spk-top-grow" />
-          {onOpenFull && (
-            <button className="spk-use" onClick={onOpenFull}>
-              <ArrowSquareOut size={12} /> Open full
-            </button>
-          )}
         </div>
 
         <div className="peek-split">
