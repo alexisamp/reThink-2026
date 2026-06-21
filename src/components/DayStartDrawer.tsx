@@ -75,8 +75,8 @@ export default function DayStartDrawer({
 
         <section className="st-objective">
           <div className="st-obj-label"><Target size={12} /> Day objective</div>
-          {closedYesterday && goal ? (
-            <p className="st-obj-text">{goal}</p>
+          {closedYesterday && initialGoal ? (
+            <p className="st-obj-text">{initialGoal}</p>
           ) : (
             <input
               ref={inputRef}
