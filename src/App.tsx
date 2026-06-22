@@ -119,9 +119,38 @@ export default function App() {
       .then(({ data, error }) => setHasWorkbook(!error && (data?.length ?? 0) > 0))
   }, [user])
 
-  // Realtime subscription: app_signals table — open_contact signal from extension
+  // Realtime subscription: app_signals table — signals from the Chrome extension
   useEffect(() => {
     if (!user) return
+
+    // Writes the captured markdown to disk via the Tauri command, then deletes
+    // the signal. The extension waits up to 30s for this deletion before it
+    // confirms the local write (turns the icon green / unblocks AI analysis).
+    async function processWriteCaptureSignal(id: string, payload: Record<string, unknown>) {
+      if (!isRunningInTauri()) return // only the desktop app can write locally
+      const relativePath = payload?.relative_path as string | undefined
+      const markdown = payload?.markdown as string | undefined
+      if (!relativePath || markdown == null) return
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('write_capture_markdown', { relativePath, markdown })
+        await supabase.from('app_signals').delete().eq('id', id)
+      } catch {
+        // Leave the signal in place so a later attempt (or restart) can retry;
+        // the extension will time out and keep the icon blue rather than lie.
+      }
+    }
+
+    // Catch up on any capture-write signals created while the app was closed or
+    // not yet subscribed (e.g. user clicked AI in the extension, then opened the app).
+    supabase
+      .from('app_signals')
+      .select('id, action, payload')
+      .eq('user_id', user.id)
+      .eq('action', 'write_capture_file')
+      .then(({ data }) => {
+        (data ?? []).forEach(row => processWriteCaptureSignal(row.id, row.payload as Record<string, unknown>))
+      })
 
     const channel = supabase
       .channel('app-signals-realtime')
@@ -132,6 +161,10 @@ export default function App() {
         filter: `user_id=eq.${user.id}`,
       }, async (payload) => {
         const record = payload.new as { id: string; action: string; payload: Record<string, unknown> }
+        if (record.action === 'write_capture_file') {
+          await processWriteCaptureSignal(record.id, record.payload)
+          return
+        }
         if (record.action !== 'open_contact') return
         const contactId = record.payload?.contact_id as string | undefined
         if (!contactId) return
