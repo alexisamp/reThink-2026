@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
+import { isRunningInTauri } from '@/lib/tauriRuntime'
 
 // Screens (lazy-loaded later; for now direct imports)
 import Login from '@/screens/Login'
@@ -56,9 +57,9 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Deep-link OAuth callback (Tauri only) — system browser returns to rethink://oauth-callback?code=…
+  // Deep-link OAuth callback (Tauri only) — system browser returns to rethink://oauth-callback.
   useEffect(() => {
-    if (!updater.isTauri) return
+    if (!updater.isTauri && !isRunningInTauri()) return
     let unlisten: (() => void) | undefined
     ;(async () => {
       const { onOpenUrl, getCurrent } = await import('@tauri-apps/plugin-deep-link')
@@ -67,7 +68,19 @@ export default function App() {
           try {
             const url = new URL(raw)
             const code = url.searchParams.get('code')
-            if (code) await supabase.auth.exchangeCodeForSession(code)
+            if (code) {
+              await supabase.auth.exchangeCodeForSession(code)
+              continue
+            }
+            const fragment = new URLSearchParams(url.hash.replace(/^#/, ''))
+            const accessToken = fragment.get('access_token')
+            const refreshToken = fragment.get('refresh_token')
+            if (accessToken && refreshToken) {
+              await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              })
+            }
           } catch {}
         }
       }

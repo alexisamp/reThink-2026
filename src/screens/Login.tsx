@@ -1,24 +1,19 @@
 import { supabase } from '@/lib/supabase'
-import { invoke, isTauri } from '@tauri-apps/api/core'
+import { isRunningInTauri, openInSystemBrowser, TAURI_OAUTH_REDIRECT } from '@/lib/tauriRuntime'
 
 export default function Login() {
   const signInWithGoogle = async () => {
-    if (isTauri()) {
+    if (isRunningInTauri()) {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: 'rethink://oauth-callback',
+          redirectTo: TAURI_OAUTH_REDIRECT,
           skipBrowserRedirect: true,
           queryParams: { prompt: 'consent' },
         },
       })
       if (error || !data?.url) return
-      try {
-        await invoke('open_url_in_browser', { url: data.url })
-      } catch {
-        const { openUrl } = await import('@tauri-apps/plugin-opener')
-        await openUrl(data.url)
-      }
+      await openInSystemBrowser(data.url)
       return
     }
     await supabase.auth.signInWithOAuth({
