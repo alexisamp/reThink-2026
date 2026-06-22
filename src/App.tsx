@@ -56,6 +56,28 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Deep-link OAuth callback (Tauri only) — system browser returns to rethink://oauth-callback?code=…
+  useEffect(() => {
+    if (!updater.isTauri) return
+    let unlisten: (() => void) | undefined
+    ;(async () => {
+      const { onOpenUrl, getCurrent } = await import('@tauri-apps/plugin-deep-link')
+      const handle = async (urls: string[]) => {
+        for (const raw of urls) {
+          try {
+            const url = new URL(raw)
+            const code = url.searchParams.get('code')
+            if (code) await supabase.auth.exchangeCodeForSession(code)
+          } catch {}
+        }
+      }
+      const initial = await getCurrent()
+      if (initial && initial.length) await handle(initial)
+      unlisten = await onOpenUrl(handle)
+    })().catch(() => {})
+    return () => { unlisten?.() }
+  }, [updater.isTauri])
+
   useEffect(() => {
     supabase.auth.getSession()
       .then(({ data: { session } }) => {

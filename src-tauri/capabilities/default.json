@@ -12,6 +12,7 @@
     "process:allow-restart",
     "notification:default",
     "dialog:default",
+    "deep-link:default",
     {
       "identifier": "opener:allow-open-url",
       "allow": [

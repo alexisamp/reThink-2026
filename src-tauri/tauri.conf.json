@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "reThink",
-  "version": "0.1.149",
+  "version": "0.1.150",
   "identifier": "com.rethink.app",
   "build": {
     "frontendDist": "../dist",
@@ -61,6 +61,13 @@
         "https://github.com/alexisamp/reThink-2026/releases/latest/download/latest.json"
       ],
       "dialog": true
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "rethink"
+        ]
+      }
     }
   }
 }
