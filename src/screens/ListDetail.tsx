@@ -176,13 +176,6 @@ export default function ListDetail() {
     setAddColumnOpen(false)
   }
 
-  async function createTextAttribute() {
-    const name = window.prompt('Attribute name')
-    if (!name?.trim()) return
-    const attr = await workspace.createAttribute({ name, type: 'text', config: {} })
-    if (attr) await addColumn(`attr:${attr.id}`)
-  }
-
   async function handleDeleteList() {
     if (!list || !window.confirm(`Delete "${list.name}"? Entries for this list will be removed, but records stay intact.`)) return
     await deleteList(list.id)
@@ -360,14 +353,17 @@ export default function ListDetail() {
         }}
       />
 
-      {addColumnOpen && (
-        <AddColumnMenu
-          kind={list.parent_object}
-          attributes={attributes}
-          onAdd={addColumn}
-          onCreateAttribute={createTextAttribute}
-        />
-      )}
+      <AddColumnModal
+        open={addColumnOpen}
+        kind={list.parent_object}
+        attributes={attributes}
+        onClose={() => setAddColumnOpen(false)}
+        onAdd={addColumn}
+        onCreateAttribute={async input => {
+          const attr = await workspace.createAttribute(input)
+          if (attr) await addColumn(`attr:${attr.id}`)
+        }}
+      />
 
       <AddRecordModal
         open={addRecordOpen}
@@ -791,39 +787,181 @@ function CreateViewModal({
   )
 }
 
-function AddColumnMenu({
+function AddColumnModal({
+  open,
   kind,
   attributes,
+  onClose,
   onAdd,
   onCreateAttribute,
 }: {
+  open: boolean
   kind: ListRecordKind
   attributes: ListAttribute[]
+  onClose: () => void
   onAdd: (key: string) => void
-  onCreateAttribute: () => void
+  onCreateAttribute: (input: { name: string; type: ListAttribute['type']; config?: ListAttribute['config'] }) => Promise<void>
 }) {
+  const [query, setQuery] = useState('')
+  const [selectedKey, setSelectedKey] = useState('')
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newType, setNewType] = useState<ListAttribute['type']>('text')
+
+  useEffect(() => {
+    if (!open) return
+    setQuery('')
+    setSelectedKey('')
+    setDropdownOpen(false)
+    setCreateOpen(false)
+    setNewName('')
+    setNewType('text')
+  }, [open])
+
+  if (!open) return null
+
+  const objectLabel = LIST_OBJECT_LABELS[kind].singular
+  const objectAttributes = OBJECT_COLUMNS[kind].filter(column => {
+    const haystack = `${column.label} ${column.key}`.toLowerCase()
+    return haystack.includes(query.toLowerCase())
+  })
+  const listAttributes = attributes.filter(attribute => {
+    const haystack = `${attribute.name} ${attribute.type}`.toLowerCase()
+    return haystack.includes(query.toLowerCase())
+  })
+  const selectedObjectColumn = OBJECT_COLUMNS[kind].find(column => column.key === selectedKey)
+  const selectedListAttribute = attributes.find(attribute => attributeKey(attribute.id) === selectedKey)
+  const selectedLabel = selectedObjectColumn?.label ?? selectedListAttribute?.name ?? 'Choose an attribute...'
+
+  async function handleCreateAttribute() {
+    if (!newName.trim()) return
+    await onCreateAttribute({ name: newName.trim(), type: newType, config: {} })
+    onClose()
+  }
+
   return (
-    <div className="absolute right-0 top-8 z-30 w-[260px] rounded-xl border border-mercury bg-white p-2 shadow-xl">
-      <div className="px-2 pb-1 text-[11px] font-medium text-shuttle">Object attributes</div>
-      {OBJECT_COLUMNS[kind].map(column => (
-        <button key={column.key} onClick={() => onAdd(column.key)} className="flex h-8 w-full items-center rounded-md px-2 text-left text-[12px] text-midnight hover:bg-mercury/30">
-          {column.label}
-        </button>
-      ))}
-      <div className="mt-2 border-t border-mercury pt-2">
-        <div className="px-2 pb-1 text-[11px] font-medium text-shuttle">List entries</div>
-        {attributes.map(attribute => (
-          <button key={attribute.id} onClick={() => onAdd(`attr:${attribute.id}`)} className="flex h-8 w-full items-center rounded-md px-2 text-left text-[12px] text-midnight hover:bg-mercury/30">
-            {attribute.name}
+    <div className="atl-modal-backdrop" onMouseDown={onClose}>
+      <div className="atl-modal md" onMouseDown={event => event.stopPropagation()}>
+        <div className="atl-modal-head">
+          <h2>Create column</h2>
+          <button onClick={onClose} className="atl-x" aria-label="Close">
+            <X size={20} />
           </button>
-        ))}
-        <button onClick={onCreateAttribute} className="flex h-8 w-full items-center gap-1 rounded-md px-2 text-left text-[12px] font-medium text-burnham hover:bg-gossip/35">
-          <Plus size={13} />
-          Create new attribute
-        </button>
+        </div>
+        <div className="atl-modal-body">
+          <label className="atl-form-label">Attribute (required)</label>
+          <div className="atl-combo">
+            <button onClick={() => setDropdownOpen(prev => !prev)} className="atl-select-trigger">
+              <span>{selectedLabel}</span>
+              <CaretDown size={18} />
+            </button>
+            {dropdownOpen && (
+              <div className="atl-popover wide left-0 top-[56px]">
+                <div className="atl-pop-search">
+                  <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search attributes..." autoFocus />
+                </div>
+                <div className="max-h-[440px] overflow-auto pb-2">
+                  <div className="atl-pop-section">{objectLabel} attributes</div>
+                  {objectAttributes.map(column => (
+                    <button
+                      key={column.key}
+                      onClick={() => {
+                        setSelectedKey(column.key)
+                        setDropdownOpen(false)
+                      }}
+                      className={`atl-pop-row ${selectedKey === column.key ? 'active' : ''}`}
+                    >
+                      <span className="w-6 text-center text-[18px] text-[#202020]">{column.icon}</span>
+                      <span>{column.label}</span>
+                      {column.group === 'relationship' && <span className="meta">30 ›</span>}
+                    </button>
+                  ))}
+                  {listAttributes.length > 0 && (
+                    <>
+                      <div className="atl-pop-section">List attributes</div>
+                      {listAttributes.map(attribute => (
+                        <button
+                          key={attribute.id}
+                          onClick={() => {
+                            setSelectedKey(`attr:${attribute.id}`)
+                            setDropdownOpen(false)
+                          }}
+                          className={`atl-pop-row ${selectedKey === attributeKey(attribute.id) ? 'active' : ''}`}
+                        >
+                          <span className="w-6 text-center text-[18px] text-[#202020]">{attribute.type === 'status' ? '●' : attribute.type === 'number' ? '#' : attribute.type === 'date' ? '◷' : 'A'}</span>
+                          <span>{attribute.name}</span>
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+                <div className="atl-pop-footer">
+                  <button
+                    onClick={() => {
+                      setDropdownOpen(false)
+                      setCreateOpen(true)
+                    }}
+                    className="atl-pop-row"
+                  >
+                    <Plus size={20} />
+                    <span>Create new attribute</span>
+                    <span className="meta">›</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {createOpen && (
+            <div className="mt-5 rounded-[14px] border border-[var(--atl-border)] bg-[#fbfbfa] p-4">
+              <label className="atl-form-label">New list attribute</label>
+              <div className="grid grid-cols-[1fr_180px] gap-3">
+                <input value={newName} onChange={event => setNewName(event.target.value)} className="atl-input" placeholder="Attribute name" autoFocus />
+                <select value={newType} onChange={event => setNewType(event.target.value as ListAttribute['type'])} className="atl-input">
+                  <option value="text">Text</option>
+                  <option value="number">Number</option>
+                  <option value="date">Date</option>
+                  <option value="select">Select</option>
+                  <option value="checkbox">Checkbox</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {!createOpen && (
+            <div className="mt-24 text-center">
+              <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--atl-border)] bg-[#fbfbfa] text-[#8a8a8a]">
+                <Plus size={22} />
+              </div>
+              <h3 className="text-[18px] font-semibold text-[var(--atl-text)]">Add your first attribute column</h3>
+              <p className="mx-auto mt-1 max-w-[360px] text-[14px] leading-5 text-[#777]">
+                Create a custom attribute or add an existing attribute to this view.
+              </p>
+            </div>
+          )}
+        </div>
+        <div className="atl-modal-foot">
+          <button onClick={onClose} className="atl-button">Cancel</button>
+          <button
+            disabled={createOpen ? !newName.trim() : !selectedKey}
+            onClick={() => {
+              if (createOpen) void handleCreateAttribute()
+              else if (selectedKey) onAdd(selectedKey)
+            }}
+            className="atl-button primary disabled:opacity-40"
+          >
+            <Plus size={16} />
+            <span>{createOpen ? 'Create attribute' : 'Add attribute column'}</span>
+          </button>
+        </div>
       </div>
     </div>
   )
+}
+
+function attributeKey(id: string) {
+  return `attr:${id}`
 }
 
 function AddRecordModal({
@@ -852,12 +990,23 @@ function AddRecordModal({
   const [editingMembership, setEditingMembership] = useState<ListMembership | null>(null)
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [notes, setNotes] = useState('')
+  const [step, setStep] = useState<'choose' | 'duplicate' | 'details'>('choose')
 
   useEffect(() => {
     if (!open || !user) return
     const table = LIST_OBJECT_LABELS[list.parent_object].table
     supabase.from(table).select('*').eq('user_id', user.id).limit(80).then(({ data }) => setRecords((data ?? []) as unknown as RecordRow[]))
   }, [list.parent_object, open, user])
+
+  useEffect(() => {
+    if (!open) return
+    setSearch('')
+    setSelectedRecord(null)
+    setEditingMembership(null)
+    setValues({})
+    setNotes('')
+    setStep('choose')
+  }, [open])
 
   if (!open) return null
 
@@ -879,93 +1028,138 @@ function AddRecordModal({
     setEditingMembership(membership)
     setValues(membership.attributes ?? {})
     setNotes(membership.notes ?? '')
+    setStep('details')
+  }
+
+  function continueFromSelection() {
+    if (!selectedRecord) return
+    if (matchingEntries.length > 0) {
+      setStep('duplicate')
+      return
+    }
+    setStep('details')
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4" onMouseDown={onClose}>
-      <div className="flex h-[620px] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-mercury bg-white shadow-2xl" onMouseDown={event => event.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-mercury px-5 py-3">
-          <h2 className="text-[14px] font-semibold text-midnight">Add to {list.name}</h2>
-          <button onClick={onClose} className="rounded p-1 text-shuttle hover:bg-mercury/40"><X size={15} /></button>
+    <div className="atl-modal-backdrop" onMouseDown={onClose}>
+      <div className="atl-modal wide flex max-h-[82vh] min-h-[620px] flex-col" onMouseDown={event => event.stopPropagation()}>
+        <div className="atl-modal-head">
+          <h2>{step === 'choose' ? 'Choose record' : `Add to ${list.name}`}</h2>
+          <button onClick={onClose} className="atl-x" aria-label="Close">
+            <X size={20} />
+          </button>
         </div>
-        <div className="grid min-h-0 flex-1 grid-cols-[300px_1fr]">
-          <div className="min-h-0 border-r border-mercury">
-            <div className="border-b border-mercury p-3">
-              <div className="relative">
-                <MagnifyingGlass size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-shuttle" />
-                <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Choose record" className="h-9 w-full rounded-lg border border-mercury pl-8 pr-2 text-[12px] outline-none focus:border-burnham" autoFocus />
-              </div>
+
+        {step === 'choose' && (
+          <>
+            <div className="atl-pop-search h-[74px] shrink-0 border-b border-[var(--atl-border)] px-7">
+              <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Find record..." autoFocus />
             </div>
-            <div className="max-h-full overflow-auto p-2">
+            <div className="atl-record-picker-list flex-1">
+              <div className="mb-3 text-[13px] font-semibold uppercase text-[#777]">Records</div>
               {filtered.map(record => (
-                <button key={record.id} onClick={() => beginAdd(record)} className={`w-full rounded-lg px-2 py-2 text-left hover:bg-mercury/25 ${selectedRecord?.id === record.id ? 'bg-gossip/35' : ''}`}>
+                <button
+                  key={record.id}
+                  onClick={() => beginAdd(record)}
+                  onDoubleClick={() => {
+                    beginAdd(record)
+                    continueFromSelection()
+                  }}
+                  className={`atl-record-row ${selectedRecord?.id === record.id ? 'active' : ''}`}
+                >
                   <RecordName kind={list.parent_object} record={record} />
+                  <span className="atl-object-chip">{LIST_OBJECT_LABELS[list.parent_object].singular}</span>
                 </button>
               ))}
             </div>
-          </div>
-          <div className="min-h-0 overflow-auto p-5">
-            {!selectedRecord ? (
-              <div className="flex h-full items-center justify-center text-[13px] text-shuttle">Choose a record to add.</div>
-            ) : (
-              <div>
-                <RecordName kind={list.parent_object} record={selectedRecord} />
-                {matchingEntries.length > 0 && !editingMembership && (
-                  <div className="mt-4 rounded-lg border border-mercury p-3">
-                    <div className="text-[12px] font-semibold text-midnight">This record is already in the list.</div>
-                    <div className="mt-2 space-y-1">
-                      {matchingEntries.map((membership, index) => (
-                        <button key={membership.id} onClick={() => beginEdit(membership)} className="flex h-8 w-full items-center justify-between rounded px-2 text-[12px] hover:bg-mercury/30">
-                          <span>Edit existing entry {index + 1}</span>
-                          <PencilSimple size={13} />
-                        </button>
-                      ))}
-                    </div>
-                    <button onClick={() => setEditingMembership(null)} className="mt-2 flex h-8 items-center gap-1 rounded px-2 text-[12px] font-medium text-burnham hover:bg-gossip/35">
-                      <Plus size={13} />
-                      Add duplicate
+            <div className="atl-modal-foot">
+              <div className="atl-record-foot-left">
+                <span className="atl-key">↑</span>
+                <span className="atl-key">↓</span>
+                <span>Navigate</span>
+              </div>
+              <button onClick={continueFromSelection} disabled={!selectedRecord} className="atl-button primary disabled:opacity-40">
+                <span>Select record</span>
+                <span className="atl-key border-white/30 bg-white/10 text-white">↵</span>
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 'duplicate' && selectedRecord && (
+          <>
+            <div className="atl-modal-body flex-1">
+              <RecordName kind={list.parent_object} record={selectedRecord} />
+              <div className="mt-5 rounded-[16px] border border-[var(--atl-border)] p-4">
+                <div className="text-[15px] font-semibold text-[var(--atl-text)]">This record is already in the list.</div>
+                <div className="mt-3 space-y-1">
+                  {matchingEntries.map((membership, index) => (
+                    <button key={membership.id} onClick={() => beginEdit(membership)} className="atl-pop-row mx-0 w-full">
+                      <span>Edit existing entry {index + 1}</span>
+                      <PencilSimple size={16} className="ml-auto" />
                     </button>
-                  </div>
-                )}
-                <div className="mt-4 space-y-3">
-                  {statusAttribute && (
-                    <label className="block">
-                      <span className="mb-1 block text-[11px] font-medium text-shuttle">{statusAttribute.name}</span>
-                      <select value={String(values[statusAttribute.id] ?? '')} onChange={event => setValues(prev => ({ ...prev, [statusAttribute.id]: event.target.value }))} className="h-9 w-full rounded-lg border border-mercury px-3 text-[13px] outline-none focus:border-burnham">
-                        <option value="">No stage</option>
-                        {(statusAttribute.config.options ?? []).map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-                      </select>
-                    </label>
-                  )}
-                  {entryAttributes.map(attribute => (
-                    <label key={attribute.id} className="block">
-                      <span className="mb-1 block text-[11px] font-medium text-shuttle">{attribute.name}</span>
-                      <input value={String(values[attribute.id] ?? '')} onChange={event => setValues(prev => ({ ...prev, [attribute.id]: event.target.value }))} className="h-9 w-full rounded-lg border border-mercury px-3 text-[13px] outline-none focus:border-burnham" />
-                    </label>
                   ))}
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-medium text-shuttle">Notes</span>
-                    <textarea value={notes} onChange={event => setNotes(event.target.value)} className="h-20 w-full resize-none rounded-lg border border-mercury px-3 py-2 text-[13px] outline-none focus:border-burnham" />
-                  </label>
+                  <button
+                    onClick={() => {
+                      setEditingMembership(null)
+                      setValues(statusAttribute ? { [statusAttribute.id]: '' } : {})
+                      setNotes('')
+                      setStep('details')
+                    }}
+                    className="atl-pop-row mx-0 w-full"
+                  >
+                    <Plus size={18} />
+                    <span>Add duplicate</span>
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center justify-end gap-2 border-t border-mercury bg-alabaster/40 px-5 py-3">
-          <button onClick={onClose} className="rounded-lg px-3 py-1.5 text-[12px] text-shuttle hover:bg-mercury/40">Cancel</button>
-          <button
-            disabled={!selectedRecord}
-            onClick={() => {
-              if (!selectedRecord) return
-              if (editingMembership) onUpdate(editingMembership.id, values, notes || null)
-              else onAdd(selectedRecord.id, values, notes || null)
-            }}
-            className="rounded-lg bg-burnham px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-40"
-          >
-            {editingMembership ? 'Save entry' : 'Add to list'}
-          </button>
-        </div>
+            </div>
+            <div className="atl-modal-foot">
+              <button onClick={() => setStep('choose')} className="atl-button">Back</button>
+            </div>
+          </>
+        )}
+
+        {step === 'details' && selectedRecord && (
+          <>
+            <div className="atl-modal-body flex-1 overflow-auto">
+              <RecordName kind={list.parent_object} record={selectedRecord} />
+              <div className="mt-5 grid gap-4">
+                {statusAttribute && (
+                  <label className="block">
+                    <span className="atl-form-label">{statusAttribute.name}</span>
+                    <select value={String(values[statusAttribute.id] ?? '')} onChange={event => setValues(prev => ({ ...prev, [statusAttribute.id]: event.target.value }))} className="atl-input">
+                      <option value="">No stage</option>
+                      {(statusAttribute.config.options ?? []).map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                    </select>
+                  </label>
+                )}
+                {entryAttributes.map(attribute => (
+                  <label key={attribute.id} className="block">
+                    <span className="atl-form-label">{attribute.name}</span>
+                    <input value={String(values[attribute.id] ?? '')} onChange={event => setValues(prev => ({ ...prev, [attribute.id]: event.target.value }))} className="atl-input" />
+                  </label>
+                ))}
+                <label className="block">
+                  <span className="atl-form-label">Notes</span>
+                  <textarea value={notes} onChange={event => setNotes(event.target.value)} className="atl-textarea" />
+                </label>
+              </div>
+            </div>
+            <div className="atl-modal-foot">
+              <button onClick={() => setStep(matchingEntries.length ? 'duplicate' : 'choose')} className="atl-button">Back</button>
+              <button
+                onClick={() => {
+                  if (editingMembership) onUpdate(editingMembership.id, values, notes || null)
+                  else onAdd(selectedRecord.id, values, notes || null)
+                }}
+                className="atl-button primary"
+              >
+                {editingMembership ? 'Save entry' : 'Add to list'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
