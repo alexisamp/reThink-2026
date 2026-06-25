@@ -262,7 +262,6 @@ function TodoRow({
           title="Drag to reorder, or drop in Backlog"
           onMouseDown={() => dragState?.setGrabbableId(todo.id)}
           onMouseUp={() => dragState?.setGrabbableId(null)}
-          onMouseLeave={() => dragState?.setGrabbableId(null)}
         >
           <DotsSixVertical size={12} />
         </span>
@@ -476,6 +475,7 @@ export default function TodoList({
     onDragStart: (id: string, e: DragEvent<HTMLDivElement>) => {
       e.dataTransfer.effectAllowed = 'move'
       e.dataTransfer.setData('text/todo-id', id)
+      e.dataTransfer.setData('text/plain', id)
       setDragId(id)
       onDragArm?.(true)
     },
@@ -486,7 +486,7 @@ export default function TodoList({
     },
     onDrop: (id: string, e: DragEvent<HTMLDivElement>) => {
       e.preventDefault()
-      const fromId = e.dataTransfer.getData('text/todo-id') || dragId
+      const fromId = e.dataTransfer.getData('text/todo-id') || e.dataTransfer.getData('text/plain') || dragId
       if (fromId) reorderByDrop(fromId, id)
       setDragId(null)
       setOverId(null)

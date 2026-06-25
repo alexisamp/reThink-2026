@@ -1,18 +1,20 @@
 import {
   ArrowSquareOut,
   ArrowBendUpRight,
+  CaretLeft,
   CaretDown,
   CaretUp,
+  CheckSquare,
   DotsThree,
   EnvelopeSimple,
   FileText,
+  LinkSimple,
   NotePencil,
   Paperclip,
-  Phone,
   Star,
   X,
 } from '@phosphor-icons/react'
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 
 export interface PeekField {
   label: string
@@ -42,6 +44,15 @@ export interface PeekDoc {
   when?: string | null
 }
 
+type RecordPeekTab = { id: string; label: string; count?: number; content?: ReactNode }
+type RecordPeekSideSection = {
+  title: string
+  items?: ReactNode[]
+  empty?: ReactNode
+  actionLabel?: string
+  onAction?: () => void
+}
+
 interface RecordPeekProps {
   open: boolean
   title: string
@@ -59,6 +70,12 @@ interface RecordPeekProps {
   activityTitle?: string
   children?: ReactNode
   belowHighlights?: ReactNode
+  tabs?: RecordPeekTab[]
+  sideSections?: RecordPeekSideSection[]
+  actions?: ReactNode
+  onAddToList?: () => void
+  onBack?: () => void
+  backLabel?: string
   index?: number | null
   total?: number
   onClose: () => void
@@ -66,9 +83,11 @@ interface RecordPeekProps {
   onNext?: () => void
 }
 
-type PeekTab = 'Overview' | 'Activity' | 'Docs'
-
-const tabs: PeekTab[] = ['Overview', 'Activity', 'Docs']
+const defaultTabs: RecordPeekTab[] = [
+  { id: 'Overview', label: 'Overview' },
+  { id: 'Activity', label: 'Activity' },
+  { id: 'Docs', label: 'Docs' },
+]
 
 function EmptyValue() {
   return <span className="spk-empty">--</span>
@@ -119,17 +138,38 @@ export default function RecordPeek({
   activityTitle = 'Activity',
   children,
   belowHighlights,
+  tabs,
+  sideSections = [],
+  actions,
+  onAddToList,
+  onBack,
+  backLabel,
   index,
   total,
   onClose,
   onPrev,
   onNext,
 }: RecordPeekProps) {
-  const [tab, setTab] = useState<PeekTab>('Overview')
+  const activeTabs = tabs?.length ? tabs : defaultTabs
+  const tabsKey = activeTabs.map(item => item.id).join('|')
+  const [tab, setTab] = useState(activeTabs[0]?.id ?? 'Overview')
+  const [showAllFields, setShowAllFields] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(true)
+  const [notice, setNotice] = useState('')
+  const noticeRef = useRef<number | null>(null)
+  const visibleFields = showAllFields ? fields : fields.slice(0, 5)
+
+  const showNotice = (message: string) => {
+    setNotice(message)
+    if (noticeRef.current) window.clearTimeout(noticeRef.current)
+    noticeRef.current = window.setTimeout(() => setNotice(''), 2200)
+  }
 
   useEffect(() => {
-    setTab('Overview')
-  }, [title])
+    setTab((tabs?.length ? tabs : defaultTabs)[0]?.id ?? 'Overview')
+    setShowAllFields(false)
+    setDetailsOpen(true)
+  }, [title, tabsKey])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -142,6 +182,15 @@ export default function RecordPeek({
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose, onNext, onPrev, open])
 
+  useEffect(() => {
+    const onNotice = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail
+      if (typeof detail === 'string' && detail.trim()) showNotice(detail)
+    }
+    window.addEventListener('rethink:peek-notice', onNotice)
+    return () => window.removeEventListener('rethink:peek-notice', onNotice)
+  }, [])
+
   if (!open) return null
 
   return (
@@ -149,6 +198,7 @@ export default function RecordPeek({
       <div className="peek-bg" onClick={onClose} />
       <aside className="peek" role="dialog" aria-label={title || eyebrow}>
         <div className="peek-topbar">
+          {onBack && <button className="peek-x peek-back" onClick={onBack} aria-label={backLabel ?? 'Back'}><CaretLeft size={13} /><CaretLeft size={13} /></button>}
           <button className="peek-x" onClick={onClose} aria-label="Close record peek"><X size={14} /></button>
           <div className="peek-nav">
             <button onClick={onPrev} disabled={!onPrev} aria-label="Previous record"><CaretUp size={12} /></button>
@@ -156,6 +206,11 @@ export default function RecordPeek({
           </div>
           {total && index != null ? <span className="peek-pos">{index + 1} of {total} in {eyebrow}</span> : <span className="peek-pos">{eyebrow}</span>}
           <span className="spk-top-grow" />
+          <span className="peek-top-avatar" aria-hidden="true">A</span>
+          <button className="peek-top-icon" aria-label="Comments" onClick={() => showNotice('Comments are not connected yet')}><NotePencil size={13} /></button>
+          <button className="peek-top-icon" aria-label="Help" onClick={() => showNotice('Edit fields directly; relation rows open linked records')}>?</button>
+          <button className="peek-top-icon" aria-label="More" onClick={() => showNotice('More actions are not connected yet')}><DotsThree size={15} /></button>
+          <button className="peek-ask" onClick={() => showNotice('AI record assistant is not connected yet')}>Ask Attio</button>
         </div>
 
         <div className="peek-split">
@@ -166,32 +221,50 @@ export default function RecordPeek({
                 <span className="peek-name">{title}</span>
                 {subtitle && <p className="peek-sub">{subtitle}</p>}
               </div>
-              <button className="peek-icn" title="Favorite" aria-label="Favorite"><Star size={14} /></button>
+              <button className="peek-icn" title="Favorite" aria-label="Favorite" onClick={() => showNotice('Favorite is not connected yet')}><Star size={14} /></button>
             </div>
 
             <div className="peek-actions">
-              <button className="peek-primary"><EnvelopeSimple size={13} /> Compose email</button>
-              <button className="peek-icn sq" aria-label="Call"><Phone size={13} /></button>
-              <button className="peek-icn sq" aria-label="Note"><NotePencil size={13} /></button>
-              <button className="peek-icn sq" aria-label="More actions"><DotsThree size={15} /></button>
+              {actions ?? (
+                <>
+                  <button className="peek-primary" onClick={() => showNotice('Composer is not connected yet')}><EnvelopeSimple size={13} /> Compose email</button>
+                  {onAddToList && <button className="peek-primary" onClick={onAddToList}><FileText size={13} /> Add to list</button>}
+                  <button
+                    className="peek-primary"
+                    aria-label="Note"
+                    onClick={() => activeTabs.some(item => item.id === 'Notes') ? setTab('Notes') : showNotice('Notes are not available on this record')}
+                  >
+                    <NotePencil size={13} /> New note
+                  </button>
+                  <button className="peek-icn sq" aria-label="Copy record link" onClick={() => showNotice('Record link is not connected yet')}><LinkSimple size={13} /></button>
+                  <button className="peek-icn sq" aria-label="Create task" onClick={() => showNotice('Tasks are not connected yet')}><CheckSquare size={13} /></button>
+                </>
+              )}
             </div>
 
             {fields.length > 0 && (
               <div className="peek-section">
                 <div className="peek-section-hd">
-                  <span>Record details</span>
-                  <button className="peek-icn" aria-label="Collapse details"><CaretDown size={12} /></button>
+                  <span>Record Details</span>
+                  <button className={`peek-icn${detailsOpen ? ' open' : ''}`} onClick={() => setDetailsOpen(prev => !prev)} aria-label="Collapse details"><CaretDown size={12} /></button>
                 </div>
-                <div className="peek-fields">
-                  {fields.map(field => <FieldRow key={field.label} field={field} />)}
-                </div>
+                {detailsOpen && (
+                  <>
+                    <div className="peek-fields">
+                      {visibleFields.map(field => <FieldRow key={field.label} field={field} />)}
+                    </div>
+                    {fields.length > visibleFields.length && (
+                      <button className="peek-show-values" onClick={() => setShowAllFields(true)}>Show all values</button>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
             <div className="peek-section">
               <div className="peek-section-hd">
                 <span>Lists</span>
-                <a className="peek-addlist" href="#">Add to list</a>
+                {onAddToList && <button className="peek-addlist" onClick={onAddToList}>Add to list</button>}
               </div>
               <div className="peek-lists">
                 {listItems?.length
@@ -199,18 +272,33 @@ export default function RecordPeek({
                   : <span className="peek-empty-lists">Not in any list yet.</span>}
               </div>
             </div>
+
+            {sideSections.map(section => (
+              <div className="peek-section" key={section.title}>
+                <div className="peek-section-hd">
+                  <span>{section.title}</span>
+                  {section.actionLabel && <button className="peek-addlist" onClick={section.onAction}>{section.actionLabel}</button>}
+                </div>
+                <div className="peek-side-list">
+                  {section.items?.length
+                    ? section.items.map((item, i) => <div key={i}>{item}</div>)
+                    : <span className="peek-empty-lists">{section.empty ?? 'Set a value...'}</span>}
+                </div>
+              </div>
+            ))}
           </aside>
 
           <section className="peek-main">
             <div className="peek-tabs">
-              {tabs.map(item => (
-                <button key={item} className={`peek-tab${tab === item ? ' active' : ''}`} onClick={() => setTab(item)}>
-                  {item}{item === 'Docs' && docs.length > 0 ? <span className="peek-tab-ct">{docs.length}</span> : null}
+              {activeTabs.map(item => (
+                <button key={item.id} className={`peek-tab${tab === item.id ? ' active' : ''}`} onClick={() => setTab(item.id)}>
+                  {item.label}{item.count !== undefined ? <span className="peek-tab-ct">{item.count}</span> : null}
                 </button>
               ))}
             </div>
             <div className="peek-scroll">
-              {tab === 'Overview' && (
+              {activeTabs.find(item => item.id === tab)?.content ?? null}
+              {tab === 'Overview' && !activeTabs.find(item => item.id === tab)?.content && (
                 <>
                   {recommendedMove && (
                     <div className="peek-move" style={{ '--rc': recommendedMove.accent ?? 'var(--moss)' } as CSSProperties}>
@@ -246,7 +334,7 @@ export default function RecordPeek({
                   {belowHighlights && <div className="peek-body">{belowHighlights}</div>}
                 </>
               )}
-              {tab === 'Activity' && (
+              {tab === 'Activity' && !activeTabs.find(item => item.id === tab)?.content && (
                 <div>
                   <div className="peek-block-label spaced">{activityTitle} <a className="peek-viewall" href="#">View all</a></div>
                   {activity.length > 0 ? (
@@ -264,7 +352,7 @@ export default function RecordPeek({
                   )}
                 </div>
               )}
-              {tab === 'Docs' && (
+              {tab === 'Docs' && !activeTabs.find(item => item.id === tab)?.content && (
                 <div className="peek-docs">
                   <div className="peek-block-label">Linked documents <span className="peek-count">{docs.length}</span></div>
                   <p className="peek-docs-hint">Proposals, decks, briefs, contracts and file pills tied to this record.</p>
@@ -290,6 +378,7 @@ export default function RecordPeek({
           </section>
         </div>
       </aside>
+      <div className={`rp-toast${notice ? ' on' : ''}`}>{notice}</div>
     </>
   )
 }

@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
-  House, BookBookmark, Users, Buildings, Target,
-  Star, Flame, Gear, List as ListIcon,
+  House, Users, Buildings, Target,
+  Gear,
   MagnifyingGlass, CaretDown, CaretRight,
-  SignOut, ArrowLeft, CheckSquare,
+  SignOut, Bell, Note,
+  Plus,
 } from '@phosphor-icons/react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
@@ -12,6 +13,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useLists } from '@/hooks/useLists'
 import CommandPalette from '@/components/CommandPalette'
 import SettingsModal from '@/components/SettingsModal'
+import ListCreateModal from '@/components/ListCreateModal'
 import type { UpdaterState } from '@/hooks/useUpdater'
 
 const SIDEBAR_KEY = 'rethink-sidebar-collapsed'
@@ -86,21 +88,23 @@ function SectionHeader({
   collapsed,
   open,
   onToggle,
+  actions,
 }: {
   label: string
   collapsed: boolean
   open: boolean
   onToggle: () => void
+  actions?: ReactNode
 }) {
   if (collapsed) return <SectionDivider collapsed={collapsed} />
   return (
-    <button
-      onClick={onToggle}
-      className="sb-eyebrow w-full"
-    >
-      {open ? <CaretDown size={9} weight="bold" /> : <CaretRight size={9} weight="bold" />}
-      {label}
-    </button>
+    <div className="sb-eyebrow flex w-full items-center">
+      <button onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
+        {open ? <CaretDown size={9} weight="bold" /> : <CaretRight size={9} weight="bold" />}
+        <span className="truncate">{label}</span>
+      </button>
+      {actions && <span className="ml-auto flex items-center gap-0.5">{actions}</span>}
+    </div>
   )
 }
 
@@ -112,6 +116,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
   const [listsOpen, setListsOpen] = useState(() => localStorage.getItem(LISTS_KEY) !== 'false')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [listCreateOpen, setListCreateOpen] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
   const [zoom, setZoom] = useState<ZoomLevel>(() => {
     const saved = parseInt(localStorage.getItem(ZOOM_KEY) ?? '100', 10)
@@ -170,7 +175,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
   const fullName = user.user_metadata?.full_name as string | undefined
   const initials = (fullName || user.email || 'U')[0].toUpperCase()
 
-  const sidebarPx = collapsed ? '48px' : '200px'
+  const sidebarPx = collapsed ? '48px' : '212px'
 
   return (
     <div
@@ -188,7 +193,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         <div className="sb-brand">
           <img src="/logo.png" alt="reThink" />
           {!collapsed && (
-            <span className="word">reThink 2026</span>
+            <span className="word">Meridian 71</span>
           )}
         </div>
 
@@ -209,40 +214,40 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
 
         {/* Main nav */}
         <nav className="flex-1 overflow-y-auto py-1">
-          <NavItem path="/today" icon={<House size={16} />} label="Today" collapsed={collapsed} />
+          <NavItem path="/today" icon={<House size={15} />} label="Home" collapsed={collapsed} />
           <NavItem
             path="/review"
-            icon={<CheckSquare size={16} />}
+            icon={<Bell size={15} />}
             label={reviewCount > 0 ? `Review (${reviewCount})` : 'Review'}
             collapsed={collapsed}
           />
-          <NavItem path="/playbook" icon={<BookBookmark size={16} />} label="Playbook" collapsed={collapsed} />
-          <NavItem path="/milestones" icon={<Target size={16} />} label="Goals" collapsed={collapsed} />
+          <NavItem path="/playbook" icon={<Note size={15} />} label="Playbook" collapsed={collapsed} />
+          <NavItem path="/milestones" icon={<Target size={15} />} label="Plan" collapsed={collapsed} />
 
           <SectionDivider collapsed={collapsed} />
 
           {/* CRM section */}
-          <SectionHeader label="CRM" collapsed={collapsed} open={crmOpen} onToggle={toggleCrm} />
+          <SectionHeader label="Records" collapsed={collapsed} open={crmOpen} onToggle={toggleCrm} />
           {(crmOpen || collapsed) && (
             <>
               <NavItem
-                path="/people"
-                icon={<span className="sb-pip" style={{ background: 'var(--midnight)' }}><Users size={9} weight="fill" /></span>}
-                label="People"
-                collapsed={collapsed}
-                indent
-              />
-              <NavItem
                 path="/people/companies"
-                icon={<span className="sb-pip" style={{ background: 'var(--shuttle)' }}><Buildings size={9} weight="fill" /></span>}
+                icon={<span className="sb-pip" style={{ background: '#2563eb' }}><Buildings size={9} weight="fill" /></span>}
                 label="Companies"
                 collapsed={collapsed}
                 indent
               />
               <NavItem
+                path="/people"
+                icon={<span className="sb-pip" style={{ background: '#2563eb' }}><Users size={9} weight="fill" /></span>}
+                label="People"
+                collapsed={collapsed}
+                indent
+              />
+              <NavItem
                 path="/people/opportunities"
-                icon={<span className="sb-pip" style={{ background: 'var(--burnham)' }}><Target size={9} weight="fill" /></span>}
-                label="Opportunities"
+                icon={<span className="sb-pip" style={{ background: '#ff6b2c' }}><Target size={9} weight="fill" /></span>}
+                label="Deals"
                 collapsed={collapsed}
                 indent
               />
@@ -252,17 +257,38 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
           <SectionDivider collapsed={collapsed} />
 
           {/* Lists section */}
-          <SectionHeader label="Lists" collapsed={collapsed} open={listsOpen} onToggle={toggleLists} />
+          <SectionHeader
+            label="Lists"
+            collapsed={collapsed}
+            open={listsOpen}
+            onToggle={toggleLists}
+            actions={(
+              <>
+                <button
+                  onClick={event => {
+                    event.stopPropagation()
+                    setSettingsOpen(true)
+                  }}
+                  className="rounded p-0.5 text-shuttle hover:bg-mercury/40 hover:text-midnight"
+                  title="List settings"
+                >
+                  <Gear size={11} />
+                </button>
+                <button
+                  onClick={event => {
+                    event.stopPropagation()
+                    setListCreateOpen(true)
+                  }}
+                  className="rounded p-0.5 text-shuttle hover:bg-mercury/40 hover:text-midnight"
+                  title="Create a list"
+                >
+                  <Plus size={12} />
+                </button>
+              </>
+            )}
+          />
           {(listsOpen || collapsed) && (
             <>
-              <NavItem
-                path="/lists"
-                icon={<span className="sb-pip" style={{ background: 'var(--burnham)' }}><ListIcon size={9} weight="fill" /></span>}
-                label="All lists"
-                collapsed={collapsed}
-                indent
-              />
-              {/* User-created lists */}
               {lists.map(l => (
                 <NavItem
                   key={l.id}
@@ -282,24 +308,8 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
                   indent
                 />
               ))}
-              {/* Legacy static presets */}
-              <NavItem
-                path="/people?list=board"
-                icon={<Star size={14} weight="fill" className="text-yellow-500" />}
-                label="Board of Directors"
-                collapsed={collapsed}
-                indent
-              />
-              <NavItem
-                path="/people/opportunities?list=active"
-                icon={<Flame size={14} weight="fill" className="text-orange-400" />}
-                label="Active Pipeline"
-                collapsed={collapsed}
-                indent
-              />
             </>
           )}
-
         </nav>
 
         {/* Bottom: profile + settings + collapse toggle */}
@@ -323,7 +333,8 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
 
           <button
             onClick={() => setSettingsOpen(true)}
-            className="sb-row w-[calc(100%-16px)]"
+            title="Settings"
+            className="sb-row sb-settings w-[calc(100%-16px)]"
           >
             <Gear size={15} className="shrink-0" />
             {!collapsed && (
@@ -345,23 +356,6 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
           </button>
 
           <SectionDivider collapsed={collapsed} />
-
-          {/* Collapse toggle */}
-          <button
-            onClick={toggleCollapsed}
-            title={collapsed ? 'Expand sidebar (⌘\\)' : 'Collapse sidebar (⌘\\)'}
-            className="sb-row w-[calc(100%-16px)]"
-          >
-            {collapsed ? (
-              <ArrowLeft size={13} className="rotate-180" />
-            ) : (
-              <>
-                <ListIcon size={13} />
-                <span>Collapse</span>
-                <span className="shortcut ml-auto">⌘\</span>
-              </>
-            )}
-          </button>
         </div>
       </aside>
 
@@ -381,6 +375,15 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         updater={updater}
         zoom={zoom}
         onZoomChange={setZoomLevel}
+      />
+
+      <ListCreateModal
+        open={listCreateOpen}
+        onClose={() => setListCreateOpen(false)}
+        onCreated={list => {
+          setListCreateOpen(false)
+          navigate(`/lists/${list.id}`)
+        }}
       />
 
     </div>

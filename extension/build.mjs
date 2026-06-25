@@ -37,6 +37,17 @@ async function buildExtension() {
     format: 'esm',
   })
 
+  // Build generic page capture content script
+  console.log('  📦 Building page capture content script...')
+  await build({
+    entryPoints: ['src/content-scripts/page-capture.ts'],
+    bundle: true,
+    outfile: 'dist/src/content-scripts/page-capture.js',
+    platform: 'browser',
+    target: 'es2020',
+    format: 'esm',
+  })
+
   // Build LinkedIn profile content script
   console.log('  📦 Building LinkedIn profile content script...')
   await build({
@@ -87,6 +98,9 @@ async function buildExtension() {
   const { readFile, writeFile } = await import('fs/promises')
   let indexHtml = await readFile('src/sidebar/index.html', 'utf-8')
   indexHtml = indexHtml.replace('/src/sidebar/main.tsx', './main.js')
+  if (!indexHtml.includes('main.css')) {
+    indexHtml = indexHtml.replace('</head>', '    <link rel="stylesheet" href="./main.css" />\n  </head>')
+  }
   await writeFile('dist/src/sidebar/index.html', indexHtml)
 
   // Inject secrets into built JS (kept out of source code / git)

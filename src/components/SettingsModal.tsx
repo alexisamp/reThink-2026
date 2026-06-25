@@ -174,7 +174,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
     markGoogleDriveScopeRequested()
     // signInWithOAuth redirects the browser to Google — page will reload after.
     // On return, the useEffect above detects provider_token and saves it to user_metadata.
-    const redirectTo = isRunningInTauri() ? TAURI_OAUTH_REDIRECT : window.location.origin
+    const redirectTo = isRunningInTauri() ? TAURI_OAUTH_REDIRECT : `${window.location.origin}/auth/callback`
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {

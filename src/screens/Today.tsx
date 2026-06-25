@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Archive, ArrowCounterClockwise, ArrowDown, CalendarBlank, CalendarDots, Check, ChartLineUp, MoonStars, Pause, PencilSimple, Play, Plus, Target, Timer, TrashSimple, X } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
+import { isActiveOpportunityStage } from '@/lib/opportunityStages'
 import type { Todo, Milestone, Goal, Review, TodoContentSegment, TodoMentionKind } from '@/types'
 import MilestonePanel from '@/components/MilestonePanel'
 import DayStartDrawer from '@/components/DayStartDrawer'
@@ -35,6 +36,7 @@ interface RelationCompany {
   name?: string | null
   logo_url?: string | null
   domain?: string | null
+  website_url?: string | null
 }
 interface OpportunityMentionRow {
   id: string
@@ -159,20 +161,27 @@ function BacklogBin({
   onDropTodo?: (id: string) => void
 }) {
   const [over, setOver] = useState(false)
+  const hasTodoDrag = (types: DOMStringList | readonly string[]) => {
+    const list = Array.from(types)
+    return armed || list.includes('text/todo-id') || list.includes('text/plain')
+  }
   return (
     <button
       className={`backlog-bin${armed ? ' armed' : ''}${over ? ' over' : ''}`}
       onClick={onOpen}
       title="Backlog — drag a todo here to park it"
       onDragOver={e => {
-        if (e.dataTransfer.types.includes('text/todo-id')) {
+        if (hasTodoDrag(e.dataTransfer.types)) {
           e.preventDefault()
+          e.dataTransfer.dropEffect = 'move'
           setOver(true)
         }
       }}
       onDragLeave={() => setOver(false)}
       onDrop={e => {
-        const id = e.dataTransfer.getData('text/todo-id')
+        e.preventDefault()
+        e.stopPropagation()
+        const id = e.dataTransfer.getData('text/todo-id') || e.dataTransfer.getData('text/plain')
         setOver(false)
         if (id) onDropTodo?.(id)
       }}
@@ -243,6 +252,10 @@ function BacklogPanel({
   onRemove: (id: string) => void
 }) {
   const [dropOver, setDropOver] = useState(false)
+  const hasTodoDrag = (types: DOMStringList | readonly string[]) => {
+    const list = Array.from(types)
+    return list.includes('text/todo-id') || list.includes('text/plain')
+  }
   return (
     <>
       <div className="bl-scrim" onClick={onClose} />
@@ -260,15 +273,18 @@ function BacklogPanel({
           className={`bl-list${dropOver ? ' drop' : ''}`}
           onDragOver={(e) => {
             if (!onDropTodo) return
-            if (e.dataTransfer.types.includes('text/todo-id')) {
+            if (hasTodoDrag(e.dataTransfer.types)) {
               e.preventDefault()
+              e.dataTransfer.dropEffect = 'move'
               setDropOver(true)
             }
           }}
           onDragLeave={() => setDropOver(false)}
           onDrop={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
             setDropOver(false)
-            const id = e.dataTransfer.getData('text/todo-id')
+            const id = e.dataTransfer.getData('text/todo-id') || e.dataTransfer.getData('text/plain')
             if (id && onDropTodo) onDropTodo(id)
           }}
         >
@@ -361,11 +377,11 @@ export default function Today() {
             .then(({ data }) => (data ?? []).forEach(c => map.set(`person:${c.id}`, { id: c.id, name: c.name, kind: 'person', imageUrl: c.profile_photo_url })))
         : null,
       companyIds.length
-        ? supabase.from('companies').select('id, name, logo_url, domain').in('id', companyIds).eq('user_id', uid)
-            .then(({ data }) => (data ?? []).forEach(c => map.set(`company:${c.id}`, { id: c.id, name: c.name, kind: 'company', imageUrl: companyImage(c.logo_url, c.domain) })))
+        ? supabase.from('companies').select('id, name, logo_url, domain, website_url').in('id', companyIds).eq('user_id', uid)
+            .then(({ data }) => (data ?? []).forEach(c => map.set(`company:${c.id}`, { id: c.id, name: c.name, kind: 'company', imageUrl: companyImage(c.logo_url, c.domain ?? c.website_url) })))
         : null,
       oppIds.length
-        ? supabase.from('opportunities').select('id, title, company_id, company:companies(id, name, logo_url, domain)').in('id', oppIds).eq('user_id', uid)
+        ? supabase.from('opportunities').select('id, title, company_id, company:companies(id, name, logo_url, domain, website_url)').in('id', oppIds).eq('user_id', uid)
             .then(({ data }) => ((data ?? []) as OpportunityMentionRow[]).forEach(o => {
               const company = firstRelation(o.company)
               map.set(`opportunity:${o.id}`, {
@@ -373,7 +389,7 @@ export default function Today() {
                 name: o.title ?? 'Opportunity',
                 kind: 'opportunity',
                 sub: company?.name ?? null,
-                imageUrl: companyImage(company?.logo_url, company?.domain),
+                imageUrl: companyImage(company?.logo_url, company?.domain ?? company?.website_url),
                 companyId: o.company_id ?? company?.id ?? null,
               })
             }))
@@ -406,8 +422,8 @@ export default function Today() {
         supabase.from('goals').select('id, text, alias, color, emoji').eq('user_id', user.id).eq('goal_type', 'ACTIVE').order('position'),
         supabase.from('reviews').select('notes, one_thing, one_thing_done, energy_level, tomorrow_focus, tomorrow_reviewed, day_locked_at').eq('user_id', user.id).eq('date', today).maybeSingle(),
         supabase.from('outreach_logs').select('id, name, profile_photo_url, company, job_title, email').eq('user_id', user.id).order('name'),
-        supabase.from('companies').select('id, name, logo_url, domain, sector, headline').eq('user_id', user.id).order('name'),
-        supabase.from('opportunities').select('id, title, stage, type, company_id, company:companies(id, name, logo_url, domain)').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('companies').select('id, name, logo_url, domain, website_url, sector, headline').eq('user_id', user.id).order('name'),
+        supabase.from('opportunities').select('id, title, stage, type, company_id, company:companies(id, name, logo_url, domain, website_url)').eq('user_id', user.id).order('created_at', { ascending: false }),
       ])
       if (cancelled) return
 
@@ -427,7 +443,7 @@ export default function Today() {
       const peopleOptions: Mention[] = (contactsRes.data ?? []).map(c => mentionFromContact(c))
       const companyOptions: Mention[] = (companiesRes.data ?? []).map(c => mentionFromCompany(c))
       const oppOptions: Mention[] = ((oppsRes.data ?? []) as OpportunityMentionRow[])
-        .filter(o => o.stage !== 'won' && o.stage !== 'lost')
+        .filter(o => isActiveOpportunityStage(o.stage))
         .map(o => mentionFromOpportunity(o))
       const review = reviewRes.data as TodayReviewRow | null
       setTodos(todoList)
@@ -439,7 +455,8 @@ export default function Today() {
       setGoals(gl)
       setGoalsMap(new Map(gl.map(g => [g.id, g])))
       if (!journalInit.current) { setJournal(review?.notes ?? ''); journalInit.current = true }
-      setDailyGoal(review?.one_thing ?? '')
+      const savedGoal = review?.one_thing?.trim() ?? ''
+      setDailyGoal(savedGoal)
       setDayClosed(Boolean(review?.tomorrow_reviewed || review?.day_locked_at))
       setClosedSummary(review?.tomorrow_reviewed || review?.day_locked_at ? {
         removedTodoIds: [],
@@ -452,7 +469,10 @@ export default function Today() {
         tomorrowGoal: review?.tomorrow_focus ?? undefined,
       } : null)
       const dayStartKey = `rethink.today.started:${today}`
-      if (!review?.one_thing && !localStorage.getItem(dayStartKey)) {
+      if (savedGoal) {
+        localStorage.setItem(dayStartKey, '1')
+        setStartOpen(false)
+      } else if (!localStorage.getItem(dayStartKey)) {
         localStorage.setItem(dayStartKey, '1')
         setStartOpen(true)
       }

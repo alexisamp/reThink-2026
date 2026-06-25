@@ -6,6 +6,8 @@ import {
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { CompanyLogo } from '@/components/crm/cells'
+import { ACTIVE_OPPORTUNITY_STAGES, opportunityStageLabel } from '@/lib/opportunityStages'
 import type { Company, Contact, Opportunity } from '@/types'
 
 function formatNumber(n: number | null | undefined): string {
@@ -182,24 +184,7 @@ export default function CompanyDetail() {
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {/* ── Header: logo + name + headline ─────────────────── */}
           <div className="flex items-start gap-4 mb-5">
-            {(() => {
-              const logoSrc = company.logo_url
-                || (company.domain
-                  ? `https://www.google.com/s2/favicons?domain=${company.domain}&sz=128`
-                  : null)
-              return logoSrc ? (
-                <img
-                  src={logoSrc}
-                  alt={company.name}
-                  className="w-16 h-16 rounded-lg object-contain border border-mercury bg-white p-1.5 shrink-0"
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-lg bg-gossip flex items-center justify-center text-burnham font-semibold text-2xl border border-pastel shrink-0">
-                  {company.name[0]?.toUpperCase()}
-                </div>
-              )
-            })()}
+            <CompanyLogo name={company.name} src={company.logo_url} domain={company.domain ?? company.website_url} size={64} />
             <div className="flex-1 min-w-0">
               <h1 className="text-[17px] font-semibold text-midnight leading-tight">{company.name}</h1>
               {company.headline && (
@@ -232,7 +217,7 @@ export default function CompanyDetail() {
             <StatTile icon={<Users size={12} />} label="Employees" value={formatNumber(company.employees_count ?? company.members_on_linkedin)} subtitle={company.size ?? undefined} />
             <StatTile icon={<UsersThree size={12} />} label="Followers" value={formatNumber(company.followers_count)} />
             <StatTile label="People" value={String(people.length)} subtitle={`at ${company.name}`} />
-            <StatTile label="Opps" value={String(opps.length)} subtitle={`${opps.filter(o => ['exploring','active','negotiating'].includes(o.stage)).length} active`} />
+            <StatTile label="Opps" value={String(opps.length)} subtitle={`${opps.filter(o => ACTIVE_OPPORTUNITY_STAGES.includes(o.stage)).length} active`} />
             <StatTile icon={<Calendar size={12} />} label="Founded" value={company.founded_year ? String(company.founded_year) : '—'} />
           </div>
 
@@ -265,8 +250,8 @@ export default function CompanyDetail() {
                     to={`/people/${p.id}`}
                     className="flex items-center gap-3 p-3 bg-white border border-mercury rounded-lg hover:border-burnham transition-colors"
                   >
-                    <div className="w-8 h-8 rounded-full bg-gossip flex items-center justify-center text-burnham text-sm font-medium">
-                      {p.name[0]?.toUpperCase()}
+                    <div className="w-8 h-8 rounded-full bg-gossip flex items-center justify-center text-burnham text-sm font-medium overflow-hidden shrink-0">
+                      {p.profile_photo_url ? <img src={p.profile_photo_url} alt="" className="w-full h-full object-cover" /> : p.name[0]?.toUpperCase()}
                     </div>
                     <div>
                       <p className="text-sm font-medium text-midnight">{p.name}</p>
@@ -294,15 +279,18 @@ export default function CompanyDetail() {
                     to={`/people/opportunities/${o.id}`}
                     className="flex items-center gap-3 p-3 bg-white border border-mercury rounded-lg hover:border-burnham transition-colors"
                   >
-                    <div className="flex-1">
+                    <div className="w-8 h-8 rounded-lg bg-white border border-mercury flex items-center justify-center overflow-hidden shrink-0">
+                      <CompanyLogo name={company.name} src={company.logo_url} domain={company.domain ?? company.website_url} size={32} />
+                    </div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-midnight">{o.title}</p>
                       <p className="text-xs text-shuttle capitalize">{o.type}</p>
                     </div>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       o.stage === 'won' ? 'bg-gossip text-burnham' :
-                      o.stage === 'lost' ? 'bg-red-100 text-red-700' :
+                      o.stage === 'lost' || o.stage === 'closed' ? 'bg-red-100 text-red-700' :
                       'bg-mercury text-shuttle'
-                    }`}>{o.stage}</span>
+                    }`}>{opportunityStageLabel(o.stage)}</span>
                   </Link>
                 ))}
               </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { consumeGoogleDriveScopeRequested, persistGoogleProviderSession } from '@/lib/googleDrive'
+import { consumeGoogleDriveScopeRequested, GOOGLE_OAUTH_SCOPES_STRING, markGoogleDriveScopeRequested, persistGoogleProviderSession } from '@/lib/googleDrive'
 import type { User } from '@supabase/supabase-js'
 
 export function useAuth() {
@@ -25,10 +25,13 @@ export function useAuth() {
   }, [])
 
   const signInWithGoogle = () => {
+    markGoogleDriveScopeRequested()
     return supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: `${window.location.origin}/auth/callback`,
+        scopes: GOOGLE_OAUTH_SCOPES_STRING,
+        queryParams: { access_type: 'offline', prompt: 'consent' },
       },
     })
   }

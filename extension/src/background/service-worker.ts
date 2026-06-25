@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 
 const SUPABASE_URL = 'https://amvezbymrnvrwcypivkf.supabase.co'
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtdmV6Ynltcm52cndjeXBpdmtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwMTIxNTgsImV4cCI6MjA4NDU4ODE1OH0.6qgaygMynKaKYB9TlcJAlyLMt87wc7D8PbA5ZeDGDUg'
+const RECENT_LINKEDIN_COMPANY_KEY = 'recentLinkedInCompanyContext'
 
 console.log('reThink People: Background service worker loaded')
 
@@ -21,6 +22,13 @@ chrome.runtime.onInstalled.addListener(async () => {
     const tabs = await chrome.tabs.query({})
     for (const tab of tabs) {
       if (!tab.id || !tab.url) continue
+      if (tab.url.startsWith('http')) {
+        try {
+          await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['src/content-scripts/page-capture.js'] })
+        } catch {
+          // Tab may not be injectable.
+        }
+      }
       if (!tab.url.includes('linkedin.com')) continue
 
       // Inject content scripts manually
@@ -53,6 +61,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (!changeInfo.url) return
+  await refreshPageContextForTab(tabId, changeInfo.url)
 
   // LinkedIn profile navigation (URL changed within LinkedIn)
   if (changeInfo.url.includes('linkedin.com/in/')) {
@@ -83,6 +92,7 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   try {
     const tab = await chrome.tabs.get(tabId)
     if (!tab.url) return
+    await refreshPageContextForTab(tabId, tab.url)
 
     if (tab.url.includes('linkedin.com/in/')) {
       // Switched to a LinkedIn profile tab — extract LinkedIn
@@ -107,6 +117,54 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
     // Tab may not be accessible
   }
 })
+
+async function refreshPageContextForTab(tabId: number, url: string) {
+  if (!url.startsWith('http')) {
+    await chrome.storage.local.set({ currentPageCaptureContext: null })
+    return
+  }
+
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_PAGE_CONTEXT' })
+    await chrome.storage.local.set({ currentPageCaptureContext: response?.context ?? null })
+    await rememberLinkedInCompanyPageContext(response?.context)
+    return
+  } catch {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ['src/content-scripts/page-capture.js'] })
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_PAGE_CONTEXT' })
+      await chrome.storage.local.set({ currentPageCaptureContext: response?.context ?? null })
+      await rememberLinkedInCompanyPageContext(response?.context)
+    } catch {
+      await chrome.storage.local.set({ currentPageCaptureContext: null })
+    }
+  }
+}
+
+async function isSenderActiveTab(sender: chrome.runtime.MessageSender) {
+  const senderTabId = sender.tab?.id
+  if (!senderTabId) return false
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  return activeTab?.id === senderTabId
+}
+
+async function rememberLinkedInCompanyPageContext(context: any) {
+  if (!context || context.source !== 'linkedin' || context.entityType !== 'company' || !context.linkedinSlug) return
+  const name = context.companyName || context.suggestedName
+  if (!name) return
+  await chrome.storage.local.set({
+    [RECENT_LINKEDIN_COMPANY_KEY]: {
+      name,
+      domain: context.domain ?? null,
+      logo_url: Array.isArray(context.logoCandidates) ? context.logoCandidates[0] ?? null : null,
+      linkedin_url: context.linkedinUrl ?? null,
+      linkedinSlug: context.linkedinSlug,
+      pageUrl: context.url,
+      fromPeoplePage: /\/(?:company|school|showcase)\/[^/?#]+\/people\/?/i.test(context.url),
+      savedAt: Date.now(),
+    },
+  })
+}
 
 // Injected into LinkedIn profile pages — must be self-contained (no imports)
 function extractLinkedInProfileBasicInfo() {
@@ -218,6 +276,72 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   ;(async () => {
     try {
       switch (message.type) {
+        case 'PAGE_CONTEXT_UPDATED': {
+          if (await isSenderActiveTab(sender)) {
+            await chrome.storage.local.set({ currentPageCaptureContext: message.context ?? null })
+            await rememberLinkedInCompanyPageContext(message.context)
+          }
+          sendResponse({ success: true })
+          break
+        }
+
+        case 'DOWNLOAD_MARKDOWN': {
+          const filename = String(message.filename || 'capture.md').replace(/^\/+/, '')
+          const markdown = String(message.markdown || '')
+          const dataUrl = `data:text/markdown;charset=utf-8,${encodeURIComponent(markdown)}`
+          const downloadId = await chrome.downloads.download({
+            url: dataUrl,
+            filename: `rethink-captures/${filename}`,
+            conflictAction: 'overwrite',
+            saveAs: false,
+          })
+          sendResponse({ success: true, downloadId })
+          break
+        }
+
+        case 'OPEN_RETHINK_APP': {
+          const tab = await chrome.tabs.create({ url: 'rethink://capture/write', active: false })
+          if (tab.id) {
+            setTimeout(() => {
+              chrome.tabs.remove(tab.id!).catch(() => {})
+            }, 5000)
+          }
+          sendResponse({ success: true })
+          break
+        }
+
+        case 'GET_ACTIVE_PAGE_CONTEXT': {
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+          if (!tab?.id || !tab.url?.startsWith('http')) {
+            sendResponse({ context: null })
+            break
+          }
+          try {
+            const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_CONTEXT' })
+            if (response?.context) {
+              await chrome.storage.local.set({ currentPageCaptureContext: response.context })
+              await rememberLinkedInCompanyPageContext(response.context)
+            }
+            sendResponse({ context: response?.context ?? null })
+          } catch {
+            try {
+              await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['src/content-scripts/page-capture.js'] })
+              const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_PAGE_CONTEXT' })
+              if (response?.context) {
+                await chrome.storage.local.set({ currentPageCaptureContext: response.context })
+                await rememberLinkedInCompanyPageContext(response.context)
+              }
+              sendResponse({ context: response?.context ?? null })
+            } catch {
+              const stored = (await chrome.storage.local.get('currentPageCaptureContext')).currentPageCaptureContext
+              const storedUrl = typeof stored?.url === 'string' ? stored.url.split('#')[0] : null
+              const activeUrl = tab.url.split('#')[0]
+              sendResponse({ context: storedUrl === activeUrl ? stored : null })
+            }
+          }
+          break
+        }
+
         case 'linkedin_message':
           await handleLinkedInMessage(message)
           sendResponse({ success: true })

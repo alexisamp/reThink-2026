@@ -45,6 +45,19 @@ interface CompanyOption {
   name: string
   domain: string | null
   logo_url?: string | null
+  linkedin_url?: string | null
+}
+
+interface RememberedLinkedInCompanyContext {
+  id?: string
+  name?: string
+  domain?: string | null
+  logo_url?: string | null
+  linkedin_url?: string | null
+  linkedinSlug?: string | null
+  pageUrl?: string
+  fromPeoplePage?: boolean
+  savedAt?: number
 }
 
 interface ListOption {
@@ -70,7 +83,18 @@ interface DealRecord {
   stage: string | null
   type?: string | null
   estimated_value?: number | null
+  company_id?: string | null
+  application_source_domain?: string | null
   company?: { name?: string | null; logo_url?: string | null; domain?: string | null } | null
+}
+
+interface EmailInteractionRecord {
+  id: string
+  type: string | null
+  channel?: string | null
+  direction?: string | null
+  notes?: string | null
+  interaction_date: string
 }
 
 interface DealDraft {
@@ -98,6 +122,8 @@ interface PersonRelationRecord {
 const EMPTY_RECORD: ExistingRecord | null = null
 const COMPANY_SELECT = 'id, name, domain, website_url, description, headline, logo_url, primary_location, linkedin_url, angellist_url, facebook_url, instagram_url, twitter_url'
 const PERSON_SELECT = 'id, name, company, company_id, job_title, profile_photo_url, email, phone, location, personal_context, linkedin_url, angellist_url, facebook_url, instagram_url, twitter_url'
+const RECENT_LINKEDIN_COMPANY_KEY = 'recentLinkedInCompanyContext'
+const RECENT_LINKEDIN_COMPANY_MAX_AGE_MS = 30 * 60 * 1000
 
 type RtIconName =
   | 'arrow-left'
@@ -204,11 +230,34 @@ function formatCurrency(value?: number | null) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value)
 }
 
+const OPPORTUNITY_STAGE_OPTIONS = [
+  { value: 'exploring', label: 'Exploring' },
+  { value: 'applied', label: 'Applied' },
+  { value: 'abm_strategy', label: 'ABM Strategy' },
+  { value: 'interviews', label: 'Interviews' },
+  { value: 'negotiating', label: 'Negotiating' },
+  { value: 'won', label: 'Won' },
+  { value: 'closed', label: 'Closed' },
+]
+
+function opportunityStageLabel(stage?: string | null) {
+  if (stage === 'active') return 'Interviews'
+  if (stage === 'lost') return 'Closed'
+  return OPPORTUNITY_STAGE_OPTIONS.find(option => option.value === stage)?.label ?? stage ?? 'Exploring'
+}
+
 export function CapturePanel({ user, context, onRefresh }: Props) {
+  const preferredGmailCandidate = context.source === 'gmail'
+    ? context.emailCandidates?.find(candidate => candidate.email.toLowerCase() !== user.email?.toLowerCase()) ?? context.emailCandidates?.[0] ?? null
+    : null
+  const preferredContextEmail = preferredGmailCandidate?.email ?? context.emailAddress ?? ''
+  const preferredContextName = preferredGmailCandidate?.name || context.suggestedName
   const [entityType, setEntityType] = useState<CaptureEntityType>(context.entityType)
   const [existing, setExisting] = useState<ExistingRecord | null>(EMPTY_RECORD)
   const [matchedCompany, setMatchedCompany] = useState<CompanyOption | null>(null)
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([])
+  const [companyCandidates, setCompanyCandidates] = useState<CompanyOption[]>([])
+  const [personCandidates, setPersonCandidates] = useState<PersonRelationRecord[]>([])
   const [showCompanyPicker, setShowCompanyPicker] = useState(false)
   const [showAddMenu, setShowAddMenu] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -224,10 +273,19 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
   const [showListPicker, setShowListPicker] = useState(false)
   const [newListName, setNewListName] = useState('')
   const [deals, setDeals] = useState<DealRecord[]>([])
+  const [emailInteractions, setEmailInteractions] = useState<EmailInteractionRecord[]>([])
   const [teamMembers, setTeamMembers] = useState<PersonRelationRecord[]>([])
   const [associatedPeople, setAssociatedPeople] = useState<PersonRelationRecord[]>([])
   const [showDealCreator, setShowDealCreator] = useState(false)
   const [newDealTitle, setNewDealTitle] = useState('')
+  const [dealOptions, setDealOptions] = useState<DealRecord[]>([])
+  const [gmailDealCandidates, setGmailDealCandidates] = useState<DealRecord[]>([])
+  const [gmailLinkingDealId, setGmailLinkingDealId] = useState<string | null>(null)
+  const [dealSearch, setDealSearch] = useState('')
+  const [showOpportunityCompanyPrompt, setShowOpportunityCompanyPrompt] = useState(false)
+  const [companyPromptRecordType, setCompanyPromptRecordType] = useState<CaptureEntityType>('opportunity')
+  const [opportunityCompanySearch, setOpportunityCompanySearch] = useState(context.companyName ?? '')
+  const [opportunityCompanyDomain, setOpportunityCompanyDomain] = useState(suggestedCompanyDomain(context.companyName))
   const [showTeamPicker, setShowTeamPicker] = useState(false)
   const [peopleOptions, setPeopleOptions] = useState<PersonRelationRecord[]>([])
   const [peopleSearch, setPeopleSearch] = useState('')
@@ -239,12 +297,12 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
   const lastContextUrl = useRef(context.url)
   const routeBaseUrl = useRef(context.url)
 
-  const [name, setName] = useState(context.suggestedName)
+  const [name, setName] = useState(preferredContextName)
   const [domain, setDomain] = useState(context.domain ?? '')
   const [description, setDescription] = useState(context.description ?? '')
   const [jobTitle, setJobTitle] = useState(context.jobTitle ?? '')
   const [companyName, setCompanyName] = useState(context.companyName ?? '')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(preferredContextEmail)
   const [phone, setPhone] = useState('')
   const [location, setLocation] = useState(context.location ?? '')
   const [dealValueInput, setDealValueInput] = useState('')
@@ -266,11 +324,14 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
 
     if (!selectedRoute || urlChanged) {
       setEntityType(context.entityType)
-      setName(context.suggestedName)
+      setName(preferredContextName)
       setDomain(context.domain ?? '')
       setDescription(context.description ?? '')
       setJobTitle(context.jobTitle ?? '')
       setCompanyName(context.companyName ?? '')
+      setOpportunityCompanySearch(context.companyName ?? '')
+      setOpportunityCompanyDomain(suggestedCompanyDomain(context.companyName))
+      setEmail(preferredContextEmail)
       setLocation(context.location ?? '')
       setLinkedinUrl(context.linkedinUrl ?? '')
     }
@@ -278,10 +339,13 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
     context.url,
     context.entityType,
     context.suggestedName,
+    preferredContextName,
+    preferredContextEmail,
     context.domain,
     context.description,
     context.jobTitle,
     context.companyName,
+    context.emailAddress,
     context.location,
     selectedRoute,
   ])
@@ -293,7 +357,7 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
     } else {
       loadMatches()
     }
-  }, [user.id, context.url, context.suggestedName, context.linkedinUrl, context.linkedinSlug, context.domain, entityType, selectedRoute?.id, selectedRoute?.type])
+  }, [user.id, context.url, context.suggestedName, context.linkedinUrl, context.linkedinSlug, context.emailAddress, context.domain, entityType, selectedRoute?.id, selectedRoute?.type])
 
   const recordLabel = entityType === 'company' ? 'Company' : entityType === 'person' ? 'Person' : 'Opportunity'
   const suggestionName = entityType === 'company' ? (name || domain || context.domain || '') : name
@@ -307,7 +371,7 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
   const logoCandidates = entityType === 'person'
     ? [selectedRoute ? null : context.profilePhotoUrl, storedPersonPhoto]
     : entityType === 'opportunity'
-      ? [matchedCompany?.logo_url, matchedCompany?.domain ? `https://www.google.com/s2/favicons?domain=${matchedCompany.domain}&sz=128` : null, existing?.logoUrl]
+      ? [matchedCompany?.logo_url, matchedCompany?.domain ? `https://www.google.com/s2/favicons?domain=${matchedCompany.domain}&sz=128` : null, ...(selectedRoute ? [] : (context.logoCandidates ?? [])), existing?.logoUrl]
       : [existing?.logoUrl, ...(selectedRoute ? [] : (context.logoCandidates ?? [])), selectedRoute ? null : context.faviconUrl, existing?.domain ? `https://www.google.com/s2/favicons?domain=${existing.domain}&sz=128` : null]
   const logoUrl = firstWorkingLogo(logoCandidates, brokenLogoUrls)
   const isPersonLogo = entityType === 'person'
@@ -316,13 +380,24 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
     setLoading(true)
     setExisting(null)
     setMatchedCompany(null)
+    setPersonCandidates([])
+    setCompanyCandidates([])
+    setPersonCandidates([])
+    setGmailDealCandidates([])
+    setGmailLinkingDealId(null)
     setCompanyName(context.companyName ?? '')
     setDomain(context.domain ?? '')
+    setEmail(preferredContextEmail)
     setMemberships([])
     setDeals([])
+    setEmailInteractions([])
+    setGmailDealCandidates([])
+    setGmailLinkingDealId(null)
     setTeamMembers([])
     setAssociatedPeople([])
     setShowTeamPicker(false)
+    setShowDealCreator(false)
+    setShowOpportunityCompanyPrompt(false)
     try {
       let found: ExistingRecord | null = null
       if (entityType === 'company') {
@@ -330,7 +405,16 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
         if (record) {
           applyExistingRecord(record)
           await syncCurrentCompanyLogo(record)
+          await rememberLinkedInCompany(record)
           found = record
+        }
+        if (!record) {
+          const candidates = await findLikelyCompanyOptions()
+          setCompanyCandidates(candidates)
+          if (candidates.length === 1 && companyMatchScore(candidates[0]) >= 74) {
+            const linked = await useExistingCompany(candidates[0], { open: false })
+            if (linked) found = linked
+          }
         }
       }
 
@@ -346,18 +430,43 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
         }
         const company = linkedCompany ?? await findCompanyOption()
         if (company) setMatchedCompany(company)
+        if (record && company && record.companyId !== company.id) {
+          await persistCompanyLinkForRecord(record, company)
+          const next = { ...record, company: company.name, companyId: company.id }
+          applyExistingRecord(next)
+          found = next
+        }
+        if (!record && context.source === 'gmail') {
+          const linkedDeal = await findLinkedGmailDeal()
+          if (linkedDeal) {
+            setSelectedRoute({ id: linkedDeal.id, type: 'opportunity' })
+            return
+          }
+          const dealCandidates = await findGmailDealCandidates()
+          setGmailDealCandidates(dealCandidates)
+          setPersonCandidates(isGenericProcessEmail(preferredContextEmail, preferredContextName, context.text) ? [] : await findLikelyPersonOptions())
+        }
         await loadCompanyOptions(company?.name ?? record?.company ?? companyName)
+        setCompanyCandidates(company ? [] : await findLikelyCompanyOptions())
       }
 
       if (entityType === 'opportunity') {
         const record = await findOpportunity()
+        let company: CompanyOption | null = null
         if (record) {
-          applyExistingRecord(record)
-          found = record
+          company = await findCompanyById(record.companyId)
+          const hydratedRecord = company
+            ? { ...record, company: company.name, companyId: company.id, domain: company.domain ?? null, logoUrl: company.logo_url ?? null }
+            : record
+          applyExistingRecord(hydratedRecord)
+          if (company) setMatchedCompany(company)
+          found = hydratedRecord
+        } else {
+          company = await findCompanyOption()
+          if (company) setMatchedCompany(company)
         }
-        const company = await findCompanyOption()
-        if (company) setMatchedCompany(company)
         await loadCompanyOptions(company?.name ?? companyName)
+        setCompanyCandidates(company ? [] : await findLikelyCompanyOptions())
         await loadPeopleOptions('')
       }
       await loadLists()
@@ -373,10 +482,12 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
     setMatchedCompany(null)
     setMemberships([])
     setDeals([])
+    setEmailInteractions([])
     setTeamMembers([])
     setAssociatedPeople([])
     setShowCompanyPicker(false)
     setShowTeamPicker(false)
+    setShowDealCreator(false)
     try {
       const record = await fetchRecordByRoute(route)
       if (!record) {
@@ -475,23 +586,35 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
 
   async function loadRelated(record: ExistingRecord) {
     await loadListMemberships(record)
+    setDeals([])
+    setEmailInteractions([])
 
     if (record.type === 'person') {
       const { data: links, error } = await supabase
         .from('opportunity_contacts')
         .select('opportunity_id')
         .eq('outreach_log_id', record.id)
+      const mergedDeals = new Map<string, DealRecord>()
       if (!error && links && links.length > 0) {
         const ids = links.map((link: any) => link.opportunity_id)
         const { data: opps } = await supabase
           .from('opportunities')
-          .select('id, title, stage, type, estimated_value, company:companies(name, logo_url, domain)')
+          .select('id, title, stage, type, estimated_value, company_id, company:companies(name, logo_url, domain)')
           .eq('user_id', user.id)
           .in('id', ids)
-        setDeals((opps ?? []) as DealRecord[])
-      } else {
-        setDeals([])
+        for (const deal of (opps ?? []) as DealRecord[]) mergedDeals.set(deal.id, deal)
       }
+      if (record.companyId) {
+        const { data: companyDeals } = await supabase
+          .from('opportunities')
+          .select('id, title, stage, type, estimated_value, company_id, company:companies(name, logo_url, domain)')
+          .eq('user_id', user.id)
+          .eq('company_id', record.companyId)
+          .order('created_at', { ascending: false })
+        for (const deal of (companyDeals ?? []) as DealRecord[]) mergedDeals.set(deal.id, deal)
+      }
+      setDeals([...mergedDeals.values()])
+      await loadEmailInteractions([record.id])
     }
 
     if (record.type === 'company') {
@@ -545,6 +668,7 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
       }
       setDeals([...mergedDeals.values()])
       setTeamMembers(members)
+      await loadEmailInteractions(members.map(member => member.id))
       void backfillCompanyRelations(record, members, [...mergedDeals.values()])
     }
 
@@ -554,11 +678,36 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
         .select('contact:outreach_logs(id, name, job_title, company, profile_photo_url, email)')
         .eq('opportunity_id', record.id)
       if (!error && links) {
-        setAssociatedPeople(links
+        const people = links
           .map((link: any) => Array.isArray(link.contact) ? link.contact[0] : link.contact)
-          .filter(Boolean) as PersonRelationRecord[])
+          .filter(Boolean) as PersonRelationRecord[]
+        setAssociatedPeople(people)
+        await loadEmailInteractions(people.map(person => person.id), record.id)
       }
     }
+  }
+
+  async function loadEmailInteractions(contactIds: string[], opportunityId?: string | null) {
+    const ids = [...new Set(contactIds.filter(Boolean))]
+    if (ids.length === 0 && !opportunityId) {
+      setEmailInteractions([])
+      return
+    }
+    let query = supabase
+      .from('interactions')
+      .select('id, type, channel, direction, notes, interaction_date')
+      .eq('user_id', user.id)
+      .order('interaction_date', { ascending: false })
+      .limit(8)
+    if (opportunityId && ids.length > 0) {
+      query = query.or(`opportunity_id.eq.${opportunityId},contact_id.in.(${ids.join(',')})`)
+    } else if (opportunityId) {
+      query = query.eq('opportunity_id', opportunityId)
+    } else {
+      query = query.in('contact_id', ids)
+    }
+    const { data } = await query
+    setEmailInteractions((data ?? []) as EmailInteractionRecord[])
   }
 
   async function loadListMemberships(record: ExistingRecord) {
@@ -583,7 +732,7 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
     const trimmed = query?.trim()
     const request = supabase
       .from('companies')
-      .select('id, name, domain, logo_url')
+      .select('id, name, domain, logo_url, linkedin_url')
       .eq('user_id', user.id)
       .order('name')
       .limit(8)
@@ -605,6 +754,64 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
       ? await request.or(`name.ilike.%${trimmed}%,email.ilike.%${trimmed}%,company.ilike.%${trimmed}%`)
       : await request
     setPeopleOptions((data ?? []) as PersonRelationRecord[])
+  }
+
+  async function loadDealOptions(query: string | null) {
+    const trimmed = query?.trim()
+    const request = supabase
+      .from('opportunities')
+      .select('id, title, stage, type, estimated_value, company_id, application_source_domain, company:companies(name, logo_url, domain)')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(12)
+    const { data } = trimmed
+      ? await request.or(`title.ilike.%${trimmed}%,stage.ilike.%${trimmed}%,type.ilike.%${trimmed}%`)
+      : await request
+    setDealOptions((data ?? []) as DealRecord[])
+  }
+
+  function openDealModal() {
+    setShowDealCreator(true)
+    setDealSearch('')
+    void loadDealOptions('')
+    void loadCompanyOptions(companyName)
+    void loadPeopleOptions('')
+  }
+
+  async function attachExistingDeal(deal: DealRecord) {
+    if (!existing) return
+    if (existing.type === 'company') {
+      const { error } = await supabase
+        .from('opportunities')
+        .update({ company_id: existing.id })
+        .eq('id', deal.id)
+        .eq('user_id', user.id)
+      if (error) {
+        setStatusText(error.message)
+        return
+      }
+    }
+
+    if (existing.type === 'person') {
+      const { error } = await supabase
+        .from('opportunity_contacts')
+        .upsert({ opportunity_id: deal.id, outreach_log_id: existing.id, role: 'associated' }, { onConflict: 'opportunity_id,outreach_log_id' })
+      if (error && error.code !== '42P01') {
+        setStatusText(error.message)
+        return
+      }
+      if (matchedCompany?.id) {
+        await supabase
+          .from('opportunities')
+          .update({ company_id: matchedCompany.id })
+          .eq('id', deal.id)
+          .eq('user_id', user.id)
+      }
+    }
+
+    setShowDealCreator(false)
+    await loadRelated(existing)
+    setStatusText(`Linked deal: ${deal.title}.`)
   }
 
   async function toggleTeamMember(person: PersonRelationRecord) {
@@ -836,6 +1043,24 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
     setShowCompanyPicker(false)
   }
 
+  async function persistCompanyLinkForRecord(record: ExistingRecord, company: CompanyOption) {
+    if (record.type === 'person') {
+      await supabase
+        .from('outreach_logs')
+        .update({ company_id: company.id, company: company.name })
+        .eq('id', record.id)
+        .eq('user_id', user.id)
+      return
+    }
+    if (record.type === 'opportunity') {
+      await supabase
+        .from('opportunities')
+        .update({ company_id: company.id })
+        .eq('id', record.id)
+        .eq('user_id', user.id)
+    }
+  }
+
   async function persistRecordPatch(patch: Record<string, unknown>) {
     if (!existing || Object.keys(patch).length === 0) return
     const table = existing.type === 'company'
@@ -892,18 +1117,43 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
     setTwitterUrl(record.twitterUrl ?? '')
   }
 
+  function isExternalOpportunitySource() {
+    return entityType === 'opportunity' && (
+      context.source === 'job_board' ||
+      /(^|\.)linkedin\.com$/i.test(context.hostname)
+    )
+  }
+
+  function visibleCompanyNameKey() {
+    return normalizeCompanyIdentity(context.companyName || companyName)
+  }
+
+  function companyMatchesVisibleOpportunity(company?: CompanyOption | null) {
+    const visible = visibleCompanyNameKey()
+    if (!visible || !company?.name) return false
+    const companyKey = normalizeCompanyIdentity(company.name)
+    return Boolean(
+      companyKey &&
+      (companyKey === visible ||
+        companyKey.includes(visible) ||
+        visible.includes(companyKey) ||
+        editDistance(companyKey, visible) <= 2),
+    )
+  }
+
   async function findCompany(): Promise<ExistingRecord | null> {
+    const sourceDomainIsCompany = !isExternalOpportunitySource()
     const domainCandidates = [
-      context.domain,
+      sourceDomainIsCompany ? context.domain : null,
       context.source === 'linkedin' ? null : domain,
-      context.source === 'linkedin' ? null : context.hostname,
-      context.source === 'linkedin' ? null : context.hostname.replace(/^www\./, ''),
+      context.source === 'linkedin' || !sourceDomainIsCompany ? null : context.hostname,
+      context.source === 'linkedin' || !sourceDomainIsCompany ? null : context.hostname.replace(/^www\./, ''),
     ]
       .filter(Boolean)
       .map(value => String(value).toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, ''))
     const uniqueDomains = [...new Set(domainCandidates)]
 
-    if (context.domain) {
+    if (uniqueDomains.length > 0) {
       const { data } = await supabase
         .from('companies')
         .select(COMPANY_SELECT)
@@ -915,13 +1165,13 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
         return companyRecordFromData(data)
       }
 
-      const { data: fuzzy } = await supabase
+      const { data: fuzzy } = context.domain && sourceDomainIsCompany ? await supabase
         .from('companies')
         .select(COMPANY_SELECT)
         .eq('user_id', user.id)
         .ilike('domain', `%${context.domain.replace(/^www\./, '')}%`)
         .limit(1)
-        .maybeSingle()
+        .maybeSingle() : { data: null }
       if (fuzzy) {
         return companyRecordFromData(fuzzy)
       }
@@ -958,9 +1208,15 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
       }
     }
 
-    const nameCandidate = context.suggestedName.trim()
+    const nameCandidate = entityType === 'company' ? context.suggestedName.trim() : ''
     const derivedName = context.domain ? context.domain.split('.')[0] : ''
-    const names = [...new Set([nameCandidate, context.companyName, derivedName].filter((value): value is string => !!value))]
+    const names = [...new Set([
+      nameCandidate,
+      context.companyName,
+      entityType === 'company' ? derivedName : '',
+      entityType === 'company' ? name : '',
+      entityType !== 'company' ? companyName : '',
+    ].filter((value): value is string => !!value))]
     for (const candidate of names) {
       const { data } = await supabase
         .from('companies')
@@ -971,6 +1227,13 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
         .maybeSingle()
       if (data) {
         return companyRecordFromData(data)
+      }
+    }
+
+    if (entityType === 'company') {
+      const likely = await findLikelyCompanyOptions()
+      if (likely.length > 0 && companyMatchScore(likely[0]) >= 74) {
+        return useExistingCompany(likely[0], { open: false })
       }
     }
 
@@ -1028,67 +1291,522 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
     return companyRecordFromData(data)
   }
 
-  async function findCompanyOption(): Promise<CompanyOption | null> {
-    const byDomain = await findCompany()
-    if (byDomain) return { id: byDomain.id, name: byDomain.name, domain: byDomain.domain ?? null, logo_url: byDomain.logoUrl ?? null }
-    if (!context.companyName) return null
+  async function useExistingCompany(company: CompanyOption, options: { open?: boolean } = {}): Promise<ExistingRecord | null> {
+    const currentLogo = company.logo_url ?? null
+    const sourceDomainIsCompany = !isExternalOpportunitySource()
+    const effectiveDomain = cleanDomainValue(company.domain || domain || (sourceDomainIsCompany ? context.domain : null))
+    const candidateLogo = firstWorkingLogo([
+      currentLogo,
+      effectiveDomain ? `https://www.google.com/s2/favicons?domain=${effectiveDomain}&sz=128` : null,
+      ...(context.logoCandidates ?? []),
+      context.faviconUrl,
+    ], brokenLogoUrls)
+    const patch: Record<string, unknown> = {}
+    if (!company.domain && effectiveDomain && !effectiveDomain.includes('linkedin.com')) patch.domain = effectiveDomain
+    if (context.source !== 'linkedin' && sourceDomainIsCompany && context.domain && !company.domain) patch.website_url = `https://${context.domain}`
+    if (context.linkedinUrl && (!company.linkedin_url || !sameLinkedinCompany(company.linkedin_url, context.linkedinUrl))) patch.linkedin_url = context.linkedinUrl
+    if (candidateLogo && (!currentLogo || isBetterCompanyLogo(currentLogo, candidateLogo, effectiveDomain))) patch.logo_url = candidateLogo
+    if (description.trim()) patch.description = description.trim()
+
+    const query = Object.keys(patch).length > 0
+      ? supabase.from('companies').update(patch).eq('id', company.id).eq('user_id', user.id).select(COMPANY_SELECT).single()
+      : supabase.from('companies').select(COMPANY_SELECT).eq('id', company.id).eq('user_id', user.id).single()
+    const { data, error } = await query
+    if (error || !data) {
+      setStatusText(error?.message ?? 'Could not link existing company.')
+      return null
+    }
+    const record = companyRecordFromData(data)
+    setCompanyCandidates([])
+    setMatchedCompany({ id: record.id, name: record.name, domain: record.domain ?? null, logo_url: record.logoUrl ?? null, linkedin_url: record.linkedinUrl ?? null })
+    applyExistingRecord(record)
+    await syncCurrentCompanyLogo(record)
+    await rememberLinkedInCompany(record)
+    if (options.open !== false) {
+      await loadRelated(record)
+      setStatusText(`Using existing company: ${record.name}.`)
+    }
+    return record
+  }
+
+  async function rememberLinkedInCompany(record: ExistingRecord | CompanyOption) {
+    if (context.source !== 'linkedin') return
+    const existingRecord = record as ExistingRecord
+    const companyOption = record as CompanyOption
+    const recordId = record.id
+    const recordName = record.name
+    const recordDomain = 'domain' in record ? record.domain ?? null : null
+    const recordLogo = existingRecord.logoUrl ?? companyOption.logo_url ?? null
+    const recordLinkedinUrl = existingRecord.linkedinUrl ?? companyOption.linkedin_url ?? null
+    const pageLinkedinUrl = entityType === 'company' ? context.linkedinUrl : context.companyLinkedinUrl
+    const pageLinkedinSlug = entityType === 'company' ? context.linkedinSlug : context.companyLinkedinSlug
+    const linkedinUrl = recordLinkedinUrl || pageLinkedinUrl || null
+    const linkedinSlug = linkedinSlugFromUrl(linkedinUrl) || pageLinkedinSlug || null
+    if (!recordId || !recordName || (!linkedinSlug && !linkedinUrl)) return
+
+    const remembered: RememberedLinkedInCompanyContext = {
+      id: recordId,
+      name: recordName,
+      domain: recordDomain,
+      logo_url: recordLogo,
+      linkedin_url: linkedinUrl,
+      linkedinSlug,
+      pageUrl: context.url,
+      fromPeoplePage: /\/(?:company|school|showcase)\/[^/?#]+\/people\/?/i.test(context.url),
+      savedAt: Date.now(),
+    }
+    await chrome.storage.local.set({ [RECENT_LINKEDIN_COMPANY_KEY]: remembered })
+  }
+
+  async function findRecentLinkedInCompanyOption(): Promise<CompanyOption | null> {
+    if (entityType !== 'person' || context.source !== 'linkedin') return null
+    const stored = await chrome.storage.local.get(RECENT_LINKEDIN_COMPANY_KEY)
+    const remembered = stored[RECENT_LINKEDIN_COMPANY_KEY] as RememberedLinkedInCompanyContext | undefined
+    if (!remembered?.savedAt || Date.now() - remembered.savedAt > RECENT_LINKEDIN_COMPANY_MAX_AGE_MS) return null
+
+    const rememberedName = normalizeCompanyIdentity(remembered.name)
+    const rememberedSlug = normalizeCompanyIdentity(remembered.linkedinSlug || linkedinSlugFromUrl(remembered.linkedin_url))
+    const profileCompany = normalizeCompanyIdentity(context.companyName)
+    const profileSlug = normalizeCompanyIdentity(context.companyLinkedinSlug || linkedinSlugFromUrl(context.companyLinkedinUrl))
+    const visibleProfileText = normalizeCompanyIdentity(`${context.companyName ?? ''} ${context.jobTitle ?? ''} ${context.text.slice(0, 2500)}`)
+    const exactCompanySignal = Boolean(
+      (rememberedSlug && profileSlug && rememberedSlug === profileSlug) ||
+      (rememberedName && profileCompany && (rememberedName === profileCompany || editDistance(rememberedName, profileCompany) <= 2)),
+    )
+    const visibleInProfile = Boolean(rememberedName && visibleProfileText.includes(rememberedName))
+    const recentPeoplePageFlow = Boolean(remembered.fromPeoplePage && Date.now() - remembered.savedAt <= 15 * 60 * 1000)
+    if (!exactCompanySignal && !visibleInProfile && !recentPeoplePageFlow) return null
+
+    if (remembered.id) {
+      const byId = await findCompanyById(remembered.id)
+      if (byId) return byId
+    }
+
+    if (rememberedSlug || remembered.linkedin_url) {
+      const { data } = await supabase
+        .from('companies')
+        .select('id, name, domain, logo_url, linkedin_url')
+        .eq('user_id', user.id)
+        .or([remembered.linkedin_url, rememberedSlug].filter(Boolean).map(value => `linkedin_url.ilike.%${value}%`).join(','))
+        .limit(1)
+        .maybeSingle()
+      if (data) return { id: data.id, name: data.name, domain: data.domain, logo_url: data.logo_url, linkedin_url: data.linkedin_url }
+    }
+
+    if (remembered.name) {
+      const { data } = await supabase
+        .from('companies')
+        .select('id, name, domain, logo_url, linkedin_url')
+        .eq('user_id', user.id)
+        .ilike('name', remembered.name)
+        .limit(1)
+        .maybeSingle()
+      if (data) return { id: data.id, name: data.name, domain: data.domain, logo_url: data.logo_url, linkedin_url: data.linkedin_url }
+    }
+
+    return null
+  }
+
+  async function findLikelyCompanyOptions(): Promise<CompanyOption[]> {
     const { data } = await supabase
       .from('companies')
-      .select('id, name, domain, logo_url')
+      .select('id, name, domain, logo_url, linkedin_url')
       .eq('user_id', user.id)
-      .ilike('name', context.companyName)
-      .limit(1)
-      .maybeSingle()
-    return data ? { id: data.id, name: data.name, domain: data.domain, logo_url: data.logo_url } : null
+      .limit(250)
+    return ((data ?? []) as CompanyOption[])
+      .map(company => ({ company, score: companyMatchScore(company) }))
+      .filter(item => item.score >= 58)
+      .sort((a, b) => b.score - a.score || a.company.name.localeCompare(b.company.name))
+      .slice(0, 5)
+      .map(item => item.company)
+  }
+
+  function companyMatchScore(company: CompanyOption) {
+    const candidates = companyIdentityCandidates()
+    const companyNameKey = normalizeCompanyIdentity(company.name)
+    const companyDomainKey = cleanDomainValue(company.domain)
+    const companyDomainRoot = companyDomainKey?.split('.')[0] ?? ''
+    const companyLinkedinSlug = linkedinSlugFromUrl(company.linkedin_url)
+    let score = 0
+
+    for (const candidate of candidates) {
+      const key = normalizeCompanyIdentity(candidate)
+      if (!key) continue
+      if (key === companyNameKey) score = Math.max(score, 100)
+      if (companyNameKey.includes(key) || key.includes(companyNameKey)) score = Math.max(score, Math.min(key.length, companyNameKey.length) >= 4 ? 84 : 0)
+      if (companyDomainRoot && (key === companyDomainRoot || editDistance(key, companyDomainRoot) <= 1)) score = Math.max(score, 88)
+      if (companyLinkedinSlug && (key === companyLinkedinSlug || editDistance(key, companyLinkedinSlug) <= 1)) score = Math.max(score, 90)
+      const distance = editDistance(key, companyNameKey)
+      if (Math.max(key.length, companyNameKey.length) >= 6 && distance <= 2) score = Math.max(score, 76)
+      if (Math.max(key.length, companyNameKey.length) >= 9 && distance <= 3) score = Math.max(score, 70)
+    }
+
+    const contextDomain = isExternalOpportunitySource() ? null : cleanDomainValue(context.domain)
+    if (contextDomain && companyDomainKey === contextDomain) score = Math.max(score, 110)
+    if (context.linkedinSlug && companyLinkedinSlug && normalizeCompanyIdentity(context.linkedinSlug) === companyLinkedinSlug) score = Math.max(score, 110)
+    if (context.companyLinkedinSlug && companyLinkedinSlug && normalizeCompanyIdentity(context.companyLinkedinSlug) === companyLinkedinSlug) score = Math.max(score, 110)
+    if (context.linkedinSlug && companyDomainRoot && editDistance(normalizeCompanyIdentity(context.linkedinSlug), companyDomainRoot) <= 1) score = Math.max(score, 88)
+    return score
+  }
+
+  function companyIdentityCandidates() {
+    const sourceDomainIsCompany = !isExternalOpportunitySource()
+    const domainRoot = cleanDomainValue(sourceDomainIsCompany ? (context.domain || domain) : domain)?.split('.')[0]
+    return [
+      entityType === 'company' ? context.suggestedName : null,
+      context.companyName,
+      companyName,
+      entityType === 'company' ? name : null,
+      entityType === 'company' ? context.linkedinSlug : null,
+      context.companyLinkedinSlug,
+      domainRoot,
+    ].filter((value): value is string => Boolean(value && value.trim()))
+  }
+
+  async function findCompanyOption(): Promise<CompanyOption | null> {
+    const sourceDomainIsCompany = !isExternalOpportunitySource()
+    if (sourceDomainIsCompany) {
+      const byDomain = await findCompany()
+      if (byDomain) return { id: byDomain.id, name: byDomain.name, domain: byDomain.domain ?? null, logo_url: byDomain.logoUrl ?? null, linkedin_url: byDomain.linkedinUrl ?? null }
+    }
+
+    const companyLinkedinSlug = context.companyLinkedinSlug || linkedinSlugFromUrl(context.companyLinkedinUrl)
+    if (companyLinkedinSlug) {
+      const { data } = await supabase
+        .from('companies')
+        .select('id, name, domain, logo_url, linkedin_url')
+        .eq('user_id', user.id)
+        .or([context.companyLinkedinUrl, companyLinkedinSlug].filter(Boolean).map(value => `linkedin_url.ilike.%${value}%`).join(','))
+        .limit(1)
+        .maybeSingle()
+      if (data) return { id: data.id, name: data.name, domain: data.domain, logo_url: data.logo_url, linkedin_url: data.linkedin_url }
+    }
+
+    if (context.companyName) {
+      const { data } = await supabase
+        .from('companies')
+        .select('id, name, domain, logo_url, linkedin_url')
+        .eq('user_id', user.id)
+        .ilike('name', context.companyName)
+        .limit(1)
+        .maybeSingle()
+      if (data) return { id: data.id, name: data.name, domain: data.domain, logo_url: data.logo_url, linkedin_url: data.linkedin_url }
+    }
+
+    const recent = await findRecentLinkedInCompanyOption()
+    if (recent) return recent
+
+    const candidates = await findLikelyCompanyOptions()
+    if (isExternalOpportunitySource() && context.companyName) {
+      return candidates.find(company => companyMatchesVisibleOpportunity(company)) ?? null
+    }
+    return candidates[0] ?? null
   }
 
   async function findCompanyById(companyId?: string | null): Promise<CompanyOption | null> {
     if (!companyId) return null
     const { data } = await supabase
       .from('companies')
-      .select('id, name, domain, logo_url')
+      .select('id, name, domain, logo_url, linkedin_url')
       .eq('user_id', user.id)
       .eq('id', companyId)
       .maybeSingle()
-    return data ? { id: data.id, name: data.name, domain: data.domain, logo_url: data.logo_url } : null
+    return data ? { id: data.id, name: data.name, domain: data.domain, logo_url: data.logo_url, linkedin_url: data.linkedin_url } : null
   }
 
   async function findPerson(): Promise<ExistingRecord | null> {
-    if (!context.linkedinUrl) return null
-    const normalized = context.linkedinUrl.replace(/\/$/, '')
+    if (context.linkedinUrl) {
+      const normalized = context.linkedinUrl.replace(/\/$/, '')
+      const { data } = await supabase
+        .from('outreach_logs')
+        .select(PERSON_SELECT)
+        .eq('user_id', user.id)
+        .in('linkedin_url', [normalized, `${normalized}/`])
+        .maybeSingle()
+      if (data) return personRecordFromData(data)
+    }
+
+    const primaryEmail = (preferredContextEmail || context.emailAddress || email).toLowerCase()
+    const emails = primaryEmail && primaryEmail.includes('@') && primaryEmail !== user.email?.toLowerCase()
+      ? [primaryEmail]
+      : []
+    if (emails.length === 0) return null
+
     const { data } = await supabase
       .from('outreach_logs')
       .select(PERSON_SELECT)
       .eq('user_id', user.id)
-      .in('linkedin_url', [normalized, `${normalized}/`])
+      .ilike('email', emails[0])
+      .limit(1)
       .maybeSingle()
-    return data
-      ? personRecordFromData(data)
-      : null
+    if (data) return personRecordFromData(data)
+
+    const { data: channelMatch } = await supabase
+      .from('contact_channels')
+      .select(`outreach_log_id, outreach_logs!inner(${PERSON_SELECT})`)
+      .eq('channel', 'email')
+      .eq('channel_identifier', emails[0])
+      .eq('outreach_logs.user_id', user.id)
+      .limit(1)
+      .maybeSingle()
+    const contact = Array.isArray((channelMatch as any)?.outreach_logs)
+      ? (channelMatch as any).outreach_logs[0]
+      : (channelMatch as any)?.outreach_logs
+    return contact ? personRecordFromData(contact) : null
+  }
+
+  async function findLikelyPersonOptions(): Promise<PersonRelationRecord[]> {
+    const terms = [...new Set([
+      preferredContextEmail,
+      context.emailAddress,
+      ...(context.emailCandidates ?? []).map(candidate => candidate.email),
+      preferredContextName,
+      name,
+    ].filter((value): value is string => Boolean(value && value.trim())))]
+    if (terms.length === 0) return []
+    const emailTerms = terms.filter(term => term.includes('@') && term.toLowerCase() !== user.email?.toLowerCase()).slice(0, 4)
+    const nameTerms = terms.filter(term => !term.includes('@')).slice(0, 3)
+    const filters = [
+      ...emailTerms.map(term => `email.ilike.%${term}%`),
+      ...nameTerms.map(term => `name.ilike.%${term}%`),
+    ]
+    if (filters.length === 0) return []
+    const { data } = await supabase
+      .from('outreach_logs')
+      .select('id, name, company_id, job_title, company, profile_photo_url, email')
+      .eq('user_id', user.id)
+      .or(filters.join(','))
+      .order('name')
+      .limit(5)
+    return (data ?? []) as PersonRelationRecord[]
+  }
+
+  async function findGmailDealCandidates(): Promise<DealRecord[]> {
+    if (context.source !== 'gmail') return []
+    const emailDomain = domainFromEmail(preferredContextEmail || context.emailAddress)
+    const textKey = normalizeCompanyIdentity(`${context.title} ${context.suggestedName} ${context.text.slice(0, 5000)}`)
+    const { data } = await supabase
+      .from('opportunities')
+      .select('id, title, stage, type, estimated_value, company_id, application_source_domain, company:companies(name, logo_url, domain)')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(120)
+
+    return ((data ?? []) as DealRecord[])
+      .map(deal => ({ deal, score: gmailDealMatchScore(deal, emailDomain, textKey) }))
+      .filter(item => item.score >= 45)
+      .sort((a, b) => b.score - a.score || a.deal.title.localeCompare(b.deal.title))
+      .slice(0, 5)
+      .map(item => item.deal)
+  }
+
+  async function findLinkedGmailDeal(): Promise<DealRecord | null> {
+    if (context.source !== 'gmail') return null
+    const externalId = gmailExternalId()
+    const { data } = await supabase
+      .from('interactions')
+      .select('opportunity:opportunities(id, title, stage, type, estimated_value, company_id, application_source_domain, company:companies(name, logo_url, domain))')
+      .eq('user_id', user.id)
+      .eq('external_id', externalId)
+      .not('opportunity_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const opportunity = Array.isArray((data as any)?.opportunity)
+      ? (data as any).opportunity[0]
+      : (data as any)?.opportunity
+    return opportunity ? opportunity as DealRecord : null
+  }
+
+  function gmailExternalId() {
+    const url = new URL(context.url)
+    const stableUrl = `${url.origin}${url.pathname}${url.hash || url.search}`.replace(/([?&](compose|th)=[^&]+)/g, '')
+    return `gmail_manual_${stableHash(stableUrl || `${context.title}:${preferredContextEmail}`)}`
+  }
+
+  function stableHash(value: string) {
+    let hash = 5381
+    for (let index = 0; index < value.length; index += 1) {
+      hash = ((hash << 5) + hash) ^ value.charCodeAt(index)
+    }
+    return (hash >>> 0).toString(36)
+  }
+
+  function gmailDealMatchScore(deal: DealRecord, emailDomain: string | null, textKey: string) {
+    let score = 0
+    if (emailDomain && sourceDomainMatches(deal.application_source_domain, emailDomain)) score += 130
+    const titleKey = normalizeCompanyIdentity(deal.title)
+    const companyName = Array.isArray(deal.company) ? deal.company[0]?.name : deal.company?.name
+    const companyKey = normalizeCompanyIdentity(companyName)
+    if (titleKey && textKey.includes(titleKey)) score += 90
+    if (companyKey && textKey.includes(companyKey)) score += 75
+    if (deal.application_source_domain && textKey.includes(normalizeCompanyIdentity(deal.application_source_domain))) score += 50
+    if (/\b(apply|application|interview|hiring|recruit|candidate|next steps|postul)/i.test(context.text)) score += 20
+    return score
+  }
+
+  function sourceDomainMatches(sourceDomain: string | null | undefined, emailDomain: string) {
+    const source = cleanDomainValue(sourceDomain)
+    const domain = cleanDomainValue(emailDomain)
+    if (!source || !domain) return false
+    return source === domain || source.endsWith(`.${domain}`) || domain.endsWith(`.${source}`)
+  }
+
+  function domainFromEmail(value?: string | null) {
+    const emailMatch = value?.match(/[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})/i)
+    return cleanDomainValue(emailMatch?.[1])
+  }
+
+  function isGenericProcessEmail(emailValue: string | null | undefined, nameValue: string | null | undefined, bodyText: string) {
+    const value = `${emailValue ?? ''} ${nameValue ?? ''} ${bodyText.slice(0, 800)}`.toLowerCase()
+    return /no-?reply|donotreply|mailer-daemon|postmaster|hiring team|recruiting|recruitment|talent|greenhouse|ashby|lever|recruitee|workable|application/.test(value)
+  }
+
+  async function linkCurrentGmailToDeal(deal: DealRecord) {
+    if (gmailLinkingDealId) return
+    setGmailLinkingDealId(deal.id)
+    setStatusText(null)
+    try {
+      const direction = preferredContextEmail && preferredContextEmail.toLowerCase() !== user.email?.toLowerCase() ? 'inbound' : 'outbound'
+      const interactionPayload = {
+        user_id: user.id,
+        contact_id: existing?.type === 'person' ? existing.id : null,
+        opportunity_id: deal.id,
+        type: 'email',
+        direction,
+        channel: 'email',
+        external_id: gmailExternalId(),
+        interaction_date: new Date().toISOString().slice(0, 10),
+        notes: [
+          context.title ? `Subject: ${context.title}` : null,
+          preferredContextEmail ? `Email: ${preferredContextEmail}` : null,
+          `Source: ${context.url}`,
+          context.text ? `\n${context.text.slice(0, 2500)}` : null,
+        ].filter(Boolean).join('\n'),
+      }
+
+      const { data: existingInteraction, error: lookupError } = await supabase
+        .from('interactions')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('opportunity_id', deal.id)
+        .eq('external_id', interactionPayload.external_id)
+        .maybeSingle()
+      if (lookupError) {
+        setStatusText(lookupError.message)
+        return
+      }
+
+      const saveQuery = existingInteraction?.id
+        ? supabase
+          .from('interactions')
+          .update(interactionPayload)
+          .eq('id', existingInteraction.id)
+          .eq('user_id', user.id)
+          .select('id')
+          .single()
+        : supabase
+          .from('interactions')
+          .insert(interactionPayload)
+          .select('id')
+          .single()
+
+      const { data, error } = await saveQuery
+      if (error || !data) {
+        setStatusText(error?.message ?? 'Could not link email to deal.')
+        return
+      }
+      setStatusText(`Email linked to ${deal.title}.`)
+      openRoute({ id: deal.id, type: 'opportunity' })
+    } finally {
+      setGmailLinkingDealId(null)
+    }
+  }
+
+  async function useExistingPerson(person: PersonRelationRecord) {
+    const patch: Record<string, unknown> = {}
+    if (!person.email && (preferredContextEmail || email.trim())) patch.email = preferredContextEmail || email.trim()
+    if (context.profilePhotoUrl && !person.profile_photo_url) patch.profile_photo_url = context.profilePhotoUrl
+    if (context.linkedinUrl) patch.linkedin_url = context.linkedinUrl
+    const query = Object.keys(patch).length > 0
+      ? supabase.from('outreach_logs').update(patch).eq('id', person.id).eq('user_id', user.id).select(PERSON_SELECT).single()
+      : supabase.from('outreach_logs').select(PERSON_SELECT).eq('id', person.id).eq('user_id', user.id).single()
+    const { data, error } = await query
+    if (error || !data) {
+      setStatusText(error?.message ?? 'Could not link existing person.')
+      return
+    }
+    const record = personRecordFromData(data)
+    await upsertEmailChannel(record.id, record.email || preferredContextEmail || email.trim())
+    setPersonCandidates([])
+    applyExistingRecord(record)
+    setExisting(record)
+    await loadRelated(record)
+    setStatusText(`Using existing person: ${record.name}.`)
+  }
+
+  async function upsertEmailChannel(contactId: string, rawEmail?: string | null) {
+    const clean = rawEmail?.trim().toLowerCase()
+    if (!clean || !clean.includes('@')) return
+    await supabase.from('contact_channels').upsert({
+      outreach_log_id: contactId,
+      channel: 'email',
+      channel_identifier: clean,
+      channel_name: clean,
+      verified: true,
+    }, { onConflict: 'channel,channel_identifier' }).then(() => undefined)
   }
 
   async function findOpportunity(): Promise<ExistingRecord | null> {
-    const { data } = await supabase
+    const opportunitySelect = 'id, title, stage, estimated_value, owner_contact_id, company_id, application_source_url, company:companies(name)'
+    const sourceUrls = [...new Set([context.applicationSourceUrl, context.canonicalUrl, context.url].filter((value): value is string => Boolean(value)))]
+
+    for (const sourceUrl of sourceUrls) {
+      const { data } = await supabase
+        .from('opportunities')
+        .select(opportunitySelect)
+        .eq('user_id', user.id)
+        .eq('application_source_url', sourceUrl)
+        .limit(1)
+        .maybeSingle()
+      if (data) {
+        return opportunityRecordFromData(data)
+      }
+    }
+
+    const company = await findCompanyOption()
+    if (isExternalOpportunitySource()) {
+      if (!company?.id) return null
+      if (context.companyName && !companyMatchesVisibleOpportunity(company)) return null
+    }
+
+    let query = supabase
       .from('opportunities')
-      .select('id, title, stage, estimated_value, owner_contact_id, company_id, company:companies(name)')
+      .select(opportunitySelect)
       .eq('user_id', user.id)
       .ilike('title', name.trim())
       .limit(1)
-      .maybeSingle()
+    if (company?.id) query = query.eq('company_id', company.id)
+    const { data } = await query.maybeSingle()
     if (!data) return null
-    const companyRecord = data.company as { name?: string | null } | { name?: string | null }[] | null
-    const company = Array.isArray(companyRecord) ? companyRecord[0]?.name : companyRecord?.name
-    return { id: data.id, type: 'opportunity', name: data.title, stage: data.stage, dealValue: data.estimated_value, ownerId: data.owner_contact_id, companyId: data.company_id, company }
+    return opportunityRecordFromData(data)
   }
 
-  async function ensureCompany(): Promise<CompanyOption | null> {
-    if (matchedCompany) return matchedCompany
-    const candidateName = companyName.trim() || domain.trim() || context.companyName || context.domain
+  async function ensureCompany(options: { allowSourceDomain?: boolean } = {}): Promise<CompanyOption | null> {
+    if (matchedCompany && (!isExternalOpportunitySource() || companyMatchesVisibleOpportunity(matchedCompany))) {
+      await rememberLinkedInCompany(matchedCompany)
+      return matchedCompany
+    }
+    const allowSourceDomain = options.allowSourceDomain ?? true
+    const candidateName = companyName.trim() || context.companyName || (allowSourceDomain ? domain.trim() || context.domain : '')
     if (!candidateName) return null
+    const candidateDomain = cleanDomainValue(domain.trim() || (candidateName.includes('.') ? candidateName : null))
+    const canonicalName = canonicalCompanyName(candidateName, candidateDomain)
 
     const existingCompany = await findCompanyOption()
     if (existingCompany) {
       setMatchedCompany(existingCompany)
+      await rememberLinkedInCompany(existingCompany)
       return existingCompany
     }
 
@@ -1096,50 +1814,158 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
       .from('companies')
       .insert({
         user_id: user.id,
-        name: candidateName,
-        domain: domain.trim() || null,
+        name: canonicalName,
+        domain: allowSourceDomain ? candidateDomain : null,
+        linkedin_url: context.companyLinkedinUrl ?? null,
         source: 'extension_capture',
         account_stage: 'captured',
         logo_url: firstWorkingLogo([...(context.logoCandidates ?? []), context.faviconUrl], brokenLogoUrls),
       })
-      .select('id, name, domain, logo_url')
+      .select('id, name, domain, logo_url, linkedin_url')
       .single()
 
     if (!data) return null
-    const company = { id: data.id, name: data.name, domain: data.domain, logo_url: data.logo_url }
+    const company = { id: data.id, name: data.name, domain: data.domain, logo_url: data.logo_url, linkedin_url: data.linkedin_url }
     setMatchedCompany(company)
+    await rememberLinkedInCompany(company)
     return company
   }
 
-  async function saveRecord(typeOverride?: CaptureEntityType) {
+  function shouldConfirmAssociatedCompany(type: CaptureEntityType) {
+    return (type === 'person' || type === 'opportunity') && !matchedCompany
+  }
+
+  function openAssociatedCompanyPrompt(type: CaptureEntityType) {
+    const defaultName = companyName.trim() || context.companyName || ''
+    setCompanyPromptRecordType(type)
+    setOpportunityCompanySearch(defaultName)
+    setOpportunityCompanyDomain(suggestedCompanyDomain(defaultName))
+    setShowOpportunityCompanyPrompt(true)
+    void loadCompanyOptions(defaultName)
+  }
+
+  async function selectCompanyForAssociation(company: CompanyOption, type: CaptureEntityType = companyPromptRecordType) {
+    const logo = firstWorkingLogo([
+      company.logo_url,
+      company.domain ? `https://www.google.com/s2/favicons?domain=${company.domain}&sz=128` : null,
+      ...(context.logoCandidates ?? []),
+    ], brokenLogoUrls)
+    if (logo && (!company.logo_url || isBetterCompanyLogo(company.logo_url, logo, company.domain))) {
+      await supabase
+        .from('companies')
+        .update({ logo_url: logo })
+        .eq('id', company.id)
+        .eq('user_id', user.id)
+    }
+    setMatchedCompany({ ...company, logo_url: logo ?? company.logo_url ?? null })
+    setCompanyName(company.name)
+    if (company.domain) setDomain(company.domain)
+    setShowOpportunityCompanyPrompt(false)
+    void saveRecord(type, { ...company, logo_url: logo ?? company.logo_url ?? null })
+  }
+
+  async function createCompanyForAssociation() {
+    const companyLabel = opportunityCompanySearch.trim() || companyName.trim() || context.companyName || ''
+    if (!companyLabel) {
+      setStatusText('Company name is required before saving this record.')
+      return
+    }
+    const cleanDomain = cleanDomainValue(opportunityCompanyDomain || (companyLabel.includes('.') ? companyLabel : null))
+    const canonicalName = canonicalCompanyName(companyLabel, cleanDomain)
+    const logo = firstWorkingLogo([
+      ...(context.logoCandidates ?? []),
+      cleanDomain ? `https://www.google.com/s2/favicons?domain=${cleanDomain}&sz=128` : null,
+    ], brokenLogoUrls)
+
+    if (cleanDomain) {
+      const { data: existingCompany } = await supabase
+        .from('companies')
+        .select('id, name, domain, logo_url, linkedin_url')
+        .eq('user_id', user.id)
+        .or(`domain.eq.${cleanDomain},website_url.ilike.%${cleanDomain}%`)
+        .limit(1)
+        .maybeSingle()
+      if (existingCompany) {
+        const patch: Record<string, unknown> = {}
+        if (!existingCompany.domain) patch.domain = cleanDomain
+        if (existingCompany.name === existingCompany.domain || existingCompany.name === cleanDomain) patch.name = canonicalName
+        if (logo && (!existingCompany.logo_url || isBetterCompanyLogo(existingCompany.logo_url, logo, cleanDomain))) patch.logo_url = logo
+        if (Object.keys(patch).length > 0) {
+          const { data: updated } = await supabase
+            .from('companies')
+            .update(patch)
+            .eq('id', existingCompany.id)
+            .eq('user_id', user.id)
+            .select('id, name, domain, logo_url, linkedin_url')
+            .single()
+          await selectCompanyForAssociation((updated ?? existingCompany) as CompanyOption)
+          return
+        }
+        await selectCompanyForAssociation(existingCompany as CompanyOption)
+        return
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('companies')
+      .insert({
+        user_id: user.id,
+        name: canonicalName,
+        domain: cleanDomain,
+        website_url: cleanDomain ? `https://${cleanDomain}` : null,
+        logo_url: logo,
+        description: description.trim() || context.description || null,
+        source: 'extension_capture',
+        account_stage: 'captured',
+      })
+      .select('id, name, domain, logo_url, linkedin_url')
+      .single()
+    if (error || !data) {
+      setStatusText(error?.message ?? 'Could not create company.')
+      return
+    }
+    await selectCompanyForAssociation({ id: data.id, name: data.name, domain: data.domain, logo_url: data.logo_url, linkedin_url: data.linkedin_url })
+  }
+
+  async function saveRecord(typeOverride?: CaptureEntityType, companyOverride?: CompanyOption | null) {
     const effectiveType = typeOverride ?? entityType
     if (saving) return
     if (!name.trim()) return
+    if (!companyOverride && shouldConfirmAssociatedCompany(effectiveType)) {
+      openAssociatedCompanyPrompt(effectiveType)
+      return
+    }
     setSaving(true)
     setStatusText(null)
     try {
       let record: ExistingRecord
 
       if (effectiveType === 'company') {
+        const target = existing?.type === 'company' ? existing : await findCompany()
+        if (!existing && target) {
+          setExisting(target)
+          applyExistingRecord(target)
+        }
         const payload = {
           name: name.trim(),
-          domain: domain.trim() || null,
-          description: description.trim() || null,
+          domain: domain.trim() || target?.domain || null,
+          description: description.trim() || target?.description || null,
           primary_location: location.trim() || null,
-          website_url: context.domain ? `https://${context.domain}` : null,
-          linkedin_url: context.linkedinUrl,
-          logo_url: context.faviconUrl,
+          ...(context.domain ? { website_url: `https://${context.domain}` } : {}),
+          linkedin_url: context.linkedinUrl || target?.linkedinUrl || null,
+          logo_url: firstWorkingLogo([...(context.logoCandidates ?? []), context.faviconUrl, target?.logoUrl], brokenLogoUrls),
           source: 'extension_capture',
           account_stage: 'captured',
         }
-        const query = existing
-          ? supabase.from('companies').update(payload).eq('id', existing.id).eq('user_id', user.id).select(COMPANY_SELECT).single()
+        const query = target
+          ? supabase.from('companies').update(payload).eq('id', target.id).eq('user_id', user.id).select(COMPANY_SELECT).single()
           : supabase.from('companies').insert({ ...payload, user_id: user.id }).select(COMPANY_SELECT).single()
         const { data, error } = await query
         if (error || !data) throw error
         record = companyRecordFromData({ ...data, logo_url: data.logo_url ?? context.faviconUrl })
+        await rememberLinkedInCompany(record)
       } else if (effectiveType === 'person') {
-        const company = await ensureCompany()
+        const company = companyOverride ?? await ensureCompany()
         const payload = {
           name: name.trim(),
           status: 'PROSPECT',
@@ -1163,22 +1989,35 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
           : supabase.from('outreach_logs').insert({ ...payload, user_id: user.id }).select(PERSON_SELECT).single()
         const { data, error } = await query
         if (error || !data) throw error
-        record = personRecordFromData(data)
+        record = { ...personRecordFromData(data), company: company?.name ?? data.company, companyId: company?.id ?? data.company_id, domain: company?.domain ?? null }
+        await upsertEmailChannel(record.id, record.email || email.trim() || preferredContextEmail)
       } else {
-        const company = await ensureCompany()
-        const payload = {
+        const company = companyOverride ?? await ensureCompany({ allowSourceDomain: !isExternalOpportunitySource() })
+        const legacyPayload = {
           title: name.trim(),
           type: 'job',
           stage: 'exploring',
           company_id: company?.id ?? null,
           notes: description.trim() || context.url,
         }
-        const query = existing
+        const payload = {
+          ...legacyPayload,
+          application_source_url: context.applicationSourceUrl || context.url,
+          application_source_domain: context.applicationSourceDomain || context.domain || null,
+          application_source_name: context.applicationSourceName || context.hostname || null,
+        }
+        let query = existing
           ? supabase.from('opportunities').update(payload).eq('id', existing.id).eq('user_id', user.id).select('id, title, stage').single()
           : supabase.from('opportunities').insert({ ...payload, user_id: user.id }).select('id, title, stage').single()
-        const { data, error } = await query
+        let { data, error } = await query
+        if (error?.code === '42703' || /application_source_/i.test(error?.message ?? '')) {
+          query = existing
+            ? supabase.from('opportunities').update(legacyPayload).eq('id', existing.id).eq('user_id', user.id).select('id, title, stage').single()
+            : supabase.from('opportunities').insert({ ...legacyPayload, user_id: user.id }).select('id, title, stage').single()
+          ;({ data, error } = await query)
+        }
         if (error || !data) throw error
-        record = { id: data.id, type: 'opportunity', name: data.title, stage: data.stage, company: company?.name ?? null }
+        record = { id: data.id, type: 'opportunity', name: data.title, stage: data.stage, company: company?.name ?? null, companyId: company?.id ?? null, domain: company?.domain ?? null, logoUrl: company?.logo_url ?? null }
       }
 
       setExisting(record)
@@ -1255,7 +2094,7 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
     const company = entityType === 'company'
       ? { id: existing.id, name: existing.name, domain: existing.domain ?? null, logo_url: existing.logoUrl ?? null }
       : draft?.companyId
-        ? companyOptions.find(option => option.id === draft.companyId) ?? matchedCompany ?? await ensureCompany()
+        ? companyOptions.find(option => option.id === draft.companyId) ?? (companyMatchesVisibleOpportunity(matchedCompany) ? matchedCompany : null) ?? await ensureCompany()
         : await ensureCompany()
     const amount = draft?.value ? Number(draft.value.replace(/[^0-9.]/g, '')) : null
     const { data, error } = await supabase
@@ -1264,7 +2103,7 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
         user_id: user.id,
         title: dealTitle.trim(),
         type: draft?.type.trim() || 'job',
-        stage: draft?.stage || 'Lead',
+        stage: draft?.stage || 'exploring',
         estimated_value: Number.isFinite(amount) ? amount : null,
         company_id: company?.id ?? null,
         notes: draft?.jobDesc.trim() || null,
@@ -1293,9 +2132,16 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
 
   async function saveSnapshot(record: ExistingRecord): Promise<(CaptureSnapshotRecord & { localWriteConfirmed?: boolean }) | null> {
     const markdown = context.markdown
-    const filename = record.type === 'person' && matchedCompany?.domain
-      ? `${matchedCompany.domain}/People/${name.replace(/[^a-z0-9._ -]+/gi, '').replace(/\s+/g, '-')}.md`
-      : localMarkdownPath({ ...context, domain: domain || context.domain }, record.type)
+    const companyDomain = cleanDomainValue(matchedCompany?.domain || record.domain)
+    const sourceDomainIsCompany = !isExternalOpportunitySource() && record.type === 'company'
+    const captureDomain = companyDomain || (sourceDomainIsCompany ? cleanDomainValue(domain || context.domain) : null)
+    const snapshotContext = {
+      ...context,
+      domain: captureDomain,
+      companyName: record.company || matchedCompany?.name || companyName || context.companyName,
+      suggestedName: record.name || name || context.suggestedName,
+    }
+    const filename = localMarkdownPath(snapshotContext, record.type)
     const path = `${user.id}/${filename}`
 
     const { data: signal, error: signalError } = await supabase.from('app_signals').insert({
@@ -1337,6 +2183,9 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
           suggested_name: context.suggestedName,
           company_name: context.companyName,
           job_title: context.jobTitle,
+          application_source_url: context.applicationSourceUrl,
+          application_source_domain: context.applicationSourceDomain,
+          application_source_name: context.applicationSourceName,
           captured_at: context.capturedAt,
           local_write_confirmed: localWriteConfirmed,
         },
@@ -1522,7 +2371,7 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
                 <div className="rt-chip-row">
                   {entityType === 'opportunity' ? (
                     <>
-                      <span className="rt-chip"><span className="rt-stage-dot" />{existing.stage || 'Lead'}</span>
+                      <span className="rt-chip"><span className="rt-stage-dot" />{opportunityStageLabel(existing.stage)}</span>
                       <span className="rt-chip">{formatCurrency(existing.dealValue)}</span>
                       <span className="rt-chip">{ownerPerson?.name || 'Set owner...'}</span>
                       <span className="rt-chip">+3</span>
@@ -1546,6 +2395,67 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
               )}
 
               {!existing && (
+                companyCandidates.length > 0 && (
+                  <div className="rt-match-card">
+                    <span className="rt-match-label">Possible existing company</span>
+                    {companyCandidates.map(candidate => {
+                      const candidateLogo = companyLogoUrl(candidate)
+                      return (
+                        <button
+                          type="button"
+                          key={candidate.id}
+                          className="rt-match-row"
+                          onClick={() => entityType === 'person' || entityType === 'opportunity' ? void selectCompanyForAssociation(candidate, entityType) : void useExistingCompany(candidate)}
+                        >
+                          {candidateLogo ? <img src={candidateLogo} alt="" /> : <ObjectGlyph type="company" />}
+                          <span>
+                            <strong>{candidate.name}</strong>
+                            <em>{candidate.domain || candidate.linkedin_url || 'Existing company'}</em>
+                          </span>
+                          <RtIcon name="chevron-right" size={13} />
+                        </button>
+                      )
+                    })}
+                  </div>
+                )
+              )}
+
+              {!existing && gmailDealCandidates.length > 0 && (
+                <div className="rt-match-card">
+                  <span className="rt-match-label">Possible existing deal</span>
+                  {gmailDealCandidates.map(candidate => {
+                    const dealLogo = companyLogoUrl(candidate.company)
+                    return (
+                      <button type="button" key={candidate.id} className="rt-match-row" onClick={() => void linkCurrentGmailToDeal(candidate)} disabled={gmailLinkingDealId === candidate.id}>
+                        {dealLogo ? <img src={dealLogo} alt="" /> : <ObjectGlyph type="opportunity" />}
+                        <span>
+                          <strong>{candidate.title}</strong>
+                          <em>{candidate.company?.name || candidate.application_source_domain || candidate.stage || 'Existing deal'}</em>
+                        </span>
+                        {gmailLinkingDealId === candidate.id ? <RtIcon name="refresh" size={13} /> : <RtIcon name="chevron-right" size={13} />}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {!existing && personCandidates.length > 0 && (
+                <div className="rt-match-card">
+                  <span className="rt-match-label">Possible existing person</span>
+                  {personCandidates.map(candidate => (
+                    <button type="button" key={candidate.id} className="rt-match-row" onClick={() => void useExistingPerson(candidate)}>
+                      {candidate.profile_photo_url ? <img className="person" src={candidate.profile_photo_url} alt="" /> : <ObjectGlyph type="person" />}
+                      <span>
+                        <strong>{candidate.name}</strong>
+                        <em>{candidate.email || candidate.company || 'Existing person'}</em>
+                      </span>
+                      <RtIcon name="chevron-right" size={13} />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {!existing && (
                 <div className="rt-create-action">
                   <button className="rt-primary" onClick={() => saveRecord()} disabled={saving}>
                     {saving ? 'Saving...' : `Add ${recordLabel} to reThink`}
@@ -1561,6 +2471,28 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
                 </div>
               )}
             </section>
+
+            {showOpportunityCompanyPrompt && (
+              <OpportunityCompanyModal
+                title={name}
+                recordType={companyPromptRecordType}
+                sourceDomain={context.applicationSourceDomain || context.domain || context.hostname}
+                companyName={opportunityCompanySearch}
+                companyDomain={opportunityCompanyDomain}
+                options={companyOptions}
+                onSearch={(value) => {
+                  setOpportunityCompanySearch(value)
+                  if (!opportunityCompanyDomain || opportunityCompanyDomain === suggestedCompanyDomain(companyName || context.companyName)) {
+                    setOpportunityCompanyDomain(suggestedCompanyDomain(value))
+                  }
+                  void loadCompanyOptions(value)
+                }}
+                onDomainChange={setOpportunityCompanyDomain}
+                onSelect={(company) => void selectCompanyForAssociation(company)}
+                onCreate={() => void createCompanyForAssociation()}
+                onCancel={() => setShowOpportunityCompanyPrompt(false)}
+              />
+            )}
 
             {!existing ? (
               <button className="rt-manual">Create record manually</button>
@@ -1585,15 +2517,15 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
                       <DetailField icon={<RtIcon name="money" />} label="Deal stage">
                         <div className="rt-inline-picker-wrap">
                           <button type="button" className="rt-deal-field-chip" onClick={() => setShowStagePicker(value => !value)}>
-                            <span className="rt-stage-dot" />{existing.stage || 'Lead'}
+                            <span className="rt-stage-dot" />{opportunityStageLabel(existing.stage)}
                           </button>
                           {showStagePicker && (
                             <div className="rt-picker-menu rt-stage-menu">
                               <div className="rt-picker-search"><RtIcon name="search" size={12} /> Search or create stage...</div>
-                              {['Lead', 'Qualified', 'Proposal', 'Won 🎉', 'Lost'].map((stage, index) => (
-                                <button type="button" key={stage} onClick={() => { void persistRecordPatch({ stage }); setShowStagePicker(false) }}>
-                                  <span className={`rt-stage-dot stage-${index}`} />{stage}
-                                  {stage === (existing.stage || 'Lead') && <span className="rt-check checked"><RtIcon name="check" size={9} /></span>}
+                              {OPPORTUNITY_STAGE_OPTIONS.map((stage, index) => (
+                                <button type="button" key={stage.value} onClick={() => { void persistRecordPatch({ stage: stage.value }); setShowStagePicker(false) }}>
+                                  <span className={`rt-stage-dot stage-${index}`} />{stage.label}
+                                  {stage.value === (existing.stage || 'exploring') && <span className="rt-check checked"><RtIcon name="check" size={9} /></span>}
                                 </button>
                               ))}
                             </div>
@@ -1711,11 +2643,10 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
                   {entityType === 'opportunity' && (
                     <DetailField icon={<RtIcon name="users" />} label="Associated people">
                       <div className="rt-inline-picker-wrap">
-                        <div className="rt-relation-rows">
+                        <div className="rt-associated-people-inline">
                           {associatedPeople.length > 0 ? associatedPeople.slice(0, 2).map(person => (
-                            <button type="button" className="rt-inline-relation" key={person.id} onClick={() => openRoute({ id: person.id, type: 'person' })}>
+                            <button type="button" className="rt-associated-person-chip icon-only" key={person.id} onClick={() => openRoute({ id: person.id, type: 'person' })} title={person.name}>
                               {person.profile_photo_url ? <img src={person.profile_photo_url} alt="" /> : <span className="rt-person-fallback">{person.name.slice(0, 1)}</span>}
-                              <span>{person.name}</span>
                             </button>
                           )) : <button type="button" className="rt-inline-relation muted" onClick={() => setShowDealPeoplePicker(value => !value)}><ObjectGlyph type="person" /><span>Set a value...</span></button>}
                           {associatedPeople.length > 2 && <span className="rt-more-chip">+{associatedPeople.length - 2}</span>}
@@ -1763,12 +2694,20 @@ export function CapturePanel({ user, context, onRefresh }: Props) {
                   }] : [])])}
                   matchedCompany={matchedCompany}
                   currentEntity={existing}
-                  onToggleCreator={() => setShowDealCreator(value => !value)}
+                  dealOptions={dealOptions}
+                  dealSearch={dealSearch}
+                  onToggleCreator={openDealModal}
+                  onCloseCreator={() => setShowDealCreator(false)}
                   onTitleChange={setNewDealTitle}
+                  onDealSearch={(value) => {
+                    setDealSearch(value)
+                    void loadDealOptions(value)
+                  }}
+                  onLinkDeal={(deal) => void attachExistingDeal(deal)}
                   onCreateDeal={createDeal}
                   onOpenDeal={(deal) => openRoute({ id: deal.id, type: 'opportunity' })}
                 />
-                <MiniSection title="Emails" empty="There is no email history yet" count="0" icon="mail" />
+                <EmailsSection interactions={emailInteractions} />
                 {entityType === 'company' ? (
                   <TeamSection
                     members={teamMembers}
@@ -1950,7 +2889,7 @@ function AllAttributesView({
         {entityType === 'opportunity' && (
           <>
             <EditableAttributeRow icon={<RtIcon name="text" />} label="Name" value={name} onChange={setName} onBlur={() => onPersistField({ title: name.trim() })} />
-            <AttributeRow icon={<RtIcon name="money" />} label="Deal stage" value="Lead" />
+            <AttributeRow icon={<RtIcon name="money" />} label="Deal stage" value="Exploring" />
             <AttributeRow icon={<RtIcon name="money" />} label="Deal value" value="Set Deal value..." />
             <AttributeRow icon={<RtIcon name="users" />} label="Associated people" value="Set Associated people..." />
             <AttributeRow icon={<RtIcon name="building" />} label="Associated company">
@@ -2195,6 +3134,77 @@ function TeamPickerModal({
   )
 }
 
+function OpportunityCompanyModal({
+  title,
+  recordType,
+  sourceDomain,
+  companyName,
+  companyDomain,
+  options,
+  onSearch,
+  onDomainChange,
+  onSelect,
+  onCreate,
+  onCancel,
+}: {
+  title: string
+  recordType: CaptureEntityType
+  sourceDomain?: string | null
+  companyName: string
+  companyDomain: string
+  options: CompanyOption[]
+  onSearch: (value: string) => void
+  onDomainChange: (value: string) => void
+  onSelect: (company: CompanyOption) => void
+  onCreate: () => void
+  onCancel: () => void
+}) {
+  const recordLabel = recordType === 'person' ? 'person' : recordType === 'opportunity' ? 'opportunity' : 'record'
+  return (
+    <div className="rt-modal-layer">
+      <div className="rt-deal-modal rt-opportunity-company-modal">
+        <div className="rt-modal-head">
+          <strong><ObjectGlyph type="company" />Associated company</strong>
+          <button type="button" onClick={onCancel}><RtIcon name="close" size={14} /></button>
+        </div>
+        <div className="rt-company-gate-summary">
+          <strong>{title}</strong>
+          <em>Source: {sourceDomain || 'job board'}</em>
+        </div>
+        <div className="rt-modal-search">
+          <RtIcon name="search" size={13} />
+          <input value={companyName} onChange={event => onSearch(event.target.value)} placeholder="Find or create company..." autoFocus />
+        </div>
+        <div className="rt-modal-list rt-company-gate-list">
+          {options.length > 0 ? options.map(company => {
+            const logo = companyLogoUrl(company)
+            return (
+              <button type="button" key={company.id} onClick={() => onSelect(company)}>
+                {logo ? <img className="rt-picker-avatar" src={logo} alt="" /> : <ObjectGlyph type="company" />}
+                <span>
+                  <strong>{company.name}</strong>
+                  <em>{company.domain || company.linkedin_url || 'Existing company'}</em>
+                </span>
+              </button>
+            )
+          }) : (
+            <div className="rt-picker-empty">No matching companies</div>
+          )}
+        </div>
+        <div className="rt-company-gate-create">
+          <label>
+            <span>New company domain</span>
+            <input value={companyDomain} onChange={event => onDomainChange(event.target.value)} placeholder="ramp.com" />
+          </label>
+          <button type="button" className="rt-modal-create" onClick={onCreate}>
+            <ObjectGlyph type="company" /> Create company and add {recordLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Field({ label, value }: { label: string; value: string | null | undefined; readOnly?: boolean }) {
   return (
     <div className="rt-field">
@@ -2249,6 +3259,21 @@ function personRecordFromData(data: any): ExistingRecord {
   }
 }
 
+function opportunityRecordFromData(data: any): ExistingRecord {
+  const companyRecord = data.company as { name?: string | null } | { name?: string | null }[] | null
+  const company = Array.isArray(companyRecord) ? companyRecord[0]?.name : companyRecord?.name
+  return {
+    id: data.id,
+    type: 'opportunity',
+    name: data.title,
+    stage: data.stage,
+    dealValue: data.estimated_value,
+    ownerId: data.owner_contact_id,
+    companyId: data.company_id,
+    company,
+  }
+}
+
 function isBadLogoUrl(value?: string | null) {
   return Boolean(value && /meridian|cliente|customer|testimonial|case-stud|badge|capterra|getapp|softwareadvice|g2|gartner/i.test(value))
 }
@@ -2298,6 +3323,74 @@ function cleanCompanyLabel(value?: string | null) {
     ?.replace(/\s*[·•]\s*.*$/g, '')
     .replace(/\s+/g, ' ')
     .trim() || null
+}
+
+function cleanDomainValue(value?: string | null) {
+  return value
+    ?.trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\/.*$/, '')
+    || null
+}
+
+function suggestedCompanyDomain(value?: string | null) {
+  const clean = cleanDomainValue(value)
+  if (clean?.includes('.')) return clean
+  const key = normalizeCompanyIdentity(value)
+  return key ? `${key}.com` : ''
+}
+
+function canonicalCompanyName(value?: string | null, domain?: string | null) {
+  const cleanValue = value?.trim()
+  const cleanDomain = cleanDomainValue(domain || (cleanValue?.includes('.') ? cleanValue : null))
+  if (cleanValue && cleanDomain && cleanDomainValue(cleanValue) === cleanDomain) return titleCaseDomain(cleanDomain)
+  if (cleanValue && !cleanValue.includes('.')) return cleanValue
+  if (cleanDomain) return titleCaseDomain(cleanDomain)
+  return cleanValue || 'Unknown'
+}
+
+function normalizeCompanyIdentity(value?: string | null) {
+  return value
+    ?.toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .replace(/\.(com|ai|io|co|net|org|cl|dev|app)$/i, '')
+    .replace(/\b(inc|incorporated|llc|ltd|limited|corp|corporation|company|co|saas|ai)\b/g, '')
+    .replace(/[^a-z0-9]+/g, '')
+    .trim()
+    || ''
+}
+
+function linkedinSlugFromUrl(value?: string | null) {
+  if (!value) return ''
+  const match = value.match(/linkedin\.com\/(?:company|school|showcase)\/([^/?#&]+)/i)
+  return normalizeCompanyIdentity(match?.[1] ?? '')
+}
+
+function sameLinkedinCompany(a?: string | null, b?: string | null) {
+  const left = linkedinSlugFromUrl(a)
+  const right = linkedinSlugFromUrl(b)
+  return Boolean(left && right && left === right)
+}
+
+function editDistance(a: string, b: string) {
+  if (a === b) return 0
+  if (!a) return b.length
+  if (!b) return a.length
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index)
+  const current = Array.from({ length: b.length + 1 }, () => 0)
+  for (let i = 1; i <= a.length; i += 1) {
+    current[0] = i
+    for (let j = 1; j <= b.length; j += 1) {
+      current[j] = a[i - 1] === b[j - 1]
+        ? previous[j - 1]
+        : Math.min(previous[j - 1], previous[j], current[j - 1]) + 1
+    }
+    for (let j = 0; j <= b.length; j += 1) previous[j] = current[j]
+  }
+  return previous[b.length]
 }
 
 function DetailField({
@@ -2482,8 +3575,13 @@ function DealsSection({
   peopleOptions,
   matchedCompany,
   currentEntity,
+  dealOptions,
+  dealSearch,
   onToggleCreator,
+  onCloseCreator,
   onTitleChange,
+  onDealSearch,
+  onLinkDeal,
   onCreateDeal,
   onOpenDeal,
 }: {
@@ -2494,8 +3592,13 @@ function DealsSection({
   peopleOptions: PersonRelationRecord[]
   matchedCompany: CompanyOption | null
   currentEntity: ExistingRecord | null
+  dealOptions: DealRecord[]
+  dealSearch: string
   onToggleCreator: () => void
+  onCloseCreator: () => void
   onTitleChange: (value: string) => void
+  onDealSearch: (value: string) => void
+  onLinkDeal: (deal: DealRecord) => void
   onCreateDeal: (draft: DealDraft) => void
   onOpenDeal: (deal: DealRecord) => void
 }) {
@@ -2527,18 +3630,100 @@ function DealsSection({
         </div>
       )}
       {showCreator && (
-        <CreateDealModal
+        <DealAttachModal
           initialTitle={newDealTitle}
           companyOptions={companyOptions}
           peopleOptions={peopleOptions}
           matchedCompany={matchedCompany}
           currentEntity={currentEntity}
+          dealOptions={dealOptions}
+          dealSearch={dealSearch}
           onTitleChange={onTitleChange}
-          onCancel={onToggleCreator}
+          onDealSearch={onDealSearch}
+          onLinkDeal={onLinkDeal}
+          onCancel={onCloseCreator}
           onCreate={onCreateDeal}
         />
       )}
     </section>
+  )
+}
+
+function DealAttachModal({
+  initialTitle,
+  companyOptions,
+  peopleOptions,
+  matchedCompany,
+  currentEntity,
+  dealOptions,
+  dealSearch,
+  onTitleChange,
+  onDealSearch,
+  onLinkDeal,
+  onCancel,
+  onCreate,
+}: {
+  initialTitle: string
+  companyOptions: CompanyOption[]
+  peopleOptions: PersonRelationRecord[]
+  matchedCompany: CompanyOption | null
+  currentEntity: ExistingRecord | null
+  dealOptions: DealRecord[]
+  dealSearch: string
+  onTitleChange: (value: string) => void
+  onDealSearch: (value: string) => void
+  onLinkDeal: (deal: DealRecord) => void
+  onCancel: () => void
+  onCreate: (draft: DealDraft) => void
+}) {
+  const [mode, setMode] = useState<'existing' | 'new'>('existing')
+  if (mode === 'new') {
+    return (
+      <CreateDealModal
+        initialTitle={initialTitle || dealSearch}
+        companyOptions={companyOptions}
+        peopleOptions={peopleOptions}
+        matchedCompany={matchedCompany}
+        currentEntity={currentEntity}
+        onTitleChange={onTitleChange}
+        onCancel={onCancel}
+        onCreate={onCreate}
+      />
+    )
+  }
+
+  return (
+    <div className="rt-modal-layer">
+      <div className="rt-deal-modal compact">
+        <div className="rt-modal-head">
+          <strong><ObjectGlyph type="opportunity" />Add Deal</strong>
+          <button type="button" onClick={onCancel}><RtIcon name="close" size={14} /></button>
+        </div>
+        <div className="rt-modal-search">
+          <RtIcon name="search" size={13} />
+          <input value={dealSearch} onChange={event => onDealSearch(event.target.value)} placeholder="Search deals..." autoFocus />
+        </div>
+        <div className="rt-modal-list">
+          {dealOptions.length === 0 ? (
+            <div className="rt-picker-empty">No deals found</div>
+          ) : dealOptions.map(deal => {
+            const logo = companyLogoUrl(deal.company)
+            return (
+              <button type="button" key={deal.id} onClick={() => onLinkDeal(deal)}>
+                {logo ? <img className="rt-picker-avatar" src={logo} alt="" /> : <ObjectGlyph type="opportunity" />}
+                <span>
+                  <strong>{deal.title}</strong>
+                  <em>{deal.company?.name || deal.stage || deal.type || 'Deal'}</em>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <button type="button" className="rt-modal-create" onClick={() => setMode('new')}>
+          <ObjectGlyph type="opportunity" /> Create new Deal
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -2563,7 +3748,7 @@ function CreateDealModal({
 }) {
   const [draft, setDraft] = useState<DealDraft>({
     title: initialTitle,
-    stage: '',
+    stage: 'exploring',
     owner: '',
     value: '',
     peopleIds: currentEntity?.type === 'person' ? [currentEntity.id] : [],
@@ -2596,15 +3781,15 @@ function CreateDealModal({
           </ModalField>
           <ModalField label="Deal stage (required)">
             <PickerButton
-              value={draft.stage ? <><span className="rt-stage-dot" />{draft.stage}</> : 'Set Deal stage...'}
+              value={draft.stage ? <><span className="rt-stage-dot" />{opportunityStageLabel(draft.stage)}</> : 'Set Deal stage...'}
               muted={!draft.stage}
               onClick={() => setOpenField(openField === 'stage' ? null : 'stage')}
             />
             {openField === 'stage' && (
               <div className="rt-picker-menu">
-                {['Lead', 'In Progress', 'Won 🎉', 'Lost'].map(stage => (
-                  <button type="button" key={stage} onClick={() => { patchDraft({ stage }); setOpenField(null) }}>
-                    <span className="rt-stage-dot" />{stage}
+                {OPPORTUNITY_STAGE_OPTIONS.map(stage => (
+                  <button type="button" key={stage.value} onClick={() => { patchDraft({ stage: stage.value }); setOpenField(null) }}>
+                    <span className="rt-stage-dot" />{stage.label}
                   </button>
                 ))}
               </div>
@@ -2857,30 +4042,58 @@ function RelationRows({ people, onOpenPerson }: { people: PersonRelationRecord[]
   )
 }
 
-function MiniSection({
-  title,
-  empty,
-  action,
-  count,
-  icon = 'mail',
-}: {
-  title: string
-  empty: string
-  action?: string
-  count?: string
-  icon?: RtIconName
-}) {
+function EmailsSection({ interactions }: { interactions: EmailInteractionRecord[] }) {
   return (
-    <section className="rt-card rt-mini">
+    <section className="rt-card rt-mini rt-live-section">
       <div className="rt-mini-head">
         <div>
-          <span><ObjectGlyph icon={icon} />{title}</span>
-          {count && <em>{count}</em>}
+          <span><ObjectGlyph icon="mail" />Interactions</span>
+          <em>{interactions.length}</em>
         </div>
         <button title="Open"><RtIcon name="external" size={13} /></button>
       </div>
-      <p>{empty}</p>
-      {action && <button className="rt-secondary">+ {action}</button>}
+      {interactions.length === 0 ? (
+        <p>There is no interaction history yet</p>
+      ) : (
+        <div className="rt-email-rows">
+          {interactions.slice(0, 4).map(interaction => (
+            <div className="rt-email-row" key={interaction.id}>
+              <ObjectGlyph icon={interactionIcon(interaction)} />
+              <span>
+                <strong>{interactionLabel(interaction)}</strong>
+                <em>{interaction.notes || 'Interaction'}</em>
+              </span>
+              <time>{formatShortDate(interaction.interaction_date)}</time>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   )
+}
+
+function interactionLabel(interaction: EmailInteractionRecord) {
+  const raw = interaction.channel || interaction.type || 'interaction'
+  const label = raw === 'linkedin_msg'
+    ? 'LinkedIn message'
+    : raw === 'virtual_coffee'
+      ? 'Virtual coffee'
+      : raw.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+  if (!interaction.direction) return label
+  return `${interaction.direction === 'inbound' ? 'Inbound' : interaction.direction === 'outbound' ? 'Outbound' : interaction.direction} ${label}`
+}
+
+function interactionIcon(interaction: EmailInteractionRecord): RtIconName {
+  const raw = interaction.channel || interaction.type
+  if (raw === 'email') return 'mail'
+  if (raw === 'linkedin' || raw === 'linkedin_msg') return 'linkedin'
+  if (raw === 'whatsapp' || raw === 'wa') return 'phone'
+  if (raw === 'call') return 'phone'
+  return 'mail'
+}
+
+function formatShortDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
 }

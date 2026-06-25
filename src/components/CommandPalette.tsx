@@ -16,6 +16,7 @@ import {
   pathForMention,
   rankCrmObjects,
 } from '@/lib/crmObjects'
+import { isActiveOpportunityStage } from '@/lib/opportunityStages'
 import { openTodoFile } from '@/lib/filePills'
 import { driveFileToSegment, searchDriveFiles, type DriveFileResult } from '@/lib/googleDrive'
 
@@ -103,13 +104,13 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
 
     Promise.all([
       supabase.from('outreach_logs').select('id, name, profile_photo_url, company, job_title, email').eq('user_id', userId).order('name'),
-      supabase.from('companies').select('id, name, logo_url, domain, sector, headline').eq('user_id', userId).order('name'),
-      supabase.from('opportunities').select('id, title, stage, type, company_id, company:companies(id, name, logo_url, domain)').eq('user_id', userId).order('created_at', { ascending: false }),
+      supabase.from('companies').select('id, name, logo_url, domain, website_url, sector, headline').eq('user_id', userId).order('name'),
+      supabase.from('opportunities').select('id, title, stage, type, company_id, company:companies(id, name, logo_url, domain, website_url)').eq('user_id', userId).order('created_at', { ascending: false }),
     ]).then(([peopleRes, companiesRes, oppsRes]) => {
       const people = (peopleRes.data ?? []).map(c => mentionFromContact(c))
       const companies = (companiesRes.data ?? []).map(c => mentionFromCompany(c))
       const opps = ((oppsRes.data ?? []) as Parameters<typeof mentionFromOpportunity>[0][])
-        .filter(o => o.stage !== 'won' && o.stage !== 'lost')
+        .filter(o => isActiveOpportunityStage(o.stage))
         .map(o => mentionFromOpportunity(o))
       setCrmOptions([...people, ...companies, ...opps])
     })

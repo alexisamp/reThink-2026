@@ -1,25 +1,64 @@
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { GOOGLE_OAUTH_SCOPES_STRING, markGoogleDriveScopeRequested } from '@/lib/googleDrive'
+import { completeOAuthCallback } from '@/lib/authCallback'
 import { isRunningInTauri, openInSystemBrowser, TAURI_OAUTH_REDIRECT } from '@/lib/tauriRuntime'
 
 export default function Login() {
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [signingIn, setSigningIn] = useState(false)
+
+  useEffect(() => {
+    const storedError = localStorage.getItem('rethink_auth_error')
+    if (storedError) {
+      localStorage.removeItem('rethink_auth_error')
+      setAuthError(storedError)
+      return
+    }
+
+    completeOAuthCallback().then(result => {
+      if (result.error) setAuthError(result.error)
+    }).catch(err => {
+      setAuthError(err instanceof Error ? err.message : 'Could not complete Google sign in.')
+    })
+  }, [])
+
   const signInWithGoogle = async () => {
+    setSigningIn(true)
+    setAuthError(null)
+    markGoogleDriveScopeRequested()
+
+    const options = {
+      scopes: GOOGLE_OAUTH_SCOPES_STRING,
+      queryParams: { access_type: 'offline', prompt: 'consent' },
+    }
+    const redirectTo = `${window.location.origin}/auth/callback`
+
     if (isRunningInTauri()) {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: TAURI_OAUTH_REDIRECT,
           skipBrowserRedirect: true,
-          queryParams: { prompt: 'consent' },
+          ...options,
         },
       })
-      if (error || !data?.url) return
+      if (error || !data?.url) {
+        setAuthError(error?.message ?? 'Could not start Google sign in.')
+        setSigningIn(false)
+        return
+      }
       await openInSystemBrowser(data.url)
       return
     }
-    await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo, ...options },
     })
+    if (error) {
+      setAuthError(error.message)
+      setSigningIn(false)
+    }
   }
 
   return (
@@ -51,6 +90,7 @@ export default function Login() {
 
           <button
             onClick={signInWithGoogle}
+            disabled={signingIn}
             className="w-full flex items-center justify-center gap-3 border border-mercury rounded-lg px-4 py-3.5 text-sm font-medium text-burnham hover:bg-gray-50 hover:border-burnham/20 transition-all"
           >
             {/* Google SVG icon */}
@@ -60,8 +100,14 @@ export default function Login() {
               <path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
               <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
             </svg>
-            Continue with Google
+            {signingIn ? 'Opening Google...' : 'Continue with Google'}
           </button>
+
+          {authError && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {authError}
+            </p>
+          )}
         </div>
 
         {/* Footer */}

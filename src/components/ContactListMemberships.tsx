@@ -23,7 +23,7 @@ export default function ContactListMemberships({ contactId }: { contactId: strin
     return m
   }, [lists])
 
-  const availableLists = lists.filter(l => !memberships.some(m => m.list_id === l.id))
+  const availableLists = lists.filter(l => (l.parent_object ?? 'person') === 'person')
 
   useEffect(() => {
     if (availableLists.length && !selectedListId) {
@@ -33,7 +33,7 @@ export default function ContactListMemberships({ contactId }: { contactId: strin
   }, [availableLists, selectedListId])
 
   async function handleAdd() {
-    if (!selectedListId || !selectedStage) return
+    if (!selectedListId) return
     await addToList(contactId, selectedListId, selectedStage)
     setShowAdd(false)
     setSelectedListId('')
@@ -81,10 +81,11 @@ export default function ContactListMemberships({ contactId }: { contactId: strin
                 </div>
               </button>
               <select
-                value={m.current_stage}
+                value={m.current_stage ?? ''}
                 onChange={e => moveStage(m.id, e.target.value)}
                 className="text-[11px] border border-mercury bg-white rounded px-1.5 py-0.5 focus:outline-none focus:border-burnham max-w-[110px]"
               >
+                <option value="">No stage</option>
                 {list.stages.map(s => (
                   <option key={s.key} value={s.key}>{s.label}</option>
                 ))}
@@ -133,6 +134,7 @@ export default function ContactListMemberships({ contactId }: { contactId: strin
                 onChange={e => setSelectedStage(e.target.value)}
                 className="text-xs border border-mercury bg-white rounded px-1.5 py-1 focus:outline-none focus:border-burnham"
               >
+                <option value="">No stage</option>
                 {selectedList.stages.map(s => (
                   <option key={s.key} value={s.key}>{s.label}</option>
                 ))}
@@ -145,7 +147,7 @@ export default function ContactListMemberships({ contactId }: { contactId: strin
             </button>
             <button
               onClick={handleAdd}
-              disabled={!selectedListId || !selectedStage}
+              disabled={!selectedListId}
               className="text-[11px] px-2 py-0.5 bg-burnham text-gossip rounded disabled:opacity-40"
             >
               Add

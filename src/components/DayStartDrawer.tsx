@@ -38,6 +38,7 @@ export default function DayStartDrawer({
 }: DayStartDrawerProps) {
   const [goal, setGoal] = useState(initialGoal ?? '')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const dayLabel = new Date(today + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
   const hour = new Date().getHours()
@@ -56,11 +57,16 @@ export default function DayStartDrawer({
     const next = goal.trim()
     if (!next) return
     setSaving(true)
-    await supabase.from('reviews').upsert(
+    setError(null)
+    const { error } = await supabase.from('reviews').upsert(
       { user_id: userId, date: today, one_thing: next },
       { onConflict: 'user_id,date' }
     )
     setSaving(false)
+    if (error) {
+      setError(error.message)
+      return
+    }
     onSave(next)
   }
 
@@ -89,6 +95,9 @@ export default function DayStartDrawer({
           )}
           {!closedYesterday && (
             <span className="st-hint"><Info size={11} /> You didn't close yesterday — set the objective and dive in.</span>
+          )}
+          {error && (
+            <span className="st-hint"><Info size={11} /> Could not save objective: {error}</span>
           )}
           {closedYesterday && yesterdayNote && (
             <div className="st-recall"><span><Info size={12} /></span>{yesterdayNote}</div>

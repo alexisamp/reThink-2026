@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "reThink People",
+  "name": "reThink",
   "version": "1.0.0",
   "description": "Your relationship layer — auto-captures LinkedIn interactions and builds your network in reThink. (WhatsApp capture moved to the Conversations desktop app.)",
   "permissions": [
@@ -11,9 +11,12 @@
     "alarms",
     "identity",
     "scripting",
-    "sidePanel"
+    "sidePanel",
+    "downloads"
   ],
   "host_permissions": [
+    "http://*/*",
+    "https://*/*",
     "https://www.linkedin.com/*",
     "https://media.licdn.com/*"
   ],
@@ -23,13 +26,18 @@
   },
   "content_scripts": [
     {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["src/content-scripts/page-capture.js"],
+      "run_at": "document_idle"
+    },
+    {
       "matches": ["https://www.linkedin.com/*"],
       "js": ["src/content-scripts/linkedin-profile.js", "src/content-scripts/floating-trigger.js", "src/content-scripts/linkedin-dm.js"],
       "run_at": "document_idle"
     }
   ],
   "action": {
-    "default_title": "reThink People",
+    "default_title": "reThink",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",
