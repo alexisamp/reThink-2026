@@ -5,7 +5,7 @@ import {
   Gear,
   MagnifyingGlass, CaretDown, CaretRight,
   SignOut, Bell, Note,
-  Plus,
+  Plus, Check, Sparkle,
 } from '@phosphor-icons/react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
@@ -15,13 +15,17 @@ import CommandPalette from '@/components/CommandPalette'
 import SettingsModal from '@/components/SettingsModal'
 import ListCreateModal from '@/components/ListCreateModal'
 import type { UpdaterState } from '@/hooks/useUpdater'
+import type { List } from '@/types'
 
 const SIDEBAR_KEY = 'rethink-sidebar-collapsed'
 const CRM_KEY = 'rethink-crm-collapsed'
 const LISTS_KEY = 'rethink-lists-collapsed'
+const LISTS_SORT_KEY = 'rethink-lists-sort'
 const ZOOM_KEY = 'rethink-ui-zoom'
 const ZOOM_OPTIONS = [80, 90, 100] as const
+const ACTIVE_LIST_LOADED_EVENT = 'rethink:active-list-loaded'
 type ZoomLevel = typeof ZOOM_OPTIONS[number]
+type ListsSortMode = 'relevant' | 'recent' | 'alphabetical' | 'custom'
 
 interface AppShellProps {
   children: ReactNode
@@ -98,25 +102,36 @@ function SectionHeader({
 }) {
   if (collapsed) return <SectionDivider collapsed={collapsed} />
   return (
-    <div className="sb-eyebrow flex w-full items-center">
+    <div className="sb-eyebrow flex w-full items-center" data-section={label.toLowerCase()}>
       <button onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
         {open ? <CaretDown size={9} weight="bold" /> : <CaretRight size={9} weight="bold" />}
         <span className="truncate">{label}</span>
       </button>
-      {actions && <span className="ml-auto flex items-center gap-0.5">{actions}</span>}
+      {actions && <span className="sb-section-actions">{actions}</span>}
     </div>
   )
 }
 
 export default function AppShell({ children, user, updater }: AppShellProps) {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const { lists } = useLists(user.id)
+  const browserPathname = typeof window !== 'undefined' ? window.location.pathname : pathname
+  const activeListId = (pathname.match(/^\/lists\/([^/]+)/) ?? browserPathname.match(/^\/lists\/([^/]+)/))?.[1] ?? null
+  const [activeListFallback, setActiveListFallback] = useState<List | null>(null)
+  const [activeListTitleFallback, setActiveListTitleFallback] = useState('')
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'true')
   const [crmOpen, setCrmOpen] = useState(() => localStorage.getItem(CRM_KEY) !== 'false')
   const [listsOpen, setListsOpen] = useState(() => localStorage.getItem(LISTS_KEY) !== 'false')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [listCreateOpen, setListCreateOpen] = useState(false)
+  const [listSortOpen, setListSortOpen] = useState(false)
+  const [listSortAnchor, setListSortAnchor] = useState<{ top: number; left: number } | null>(null)
+  const [listSortMode, setListSortMode] = useState<ListsSortMode>(() => {
+    const saved = localStorage.getItem(LISTS_SORT_KEY)
+    return saved === 'relevant' || saved === 'recent' || saved === 'alphabetical' || saved === 'custom' ? saved : 'custom'
+  })
   const [reviewCount, setReviewCount] = useState(0)
   const [zoom, setZoom] = useState<ZoomLevel>(() => {
     const saved = parseInt(localStorage.getItem(ZOOM_KEY) ?? '100', 10)
@@ -147,8 +162,9 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
     'cmd+\\': toggleCollapsed,
     'cmd+1': () => navigate('/today'),
     'cmd+2': () => navigate('/review'),
-    'cmd+3': () => navigate('/playbook'),
-    'cmd+4': () => navigate('/milestones'),
+    'cmd+3': () => navigate('/suggestions'),
+    'cmd+4': () => navigate('/playbook'),
+    'cmd+5': () => navigate('/milestones'),
   })
 
   useEffect(() => {
@@ -159,6 +175,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('status', 'pending')
+        .eq('proposed_payload->>source_kind', 'identity_resolution')
       if (!cancelled) setReviewCount(count ?? 0)
     }
     loadReviewCount()
@@ -169,17 +186,122 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
     }
   }, [user.id])
 
+  useEffect(() => {
+    let cancelled = false
+    if (!activeListId || lists.some(list => list.id === activeListId)) {
+      setActiveListFallback(null)
+      return () => { cancelled = true }
+    }
+    supabase
+      .from('lists')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('id', activeListId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setActiveListFallback((data as List | null) ?? null)
+      })
+    return () => { cancelled = true }
+  }, [activeListId, lists, user.id])
+
+  useEffect(() => {
+    function handleActiveListLoaded(event: Event) {
+      const detail = (event as CustomEvent<List>).detail
+      if (detail?.id) setActiveListFallback(detail)
+    }
+    window.addEventListener(ACTIVE_LIST_LOADED_EVENT, handleActiveListLoaded)
+    return () => window.removeEventListener(ACTIVE_LIST_LOADED_EVENT, handleActiveListLoaded)
+  }, [])
+
+  useEffect(() => {
+    if (!listSortOpen) return undefined
+    const close = () => setListSortOpen(false)
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') close()
+    }
+    window.addEventListener('click', close)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [listSortOpen])
+
+  useEffect(() => {
+    if (!activeListId || lists.some(list => list.id === activeListId) || activeListFallback?.id === activeListId) {
+      setActiveListTitleFallback('')
+      return undefined
+    }
+    const readTitle = () => {
+      const title = document.querySelector('.atl-title-row h1')?.textContent?.trim()
+      if (title) setActiveListTitleFallback(title)
+    }
+    readTitle()
+    const interval = window.setInterval(readTitle, 150)
+    const timeout = window.setTimeout(() => window.clearInterval(interval), 2500)
+    return () => {
+      window.clearInterval(interval)
+      window.clearTimeout(timeout)
+    }
+  }, [activeListFallback?.id, activeListId, lists])
+
   const showUpdateDot = updater.status === 'available' || updater.status === 'ready'
 
   const avatarUrl = user.user_metadata?.avatar_url as string | undefined
   const fullName = user.user_metadata?.full_name as string | undefined
   const initials = (fullName || user.email || 'U')[0].toUpperCase()
 
-  const sidebarPx = collapsed ? '48px' : '212px'
+  const listsMode = pathname.startsWith('/lists') || browserPathname.startsWith('/lists')
+  const sidebarPx = collapsed ? '48px' : (listsMode ? '214px' : '212px')
+  const listsSectionOpen = listsOpen || listsMode
+  const syntheticActiveList: List | null = activeListId && activeListTitleFallback
+    ? {
+      id: activeListId,
+      user_id: user.id,
+      name: activeListTitleFallback,
+      parent_object: 'company',
+      purpose: null,
+      stages: [],
+      color: '#9CA3AF',
+      icon: '📋',
+      is_archived: false,
+      created_at: '',
+      updated_at: '',
+    }
+    : null
+  const unsortedSidebarLists = [
+    ...lists,
+    ...(
+      activeListFallback && !lists.some(list => list.id === activeListFallback.id)
+        ? [activeListFallback]
+        : []
+    ),
+    ...(
+      syntheticActiveList && !lists.some(list => list.id === syntheticActiveList.id) && activeListFallback?.id !== syntheticActiveList.id
+        ? [syntheticActiveList]
+        : []
+    ),
+  ]
+  const sidebarLists = [...unsortedSidebarLists].sort((a, b) => {
+    if (listSortMode === 'alphabetical') return a.name.localeCompare(b.name)
+    if (listSortMode === 'recent') return String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''))
+    return 0
+  })
+  const sortOptions: Array<{ mode: ListsSortMode; label: string }> = [
+    { mode: 'relevant', label: 'Most relevant' },
+    { mode: 'recent', label: 'Recently added' },
+    { mode: 'alphabetical', label: 'Alphabetical' },
+    { mode: 'custom', label: 'Custom' },
+  ]
+  const selectListSort = (mode: ListsSortMode) => {
+    setListSortMode(mode)
+    localStorage.setItem(LISTS_SORT_KEY, mode)
+    setListSortOpen(false)
+  }
 
   return (
     <div
-      className="shell"
+      className={['shell', listsMode ? 'lists-shell' : ''].join(' ')}
       style={{ '--sidebar-width': sidebarPx } as React.CSSProperties}
     >
       {/* Left sidebar */}
@@ -198,16 +320,30 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         </div>
 
         {/* Quick actions / search */}
-        <div className="shrink-0">
-          <button onClick={() => setPaletteOpen(true)} className="sb-search w-[calc(100%-16px)]">
-            <MagnifyingGlass size={14} className="shrink-0" />
-            {!collapsed && (
-              <>
-                <span className="label">Quick actions</span>
+        <div className="sb-actions shrink-0">
+          {listsMode && !collapsed ? (
+            <>
+              <button onClick={() => setPaletteOpen(true)} className="sb-search sb-quick-action">
+                <span className="sb-quick-icon">K</span>
+                <span className="label">Quick action...</span>
                 <span className="shortcut">⌘K</span>
-              </>
-            )}
-          </button>
+              </button>
+              <button onClick={() => setPaletteOpen(true)} className="sb-search sb-search-only" aria-label="Search">
+                <MagnifyingGlass size={18} className="shrink-0" />
+                <span className="shortcut">/</span>
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setPaletteOpen(true)} className="sb-search w-[calc(100%-16px)]">
+              <MagnifyingGlass size={14} className="shrink-0" />
+              {!collapsed && (
+                <>
+                  <span className="label">Quick actions</span>
+                  <span className="shortcut">⌘K</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
 
         <SectionDivider collapsed={collapsed} />
@@ -221,6 +357,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
             label={reviewCount > 0 ? `Review (${reviewCount})` : 'Review'}
             collapsed={collapsed}
           />
+          <NavItem path="/suggestions" icon={<Sparkle size={15} />} label="Suggestions" collapsed={collapsed} />
           <NavItem path="/playbook" icon={<Note size={15} />} label="Playbook" collapsed={collapsed} />
           <NavItem path="/milestones" icon={<Target size={15} />} label="Plan" collapsed={collapsed} />
 
@@ -260,36 +397,63 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
           <SectionHeader
             label="Lists"
             collapsed={collapsed}
-            open={listsOpen}
+            open={listsSectionOpen}
             onToggle={toggleLists}
             actions={(
               <>
                 <button
                   onClick={event => {
                     event.stopPropagation()
-                    setSettingsOpen(true)
+                    const rect = event.currentTarget.getBoundingClientRect()
+                    setListSortAnchor({ top: rect.bottom + 8, left: rect.left - 4 })
+                    setListSortOpen(prev => !prev)
                   }}
-                  className="rounded p-0.5 text-shuttle hover:bg-mercury/40 hover:text-midnight"
-                  title="List settings"
+                  className={`sb-section-action ${listSortOpen ? 'active' : ''}`}
+                  aria-label="List settings"
                 >
                   <Gear size={11} />
                 </button>
+                {listSortOpen && (
+                  <div
+                    className="sb-lists-sort-menu"
+                    style={listSortAnchor ? { top: listSortAnchor.top, left: listSortAnchor.left } : undefined}
+                    onClick={event => event.stopPropagation()}
+                  >
+                    <div className="sb-lists-sort-label">Sort</div>
+                    {sortOptions.map(option => (
+                      <button
+                        key={option.mode}
+                        type="button"
+                        onClick={() => selectListSort(option.mode)}
+                        className="sb-lists-sort-row"
+                      >
+                        <span>{option.label}</span>
+                        {listSortMode === option.mode && (
+                          <span className="sb-lists-sort-check">
+                            <Check size={14} weight="bold" />
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <button
                   onClick={event => {
                     event.stopPropagation()
                     setListCreateOpen(true)
                   }}
-                  className="rounded p-0.5 text-shuttle hover:bg-mercury/40 hover:text-midnight"
-                  title="Create a list"
+                  className="sb-section-action sb-tooltip-wrap"
+                  aria-label="Create a list"
                 >
                   <Plus size={12} />
+                  <span className="sb-tooltip">Create a list</span>
                 </button>
               </>
             )}
           />
-          {(listsOpen || collapsed) && (
+          {(listsSectionOpen || collapsed) && (
             <>
-              {lists.map(l => (
+              {sidebarLists.map(l => (
                 <NavItem
                   key={l.id}
                   path={`/lists/${l.id}`}

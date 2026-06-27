@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { addRecordToList } from '@/hooks/useLists'
 import CrmTable, { type CrmColumn } from '@/components/crm/CrmTable'
 import RecordPeek from '@/components/crm/RecordPeek'
 import EditablePeekSelect from '@/components/crm/EditablePeekSelect'
@@ -321,30 +322,16 @@ export default function PeopleCompanies() {
 
   const addCompanyToList = async (list: List) => {
     if (!user || !peek) return
-    await supabase.from('list_memberships').insert({
-      user_id: user.id,
-      list_id: list.id,
-      company_id: peek.id,
-      contact_id: null,
-      opportunity_id: null,
-      current_stage: null,
-      attributes: {},
-    })
+    if ((list.parent_object ?? 'person') !== 'company') return
+    await addRecordToList({ userId: user.id, list, recordId: peek.id })
     setPicker(null)
     await load()
   }
 
   const addNestedPersonToList = async (list: List) => {
     if (!user || !nestedPerson) return
-    await supabase.from('list_memberships').insert({
-      user_id: user.id,
-      list_id: list.id,
-      contact_id: nestedPerson.id,
-      company_id: null,
-      opportunity_id: null,
-      current_stage: null,
-      attributes: {},
-    })
+    if ((list.parent_object ?? 'person') !== 'person') return
+    await addRecordToList({ userId: user.id, list, recordId: nestedPerson.id })
     setPicker(null)
     await load()
   }
@@ -356,15 +343,8 @@ export default function PeopleCompanies() {
 
   const addNestedDealToList = async (list: List) => {
     if (!user || !nestedDeal) return
-    await supabase.from('list_memberships').insert({
-      user_id: user.id,
-      list_id: list.id,
-      opportunity_id: nestedDeal.id,
-      company_id: null,
-      contact_id: null,
-      current_stage: null,
-      attributes: {},
-    })
+    if ((list.parent_object ?? 'person') !== 'opportunity') return
+    await addRecordToList({ userId: user.id, list, recordId: nestedDeal.id })
     setPicker(null)
     await load()
   }

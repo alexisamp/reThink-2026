@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { Buildings, Check, Users, X, Target } from '@phosphor-icons/react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Buildings, CaretLeft, Users, X, Target } from '@phosphor-icons/react'
 import { useAuth } from '@/hooks/useAuth'
 import { LIST_OBJECT_LABELS, useLists } from '@/hooks/useLists'
 import type { List, ListRecordKind } from '@/types'
@@ -22,14 +22,14 @@ const OBJECTS: Array<{
     title: 'Companies',
     subtitle: 'Accounts, targets, partners, and organizations.',
     icon: <Buildings size={16} weight="fill" />,
-    color: '#2563eb',
+    color: '#3b6ce8',
   },
   {
     id: 'person',
     title: 'People',
     subtitle: 'Contacts, candidates, mentors, and relationships.',
     icon: <Users size={16} weight="fill" />,
-    color: '#2563eb',
+    color: '#3b6ce8',
   },
   {
     id: 'opportunity',
@@ -40,12 +40,60 @@ const OBJECTS: Array<{
   },
 ]
 
+const EMOJI_OPTIONS: Array<{ emoji: string; terms: string }> = [
+  { emoji: '😀', terms: 'grinning smile happy face' },
+  { emoji: '😃', terms: 'smile happy open face' },
+  { emoji: '😁', terms: 'beam grin smile happy' },
+  { emoji: '😄', terms: 'laugh smile happy' },
+  { emoji: '😆', terms: 'laugh squint smile' },
+  { emoji: '😅', terms: 'sweat smile relief' },
+  { emoji: '🤣', terms: 'rolling laugh funny' },
+  { emoji: '😂', terms: 'joy laugh tears' },
+  { emoji: '🙂', terms: 'slight smile' },
+  { emoji: '🙃', terms: 'upside down smile' },
+  { emoji: '😉', terms: 'wink playful' },
+  { emoji: '😊', terms: 'blush smile happy' },
+  { emoji: '😇', terms: 'angel halo' },
+  { emoji: '🥰', terms: 'love hearts smile' },
+  { emoji: '😍', terms: 'heart eyes love' },
+  { emoji: '🤩', terms: 'star eyes excited' },
+  { emoji: '😘', terms: 'kiss love' },
+  { emoji: '😋', terms: 'yum tongue' },
+  { emoji: '🤪', terms: 'zany silly' },
+  { emoji: '🤑', terms: 'money deal revenue' },
+  { emoji: '🤗', terms: 'hug thanks' },
+  { emoji: '🤔', terms: 'thinking think' },
+  { emoji: '😐', terms: 'neutral' },
+  { emoji: '😴', terms: 'sleep sleepy' },
+  { emoji: '🤒', terms: 'sick thermometer' },
+  { emoji: '🥵', terms: 'hot' },
+  { emoji: '🥶', terms: 'cold' },
+  { emoji: '🤯', terms: 'mind blown' },
+  { emoji: '🥳', terms: 'party celebrate' },
+  { emoji: '😎', terms: 'cool sunglasses' },
+  { emoji: '🤓', terms: 'nerd smart' },
+  { emoji: '🧐', terms: 'inspect monocle research' },
+  { emoji: '🔥', terms: 'fire hot priority job hunt' },
+  { emoji: '🚀', terms: 'rocket launch startup growth' },
+  { emoji: '🤝', terms: 'handshake partner partners relationship' },
+  { emoji: '☘️', terms: 'clover luck revenue funnel' },
+  { emoji: '📋', terms: 'clipboard list lists task' },
+  { emoji: '🏢', terms: 'company companies building account' },
+  { emoji: '👤', terms: 'person people contact user' },
+  { emoji: '💼', terms: 'deal deals work business opportunity' },
+  { emoji: '💰', terms: 'money revenue sales' },
+  { emoji: '🎯', terms: 'target goal focus' },
+  { emoji: '⭐', terms: 'star favorite important' },
+]
+
 export default function ListCreateModal({ open, onClose, onCreated }: ListCreateModalProps) {
   const { user } = useAuth()
   const { createList } = useLists(user?.id)
   const [selectedObject, setSelectedObject] = useState<ListRecordKind | null>(null)
   const [emoji, setEmoji] = useState('')
   const [name, setName] = useState('')
+  const [emojiOpen, setEmojiOpen] = useState(false)
+  const [emojiQuery, setEmojiQuery] = useState('')
   const [saving, setSaving] = useState(false)
 
   const effectiveEmoji = useMemo(() => {
@@ -53,6 +101,15 @@ export default function ListCreateModal({ open, onClose, onCreated }: ListCreate
     if (!selectedObject) return ''
     return LIST_OBJECT_LABELS[selectedObject].icon
   }, [emoji, selectedObject])
+
+  useEffect(() => {
+    if (!open) return
+    setSelectedObject('company')
+    setEmoji(LIST_OBJECT_LABELS.company.icon)
+    setName('New list')
+    setEmojiOpen(false)
+    setEmojiQuery('')
+  }, [open])
 
   if (!open) return null
 
@@ -73,90 +130,120 @@ export default function ListCreateModal({ open, onClose, onCreated }: ListCreate
     }
   }
 
+  const normalizedEmojiQuery = emojiQuery.trim().toLowerCase()
+  const filteredEmojis = normalizedEmojiQuery
+    ? EMOJI_OPTIONS.filter(option => option.emoji.includes(normalizedEmojiQuery) || option.terms.includes(normalizedEmojiQuery))
+    : EMOJI_OPTIONS
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 p-4" onMouseDown={onClose}>
+    <div className="atl-modal-backdrop atl-list-create-backdrop" onMouseDown={onClose}>
       <div
-        className="w-full max-w-[640px] overflow-hidden rounded-xl border border-mercury bg-white shadow-2xl"
+        className="atl-modal md atl-list-create-modal"
         onMouseDown={event => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-mercury px-5 py-3">
-          <div className="flex items-center gap-1.5 text-[13px]">
-            <span className="font-medium text-shuttle">Templates</span>
-            <span className="text-shuttle/60">/</span>
-            <span className="font-semibold text-midnight">Start from scratch</span>
+        <div className="atl-modal-head">
+          <div className="atl-crumbs">
+            <button className="atl-crumb-back" type="button" aria-label="Back" onClick={onClose}>
+              <CaretLeft size={18} />
+            </button>
+            <span>Templates</span>
+            <span className="slash">/</span>
+            <strong>Start from scratch</strong>
           </div>
-          <button onClick={onClose} className="rounded-md p-1 text-shuttle hover:bg-mercury/40 hover:text-midnight" title="Close">
-            <X size={15} />
+          <button onClick={onClose} className="atl-x" title="Close">
+            <X size={20} />
           </button>
         </div>
 
-        <div className="px-6 py-5">
-          <div className="mb-5">
-            <h2 className="text-[17px] font-semibold text-midnight">Create a list</h2>
-            <p className="mt-1 text-[13px] text-shuttle">Choose one object type for every entry in this list.</p>
-          </div>
-
-          <div className="mb-5 grid gap-2">
+        <div className="atl-modal-body">
+          <div className="atl-form-label">Object</div>
+          <div className="atl-list-object-grid">
             {OBJECTS.map(object => {
               const active = selectedObject === object.id
               return (
                 <button
                   key={object.id}
                   onClick={() => {
+                    const previousDefaultEmoji = selectedObject ? LIST_OBJECT_LABELS[selectedObject].icon : ''
                     setSelectedObject(object.id)
-                    if (!emoji.trim()) setEmoji(LIST_OBJECT_LABELS[object.id].icon)
+                    if (!emoji.trim() || emoji === previousDefaultEmoji) setEmoji(LIST_OBJECT_LABELS[object.id].icon)
                   }}
-                  className={[
-                    'flex items-center gap-3 rounded-lg border px-3 py-3 text-left transition',
-                    active ? 'border-burnham bg-gossip/30 shadow-sm' : 'border-mercury bg-white hover:border-shuttle/40 hover:bg-mercury/20',
-                  ].join(' ')}
+                  className={`atl-type-card ${active ? 'active' : ''}`}
                 >
-                  <span className="flex h-8 w-8 items-center justify-center rounded-md text-white" style={{ background: object.color }}>
+                  <span className="atl-object-icon" style={{ background: object.color }}>
                     {object.icon}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-semibold text-midnight">{object.title}</span>
-                    <span className="block truncate text-[12px] text-shuttle">{object.subtitle}</span>
+                  <span className="min-w-0">
+                    <span className="atl-type-title">{object.title}</span>
                   </span>
-                  {active && <Check size={15} className="text-burnham" weight="bold" />}
                 </button>
               )
             })}
           </div>
 
-          <div className="grid grid-cols-[72px_1fr] gap-3">
+          <div className="atl-list-name-row">
+            <div className="atl-emoji-anchor">
+              <button
+                type="button"
+                onClick={() => setEmojiOpen(prev => !prev)}
+                className="atl-emoji-button"
+                aria-label="Choose emoji"
+              >
+                {effectiveEmoji || '✨'}
+              </button>
+              {emojiOpen && (
+                <div className="atl-emoji-popover">
+                  <input
+                    value={emojiQuery}
+                    onChange={event => setEmojiQuery(event.target.value)}
+                    className="atl-emoji-search"
+                    placeholder="Search Emojis"
+                    autoFocus
+                  />
+                  <div className="atl-emoji-section">Smileys &amp; Emotion</div>
+                  <div className="atl-emoji-grid">
+                    {filteredEmojis.map(({ emoji: item }) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => {
+                          setEmoji(item)
+                          setEmojiOpen(false)
+                        }}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                  {filteredEmojis.length === 0 && (
+                    <div className="atl-emoji-empty">No emojis found</div>
+                  )}
+                </div>
+              )}
+            </div>
             <label className="block">
-              <span className="mb-1.5 block text-[11px] font-medium text-shuttle">Emoji</span>
-              <input
-                value={emoji}
-                onChange={event => setEmoji(event.target.value.slice(0, 4))}
-                placeholder={selectedObject ? LIST_OBJECT_LABELS[selectedObject].icon : '✨'}
-                className="h-9 w-full rounded-lg border border-mercury px-2 text-center text-[18px] outline-none focus:border-burnham"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-[11px] font-medium text-shuttle">List name</span>
+              <span className="atl-form-label">List name</span>
               <input
                 value={name}
                 onChange={event => setName(event.target.value)}
                 placeholder={selectedObject ? `${LIST_OBJECT_LABELS[selectedObject].plural} list` : 'Name your list'}
-                className="h-9 w-full rounded-lg border border-mercury px-3 text-[13px] text-midnight outline-none focus:border-burnham"
+                className="atl-input"
                 autoFocus
               />
             </label>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-mercury bg-alabaster/40 px-5 py-3">
-          <button onClick={onClose} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-shuttle hover:bg-mercury/40 hover:text-midnight">
-            Cancel
+        <div className="atl-modal-foot">
+          <button onClick={onClose} className="atl-button atl-button-with-key">
+            Cancel <span className="atl-key small">ESC</span>
           </button>
           <button
             onClick={handleCreate}
             disabled={!selectedObject || !name.trim() || saving}
-            className="rounded-lg bg-burnham px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
+            className="atl-button primary disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Create list
+            Create list <span className="atl-key primary-key">↵</span>
           </button>
         </div>
       </div>

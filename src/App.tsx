@@ -12,6 +12,7 @@ import AppShell from '@/components/layout/AppShell'
 import Assessment from '@/screens/Assessment'
 import Today from '@/screens/Today'
 import ReviewQueue from '@/screens/ReviewQueue'
+import Suggestions from '@/screens/Suggestions'
 import People from '@/screens/People'
 import PersonDetail from '@/screens/PersonDetail'
 import PeopleCompanies from '@/screens/PeopleCompanies'
@@ -356,6 +357,7 @@ export default function App() {
                   <Route path="/" element={<Navigate to="/today" replace />} />
                   <Route path="/today" element={<Today />} />
                   <Route path="/review" element={<ReviewQueue />} />
+                  <Route path="/suggestions" element={<Suggestions />} />
                   <Route path="/strategy" element={<Navigate to="/milestones" replace />} />
                   <Route path="/monthly" element={<Navigate to="/milestones" replace />} />
                   <Route path="/monthly/:goalId" element={<Navigate to="/milestones" replace />} />

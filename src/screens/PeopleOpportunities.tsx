@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useOpportunities } from '@/hooks/useOpportunities'
+import { addRecordToList } from '@/hooks/useLists'
 import CrmTable, { type CrmColumn } from '@/components/crm/CrmTable'
 import RecordPeek from '@/components/crm/RecordPeek'
 import EditablePeekSelect from '@/components/crm/EditablePeekSelect'
@@ -314,15 +315,8 @@ export default function PeopleOpportunities() {
 
   const addDealToList = async (list: List) => {
     if (!user || !peek) return
-    await supabase.from('list_memberships').insert({
-      user_id: user.id,
-      list_id: list.id,
-      opportunity_id: peek.id,
-      company_id: null,
-      contact_id: null,
-      current_stage: null,
-      attributes: {},
-    })
+    if ((list.parent_object ?? 'person') !== 'opportunity') return
+    await addRecordToList({ userId: user.id, list, recordId: peek.id })
     setPicker(null)
     await loadRelations()
   }
@@ -362,15 +356,8 @@ export default function PeopleOpportunities() {
 
   const addCompanyToList = async (list: List) => {
     if (!user || !nestedCompany) return
-    await supabase.from('list_memberships').insert({
-      user_id: user.id,
-      list_id: list.id,
-      company_id: nestedCompany.id,
-      opportunity_id: null,
-      contact_id: null,
-      current_stage: null,
-      attributes: {},
-    })
+    if ((list.parent_object ?? 'person') !== 'company') return
+    await addRecordToList({ userId: user.id, list, recordId: nestedCompany.id })
     setPicker(null)
     await loadRelations()
   }
@@ -400,15 +387,8 @@ export default function PeopleOpportunities() {
 
   const addPersonToList = async (list: List) => {
     if (!user || !nestedPerson) return
-    await supabase.from('list_memberships').insert({
-      user_id: user.id,
-      list_id: list.id,
-      contact_id: nestedPerson.id,
-      company_id: null,
-      opportunity_id: null,
-      current_stage: null,
-      attributes: {},
-    })
+    if ((list.parent_object ?? 'person') !== 'person') return
+    await addRecordToList({ userId: user.id, list, recordId: nestedPerson.id })
     setPicker(null)
     await loadRelations()
   }

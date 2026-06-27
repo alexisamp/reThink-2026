@@ -76,12 +76,41 @@ function notifyListsChanged() {
   }
 }
 
-function membershipPayload(kind: ListRecordKind, recordId: string) {
+export function membershipPayload(kind: ListRecordKind, recordId: string) {
   return {
     contact_id: kind === 'person' ? recordId : null,
     company_id: kind === 'company' ? recordId : null,
     opportunity_id: kind === 'opportunity' ? recordId : null,
   }
+}
+
+export async function addRecordToList(input: {
+  userId: string
+  list: Pick<List, 'id' | 'parent_object'>
+  recordId: string
+  attributes?: Record<string, unknown>
+  notes?: string | null
+  currentStage?: string | null
+}) {
+  const attributes = input.attributes ?? {}
+  const currentStage = input.currentStage ?? null
+  const { data, error } = await supabase
+    .from('list_memberships')
+    .insert({
+      ...membershipPayload(input.list.parent_object ?? 'person', input.recordId),
+      user_id: input.userId,
+      list_id: input.list.id,
+      current_stage: currentStage,
+      notes: input.notes ?? null,
+      attributes,
+    })
+    .select()
+    .single()
+  if (error) {
+    console.error('addRecordToList failed', error)
+    return null
+  }
+  return data as ListMembership
 }
 
 export function getListRecordId(entry: ListMembership, kind: ListRecordKind) {
@@ -104,7 +133,7 @@ export function useLists(userId: string | null | undefined) {
       .from('lists')
       .select('*')
       .eq('user_id', userId)
-      .eq('is_archived', false)
+      .or('is_archived.is.null,is_archived.eq.false')
       .order('created_at')
     if (error) {
       console.error('load lists failed', error)
@@ -348,10 +377,10 @@ export function useListEntries(
     const uniqueIds = Array.from(new Set(ids))
     const table = LIST_OBJECT_LABELS[list.parent_object].table
     const recordIdColumn = 'id'
-    const { data: recordData, error: recordError } = await supabase
-      .from(table)
-      .select('*')
-      .in(recordIdColumn, uniqueIds)
+    const recordResult = list.parent_object === 'opportunity'
+      ? await supabase.from('opportunities').select('*, company:companies(*)').in(recordIdColumn, uniqueIds)
+      : await supabase.from(table).select('*').in(recordIdColumn, uniqueIds)
+    const { data: recordData, error: recordError } = recordResult
     if (recordError) {
       console.error('load list records failed', recordError)
       setEntries([])
@@ -360,7 +389,7 @@ export function useListEntries(
     }
 
     const byId = new Map<string, ListRecord>()
-    for (const record of (recordData ?? []) as ListRecord[]) byId.set(record.id, record)
+    for (const record of (recordData ?? []) as unknown as ListRecord[]) byId.set(record.id, record)
     setEntries(loadedMemberships.flatMap(membership => {
       const recordId = getListRecordId(membership, list.parent_object)
       const record = recordId ? byId.get(recordId) : null
@@ -486,26 +515,16 @@ export function useListMemberships(
     attributes: Record<string, unknown> = {},
   ): Promise<ListMembership | null> => {
     if (!userId) return null
-    const { data, error } = await supabase
-      .from('list_memberships')
-      .insert({
-        contact_id: contactId,
-        company_id: null,
-        opportunity_id: null,
-        list_id: listId,
-        user_id: userId,
-        current_stage: stage || null,
-        notes: notes ?? null,
-        attributes,
-      })
-      .select()
-      .single()
-    if (error) {
-      console.error('addToList failed', error)
-      return null
-    }
+    const data = await addRecordToList({
+      userId,
+      list: { id: listId, parent_object: 'person' },
+      recordId: contactId,
+      currentStage: stage || null,
+      notes: notes ?? null,
+      attributes,
+    })
     await load()
-    return data as ListMembership
+    return data
   }, [userId, load])
 
   const moveStage = useCallback(async (
