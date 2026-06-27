@@ -316,6 +316,10 @@ export interface Contact {
   phone: string | null
   website: string | null
   about: string | null
+  angellist_url?: string | null
+  facebook_url?: string | null
+  instagram_url?: string | null
+  twitter_url?: string | null
   health_score: number
   last_interaction_at: string | null
   log_date: string
@@ -360,10 +364,60 @@ export interface ListStage {
   color?: string
 }
 
+export type ListRecordKind = 'person' | 'company' | 'opportunity'
+
+export type ListAttributeType = 'text' | 'number' | 'date' | 'select' | 'status' | 'url' | 'checkbox'
+
+export interface ListAttributeOption {
+  id: string
+  label: string
+  color?: string | null
+  track_time?: boolean
+  confetti?: boolean
+}
+
+export interface ListAttribute {
+  id: string
+  list_id: string
+  user_id: string
+  name: string
+  type: ListAttributeType
+  config: {
+    options?: ListAttributeOption[]
+    [key: string]: unknown
+  }
+  order_index: number
+  created_at: string
+  updated_at: string
+}
+
+export type ListViewType = 'table' | 'kanban'
+
+export interface ListView {
+  id: string
+  list_id: string
+  user_id: string
+  name: string
+  type: ListViewType
+  config: {
+    columns?: string[]
+    sort?: unknown
+    filters?: unknown[]
+    kanbanStatusAttributeId?: string
+    favorite?: boolean
+    [key: string]: unknown
+  }
+  order_index: number
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface List {
   id: string
   user_id: string
   name: string
+  parent_object: ListRecordKind
   purpose: string | null
   stages: ListStage[]
   color: string | null
@@ -376,13 +430,15 @@ export interface List {
 export interface ListMembership {
   id: string
   list_id: string
-  contact_id: string
+  contact_id: string | null
+  company_id?: string | null
+  opportunity_id?: string | null
   user_id: string
-  current_stage: string
+  current_stage: string | null
   entered_at: string
   stage_changed_at: string
   notes: string | null
-  attributes?: Record<string, unknown>
+  attributes?: Record<string, unknown> | null
   created_at: string
 }
 
@@ -440,6 +496,7 @@ export interface Interaction {
   direction: 'outbound' | 'inbound'
   notes: string | null
   interaction_date: string
+  external_id?: string | null
   // v2 new fields
   opportunity_id?: string | null
   value_log_id?: string | null
@@ -448,6 +505,71 @@ export interface Interaction {
   next_step_owner?: 'me' | 'them' | null
   channel?: 'whatsapp' | 'linkedin' | 'exit5' | 'x' | 'email' | 'call' | 'in_person' | 'other' | null
   created_at: string
+}
+
+export interface InteractionExcerpt {
+  timestamp?: string
+  speaker?: string
+  direction?: 'inbound' | 'outbound'
+  text: string
+}
+
+export interface InteractionDetail {
+  id: string
+  user_id: string
+  interaction_id: string
+  channel: 'whatsapp' | 'linkedin' | 'email'
+  source_external_id: string
+  window_start: string | null
+  window_end: string | null
+  message_count: number
+  participants: Array<{ name?: string; role?: string; channel_identifier?: string }>
+  summary: string | null
+  excerpts: InteractionExcerpt[]
+  created_at: string
+  updated_at: string
+}
+
+export type InteractionSuggestionTarget =
+  | 'todo'
+  | 'contact_fact'
+  | 'key_date'
+  | 'value_log'
+  | 'intro'
+  | 'next_step'
+
+export interface InteractionSuggestion {
+  id: string
+  user_id: string
+  interaction_id: string | null
+  contact_id: string | null
+  source_external_id: string
+  target: InteractionSuggestionTarget
+  title: string
+  body: string | null
+  payload: Record<string, unknown>
+  confidence: 'low' | 'medium' | 'high'
+  status: 'pending' | 'approved' | 'dismissed'
+  reviewed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ContactKeyDate {
+  id: string
+  user_id: string
+  contact_id: string
+  event_type: string
+  subject: string
+  relation: string | null
+  date_value: string | null
+  date_precision: 'exact' | 'month_day' | 'month' | 'year' | 'unknown'
+  description: string | null
+  source: string
+  source_interaction_date: string | null
+  source_external_id: string | null
+  created_at: string
+  updated_at: string
 }
 
 // ─── Review Queue ────────────────────────────────────────────────────────────
@@ -502,6 +624,11 @@ export interface Company {
   description: string | null
   website_url: string | null
   linkedin_url: string | null
+  primary_location?: string | null
+  angellist_url?: string | null
+  facebook_url?: string | null
+  instagram_url?: string | null
+  twitter_url?: string | null
   employees_count: number | null   // canonical — real if associated members captured, else bucket ceiling
   members_on_linkedin: number | null  // raw "N associated members" from LI
   followers_count: number | null   // external followers of the company page
@@ -516,7 +643,16 @@ export interface Company {
 }
 
 export type OpportunityType = 'job' | 'consulting' | 'business' | 'partnership' | 'other'
-export type OpportunityStage = 'exploring' | 'active' | 'negotiating' | 'won' | 'lost'
+export type OpportunityStage =
+  | 'exploring'
+  | 'applied'
+  | 'abm_strategy'
+  | 'interviews'
+  | 'negotiating'
+  | 'won'
+  | 'closed'
+  | 'active'
+  | 'lost'
 
 export interface Opportunity {
   id: string
@@ -527,6 +663,11 @@ export interface Opportunity {
   stage: OpportunityStage
   estimated_value: number | null
   target_date: string | null
+  close_date: string | null
+  owner_contact_id: string | null
+  application_source_url?: string | null
+  application_source_domain?: string | null
+  application_source_name?: string | null
   notes: string | null
   decision_filter_pass: boolean | null
   interview_prep: Record<string, unknown> | null
@@ -540,7 +681,7 @@ export interface Opportunity {
 export interface ContactChannel {
   id: string
   outreach_log_id: string
-  channel: 'whatsapp' | 'linkedin' | 'exit5' | 'x'
+  channel: 'whatsapp' | 'wa' | 'linkedin' | 'exit5' | 'x' | 'email'
   channel_identifier: string
   channel_name: string | null
   verified: boolean

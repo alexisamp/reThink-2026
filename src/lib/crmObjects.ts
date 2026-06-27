@@ -20,8 +20,21 @@ export function firstRelation<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? value[0] ?? null : value
 }
 
-export function companyImage(logoUrl?: string | null, domain?: string | null): string | null {
+function cleanDomain(domainOrUrl?: string | null): string | null {
+  if (!domainOrUrl) return null
+  const clean = domainOrUrl
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .split(/[/?#]/)[0]
+    .toLowerCase()
+  if (!clean || clean.includes('linkedin.com')) return null
+  return clean
+}
+
+export function companyImage(logoUrl?: string | null, domainOrUrl?: string | null): string | null {
   if (logoUrl) return logoUrl
+  const domain = cleanDomain(domainOrUrl)
   if (!domain) return null
   return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
 }
@@ -51,13 +64,13 @@ export function mentionFromContact(contact: Pick<Contact, 'id' | 'name' | 'profi
   }
 }
 
-export function mentionFromCompany(company: Pick<Company, 'id' | 'name' | 'logo_url' | 'domain' | 'sector' | 'headline'>): CrmObjectOption {
+export function mentionFromCompany(company: Pick<Company, 'id' | 'name' | 'logo_url' | 'domain' | 'website_url' | 'sector' | 'headline'>): CrmObjectOption {
   return {
     id: company.id,
     name: company.name,
     kind: 'company',
     sub: company.domain || company.sector || company.headline || null,
-    imageUrl: companyImage(company.logo_url, company.domain),
+    imageUrl: companyImage(company.logo_url, company.domain ?? company.website_url),
     searchText: [company.name, company.domain, company.sector, company.headline].filter(Boolean).join(' '),
   }
 }
@@ -67,6 +80,7 @@ interface OpportunityCompanyLite {
   name?: string | null
   logo_url?: string | null
   domain?: string | null
+  website_url?: string | null
 }
 
 interface OpportunityWithCompany {
@@ -85,7 +99,7 @@ export function mentionFromOpportunity(opportunity: OpportunityWithCompany): Crm
     name: opportunity.title ?? 'Opportunity',
     kind: 'opportunity',
     sub: [company?.name, opportunity.stage, opportunity.type].filter(Boolean).join(' · ') || null,
-    imageUrl: companyImage(company?.logo_url, company?.domain),
+    imageUrl: companyImage(company?.logo_url, company?.domain ?? company?.website_url),
     companyId: opportunity.company_id ?? company?.id ?? null,
     searchText: [opportunity.title, company?.name, opportunity.stage, opportunity.type].filter(Boolean).join(' '),
   }
@@ -155,7 +169,7 @@ export async function createCrmObject(
     const { data, error } = await supabase.from('companies').insert({
       user_id: userId,
       name: trimmed,
-    }).select('id, name, logo_url, domain, sector, headline').single()
+    }).select('id, name, logo_url, domain, website_url, sector, headline').single()
     if (error || !data) return null
     const mention = mentionFromCompany(data as Company)
     return { mention, path: pathForMention(mention) }
@@ -167,7 +181,7 @@ export async function createCrmObject(
     type: 'job',
     stage: 'exploring',
     company_id: opts.companyId ?? null,
-  }).select('id, title, stage, type, company_id, company:companies(id, name, logo_url, domain)').single()
+  }).select('id, title, stage, type, company_id, company:companies(id, name, logo_url, domain, website_url)').single()
   if (error || !data) return null
   const mention = mentionFromOpportunity(data as OpportunityWithCompany)
   return { mention, path: pathForMention(mention) }

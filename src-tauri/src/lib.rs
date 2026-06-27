@@ -94,6 +94,20 @@ fn read_local_file_base64(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn write_capture_markdown(relative_path: String, markdown: String) -> Result<String, String> {
+    if relative_path.contains("..") || relative_path.starts_with('/') || relative_path.starts_with('~') {
+        return Err("Invalid capture path".to_string());
+    }
+    let root = std::path::Path::new("/Users/alexi/Documents/AA9 | Brain Project/Revenue | Opps/Job Opportunities");
+    let target = root.join(relative_path);
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent).map_err(|_| "Could not create capture directory".to_string())?;
+    }
+    std::fs::write(&target, markdown).map_err(|_| "Could not write capture markdown".to_string())?;
+    Ok(target.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn read_conversations_staged_outputs() -> Result<Value, String> {
     let home = std::env::var("HOME").map_err(|_| "Could not resolve home directory".to_string())?;
     let db_path = std::path::Path::new(&home)
@@ -189,6 +203,7 @@ pub fn run() {
     .plugin(tauri_plugin_notification::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_opener::init())
+    .plugin(tauri_plugin_deep_link::init())
     .plugin(tauri_plugin_global_shortcut::Builder::new().build())
     .setup(|app| {
       if cfg!(debug_assertions) {
@@ -212,7 +227,7 @@ pub fn run() {
 
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![open_url_in_browser, open_file_in_default_browser, read_local_file_base64, read_conversations_staged_outputs, mark_conversations_staged_outputs])
+    .invoke_handler(tauri::generate_handler![open_url_in_browser, open_file_in_default_browser, read_local_file_base64, write_capture_markdown, read_conversations_staged_outputs, mark_conversations_staged_outputs])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

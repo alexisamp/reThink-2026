@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
-  House, BookBookmark, Users, Buildings, Target,
-  Star, Flame, Gear, List as ListIcon,
+  House, Users, Buildings, Target,
+  Gear,
   MagnifyingGlass, CaretDown, CaretRight,
-  SignOut, ArrowLeft, CheckSquare,
+  SignOut, Bell, Note,
+  Plus, Check, Sparkle,
 } from '@phosphor-icons/react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
@@ -12,14 +13,19 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useLists } from '@/hooks/useLists'
 import CommandPalette from '@/components/CommandPalette'
 import SettingsModal from '@/components/SettingsModal'
+import ListCreateModal from '@/components/ListCreateModal'
 import type { UpdaterState } from '@/hooks/useUpdater'
+import type { List } from '@/types'
 
 const SIDEBAR_KEY = 'rethink-sidebar-collapsed'
 const CRM_KEY = 'rethink-crm-collapsed'
 const LISTS_KEY = 'rethink-lists-collapsed'
+const LISTS_SORT_KEY = 'rethink-lists-sort'
 const ZOOM_KEY = 'rethink-ui-zoom'
 const ZOOM_OPTIONS = [80, 90, 100] as const
+const ACTIVE_LIST_LOADED_EVENT = 'rethink:active-list-loaded'
 type ZoomLevel = typeof ZOOM_OPTIONS[number]
+type ListsSortMode = 'relevant' | 'recent' | 'alphabetical' | 'custom'
 
 interface AppShellProps {
   children: ReactNode
@@ -86,32 +92,46 @@ function SectionHeader({
   collapsed,
   open,
   onToggle,
+  actions,
 }: {
   label: string
   collapsed: boolean
   open: boolean
   onToggle: () => void
+  actions?: ReactNode
 }) {
   if (collapsed) return <SectionDivider collapsed={collapsed} />
   return (
-    <button
-      onClick={onToggle}
-      className="sb-eyebrow w-full"
-    >
-      {open ? <CaretDown size={9} weight="bold" /> : <CaretRight size={9} weight="bold" />}
-      {label}
-    </button>
+    <div className="sb-eyebrow flex w-full items-center" data-section={label.toLowerCase()}>
+      <button onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
+        {open ? <CaretDown size={9} weight="bold" /> : <CaretRight size={9} weight="bold" />}
+        <span className="truncate">{label}</span>
+      </button>
+      {actions && <span className="sb-section-actions">{actions}</span>}
+    </div>
   )
 }
 
 export default function AppShell({ children, user, updater }: AppShellProps) {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const { lists } = useLists(user.id)
+  const browserPathname = typeof window !== 'undefined' ? window.location.pathname : pathname
+  const activeListId = (pathname.match(/^\/lists\/([^/]+)/) ?? browserPathname.match(/^\/lists\/([^/]+)/))?.[1] ?? null
+  const [activeListFallback, setActiveListFallback] = useState<List | null>(null)
+  const [activeListTitleFallback, setActiveListTitleFallback] = useState('')
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'true')
   const [crmOpen, setCrmOpen] = useState(() => localStorage.getItem(CRM_KEY) !== 'false')
   const [listsOpen, setListsOpen] = useState(() => localStorage.getItem(LISTS_KEY) !== 'false')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [listCreateOpen, setListCreateOpen] = useState(false)
+  const [listSortOpen, setListSortOpen] = useState(false)
+  const [listSortAnchor, setListSortAnchor] = useState<{ top: number; left: number } | null>(null)
+  const [listSortMode, setListSortMode] = useState<ListsSortMode>(() => {
+    const saved = localStorage.getItem(LISTS_SORT_KEY)
+    return saved === 'relevant' || saved === 'recent' || saved === 'alphabetical' || saved === 'custom' ? saved : 'custom'
+  })
   const [reviewCount, setReviewCount] = useState(0)
   const [zoom, setZoom] = useState<ZoomLevel>(() => {
     const saved = parseInt(localStorage.getItem(ZOOM_KEY) ?? '100', 10)
@@ -142,8 +162,9 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
     'cmd+\\': toggleCollapsed,
     'cmd+1': () => navigate('/today'),
     'cmd+2': () => navigate('/review'),
-    'cmd+3': () => navigate('/playbook'),
-    'cmd+4': () => navigate('/milestones'),
+    'cmd+3': () => navigate('/suggestions'),
+    'cmd+4': () => navigate('/playbook'),
+    'cmd+5': () => navigate('/milestones'),
   })
 
   useEffect(() => {
@@ -154,6 +175,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('status', 'pending')
+        .eq('proposed_payload->>source_kind', 'identity_resolution')
       if (!cancelled) setReviewCount(count ?? 0)
     }
     loadReviewCount()
@@ -164,17 +186,122 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
     }
   }, [user.id])
 
+  useEffect(() => {
+    let cancelled = false
+    if (!activeListId || lists.some(list => list.id === activeListId)) {
+      setActiveListFallback(null)
+      return () => { cancelled = true }
+    }
+    supabase
+      .from('lists')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('id', activeListId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setActiveListFallback((data as List | null) ?? null)
+      })
+    return () => { cancelled = true }
+  }, [activeListId, lists, user.id])
+
+  useEffect(() => {
+    function handleActiveListLoaded(event: Event) {
+      const detail = (event as CustomEvent<List>).detail
+      if (detail?.id) setActiveListFallback(detail)
+    }
+    window.addEventListener(ACTIVE_LIST_LOADED_EVENT, handleActiveListLoaded)
+    return () => window.removeEventListener(ACTIVE_LIST_LOADED_EVENT, handleActiveListLoaded)
+  }, [])
+
+  useEffect(() => {
+    if (!listSortOpen) return undefined
+    const close = () => setListSortOpen(false)
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') close()
+    }
+    window.addEventListener('click', close)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [listSortOpen])
+
+  useEffect(() => {
+    if (!activeListId || lists.some(list => list.id === activeListId) || activeListFallback?.id === activeListId) {
+      setActiveListTitleFallback('')
+      return undefined
+    }
+    const readTitle = () => {
+      const title = document.querySelector('.atl-title-row h1')?.textContent?.trim()
+      if (title) setActiveListTitleFallback(title)
+    }
+    readTitle()
+    const interval = window.setInterval(readTitle, 150)
+    const timeout = window.setTimeout(() => window.clearInterval(interval), 2500)
+    return () => {
+      window.clearInterval(interval)
+      window.clearTimeout(timeout)
+    }
+  }, [activeListFallback?.id, activeListId, lists])
+
   const showUpdateDot = updater.status === 'available' || updater.status === 'ready'
 
   const avatarUrl = user.user_metadata?.avatar_url as string | undefined
   const fullName = user.user_metadata?.full_name as string | undefined
   const initials = (fullName || user.email || 'U')[0].toUpperCase()
 
-  const sidebarPx = collapsed ? '48px' : '200px'
+  const listsMode = pathname.startsWith('/lists') || browserPathname.startsWith('/lists')
+  const sidebarPx = collapsed ? '48px' : (listsMode ? '214px' : '212px')
+  const listsSectionOpen = listsOpen || listsMode
+  const syntheticActiveList: List | null = activeListId && activeListTitleFallback
+    ? {
+      id: activeListId,
+      user_id: user.id,
+      name: activeListTitleFallback,
+      parent_object: 'company',
+      purpose: null,
+      stages: [],
+      color: '#9CA3AF',
+      icon: '📋',
+      is_archived: false,
+      created_at: '',
+      updated_at: '',
+    }
+    : null
+  const unsortedSidebarLists = [
+    ...lists,
+    ...(
+      activeListFallback && !lists.some(list => list.id === activeListFallback.id)
+        ? [activeListFallback]
+        : []
+    ),
+    ...(
+      syntheticActiveList && !lists.some(list => list.id === syntheticActiveList.id) && activeListFallback?.id !== syntheticActiveList.id
+        ? [syntheticActiveList]
+        : []
+    ),
+  ]
+  const sidebarLists = [...unsortedSidebarLists].sort((a, b) => {
+    if (listSortMode === 'alphabetical') return a.name.localeCompare(b.name)
+    if (listSortMode === 'recent') return String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''))
+    return 0
+  })
+  const sortOptions: Array<{ mode: ListsSortMode; label: string }> = [
+    { mode: 'relevant', label: 'Most relevant' },
+    { mode: 'recent', label: 'Recently added' },
+    { mode: 'alphabetical', label: 'Alphabetical' },
+    { mode: 'custom', label: 'Custom' },
+  ]
+  const selectListSort = (mode: ListsSortMode) => {
+    setListSortMode(mode)
+    localStorage.setItem(LISTS_SORT_KEY, mode)
+    setListSortOpen(false)
+  }
 
   return (
     <div
-      className="shell"
+      className={['shell', listsMode ? 'lists-shell' : ''].join(' ')}
       style={{ '--sidebar-width': sidebarPx } as React.CSSProperties}
     >
       {/* Left sidebar */}
@@ -188,61 +315,76 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         <div className="sb-brand">
           <img src="/logo.png" alt="reThink" />
           {!collapsed && (
-            <span className="word">reThink 2026</span>
+            <span className="word">Meridian 71</span>
           )}
         </div>
 
         {/* Quick actions / search */}
-        <div className="shrink-0">
-          <button onClick={() => setPaletteOpen(true)} className="sb-search w-[calc(100%-16px)]">
-            <MagnifyingGlass size={14} className="shrink-0" />
-            {!collapsed && (
-              <>
-                <span className="label">Quick actions</span>
+        <div className="sb-actions shrink-0">
+          {listsMode && !collapsed ? (
+            <>
+              <button onClick={() => setPaletteOpen(true)} className="sb-search sb-quick-action">
+                <span className="sb-quick-icon">K</span>
+                <span className="label">Quick action...</span>
                 <span className="shortcut">⌘K</span>
-              </>
-            )}
-          </button>
+              </button>
+              <button onClick={() => setPaletteOpen(true)} className="sb-search sb-search-only" aria-label="Search">
+                <MagnifyingGlass size={18} className="shrink-0" />
+                <span className="shortcut">/</span>
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setPaletteOpen(true)} className="sb-search w-[calc(100%-16px)]">
+              <MagnifyingGlass size={14} className="shrink-0" />
+              {!collapsed && (
+                <>
+                  <span className="label">Quick actions</span>
+                  <span className="shortcut">⌘K</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
 
         <SectionDivider collapsed={collapsed} />
 
         {/* Main nav */}
         <nav className="flex-1 overflow-y-auto py-1">
-          <NavItem path="/today" icon={<House size={16} />} label="Today" collapsed={collapsed} />
+          <NavItem path="/today" icon={<House size={15} />} label="Home" collapsed={collapsed} />
           <NavItem
             path="/review"
-            icon={<CheckSquare size={16} />}
+            icon={<Bell size={15} />}
             label={reviewCount > 0 ? `Review (${reviewCount})` : 'Review'}
             collapsed={collapsed}
           />
-          <NavItem path="/playbook" icon={<BookBookmark size={16} />} label="Playbook" collapsed={collapsed} />
-          <NavItem path="/milestones" icon={<Target size={16} />} label="Goals" collapsed={collapsed} />
+          <NavItem path="/suggestions" icon={<Sparkle size={15} />} label="Suggestions" collapsed={collapsed} />
+          <NavItem path="/playbook" icon={<Note size={15} />} label="Playbook" collapsed={collapsed} />
+          <NavItem path="/milestones" icon={<Target size={15} />} label="Plan" collapsed={collapsed} />
 
           <SectionDivider collapsed={collapsed} />
 
           {/* CRM section */}
-          <SectionHeader label="CRM" collapsed={collapsed} open={crmOpen} onToggle={toggleCrm} />
+          <SectionHeader label="Records" collapsed={collapsed} open={crmOpen} onToggle={toggleCrm} />
           {(crmOpen || collapsed) && (
             <>
               <NavItem
-                path="/people"
-                icon={<span className="sb-pip" style={{ background: 'var(--midnight)' }}><Users size={9} weight="fill" /></span>}
-                label="People"
-                collapsed={collapsed}
-                indent
-              />
-              <NavItem
                 path="/people/companies"
-                icon={<span className="sb-pip" style={{ background: 'var(--shuttle)' }}><Buildings size={9} weight="fill" /></span>}
+                icon={<span className="sb-pip" style={{ background: '#2563eb' }}><Buildings size={9} weight="fill" /></span>}
                 label="Companies"
                 collapsed={collapsed}
                 indent
               />
               <NavItem
+                path="/people"
+                icon={<span className="sb-pip" style={{ background: '#2563eb' }}><Users size={9} weight="fill" /></span>}
+                label="People"
+                collapsed={collapsed}
+                indent
+              />
+              <NavItem
                 path="/people/opportunities"
-                icon={<span className="sb-pip" style={{ background: 'var(--burnham)' }}><Target size={9} weight="fill" /></span>}
-                label="Opportunities"
+                icon={<span className="sb-pip" style={{ background: '#ff6b2c' }}><Target size={9} weight="fill" /></span>}
+                label="Deals"
                 collapsed={collapsed}
                 indent
               />
@@ -252,18 +394,66 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
           <SectionDivider collapsed={collapsed} />
 
           {/* Lists section */}
-          <SectionHeader label="Lists" collapsed={collapsed} open={listsOpen} onToggle={toggleLists} />
-          {(listsOpen || collapsed) && (
+          <SectionHeader
+            label="Lists"
+            collapsed={collapsed}
+            open={listsSectionOpen}
+            onToggle={toggleLists}
+            actions={(
+              <>
+                <button
+                  onClick={event => {
+                    event.stopPropagation()
+                    const rect = event.currentTarget.getBoundingClientRect()
+                    setListSortAnchor({ top: rect.bottom + 8, left: rect.left - 4 })
+                    setListSortOpen(prev => !prev)
+                  }}
+                  className={`sb-section-action ${listSortOpen ? 'active' : ''}`}
+                  aria-label="List settings"
+                >
+                  <Gear size={11} />
+                </button>
+                {listSortOpen && (
+                  <div
+                    className="sb-lists-sort-menu"
+                    style={listSortAnchor ? { top: listSortAnchor.top, left: listSortAnchor.left } : undefined}
+                    onClick={event => event.stopPropagation()}
+                  >
+                    <div className="sb-lists-sort-label">Sort</div>
+                    {sortOptions.map(option => (
+                      <button
+                        key={option.mode}
+                        type="button"
+                        onClick={() => selectListSort(option.mode)}
+                        className="sb-lists-sort-row"
+                      >
+                        <span>{option.label}</span>
+                        {listSortMode === option.mode && (
+                          <span className="sb-lists-sort-check">
+                            <Check size={14} weight="bold" />
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button
+                  onClick={event => {
+                    event.stopPropagation()
+                    setListCreateOpen(true)
+                  }}
+                  className="sb-section-action sb-tooltip-wrap"
+                  aria-label="Create a list"
+                >
+                  <Plus size={12} />
+                  <span className="sb-tooltip">Create a list</span>
+                </button>
+              </>
+            )}
+          />
+          {(listsSectionOpen || collapsed) && (
             <>
-              <NavItem
-                path="/lists"
-                icon={<span className="sb-pip" style={{ background: 'var(--burnham)' }}><ListIcon size={9} weight="fill" /></span>}
-                label="All lists"
-                collapsed={collapsed}
-                indent
-              />
-              {/* User-created lists */}
-              {lists.map(l => (
+              {sidebarLists.map(l => (
                 <NavItem
                   key={l.id}
                   path={`/lists/${l.id}`}
@@ -282,24 +472,8 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
                   indent
                 />
               ))}
-              {/* Legacy static presets */}
-              <NavItem
-                path="/people?list=board"
-                icon={<Star size={14} weight="fill" className="text-yellow-500" />}
-                label="Board of Directors"
-                collapsed={collapsed}
-                indent
-              />
-              <NavItem
-                path="/people/opportunities?list=active"
-                icon={<Flame size={14} weight="fill" className="text-orange-400" />}
-                label="Active Pipeline"
-                collapsed={collapsed}
-                indent
-              />
             </>
           )}
-
         </nav>
 
         {/* Bottom: profile + settings + collapse toggle */}
@@ -323,7 +497,8 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
 
           <button
             onClick={() => setSettingsOpen(true)}
-            className="sb-row w-[calc(100%-16px)]"
+            title="Settings"
+            className="sb-row sb-settings w-[calc(100%-16px)]"
           >
             <Gear size={15} className="shrink-0" />
             {!collapsed && (
@@ -345,23 +520,6 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
           </button>
 
           <SectionDivider collapsed={collapsed} />
-
-          {/* Collapse toggle */}
-          <button
-            onClick={toggleCollapsed}
-            title={collapsed ? 'Expand sidebar (⌘\\)' : 'Collapse sidebar (⌘\\)'}
-            className="sb-row w-[calc(100%-16px)]"
-          >
-            {collapsed ? (
-              <ArrowLeft size={13} className="rotate-180" />
-            ) : (
-              <>
-                <ListIcon size={13} />
-                <span>Collapse</span>
-                <span className="shortcut ml-auto">⌘\</span>
-              </>
-            )}
-          </button>
         </div>
       </aside>
 
@@ -381,6 +539,15 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         updater={updater}
         zoom={zoom}
         onZoomChange={setZoomLevel}
+      />
+
+      <ListCreateModal
+        open={listCreateOpen}
+        onClose={() => setListCreateOpen(false)}
+        onCreated={list => {
+          setListCreateOpen(false)
+          navigate(`/lists/${list.id}`)
+        }}
       />
 
     </div>

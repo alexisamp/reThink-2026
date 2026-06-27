@@ -18,12 +18,17 @@ export interface ContactInput {
   log_date?: string
   job_title?: string | null
   company?: string | null
+  company_id?: string | null
   location?: string | null
   connections_count?: number | null
   followers_count?: number | null
   email?: string | null
   phone?: string | null
   website?: string | null
+  angellist_url?: string | null
+  facebook_url?: string | null
+  instagram_url?: string | null
+  twitter_url?: string | null
   about?: string | null
   skills?: string | null
   personal_context?: string | null
@@ -130,12 +135,17 @@ export function useContacts(
       log_date: input.log_date ?? today,
       job_title: input.job_title ?? null,
       company: input.company ?? null,
+      company_id: input.company_id ?? null,
       location: input.location ?? null,
       connections_count: input.connections_count ?? null,
       followers_count: input.followers_count ?? null,
       email: input.email ?? null,
       phone: input.phone ?? null,
       website: input.website ?? null,
+      angellist_url: input.angellist_url ?? null,
+      facebook_url: input.facebook_url ?? null,
+      instagram_url: input.instagram_url ?? null,
+      twitter_url: input.twitter_url ?? null,
       about: input.about ?? null,
       skills: input.skills ?? null,
       personal_context: input.personal_context ?? null,
@@ -162,8 +172,8 @@ export function useContacts(
 
     const patch: Record<string, unknown> = {}
     const fields = ['name','linkedin_url','category','status','notes','goal_id','job_title',
-                    'company','location','connections_count','followers_count','email','phone',
-                    'website','about','skills','personal_context',
+                    'company','company_id','location','connections_count','followers_count','email','phone',
+                    'website','angellist_url','facebook_url','instagram_url','twitter_url','about','skills','personal_context',
                     'company_domain','ai_enriched_at','profile_photo_url',
                     'birthday','links','tier','referred_by'] as const
     for (const f of fields) {

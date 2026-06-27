@@ -430,6 +430,46 @@ function channelForItem(item: ReviewItem) {
   return item.source
 }
 
+function identityChannelRows(item: ReviewItem, contactId: string) {
+  const payload = item.proposed_payload ?? {}
+  const channel = channelForItem(item)
+  const rows: Array<{
+    outreach_log_id: string
+    channel: 'whatsapp' | 'linkedin'
+    channel_identifier: string
+    channel_name: string | null
+    verified: boolean
+  }> = []
+  const add = (nextChannel: 'whatsapp' | 'linkedin', identifier: unknown, name?: unknown) => {
+    if (typeof identifier !== 'string' || !identifier.trim()) return
+    rows.push({
+      outreach_log_id: contactId,
+      channel: nextChannel,
+      channel_identifier: identifier.trim(),
+      channel_name: typeof name === 'string' && name.trim() ? name.trim() : null,
+      verified: true,
+    })
+  }
+  if (channel.includes('linkedin')) {
+    add('linkedin', payload.conversation_id ? `linkedin_conversation:${payload.conversation_id}` : null, payload.name)
+    add('linkedin', payload.linkedin_url, payload.name)
+    add('linkedin', payload.linkedin_urn ? `linkedin_urn:${payload.linkedin_urn}` : null, payload.name)
+  } else {
+    add('whatsapp', payload.wa_chat_id, payload.wa_name)
+    add('whatsapp', payload.wa_chat_id ? `jid:${payload.wa_chat_id}` : null, payload.wa_name)
+    add('whatsapp', payload.wa_phone, payload.wa_name)
+    add('whatsapp', payload.phone, payload.wa_name)
+    add('whatsapp', payload.wa_name ? `waname:${payload.wa_name}` : null, payload.wa_name)
+  }
+  const seen = new Set<string>()
+  return rows.filter(row => {
+    const key = `${row.channel}:${row.channel_identifier}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 function summaryForItem(item: ReviewItem) {
   const payloadSummary = firstPayloadString(item.proposed_payload, ['summary', 'conversation_summary', 'description', 'notes'])
   if (payloadSummary) return compactText(payloadSummary, 180)
@@ -845,35 +885,18 @@ export default function ReviewQueue() {
   const load = useCallback(async () => {
     if (!user) return
     setLoading(true)
-    const [remoteRes, localOutputs, contactsRes] = await Promise.all([
-      supabase
-        .from('conversation_ai_staged_outputs')
-        .select('*')
-        .eq('user_id', user.id)
-        .in('status', ['pending', 'failed'])
-        .order('created_at', { ascending: true })
-        .limit(500),
-      invokeTauri<LocalStagedOutput[]>('read_conversations_staged_outputs'),
+    const [contactsRes] = await Promise.all([
       supabase.from('outreach_logs').select('*').eq('user_id', user.id).order('name'),
     ])
-    let nextItems: ReviewItem[]
-    const remoteOutputs = (remoteRes.data ?? []) as RemoteStagedOutput[]
-    if (!remoteRes.error && remoteOutputs.length > 0) {
-      nextItems = remoteOutputs.map(output => remoteStagedOutputToReviewItem(output, user.id))
-      setReviewOrigin('conversations-local')
-    } else if (localOutputs && localOutputs.length > 0) {
-      nextItems = localOutputs.map(output => stagedOutputToReviewItem(output, user.id))
-      setReviewOrigin('conversations-local')
-    } else {
-      const itemsRes = await supabase
-        .from('review_items')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(200)
-      nextItems = (itemsRes.data ?? []) as ReviewItem[]
-      setReviewOrigin('supabase')
-    }
+    const itemsRes = await supabase
+      .from('review_items')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('proposed_payload->>source_kind', 'identity_resolution')
+      .order('created_at', { ascending: false })
+      .limit(200)
+    const nextItems = (itemsRes.data ?? []) as ReviewItem[]
+    setReviewOrigin('supabase')
     setItems(nextItems)
     setContacts((contactsRes.data ?? []) as Contact[])
     setDraftPayloads(prev => {
@@ -976,7 +999,14 @@ export default function ReviewQueue() {
   }
 
   const linkPerson = async (person: ReviewPerson, contactId: string) => {
-    await supabase.from('review_items').update({ contact_id: contactId }).in('id', person.days.flatMap(d => d.items.map(i => i.id)))
+    const personItems = person.days.flatMap(d => d.items)
+    const channelRows = personItems.flatMap(item => identityChannelRows(item, contactId))
+    if (channelRows.length > 0) {
+      await supabase.from('contact_channels').upsert(channelRows, { onConflict: 'channel,channel_identifier' })
+    }
+    await supabase.from('review_items')
+      .update({ contact_id: contactId, status: 'accepted', reviewed_at: new Date().toISOString() })
+      .in('id', personItems.map(i => i.id))
     person.days.flatMap(d => d.items).forEach(item => setDraftContacts(prev => ({ ...prev, [item.id]: contactId })))
     showToast(<>Linked to <b>{contacts.find(c => c.id === contactId)?.name}</b></>)
     await load()
@@ -1008,8 +1038,10 @@ export default function ReviewQueue() {
   }
 
   const approveSelected = async () => {
-    const picked = groups.filter(p => selected.has(p.id)).flatMap(p => p.days.flatMap(d => d.items))
-    await acceptMany(picked)
+    for (const person of groups.filter(p => selected.has(p.id))) {
+      const contactId = person.days.flatMap(day => day.items).map(item => draftContacts[item.id] || item.contact_id || '').find(Boolean)
+      if (contactId) await linkPerson(person, contactId)
+    }
     setSelected(new Set())
   }
 
@@ -1020,7 +1052,10 @@ export default function ReviewQueue() {
   }
 
   const approveAll = async () => {
-    await acceptMany(items.filter(i => i.status === 'pending' && (draftContacts[i.id] || i.contact_id)))
+    for (const person of pendingGroups) {
+      const contactId = person.days.flatMap(day => day.items).map(item => draftContacts[item.id] || item.contact_id || '').find(Boolean)
+      if (contactId) await linkPerson(person, contactId)
+    }
   }
 
   return (
@@ -1028,12 +1063,12 @@ export default function ReviewQueue() {
       <header className="rv-hd">
         <div className="rv-hd-l">
           <h1 className="ppl-title">Review</h1>
-          <p className="ppl-sub">{reviewOrigin === 'conversations-local' ? 'Structured writes stay local until you approve the person.' : 'Everything the AI read from your conversations before it touches your records.'}</p>
+          <p className="ppl-sub">Link unmatched WhatsApp and LinkedIn conversations to the right contact. Interaction summaries and AI actions live in Activity and Suggestions.</p>
         </div>
         <div className="rv-kpi" title="Pending writes">
           <ChatsCircle size={15} />
           <span className="rv-kpi-num"><b>{pendingCount}</b>/{items.length || 0}</span>
-          <span className="rv-kpi-lbl">conversations · week</span>
+          <span className="rv-kpi-lbl">need linking</span>
           <span className="rv-kpi-bar"><span style={{ width: `${items.length ? Math.round((reviewedCount / items.length) * 100) : 0}%` }} /></span>
         </div>
       </header>
@@ -1042,7 +1077,7 @@ export default function ReviewQueue() {
         <div className="rv-toolbar">
           <div className="rv-stats">
             <span className="rv-stat"><b>{pendingGroups.length}</b> contacts</span>
-            <span className="rv-stat"><b>{pendingWrites}</b> writes</span>
+            <span className="rv-stat"><b>{pendingWrites}</b> links</span>
             <span className="rv-stat"><b>{linkedCount}</b> linked</span>
             {needId > 0 && <button className="rv-stat warn" onClick={() => setFilter('pending')}><span className="dot" /><b>{needId}</b> need identity</button>}
           </div>
@@ -1055,7 +1090,7 @@ export default function ReviewQueue() {
               </button>
             ))}
           </div>
-          <button className="crm-tool primary rv-approveall" onClick={approveAll}><CheckCircle size={13} /> Approve all</button>
+          <button className="crm-tool primary rv-approveall" onClick={approveAll}><CheckCircle size={13} /> Link all</button>
         </div>
 
         <div className="rv-scroll">

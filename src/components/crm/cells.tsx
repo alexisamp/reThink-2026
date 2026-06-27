@@ -1,7 +1,7 @@
 // cells.tsx — presentational CRM cells + ABM chips, ported from the design handoff
 // (crm-cells.jsx + AbmHub.jsx). Icons use the Phosphor web font via <Icon/>.
 
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   TIER_CFG, STRENGTH_CFG, REL_CFG, STATUS_CFG, STAGE_CFG, LIST_CFG,
   CHANNEL_CFG, SOURCE_CFG, ICP_CFG, ACCOUNT_SOURCE_CFG, MOTION_CFG,
@@ -21,9 +21,11 @@ export function Icon({ name, size = 14, weight }: { name: string; size?: number;
 
 export function Avatar({ src, name, sq, size = 22 }: { src?: string | null; name?: string; sq?: boolean; size?: number }) {
   const initials = (name || '?').split(' ').map(w => w[0]).slice(0, 2).join('')
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [src])
   return (
     <span className={`crm-av${sq ? ' sq' : ''}`} style={{ width: size, height: size, fontSize: size * 0.42 }}>
-      {src ? <img src={src} alt="" /> : initials}
+      {src && !failed ? <img src={src} alt="" onError={() => setFailed(true)} /> : initials}
     </span>
   )
 }
@@ -75,11 +77,53 @@ export function StageChip({ stage }: { stage?: string }) {
   )
 }
 
-export function CompanyCell({ name, mark }: { name?: string | null; mark?: string | null }) {
+function cleanCompanyDomain(domainOrUrl?: string | null) {
+  if (!domainOrUrl) return null
+  const clean = domainOrUrl
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .split(/[/?#]/)[0]
+    .toLowerCase()
+  if (!clean || clean.includes('linkedin.com')) return null
+  return clean
+}
+
+function fallbackCompanyLogos(domainOrUrl?: string | null) {
+  const domain = cleanCompanyDomain(domainOrUrl)
+  if (!domain) return []
+  return [
+    `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+    `https://icons.duckduckgo.com/ip3/${domain}.ico`,
+    `https://${domain}/favicon.ico`,
+  ]
+}
+
+export function CompanyLogo({ name, mark, src, domain, size = 22 }: { name: string; mark?: string | null; src?: string | null; domain?: string | null; size?: number }) {
+  const candidates = useMemo(() => {
+    return [src, ...fallbackCompanyLogos(domain)].filter((value, index, arr): value is string => Boolean(value) && arr.indexOf(value) === index)
+  }, [src, domain])
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => setIndex(0), [candidates.join('|')])
+
+  const image = candidates[index] ?? null
+  return (
+    <span className="crm-av sq logo" style={{ width: size, height: size, fontSize: size * 0.42 }}>
+      {image ? (
+        <img src={image} alt="" onError={() => setIndex(current => current + 1)} />
+      ) : (
+        mark || name[0]?.toUpperCase()
+      )}
+    </span>
+  )
+}
+
+export function CompanyCell({ name, mark, src, domain }: { name?: string | null; mark?: string | null; src?: string | null; domain?: string | null }) {
   if (!name) return <span className="crm-empty">No company</span>
   return (
     <span className="crm-name">
-      <span className="crm-av sq logo">{mark || name[0]?.toUpperCase()}</span>
+      <CompanyLogo name={name} mark={mark} src={src} domain={domain} />
       <span className="link">{name}</span>
     </span>
   )

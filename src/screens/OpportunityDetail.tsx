@@ -7,25 +7,36 @@ import {
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { CompanyLogo } from '@/components/crm/cells'
+import { OPPORTUNITY_STAGE_OPTIONS, opportunityStageLabel } from '@/lib/opportunityStages'
+import { formatCurrency } from '@/lib/formatters'
 import type { Opportunity, OpportunityStage, OpportunityType, Contact, Interaction } from '@/types'
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
-const STAGES: OpportunityStage[] = ['exploring', 'active', 'negotiating', 'won', 'lost']
+const STAGES = OPPORTUNITY_STAGE_OPTIONS
 
 const STAGE_COLORS: Record<OpportunityStage, string> = {
   exploring: 'text-shuttle bg-mercury',
-  active: 'text-burnham bg-gossip',
+  applied: 'text-blue-800 bg-blue-100',
+  abm_strategy: 'text-purple-800 bg-purple-100',
+  interviews: 'text-burnham bg-gossip',
   negotiating: 'text-yellow-800 bg-yellow-100',
   won: 'text-green-800 bg-green-100',
+  closed: 'text-red-700 bg-red-100',
+  active: 'text-burnham bg-gossip',
   lost: 'text-red-700 bg-red-100',
 }
 
 const STAGE_BAR: Record<OpportunityStage, string> = {
   exploring: 'bg-mercury',
-  active: 'bg-pastel',
+  applied: 'bg-blue-400',
+  abm_strategy: 'bg-purple-400',
+  interviews: 'bg-pastel',
   negotiating: 'bg-yellow-400',
   won: 'bg-green-400',
+  closed: 'bg-red-400',
+  active: 'bg-pastel',
   lost: 'bg-red-400',
 }
 
@@ -65,10 +76,7 @@ type Tab = 'overview' | 'stakeholders' | 'transcripts' | 'local_files' | 'negoti
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function formatValue(n: number | null): string {
-  if (n === null) return '—'
-  if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`
-  if (n >= 1000) return `$${(n / 1000).toFixed(0)}k`
-  return `$${n}`
+  return formatCurrency(n)
 }
 
 function roundStatusIcon(status: string) {
@@ -282,7 +290,7 @@ export default function OpportunityDetail() {
   const interviewMap = (Array.isArray(opp.interview_map) ? opp.interview_map : []) as InterviewMapEntry[]
   const localDocs = prepData.local_docs as LocalDocs | undefined
   const decisionFilter = prepData.decision_filter as Record<string, string> | undefined
-  const isActive = opp.stage === 'active'
+  const isActive = opp.stage === 'active' || opp.stage === 'interviews'
   const isNegotiating = opp.stage === 'negotiating'
   const showNegotiation = isActive || isNegotiating
 
@@ -337,7 +345,7 @@ export default function OpportunityDetail() {
                   {isCurrent && (
                     <span className={`absolute inset-0 rounded opacity-30 ${STAGE_BAR[s]}`} />
                   )}
-                  <span className="relative">{s}</span>
+                  <span className="relative">{opportunityStageLabel(s)}</span>
                 </button>
                 {i < STAGES.length - 1 && (
                   <span className="text-mercury text-[10px] mx-0.5">›</span>
@@ -375,14 +383,18 @@ export default function OpportunityDetail() {
             <div>
               {/* header */}
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-lg bg-gossip/40 flex items-center justify-center text-burnham shrink-0">
-                  <Target size={18} />
-                </div>
+                {opp.company ? (
+                  <CompanyLogo name={opp.company.name} src={opp.company.logo_url} domain={opp.company.domain ?? opp.company.website_url} size={36} />
+                ) : (
+                  <div className="w-9 h-9 rounded-lg bg-gossip/40 flex items-center justify-center text-burnham shrink-0">
+                    <Target size={18} />
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <h1 className="text-[15px] font-semibold text-midnight">{opp.title}</h1>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${STAGE_COLORS[opp.stage]}`}>
-                      {opp.stage}
+                      {opportunityStageLabel(opp.stage)}
                     </span>
                     <span className="text-[11px] text-shuttle/60">{TYPE_LABELS[opp.type]}</span>
                     {opp.company && (
@@ -445,8 +457,8 @@ export default function OpportunityDetail() {
                         to={`/people/${c.id}`}
                         className="flex items-center gap-2.5 px-3 py-2 bg-white border border-mercury rounded-lg hover:border-burnham transition-colors"
                       >
-                        <div className="w-6 h-6 rounded-full bg-gossip flex items-center justify-center text-burnham text-[11px] font-semibold shrink-0">
-                          {c.name[0]?.toUpperCase()}
+                        <div className="w-6 h-6 rounded-full bg-gossip flex items-center justify-center text-burnham text-[11px] font-semibold shrink-0 overflow-hidden">
+                          {c.profile_photo_url ? <img src={c.profile_photo_url} alt="" className="w-full h-full object-cover" /> : c.name[0]?.toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[12px] font-medium text-midnight truncate">{c.name}</p>
@@ -702,7 +714,7 @@ export default function OpportunityDetail() {
               onChange={e => updateField('stage', e.target.value)}
               className="mt-0.5 w-full text-[12px] border border-mercury rounded px-2 py-1 focus:outline-none focus:border-burnham bg-white"
             >
-              {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+              {STAGES.map(s => <option key={s} value={s}>{opportunityStageLabel(s)}</option>)}
             </select>
           </div>
 

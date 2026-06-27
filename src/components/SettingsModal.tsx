@@ -11,6 +11,7 @@ import { FUNNEL_STAGE_ORDER, UNDELETABLE_STAGES } from '@/lib/funnelDefaults'
 import type { ContactStatus, Profile } from '@/types'
 import { useUserSettings } from '@/lib/userSettings'
 import { consumeGoogleDriveScopeRequested, GOOGLE_OAUTH_SCOPES_STRING, hasGoogleDriveScope, markGoogleDriveScopeRequested, persistGoogleProviderSession } from '@/lib/googleDrive'
+import { isRunningInTauri, openInSystemBrowser, TAURI_OAUTH_REDIRECT } from '@/lib/tauriRuntime'
 
 interface SettingsModalProps {
   open: boolean
@@ -173,14 +174,18 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
     markGoogleDriveScopeRequested()
     // signInWithOAuth redirects the browser to Google — page will reload after.
     // On return, the useEffect above detects provider_token and saves it to user_metadata.
-    await supabase.auth.signInWithOAuth({
+    const redirectTo = isRunningInTauri() ? TAURI_OAUTH_REDIRECT : `${window.location.origin}/auth/callback`
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo,
+        skipBrowserRedirect: isRunningInTauri(),
         scopes: GOOGLE_OAUTH_SCOPES_STRING,
         queryParams: { access_type: 'offline', prompt: 'consent' },
       },
     })
+    if (error || !data?.url || !isRunningInTauri()) return
+    await openInSystemBrowser(data.url)
     // Nothing here runs — browser has already navigated to Google
   }
 

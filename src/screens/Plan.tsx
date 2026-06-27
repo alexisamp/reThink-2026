@@ -6,7 +6,8 @@ import {
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import type { Goal, Opportunity } from '@/types'
+import { ACTIVE_OPPORTUNITY_STAGES, opportunityStageLabel } from '@/lib/opportunityStages'
+import type { Goal, Opportunity, OpportunityStage } from '@/types'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -95,22 +96,29 @@ function GoalCard({ goal }: { goal: Goal }) {
 // ── opportunity card ──────────────────────────────────────────────────────────
 
 function OppPipelineCard({ opp }: { opp: Opportunity }) {
-  const stageColor = {
-    exploring: 'text-shuttle', active: 'text-pastel',
-    negotiating: 'text-yellow-500', won: 'text-green-500', lost: 'text-red-400',
-  }[opp.stage] ?? 'text-shuttle'
+  const stageColor: Record<OpportunityStage, string> = {
+    exploring: 'text-shuttle',
+    applied: 'text-blue-600',
+    abm_strategy: 'text-purple-600',
+    interviews: 'text-pastel',
+    active: 'text-pastel',
+    negotiating: 'text-yellow-500',
+    won: 'text-green-500',
+    closed: 'text-red-400',
+    lost: 'text-red-400',
+  }
 
   return (
     <Link
       to={`/people/opportunities/${opp.id}`}
       className="flex items-center gap-3 p-3 bg-white border border-mercury rounded-lg hover:border-burnham transition-colors"
     >
-      <DotOutline size={16} weight="fill" className={stageColor} />
+      <DotOutline size={16} weight="fill" className={stageColor[opp.stage] ?? 'text-shuttle'} />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-midnight truncate">{opp.title}</p>
         <p className="text-xs text-shuttle">{opp.company?.name ?? 'No company'}</p>
       </div>
-      <span className="text-xs text-shuttle capitalize">{opp.stage}</span>
+      <span className="text-xs text-shuttle">{opportunityStageLabel(opp.stage)}</span>
     </Link>
   )
 }
@@ -172,7 +180,7 @@ export default function Plan() {
       supabase.from('opportunities')
         .select('*, company:companies(*)')
         .eq('user_id', user.id)
-        .in('stage', ['exploring', 'active', 'negotiating'])
+        .in('stage', ACTIVE_OPPORTUNITY_STAGES)
         .order('created_at', { ascending: false }),
     ])
 

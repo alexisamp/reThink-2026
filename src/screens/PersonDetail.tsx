@@ -8,6 +8,7 @@ import {
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { isActiveOpportunityStage, opportunityStageLabel } from '@/lib/opportunityStages'
 import { useValueLogs } from '@/hooks/useValueLogs'
 import ContactFacts from '@/components/ContactFacts'
 import ContactListMemberships from '@/components/ContactListMemberships'
@@ -154,8 +155,15 @@ const TIER_LABELS: Record<number, string> = {
 }
 
 const STAGE_COLORS: Record<string, string> = {
-  exploring: 'text-shuttle', active: 'text-burnham font-medium',
-  negotiating: 'text-yellow-700 font-medium', won: 'text-pastel', lost: 'text-red-400',
+  exploring: 'text-shuttle',
+  applied: 'text-blue-700 font-medium',
+  abm_strategy: 'text-purple-700 font-medium',
+  interviews: 'text-burnham font-medium',
+  active: 'text-burnham font-medium',
+  negotiating: 'text-yellow-700 font-medium',
+  won: 'text-pastel',
+  closed: 'text-red-400',
+  lost: 'text-red-400',
 }
 
 // ── sub-components ────────────────────────────────────────────────────────────
@@ -598,7 +606,7 @@ export default function PersonDetail() {
     ? milestoneDaysUntil({ date_mm_dd: birthdayMmDd } as ContactMilestone)
     : null
   const hasStarters = starterFacts.length > 0 || upcomingMilestones.length > 0 || (birthdayDays != null && birthdayDays <= 30)
-  const activeOpps = opportunities.filter(o => o.stage === 'active' || o.stage === 'negotiating')
+  const activeOpps = opportunities.filter(o => isActiveOpportunityStage(o.stage))
 
   return (
     <div className="flex flex-col h-full bg-[#F7F7F5]">
@@ -749,7 +757,7 @@ export default function PersonDetail() {
                         <p className="text-[11px] text-shuttle">{opp.company?.name ?? 'No company'}</p>
                       </div>
                       <span className={`text-[11px] capitalize ${STAGE_COLORS[opp.stage] ?? 'text-shuttle'}`}>
-                        {opp.stage}
+                        {opportunityStageLabel(opp.stage)}
                       </span>
                       <CaretRight size={10} className="text-mercury" />
                     </Link>
@@ -1070,7 +1078,7 @@ export default function PersonDetail() {
                         <p className="text-[11px] text-shuttle">{opp.company?.name ?? 'No company'} · {opp.type}</p>
                       </div>
                       <span className={`text-[11px] capitalize ${STAGE_COLORS[opp.stage] ?? 'text-shuttle'}`}>
-                        {opp.stage}
+                        {opportunityStageLabel(opp.stage)}
                       </span>
                     </Link>
                   ))}
@@ -1311,7 +1319,7 @@ export default function PersonDetail() {
                   >
                     <span className="text-[11px] text-midnight truncate">{opp.title}</span>
                     <span className={`text-[10px] ml-2 flex-shrink-0 capitalize ${STAGE_COLORS[opp.stage] ?? 'text-shuttle'}`}>
-                      {opp.stage}
+                      {opportunityStageLabel(opp.stage)}
                     </span>
                   </Link>
                 ))}

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   House, BookOpen, Timer, Check, Target, Flag, CheckSquare, Plus, Users, FileText,
+  Sparkle,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Goal, Milestone, Todo, TodoMentionKind } from '@/types'
@@ -16,6 +17,7 @@ import {
   pathForMention,
   rankCrmObjects,
 } from '@/lib/crmObjects'
+import { isActiveOpportunityStage } from '@/lib/opportunityStages'
 import { openTodoFile } from '@/lib/filePills'
 import { driveFileToSegment, searchDriveFiles, type DriveFileResult } from '@/lib/googleDrive'
 
@@ -103,13 +105,13 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
 
     Promise.all([
       supabase.from('outreach_logs').select('id, name, profile_photo_url, company, job_title, email').eq('user_id', userId).order('name'),
-      supabase.from('companies').select('id, name, logo_url, domain, sector, headline').eq('user_id', userId).order('name'),
-      supabase.from('opportunities').select('id, title, stage, type, company_id, company:companies(id, name, logo_url, domain)').eq('user_id', userId).order('created_at', { ascending: false }),
+      supabase.from('companies').select('id, name, logo_url, domain, website_url, sector, headline').eq('user_id', userId).order('name'),
+      supabase.from('opportunities').select('id, title, stage, type, company_id, company:companies(id, name, logo_url, domain, website_url)').eq('user_id', userId).order('created_at', { ascending: false }),
     ]).then(([peopleRes, companiesRes, oppsRes]) => {
       const people = (peopleRes.data ?? []).map(c => mentionFromContact(c))
       const companies = (companiesRes.data ?? []).map(c => mentionFromCompany(c))
       const opps = ((oppsRes.data ?? []) as Parameters<typeof mentionFromOpportunity>[0][])
-        .filter(o => o.stage !== 'won' && o.stage !== 'lost')
+        .filter(o => isActiveOpportunityStage(o.stage))
         .map(o => mentionFromOpportunity(o))
       setCrmOptions([...people, ...companies, ...opps])
     })
@@ -168,9 +170,10 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
 
   const navCommands: Command[] = [
     { id: 'today',    label: 'Go to Today',         Icon: House,         shortcut: '⌘1', group: 'nav', action: () => { navigate('/today');        onClose() } },
-    { id: 'review',   label: 'Go to Review Queue',   Icon: CheckSquare,   shortcut: '⌘2', group: 'nav', action: () => { navigate('/review');       onClose() } },
-    { id: 'playbook', label: 'Go to Playbook',       Icon: BookOpen,      shortcut: '⌘3', group: 'nav', action: () => { navigate('/playbook');     onClose() } },
-    { id: 'goals',    label: 'Go to Goals',          Icon: Target,        shortcut: '⌘4', group: 'nav', action: () => { navigate('/milestones');   onClose() } },
+    { id: 'review',   label: 'Go to Contact Linking', Icon: CheckSquare,   shortcut: '⌘2', group: 'nav', action: () => { navigate('/review');       onClose() } },
+    { id: 'suggestions', label: 'Go to Suggestions',  Icon: Sparkle,       shortcut: '⌘3', group: 'nav', action: () => { navigate('/suggestions');  onClose() } },
+    { id: 'playbook', label: 'Go to Playbook',       Icon: BookOpen,      shortcut: '⌘4', group: 'nav', action: () => { navigate('/playbook');     onClose() } },
+    { id: 'goals',    label: 'Go to Goals',          Icon: Target,        shortcut: '⌘5', group: 'nav', action: () => { navigate('/milestones');   onClose() } },
     { id: 'people',   label: 'Go to People',         Icon: Users,                         group: 'nav', action: () => { navigate('/people');       onClose() } },
     { id: 'timer',    label: 'Start Focus Timer',    Icon: Timer,                         group: 'nav', action: () => { navigate('/today'); onStartTimer?.(); onClose() } },
   ]

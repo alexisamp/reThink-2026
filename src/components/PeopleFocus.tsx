@@ -7,6 +7,7 @@ import {
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useRelationshipBrief, type BriefItem, type BriefReason } from '@/hooks/useRelationshipBrief'
+import { ACTIVE_OPPORTUNITY_STAGES } from '@/lib/opportunityStages'
 import type { Contact, Opportunity } from '@/types'
 
 type ChannelRow = { outreach_log_id: string; channel: string }
@@ -430,7 +431,7 @@ export default function PeopleFocus({
     Promise.all([
       supabase.from('todos').select('url').eq('user_id', userId).like('url', 'rethink://people-focus/%').eq('completed', false),
       supabase.from('interactions').select('contact_id, interaction_date').eq('user_id', userId).gte('interaction_date', weekAgoDate),
-      supabase.from('opportunities').select('*, company:companies(*)').eq('user_id', userId).in('stage', ['exploring', 'active', 'negotiating']).order('target_date', { ascending: true, nullsFirst: false }),
+      supabase.from('opportunities').select('*, company:companies(*)').eq('user_id', userId).in('stage', ACTIVE_OPPORTUNITY_STAGES).order('target_date', { ascending: true, nullsFirst: false }),
     ]).then(([todoRes, interactionRes, oppRes]) => {
       if (cancelled) return
       setAccepted(new Set((todoRes.data ?? []).map(row => String(row.url ?? '').replace('rethink://people-focus/', '')).filter(Boolean)))

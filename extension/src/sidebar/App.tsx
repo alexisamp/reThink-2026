@@ -4,6 +4,8 @@ import type { User } from '@supabase/supabase-js'
 import { LinkedInKnownScreen } from './screens/LinkedInKnownScreen'
 import { LinkedInNewScreen } from './screens/LinkedInNewScreen'
 import { DailyProgress } from './components/DailyProgress'
+import { CapturePanel } from './screens/CapturePanel'
+import type { PageCaptureContext } from '../lib/pageCapture'
 
 // ===== TYPES =====
 
@@ -11,6 +13,7 @@ type SidebarState =
   | 'loading'
   | 'unauthenticated'
   | 'default'
+  | 'capture_page'
   | 'linkedin_known'
   | 'linkedin_new'
 
@@ -52,17 +55,35 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null)
   const [currentContact, setCurrentContact] = useState<CurrentContact | null>(null)
   const [linkedInProfile, setLinkedInProfile] = useState<LinkedInProfile | null>(null)
+  const [pageContext, setPageContext] = useState<PageCaptureContext | null>(null)
 
   useEffect(() => {
     determineState()
+    const refreshTimer = window.setInterval(() => {
+      determineState()
+    }, 2500)
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') determineState()
+    }
+    window.addEventListener('focus', determineState)
+    document.addEventListener('visibilitychange', onVisibilityChange)
 
     const onStorageChange = (changes: Record<string, chrome.storage.StorageChange>) => {
       if (changes.currentLinkedInProfile) {
         determineState()
       }
+      if (changes.currentPageCaptureContext) {
+        determineState()
+      }
     }
     chrome.storage.onChanged.addListener(onStorageChange)
-    return () => chrome.storage.onChanged.removeListener(onStorageChange)
+    return () => {
+      window.clearInterval(refreshTimer)
+      window.removeEventListener('focus', determineState)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      chrome.storage.onChanged.removeListener(onStorageChange)
+    }
   }, [])
 
   async function determineState() {
@@ -75,7 +96,19 @@ export default function App() {
       }
       setUser(session.user)
 
-      const stored = await chrome.storage.local.get(['currentLinkedInProfile'])
+      const activeContext = await chrome.runtime
+        .sendMessage({ type: 'GET_ACTIVE_PAGE_CONTEXT' })
+        .then((res: { context?: PageCaptureContext | null }) => res?.context ?? null)
+        .catch(() => null)
+      const stored = await chrome.storage.local.get(['currentLinkedInProfile', 'currentPageCaptureContext'])
+      const context = activeContext ?? (stored.currentPageCaptureContext as PageCaptureContext | null)
+
+      if (context?.url?.startsWith('http')) {
+        setPageContext(context)
+        setCurrentContact(null)
+        setSidebarState('capture_page')
+        return
+      }
 
       if (stored.currentLinkedInProfile?.linkedinUrl) {
         const profile = stored.currentLinkedInProfile as LinkedInProfile
@@ -90,6 +123,7 @@ export default function App() {
         }
       } else {
         setCurrentContact(null)
+        setPageContext(null)
         setSidebarState('default')
       }
     } catch (err) {
@@ -159,6 +193,17 @@ export default function App() {
 
     case 'default':
       return <DefaultScreen user={user!} onSignOut={handleSignOut} />
+
+    case 'capture_page':
+      return (
+        <CapturePanel
+          key={`${pageContext!.url}:${pageContext!.entityType}:${pageContext!.linkedinSlug ?? pageContext!.domain ?? ''}`}
+          user={user!}
+          context={pageContext!}
+          onRefresh={() => determineState()}
+          onSignOut={handleSignOut}
+        />
+      )
 
     case 'linkedin_known':
       return (

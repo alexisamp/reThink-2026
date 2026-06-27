@@ -1,23 +1,65 @@
-import { useState, useEffect, useCallback, useMemo, type CSSProperties } from 'react'
+import { useState, useEffect, useCallback, useMemo, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Table, Lightning, Users,
   WhatsappLogo, LinkedinLogo, TwitterLogo, IdentificationCard, At, Buildings,
   Briefcase, MapPin, Heartbeat, CircleHalf, Broadcast, GitFork, Target,
-  ArrowUpRight, ArrowDownLeft, Info, CalendarBlank, Plus, Trash,
+  ArrowUpRight, ArrowDownLeft, Info, CalendarBlank, NotePencil, Plus, Trash, Check, X,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type {
-  Contact, ContactFact, ContactIntroduction, ContactStatus, Interaction, Todo,
-  ValueDirection, ValueLog, ValueLogType,
+  Company, Contact, ContactFact, ContactIntroduction, ContactStatus, Interaction, InteractionDetail,
+  InteractionSuggestion, List, Todo, Opportunity, OpportunityStage, OpportunityType, ValueDirection,
+  ValueLog, ValueLogType,
 } from '@/types'
 import { useContacts } from '@/hooks/useContacts'
+import { addRecordToList } from '@/hooks/useLists'
+import { GMAIL_SYNC_EVENT, type GmailSyncEventDetail } from '@/hooks/useGmailAutoSync'
 import PeopleFocus from '@/components/PeopleFocus'
 import PeopleNetwork from '@/components/PeopleNetwork'
 import CrmTable, { type CrmColumn } from '@/components/crm/CrmTable'
 import ConversationsDrawer from '@/components/crm/ConversationsDrawer'
 import NewPersonPeek from '@/components/crm/NewPersonPeek'
 import RecordPeek from '@/components/crm/RecordPeek'
+import EditablePeekSelect from '@/components/crm/EditablePeekSelect'
+import EditableCurrencyInput from '@/components/crm/EditableCurrencyInput'
+import { Avatar, TierChip, ValueBar, RelStatus } from '@/components/crm/cells'
+import { relFromContact } from '@/lib/abm'
+import { OPPORTUNITY_STAGE_OPTIONS, opportunityStageLabel } from '@/lib/opportunityStages'
+import { formatCurrency } from '@/lib/formatters'
+import { approveInteractionSuggestion, dismissInteractionSuggestion } from '@/lib/interactionSuggestions'
+
+// Source label for an Activity row — matches the handoff peek (text "· WhatsApp"),
+// derived from the interaction's channel/type provenance.
+const INTERACTION_LABEL: Record<string, string> = {
+  whatsapp: 'WhatsApp', wa: 'WhatsApp', linkedin: 'LinkedIn', linkedin_msg: 'LinkedIn',
+  email: 'Gmail', call: 'Phone', virtual_coffee: 'Video call',
+  in_person: 'In person', x: 'X', exit5: 'Exit Five', other: 'Note',
+}
+function interactionLabel(i: { channel?: string | null; type?: string | null }): string | undefined {
+  return INTERACTION_LABEL[i.channel ?? ''] ?? INTERACTION_LABEL[i.type ?? '']
+}
+
+function interactionIcon(i: { channel?: string | null; type?: string | null }) {
+  const raw = i.channel ?? i.type ?? ''
+  if (raw === 'whatsapp' || raw === 'wa') return <WhatsappLogo size={12} />
+  if (raw === 'linkedin' || raw === 'linkedin_msg') return <LinkedinLogo size={12} />
+  if (raw === 'email') return <At size={12} />
+  if (raw === 'call') return <Broadcast size={12} />
+  return <NotePencil size={12} />
+}
+
+function emailNotePart(notes: string | null | undefined, label: string): string | null {
+  if (!notes) return null
+  const line = notes.split('\n').find(part => part.toLowerCase().startsWith(`${label.toLowerCase()}:`))
+  return line ? line.slice(label.length + 1).trim() || null : null
+}
+
+function compactText(value: string | null | undefined, max = 120): string | null {
+  const clean = (value ?? '').replace(/\s+/g, ' ').trim()
+  if (!clean) return null
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean
+}
 import { TierInfoHelper } from '@/components/TierInfoHelper'
 import MergeContactsModal from '@/components/MergeContactsModal'
 
@@ -113,26 +155,6 @@ function EditablePeekInput({
   )
 }
 
-function EditablePeekSelect<T extends string>({
-  value,
-  options,
-  onSave,
-}: {
-  value: T
-  options: Array<{ value: T; label: string }>
-  onSave: (value: T) => Promise<void> | void
-}) {
-  return (
-    <select
-      className="peek-inline-input peek-inline-select"
-      value={value}
-      onChange={event => { void onSave(event.target.value as T) }}
-    >
-      {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-    </select>
-  )
-}
-
 function docsFromTodos(todos: Todo[]) {
   const docs = todos.flatMap(todo => (todo.content_segments ?? [])
     .filter(segment => segment.type === 'file')
@@ -187,7 +209,8 @@ function ContactAvatar({ name, photoUrl, size = 28 }: { name: string; photoUrl?:
 // count badge when there's more than one underlying row.
 function ChannelIcons({ channels }: { channels: Array<{ channel: string }> }) {
   const counts = channels.reduce<Record<string, number>>((acc, c) => {
-    acc[c.channel] = (acc[c.channel] ?? 0) + 1
+    const key = c.channel === 'wa' ? 'whatsapp' : c.channel
+    acc[key] = (acc[key] ?? 0) + 1
     return acc
   }, {})
 
@@ -195,12 +218,13 @@ function ChannelIcons({ channels }: { channels: Array<{ channel: string }> }) {
     if (channel === 'whatsapp') return <WhatsappLogo size={11} className="text-green-500" />
     if (channel === 'linkedin') return <LinkedinLogo size={11} className="text-blue-500" />
     if (channel === 'x') return <TwitterLogo size={11} className="text-shuttle" />
+    if (channel === 'email') return <At size={11} className="text-red-500" />
     if (channel === 'exit5') return <span className="text-[9px] font-bold text-shuttle/60">E5</span>
     return null
   }
 
   // Stable display order
-  const ORDER = ['whatsapp', 'linkedin', 'x', 'exit5'] as const
+  const ORDER = ['email', 'whatsapp', 'linkedin', 'x', 'exit5'] as const
   const entries = ORDER.filter(k => counts[k] > 0)
 
   return (
@@ -227,6 +251,23 @@ function ChannelIcons({ channels }: { channels: Array<{ channel: string }> }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 type ViewMode = 'focus' | 'table' | 'network'
+type PeopleListMembership = {
+  id: string
+  list_id: string
+  contact_id: string | null
+  company_id?: string | null
+  opportunity_id?: string | null
+  current_stage: string
+  list?: List | null
+}
+type PeopleOpportunityLink = { id: string; opportunity_id: string; outreach_log_id: string; role: string | null }
+type PeopleNestedRecord = { type: 'person' | 'company' | 'deal'; id: string }
+const OPPORTUNITY_STAGES = OPPORTUNITY_STAGE_OPTIONS
+const OPPORTUNITY_TYPES: OpportunityType[] = ['job', 'consulting', 'business', 'partnership', 'other']
+
+function formatDealValue(n: number | null): string {
+  return formatCurrency(n)
+}
 
 export default function People() {
   const navigate = useNavigate()
@@ -238,6 +279,9 @@ export default function People() {
   const [peekFacts, setPeekFacts] = useState<ContactFact[]>([])
   const [peekValues, setPeekValues] = useState<ValueLog[]>([])
   const [peekInteractions, setPeekInteractions] = useState<Interaction[]>([])
+  const [peekInteractionDetails, setPeekInteractionDetails] = useState<Record<string, InteractionDetail>>({})
+  const [peekSuggestions, setPeekSuggestions] = useState<InteractionSuggestion[]>([])
+  const [selectedInteractionId, setSelectedInteractionId] = useState<string | null>(null)
   const [peekTodos, setPeekTodos] = useState<Todo[]>([])
   const [introductions, setIntroductions] = useState<ContactIntroduction[]>([])
   const [newValueDirection, setNewValueDirection] = useState<ValueDirection>('given')
@@ -255,9 +299,37 @@ export default function People() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkTagging, setBulkTagging] = useState(false)
   const [mergeModalOpen, setMergeModalOpen] = useState(false)
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [companyPickerOpen, setCompanyPickerOpen] = useState(false)
+  const [companyPickerQuery, setCompanyPickerQuery] = useState('')
+  const [nestedStack, setNestedStack] = useState<PeopleNestedRecord[]>([])
+  const [lists, setLists] = useState<List[]>([])
+  const [listMemberships, setListMemberships] = useState<PeopleListMembership[]>([])
+  const [listPickerOpen, setListPickerOpen] = useState(false)
+  const [listPickerQuery, setListPickerQuery] = useState('')
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([])
+  const [opportunityLinks, setOpportunityLinks] = useState<PeopleOpportunityLink[]>([])
+  const [dealPickerOpen, setDealPickerOpen] = useState(false)
+  const [dealPickerQuery, setDealPickerQuery] = useState('')
+  const [dealPeoplePickerOpen, setDealPeoplePickerOpen] = useState(false)
+  const [dealPeoplePickerQuery, setDealPeoplePickerQuery] = useState('')
+  const [companyTeamPickerOpen, setCompanyTeamPickerOpen] = useState(false)
+  const [companyTeamPickerQuery, setCompanyTeamPickerQuery] = useState('')
+  const [companyDealPickerOpen, setCompanyDealPickerOpen] = useState(false)
+  const [companyDealPickerQuery, setCompanyDealPickerQuery] = useState('')
+  const [companyListPickerOpen, setCompanyListPickerOpen] = useState(false)
+  const [companyListPickerQuery, setCompanyListPickerQuery] = useState('')
+  const [nestedPersonDealPickerOpen, setNestedPersonDealPickerOpen] = useState(false)
+  const [nestedPersonDealPickerQuery, setNestedPersonDealPickerQuery] = useState('')
+  const [nestedPersonListPickerOpen, setNestedPersonListPickerOpen] = useState(false)
+  const [nestedPersonListPickerQuery, setNestedPersonListPickerQuery] = useState('')
+  const [nestedDealListPickerOpen, setNestedDealListPickerOpen] = useState(false)
+  const [nestedDealListPickerQuery, setNestedDealListPickerQuery] = useState('')
 
   // Contact channels (loaded separately)
   const [channels, setChannels] = useState<Array<{ outreach_log_id: string; channel: string }>>([])
+  // Value ledger per contact (given/received counts) for the List "Value" column
+  const [ledgerByContact, setLedgerByContact] = useState<Map<string, { given: number; received: number }>>(new Map())
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -272,6 +344,68 @@ export default function People() {
       .from('contact_channels')
       .select('outreach_log_id, channel')
       .then(({ data }) => setChannels(data ?? []))
+  }, [userId])
+
+  useEffect(() => {
+    if (!userId) return
+    supabase
+      .from('companies')
+      .select('*')
+      .eq('user_id', userId)
+      .order('name')
+      .then(({ data }) => setCompanies((data ?? []) as Company[]))
+  }, [userId])
+
+  const loadLists = useCallback(async () => {
+    if (!userId) return
+    const [{ data: listData }, { data: membershipData }] = await Promise.all([
+      supabase.from('lists').select('*').eq('user_id', userId).eq('is_archived', false).order('created_at'),
+      supabase.from('list_memberships').select('*').eq('user_id', userId),
+    ])
+    const listById = new Map((listData ?? []).map(list => [list.id, list as List]))
+    setLists((listData ?? []) as List[])
+    setListMemberships(((membershipData ?? []) as PeopleListMembership[]).map(membership => ({
+      ...membership,
+      list: listById.get(membership.list_id) ?? null,
+    })))
+  }, [userId])
+
+  useEffect(() => {
+    void loadLists()
+  }, [loadLists])
+
+  const loadOpportunities = useCallback(async () => {
+    if (!userId) return
+    const [{ data: opportunityData }, { data: linkData }] = await Promise.all([
+      supabase.from('opportunities').select('*, company:companies(*)').eq('user_id', userId).order('created_at', { ascending: false }),
+      supabase.from('opportunity_contacts').select('*'),
+    ])
+    setOpportunities((opportunityData ?? []) as Opportunity[])
+    setOpportunityLinks((linkData ?? []) as PeopleOpportunityLink[])
+  }, [userId])
+
+  useEffect(() => {
+    void loadOpportunities()
+  }, [loadOpportunities])
+
+  // Load value ledger (given/received per contact) for the List "Value" column
+  useEffect(() => {
+    if (!userId) return
+    supabase
+      .from('value_logs')
+      .select('outreach_log_id, direction')
+      .eq('user_id', userId)
+      .then(({ data }) => {
+        const map = new Map<string, { given: number; received: number }>()
+        for (const row of (data ?? []) as Array<{ outreach_log_id: string | null; direction: string }>) {
+          if (!row.outreach_log_id) continue
+          const cur = map.get(row.outreach_log_id) ?? { given: 0, received: 0 }
+          if (row.direction === 'given') cur.given += 1
+          else if (row.direction === 'received') cur.received += 1
+          map.set(row.outreach_log_id, cur)
+        }
+        setLedgerByContact(map)
+      })
   }, [userId])
 
   useEffect(() => {
@@ -312,10 +446,90 @@ export default function People() {
 
   const handleRowClick = useCallback((c: Contact) => {
     setPeekContactId(c.id)
+    setNestedStack([])
   }, [])
   const peekContact = filtered.find(c => c.id === peekContactId) ?? null
   const peekIndex = peekContact ? filtered.findIndex(c => c.id === peekContact.id) : -1
   const contactsById = useMemo(() => new Map(contacts.map(contact => [contact.id, contact])), [contacts])
+  const nested = nestedStack[nestedStack.length - 1] ?? null
+  const nestedPersonId = nested?.type === 'person' ? nested.id : null
+  const nestedPerson = nestedPersonId ? contactsById.get(nestedPersonId) ?? null : null
+  const companiesById = useMemo(() => new Map(companies.map(company => [company.id, company])), [companies])
+  const nestedCompany = nested?.type === 'company' ? companiesById.get(nested.id) ?? null : null
+  const peekCompany = peekContact
+    ? (peekContact.company_id ? companiesById.get(peekContact.company_id) ?? null : companies.find(company => sameName(company.name, peekContact.company)))
+    : null
+  const nestedPersonCompany = nestedPerson
+    ? (nestedPerson.company_id ? companiesById.get(nestedPerson.company_id) ?? null : companies.find(company => sameName(company.name, nestedPerson.company)))
+    : null
+  const peekListMemberships = peekContact ? listMemberships.filter(membership => membership.contact_id === peekContact.id) : []
+  const peekDealLinks = peekContact ? opportunityLinks.filter(link => link.outreach_log_id === peekContact.id) : []
+  const peekDeals = peekDealLinks
+    .map(link => opportunities.find(opportunity => opportunity.id === link.opportunity_id))
+    .filter(Boolean) as Opportunity[]
+  const nestedDeal = nested?.type === 'deal' ? opportunities.find(opportunity => opportunity.id === nested.id) ?? null : null
+  const nestedDealLinks = nestedDeal ? opportunityLinks.filter(link => link.opportunity_id === nestedDeal.id) : []
+  const nestedDealPeople = nestedDealLinks
+    .map(link => contacts.find(contact => contact.id === link.outreach_log_id))
+    .filter(Boolean) as Contact[]
+  const nestedPersonDealLinks = nestedPerson ? opportunityLinks.filter(link => link.outreach_log_id === nestedPerson.id) : []
+  const nestedPersonDeals = nestedPersonDealLinks
+    .map(link => opportunities.find(opportunity => opportunity.id === link.opportunity_id))
+    .filter(Boolean) as Opportunity[]
+  const nestedPersonListMemberships = nestedPerson ? listMemberships.filter(membership => membership.contact_id === nestedPerson.id) : []
+  const nestedDealListMemberships = nestedDeal ? listMemberships.filter(membership => membership.opportunity_id === nestedDeal.id) : []
+  const nestedDealOwner = nestedDeal?.owner_contact_id ? contacts.find(contact => contact.id === nestedDeal.owner_contact_id) ?? null : null
+  const nestedDealCompany = nestedDeal?.company ?? (nestedDeal?.company_id ? companiesById.get(nestedDeal.company_id) ?? null : null)
+  const nestedCompanyTeam = nestedCompany
+    ? contacts.filter(contact => contact.company_id === nestedCompany.id || (!contact.company_id && sameName(contact.company, nestedCompany.name)))
+    : []
+  const nestedCompanyDeals = nestedCompany
+    ? opportunities.filter(opportunity => opportunity.company_id === nestedCompany.id || opportunity.company?.id === nestedCompany.id)
+    : []
+  const nestedCompanyLists = nestedCompany
+    ? listMemberships.filter(membership => membership.company_id === nestedCompany.id)
+    : []
+  const openNested = (record: PeopleNestedRecord) => {
+    setCompanyPickerOpen(false)
+    setDealPickerOpen(false)
+    setDealPeoplePickerOpen(false)
+    setCompanyTeamPickerOpen(false)
+    setCompanyDealPickerOpen(false)
+    setCompanyListPickerOpen(false)
+    setNestedPersonDealPickerOpen(false)
+    setNestedPersonListPickerOpen(false)
+    setNestedDealListPickerOpen(false)
+    setNestedStack(prev => [...prev, record])
+  }
+  const resetNested = () => {
+    setNestedStack([])
+    setCompanyPickerOpen(false)
+    setDealPickerOpen(false)
+    setDealPeoplePickerOpen(false)
+    setCompanyTeamPickerOpen(false)
+    setCompanyDealPickerOpen(false)
+    setCompanyListPickerOpen(false)
+    setNestedPersonDealPickerOpen(false)
+    setNestedPersonListPickerOpen(false)
+    setNestedDealListPickerOpen(false)
+  }
+  const backNested = () => {
+    setDealPeoplePickerOpen(false)
+    setCompanyTeamPickerOpen(false)
+    setCompanyDealPickerOpen(false)
+    setCompanyListPickerOpen(false)
+    setNestedPersonDealPickerOpen(false)
+    setNestedPersonListPickerOpen(false)
+    setNestedDealListPickerOpen(false)
+    setNestedStack(prev => prev.slice(0, -1))
+  }
+  const nestedBackLabel = (() => {
+    const previous = nestedStack[nestedStack.length - 2]
+    if (!previous) return peekContact?.name ?? 'person'
+    if (previous.type === 'person') return contactsById.get(previous.id)?.name ?? 'person'
+    if (previous.type === 'company') return companiesById.get(previous.id)?.name ?? 'company'
+    return opportunities.find(opportunity => opportunity.id === previous.id)?.title ?? 'deal'
+  })()
   const introsByPeek = useMemo(() => {
     if (!peekContact) return { madeBy: [] as ContactIntroduction[], madeTo: [] as ContactIntroduction[] }
     const isIntroduced = (intro: ContactIntroduction) => (
@@ -346,6 +560,9 @@ export default function People() {
       setPeekFacts([])
       setPeekValues([])
       setPeekInteractions([])
+      setPeekInteractionDetails({})
+      setPeekSuggestions([])
+      setSelectedInteractionId(null)
       setPeekTodos([])
       return
     }
@@ -355,14 +572,49 @@ export default function People() {
       supabase.from('value_logs').select('*').eq('user_id', userId).eq('outreach_log_id', peekContactId).order('date', { ascending: false }).limit(6),
       supabase.from('interactions').select('*').eq('user_id', userId).eq('contact_id', peekContactId).order('interaction_date', { ascending: false }).limit(6),
       supabase.from('todos').select('*').eq('user_id', userId).eq('contact_id', peekContactId).eq('completed', false).order('date', { nullsFirst: false }).limit(6),
-    ]).then(([factsRes, valuesRes, interactionsRes, todosRes]) => {
+      supabase.from('interaction_suggestions').select('*').eq('user_id', userId).eq('contact_id', peekContactId).eq('status', 'pending').order('created_at', { ascending: false }).limit(50),
+    ]).then(async ([factsRes, valuesRes, interactionsRes, todosRes, suggestionsRes]) => {
       if (cancelled) return
+      const interactions = (interactionsRes.data ?? []) as Interaction[]
       setPeekFacts((factsRes.data ?? []) as ContactFact[])
       setPeekValues((valuesRes.data ?? []) as ValueLog[])
-      setPeekInteractions((interactionsRes.data ?? []) as Interaction[])
+      setPeekInteractions(interactions)
       setPeekTodos((todosRes.data ?? []) as Todo[])
+      setPeekSuggestions((suggestionsRes.data ?? []) as InteractionSuggestion[])
+      setSelectedInteractionId(null)
+      if (interactions.length === 0) {
+        setPeekInteractionDetails({})
+        return
+      }
+      const { data } = await supabase
+        .from('interaction_details')
+        .select('*')
+        .eq('user_id', userId)
+        .in('interaction_id', interactions.map(interaction => interaction.id))
+      if (cancelled) return
+      setPeekInteractionDetails(Object.fromEntries(
+        ((data ?? []) as InteractionDetail[]).map(detail => [detail.interaction_id, detail]),
+      ))
     })
     return () => { cancelled = true }
+  }, [peekContactId, userId])
+
+  useEffect(() => {
+    if (!userId || !peekContactId) return
+    const onGmailSync = (event: Event) => {
+      const detail = (event as CustomEvent<GmailSyncEventDetail>).detail
+      if (!detail?.contactsTouched?.includes(peekContactId)) return
+      supabase
+        .from('interactions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('contact_id', peekContactId)
+        .order('interaction_date', { ascending: false })
+        .limit(6)
+        .then(({ data }) => setPeekInteractions((data ?? []) as Interaction[]))
+    }
+    window.addEventListener(GMAIL_SYNC_EVENT, onGmailSync)
+    return () => window.removeEventListener(GMAIL_SYNC_EVENT, onGmailSync)
   }, [peekContactId, userId])
 
   useEffect(() => {
@@ -376,12 +628,398 @@ export default function People() {
     setNewIntroByCompany('')
     setNewIntroToName('')
     setNewIntroToCompany('')
+    resetNested()
+    setCompanyPickerOpen(false)
+    setCompanyPickerQuery('')
+    setListPickerOpen(false)
+    setListPickerQuery('')
+    setDealPickerOpen(false)
+    setDealPickerQuery('')
+    setDealPeoplePickerOpen(false)
+    setDealPeoplePickerQuery('')
+    setCompanyTeamPickerOpen(false)
+    setCompanyTeamPickerQuery('')
+    setCompanyDealPickerOpen(false)
+    setCompanyDealPickerQuery('')
+    setCompanyListPickerOpen(false)
+    setCompanyListPickerQuery('')
+    setNestedPersonDealPickerOpen(false)
+    setNestedPersonDealPickerQuery('')
+    setNestedPersonListPickerOpen(false)
+    setNestedPersonListPickerQuery('')
+    setNestedDealListPickerOpen(false)
+    setNestedDealListPickerQuery('')
   }, [peekContactId])
 
   const updatePeekContact = useCallback(async (patch: Parameters<typeof updateContact>[1]) => {
     if (!peekContactId) return
     await updateContact(peekContactId, patch)
   }, [peekContactId, updateContact])
+
+  const updateNestedPerson = useCallback(async (patch: Parameters<typeof updateContact>[1]) => {
+    if (!nestedPersonId) return
+    await updateContact(nestedPersonId, patch)
+  }, [nestedPersonId, updateContact])
+
+  const updateNestedCompany = useCallback(async (companyId: string, patch: Partial<Company>) => {
+    const { data, error } = await supabase.from('companies').update(patch).eq('id', companyId).select('*').single()
+    if (error || !data) return
+    const next = data as Company
+    setCompanies(prev => prev.map(company => company.id === companyId ? next : company))
+  }, [])
+
+  const attachCompanyToPeek = useCallback(async (company: Company) => {
+    if (!peekContactId) return
+    await updateContact(peekContactId, { company_id: company.id, company: company.name })
+    setCompanyPickerOpen(false)
+    setCompanyPickerQuery('')
+  }, [peekContactId, updateContact])
+
+  const createAndAttachCompany = useCallback(async () => {
+    if (!userId || !peekContactId) return
+    const name = companyPickerQuery.trim()
+    if (!name) return
+    const { data, error } = await supabase.from('companies').insert({
+      user_id: userId,
+      name,
+      domain: null,
+      sector: null,
+      size: null,
+      notes: null,
+      key_insight: null,
+      logo_url: null,
+    }).select('*').single()
+    if (error || !data) return
+    const company = data as Company
+    setCompanies(prev => [...prev, company].sort((a, b) => a.name.localeCompare(b.name)))
+    await attachCompanyToPeek(company)
+  }, [attachCompanyToPeek, companyPickerQuery, peekContactId, userId])
+
+  const addContactToList = useCallback(async (list: List) => {
+    if (!userId || !peekContactId) return
+    if ((list.parent_object ?? 'person') !== 'person') return
+    await addRecordToList({ userId, list, recordId: peekContactId })
+    setListPickerOpen(false)
+    setListPickerQuery('')
+    await loadLists()
+  }, [loadLists, peekContactId, userId])
+
+  const removeContactFromList = useCallback(async (membershipId: string) => {
+    await supabase.from('list_memberships').delete().eq('id', membershipId)
+    await loadLists()
+  }, [loadLists])
+
+  const createAndAddList = useCallback(async () => {
+    if (!userId || !peekContactId) return
+    const name = listPickerQuery.trim()
+    if (!name) return
+    const { data, error } = await supabase.from('lists').insert({
+      user_id: userId,
+      name,
+      parent_object: 'person',
+      purpose: null,
+      stages: [],
+      color: '#eef0ed',
+      icon: '👤',
+    }).select('*').single()
+    if (error || !data) return
+    await addContactToList(data as List)
+  }, [addContactToList, listPickerQuery, peekContactId, userId])
+
+  const updateNestedDeal = useCallback(async (dealId: string, patch: Partial<Opportunity>) => {
+    const { data, error } = await supabase.from('opportunities').update(patch).eq('id', dealId).select('*, company:companies(*)').single()
+    if (error || !data) return
+    const next = data as Opportunity
+    setOpportunities(prev => prev.map(opportunity => opportunity.id === dealId ? next : opportunity))
+  }, [])
+
+  const addDealToPeek = useCallback(async (deal: Opportunity) => {
+    if (!peekContactId) return
+    await supabase.from('opportunity_contacts').upsert({
+      opportunity_id: deal.id,
+      outreach_log_id: peekContactId,
+      role: 'contact',
+    }, { onConflict: 'opportunity_id,outreach_log_id' })
+    setDealPickerOpen(false)
+    setDealPickerQuery('')
+    await loadOpportunities()
+  }, [loadOpportunities, peekContactId])
+
+  const removeDealFromPeek = useCallback(async (deal: Opportunity) => {
+    if (!peekContactId) return
+    await supabase.from('opportunity_contacts').delete().eq('opportunity_id', deal.id).eq('outreach_log_id', peekContactId)
+    if (nestedDeal?.id === deal.id) resetNested()
+    await loadOpportunities()
+  }, [loadOpportunities, nestedDeal?.id, peekContactId])
+
+  const addPersonToNestedDeal = useCallback(async (person: Contact) => {
+    if (!nestedDeal) return
+    await supabase.from('opportunity_contacts').upsert({
+      opportunity_id: nestedDeal.id,
+      outreach_log_id: person.id,
+      role: 'contact',
+    }, { onConflict: 'opportunity_id,outreach_log_id' })
+    setDealPeoplePickerOpen(false)
+    setDealPeoplePickerQuery('')
+    await loadOpportunities()
+  }, [loadOpportunities, nestedDeal])
+
+  const removePersonFromNestedDeal = useCallback(async (person: Contact) => {
+    if (!nestedDeal) return
+    await supabase.from('opportunity_contacts').delete().eq('opportunity_id', nestedDeal.id).eq('outreach_log_id', person.id)
+    await loadOpportunities()
+  }, [loadOpportunities, nestedDeal])
+
+  const addNestedDealToList = useCallback(async (list: List) => {
+    if (!userId || !nestedDeal) return
+    if ((list.parent_object ?? 'person') !== 'opportunity') return
+    await addRecordToList({ userId, list, recordId: nestedDeal.id })
+    setNestedDealListPickerOpen(false)
+    setNestedDealListPickerQuery('')
+    await loadLists()
+  }, [loadLists, nestedDeal, userId])
+
+  const removeNestedDealFromList = useCallback(async (membershipId: string) => {
+    await supabase.from('list_memberships').delete().eq('id', membershipId)
+    await loadLists()
+  }, [loadLists])
+
+  const createAndAddNestedDealList = useCallback(async () => {
+    if (!userId || !nestedDeal) return
+    const name = nestedDealListPickerQuery.trim()
+    if (!name) return
+    const { data, error } = await supabase.from('lists').insert({
+      user_id: userId,
+      name,
+      parent_object: 'opportunity',
+      purpose: null,
+      stages: [],
+      color: '#eef0ed',
+      icon: '💼',
+    }).select('*').single()
+    if (error || !data) return
+    await addNestedDealToList(data as List)
+  }, [addNestedDealToList, nestedDeal, nestedDealListPickerQuery, userId])
+
+  const createAndAddPersonToNestedDeal = useCallback(async () => {
+    if (!userId || !nestedDeal) return
+    const name = dealPeoplePickerQuery.trim()
+    if (!name) return
+    const company = nestedDealCompany ?? peekCompany
+    const person = await addContact({
+      name,
+      status: 'PROSPECT',
+      log_date: localDate(),
+      company_id: company?.id ?? null,
+      company: company?.name ?? null,
+    })
+    if (!person) return
+    await addPersonToNestedDeal(person)
+  }, [addContact, addPersonToNestedDeal, dealPeoplePickerQuery, nestedDeal, nestedDealCompany, peekCompany, userId])
+
+  const createAndAddDeal = useCallback(async () => {
+    if (!userId || !peekContactId) return
+    const title = dealPickerQuery.trim()
+    if (!title) return
+    const { data, error } = await supabase.from('opportunities').insert({
+      user_id: userId,
+      title,
+      type: 'job',
+      stage: 'exploring',
+      company_id: peekCompany?.id ?? null,
+      estimated_value: null,
+      target_date: null,
+      close_date: null,
+      owner_contact_id: null,
+      notes: null,
+      decision_filter_pass: null,
+      interview_prep: null,
+      interview_map: null,
+      negotiation_prep: null,
+    }).select('*, company:companies(*)').single()
+    if (error || !data) return
+    const deal = data as Opportunity
+    setOpportunities(prev => [deal, ...prev])
+    await addDealToPeek(deal)
+  }, [addDealToPeek, dealPickerQuery, peekCompany?.id, peekContactId, userId])
+
+  const addDealToNestedPerson = useCallback(async (deal: Opportunity) => {
+    if (!nestedPerson) return
+    await supabase.from('opportunity_contacts').upsert({
+      opportunity_id: deal.id,
+      outreach_log_id: nestedPerson.id,
+      role: 'contact',
+    }, { onConflict: 'opportunity_id,outreach_log_id' })
+    setNestedPersonDealPickerOpen(false)
+    setNestedPersonDealPickerQuery('')
+    await loadOpportunities()
+  }, [loadOpportunities, nestedPerson])
+
+  const removeDealFromNestedPerson = useCallback(async (deal: Opportunity) => {
+    if (!nestedPerson) return
+    await supabase.from('opportunity_contacts').delete().eq('opportunity_id', deal.id).eq('outreach_log_id', nestedPerson.id)
+    await loadOpportunities()
+  }, [loadOpportunities, nestedPerson])
+
+  const createAndAddDealToNestedPerson = useCallback(async () => {
+    if (!userId || !nestedPerson) return
+    const title = nestedPersonDealPickerQuery.trim()
+    if (!title) return
+    const { data, error } = await supabase.from('opportunities').insert({
+      user_id: userId,
+      title,
+      type: 'job',
+      stage: 'exploring',
+      company_id: nestedPersonCompany?.id ?? null,
+      estimated_value: null,
+      target_date: null,
+      close_date: null,
+      owner_contact_id: null,
+      notes: null,
+      decision_filter_pass: null,
+      interview_prep: null,
+      interview_map: null,
+      negotiation_prep: null,
+    }).select('*, company:companies(*)').single()
+    if (error || !data) return
+    const deal = data as Opportunity
+    setOpportunities(prev => [deal, ...prev])
+    await addDealToNestedPerson(deal)
+  }, [addDealToNestedPerson, nestedPerson, nestedPersonCompany?.id, nestedPersonDealPickerQuery, userId])
+
+  const addNestedPersonToList = useCallback(async (list: List) => {
+    if (!userId || !nestedPerson) return
+    if ((list.parent_object ?? 'person') !== 'person') return
+    await addRecordToList({ userId, list, recordId: nestedPerson.id })
+    setNestedPersonListPickerOpen(false)
+    setNestedPersonListPickerQuery('')
+    await loadLists()
+  }, [loadLists, nestedPerson, userId])
+
+  const removeNestedPersonFromList = useCallback(async (membershipId: string) => {
+    await supabase.from('list_memberships').delete().eq('id', membershipId)
+    await loadLists()
+  }, [loadLists])
+
+  const createAndAddNestedPersonList = useCallback(async () => {
+    if (!userId || !nestedPerson) return
+    const name = nestedPersonListPickerQuery.trim()
+    if (!name) return
+    const { data, error } = await supabase.from('lists').insert({
+      user_id: userId,
+      name,
+      parent_object: 'person',
+      purpose: null,
+      stages: [],
+      color: '#eef0ed',
+      icon: '👤',
+    }).select('*').single()
+    if (error || !data) return
+    await addNestedPersonToList(data as List)
+  }, [addNestedPersonToList, nestedPerson, nestedPersonListPickerQuery, userId])
+
+  const attachPersonToNestedCompany = useCallback(async (person: Contact) => {
+    if (!nestedCompany) return
+    await updateContact(person.id, { company_id: nestedCompany.id, company: nestedCompany.name })
+    setCompanyTeamPickerOpen(false)
+    setCompanyTeamPickerQuery('')
+  }, [nestedCompany, updateContact])
+
+  const detachPersonFromNestedCompany = useCallback(async (person: Contact) => {
+    if (!nestedCompany) return
+    await updateContact(person.id, { company_id: null, company: null })
+  }, [nestedCompany, updateContact])
+
+  const createAndAddPersonToNestedCompany = useCallback(async () => {
+    if (!userId || !nestedCompany) return
+    const name = companyTeamPickerQuery.trim()
+    if (!name) return
+    await addContact({
+      name,
+      status: 'PROSPECT',
+      log_date: localDate(),
+      company_id: nestedCompany.id,
+      company: nestedCompany.name,
+    })
+    setCompanyTeamPickerOpen(false)
+    setCompanyTeamPickerQuery('')
+  }, [addContact, companyTeamPickerQuery, nestedCompany, userId])
+
+  const attachDealToNestedCompany = useCallback(async (deal: Opportunity) => {
+    if (!nestedCompany) return
+    const { data, error } = await supabase.from('opportunities').update({ company_id: nestedCompany.id }).eq('id', deal.id).select('*, company:companies(*)').single()
+    if (!error && data) {
+      const next = data as Opportunity
+      setOpportunities(prev => prev.map(opportunity => opportunity.id === deal.id ? next : opportunity))
+    }
+    setCompanyDealPickerOpen(false)
+    setCompanyDealPickerQuery('')
+    await loadOpportunities()
+  }, [loadOpportunities, nestedCompany])
+
+  const detachDealFromNestedCompany = useCallback(async (deal: Opportunity) => {
+    if (!nestedCompany) return
+    await supabase.from('opportunities').update({ company_id: null }).eq('id', deal.id)
+    if (nestedDeal?.id === deal.id) resetNested()
+    await loadOpportunities()
+  }, [loadOpportunities, nestedCompany, nestedDeal?.id])
+
+  const createAndAddDealToNestedCompany = useCallback(async () => {
+    if (!userId || !nestedCompany) return
+    const title = companyDealPickerQuery.trim()
+    if (!title) return
+    const { data, error } = await supabase.from('opportunities').insert({
+      user_id: userId,
+      title,
+      type: 'job',
+      stage: 'exploring',
+      company_id: nestedCompany.id,
+      estimated_value: null,
+      target_date: null,
+      close_date: null,
+      owner_contact_id: null,
+      notes: null,
+      decision_filter_pass: null,
+      interview_prep: null,
+      interview_map: null,
+      negotiation_prep: null,
+    }).select('*, company:companies(*)').single()
+    if (!error && data) setOpportunities(prev => [data as Opportunity, ...prev])
+    setCompanyDealPickerOpen(false)
+    setCompanyDealPickerQuery('')
+    await loadOpportunities()
+  }, [companyDealPickerQuery, loadOpportunities, nestedCompany, userId])
+
+  const addNestedCompanyToList = useCallback(async (list: List) => {
+    if (!userId || !nestedCompany) return
+    if ((list.parent_object ?? 'person') !== 'company') return
+    await addRecordToList({ userId, list, recordId: nestedCompany.id })
+    setCompanyListPickerOpen(false)
+    setCompanyListPickerQuery('')
+    await loadLists()
+  }, [loadLists, nestedCompany, userId])
+
+  const removeNestedCompanyFromList = useCallback(async (membershipId: string) => {
+    await supabase.from('list_memberships').delete().eq('id', membershipId)
+    await loadLists()
+  }, [loadLists])
+
+  const createAndAddNestedCompanyList = useCallback(async () => {
+    if (!userId || !nestedCompany) return
+    const name = companyListPickerQuery.trim()
+    if (!name) return
+    const { data, error } = await supabase.from('lists').insert({
+      user_id: userId,
+      name,
+      parent_object: 'company',
+      purpose: null,
+      stages: [],
+      color: '#eef0ed',
+      icon: '🏢',
+    }).select('*').single()
+    if (error || !data) return
+    await addNestedCompanyToList(data as List)
+  }, [addNestedCompanyToList, companyListPickerQuery, nestedCompany, userId])
 
   const addValueLog = useCallback(async () => {
     if (!userId || !peekContactId || !newValueText.trim()) return
@@ -680,6 +1318,29 @@ export default function People() {
     peekContact?.last_interaction_at ? `Last touch ${formatAgo(daysSince(peekContact.last_interaction_at))}` : null,
     peekContact?.status === 'DORMANT' || peekContact?.status === 'RECONNECT' ? 'Relationship needs reactivation' : null,
   ].filter(Boolean) as string[]
+  const selectedInteraction = peekInteractions.find(interaction => interaction.id === selectedInteractionId) ?? null
+  const selectedInteractionDetail = selectedInteractionId ? peekInteractionDetails[selectedInteractionId] ?? null : null
+  const notifyPeek = (message: string) => {
+    window.dispatchEvent(new CustomEvent('rethink:peek-notice', { detail: message }))
+  }
+  const approveSuggestionFromPeek = async (suggestion: InteractionSuggestion) => {
+    const result = await approveInteractionSuggestion(suggestion)
+    if (!result.ok) {
+      notifyPeek(result.error ?? 'Could not approve suggestion')
+      return
+    }
+    setPeekSuggestions(current => current.filter(item => item.id !== suggestion.id))
+    notifyPeek('Suggestion approved')
+  }
+  const dismissSuggestionFromPeek = async (suggestion: InteractionSuggestion) => {
+    const result = await dismissInteractionSuggestion(suggestion)
+    if (!result.ok) {
+      notifyPeek(result.error ?? 'Could not dismiss suggestion')
+      return
+    }
+    setPeekSuggestions(current => current.filter(item => item.id !== suggestion.id))
+    notifyPeek('Suggestion dismissed')
+  }
   const tierEditor = peekContact ? (
     <span className="peek-tier-edit">
       <select
@@ -695,6 +1356,431 @@ export default function People() {
       </select>
     </span>
   ) : null
+  const personHighlights = peekContact ? [
+    { label: 'Connection strength', icon: <Heartbeat size={13} />, value: (peekContact.connection_strength ?? 0).toFixed(1) },
+    { label: 'Relationship', icon: <CircleHalf size={13} />, value: peekContact.status },
+    { label: 'Channels', icon: <Broadcast size={13} />, value: [peekContact.email && 'email', peekContact.phone && 'phone', peekContact.linkedin_url && 'linkedin'].filter(Boolean).join(' · ') || '—' },
+    { label: 'Daisy chain', icon: <GitFork size={13} />, value: referrerName },
+    { label: 'Opportunity', icon: <Target size={13} />, value: peekContact.looking_for || '—' },
+    { label: 'Company', icon: <Buildings size={13} />, value: (peekCompany?.name ?? peekContact.company) || 'No company' },
+  ] : []
+  const companyHighlights = nestedCompany ? [
+    { label: 'Team', icon: <Users size={13} />, value: nestedCompanyTeam.length ? `${nestedCompanyTeam.length} people` : 'No Team' },
+    { label: 'Associated deals', icon: <Target size={13} />, value: nestedCompanyDeals.length ? `${nestedCompanyDeals.length} deals` : 'No Associated deals' },
+    { label: 'Lists', icon: <Info size={13} />, value: nestedCompanyLists.length ? `${nestedCompanyLists.length} lists` : 'Not in any list' },
+    { label: 'Primary location', icon: <MapPin size={13} />, value: nestedCompany.primary_location || nestedCompany.hq_location || 'No Primary location' },
+    { label: 'Website', icon: <Buildings size={13} />, value: nestedCompany.website_url || nestedCompany.domain || 'No Website' },
+    { label: 'Employee range', icon: <Users size={13} />, value: nestedCompany.size || (nestedCompany.employees_count ? `${nestedCompany.employees_count}` : 'No Employee range') },
+  ] : []
+  const renderHighlightGrid = (items: Array<{ label: string; icon: ReactNode; value: ReactNode }>) => (
+    <>
+      <div className="peek-block-label">Highlights</div>
+      <div className="peek-hl-grid">
+        {items.map(field => (
+          <div className="peek-hl" key={field.label}>
+            <span className="hl-hd"><span>{field.label}</span>{field.icon}</span>
+            <span className="hl-body">{field.value}</span>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+  const activityRows = peekInteractions.map(interaction => {
+    const source = interactionLabel(interaction)
+    const detail = peekInteractionDetails[interaction.id]
+    if (interaction.type === 'email') {
+      const subject = compactText(emailNotePart(interaction.notes, 'Subject'), 80)
+      const summary = compactText(emailNotePart(interaction.notes, 'Summary'), 150)
+      const intent = compactText(emailNotePart(interaction.notes, 'Intent'), 80)
+      const from = compactText(emailNotePart(interaction.notes, 'From'), 70)
+      const to = compactText(emailNotePart(interaction.notes, 'To'), 70)
+      const directionLabel = interaction.direction === 'outbound'
+        ? `To ${peekContact?.name ?? to ?? 'contact'}`
+        : `From ${peekContact?.name ?? from ?? 'contact'}`
+      return {
+        text: (
+          <span className="act-email">
+            <span><strong>{directionLabel}</strong>{source ? <span className="act-src"> · {source}</span> : null}</span>
+            {subject && <span className="act-email-subject">{subject}</span>}
+            {(summary || intent) && (
+              <span className="act-email-meta">
+                {summary}{summary && intent ? ' · ' : ''}{intent ? `Intent: ${intent}` : ''}
+              </span>
+            )}
+          </span>
+        ),
+        when: interaction.interaction_date,
+        id: interaction.id,
+        hasDetail: Boolean(detail),
+        icon: interactionIcon(interaction),
+        channel: interaction.channel ?? interaction.type,
+      }
+    }
+    return {
+      text: <><strong>You</strong> {interaction.notes || `logged ${interaction.type.replace('_', ' ')}`}{source ? <span className="act-src"> · {source}</span> : null}</>,
+      when: interaction.interaction_date,
+      id: interaction.id,
+      hasDetail: Boolean(detail),
+      icon: interactionIcon(interaction),
+      channel: interaction.channel ?? interaction.type,
+    }
+  })
+  const personOverview = peekContact ? (
+    <>
+      {renderHighlightGrid(personHighlights)}
+      <div className="peek-activity-head">
+        <div className="peek-block-label spaced">Activity</div>
+        <button className="peek-viewall">View all</button>
+      </div>
+      <div className="peek-activity-card">
+        {activityRows.length > 0 ? activityRows.slice(0, 4).map((row, index) => (
+          <button
+            type="button"
+            className={`peek-act-row${row.hasDetail ? ' clickable' : ''}`}
+            key={`${row.when}-${index}`}
+            onClick={() => row.hasDetail && setSelectedInteractionId(row.id)}
+          >
+            <span className="act-channel-ic" data-channel={row.channel}>{row.icon}</span><span className="act-txt">{row.text}</span><span className="act-when">{row.when}</span>
+          </button>
+        )) : (
+          <div className="peek-act-row"><span className="dot" /><span className="act-txt"><strong>You</strong> created Person</span><span className="act-when">{formatAgo(daysSince(peekContact.created_at))}</span></div>
+        )}
+      </div>
+    </>
+  ) : null
+  const companyOverview = nestedCompany ? (
+    <>
+      {renderHighlightGrid(companyHighlights)}
+      <div className="peek-activity-head">
+        <div className="peek-block-label spaced">Activity</div>
+        <button className="peek-viewall">View all</button>
+      </div>
+      <div className="peek-activity-card">
+        <div className="peek-act-row"><span className="dot" /><span className="act-txt"><strong>You</strong> changed {nestedCompany.name}'s attributes</span><span className="act-when">{formatAgo(daysSince(nestedCompany.last_enriched_at || nestedCompany.created_at))}</span></div>
+        <div className="peek-act-row"><span className="dot" /><span className="act-txt"><strong>You</strong> created Company</span><span className="act-when">{formatAgo(daysSince(nestedCompany.created_at))}</span></div>
+      </div>
+    </>
+  ) : null
+  const dealHighlights = nestedDeal ? [
+    { label: 'Deal stage', icon: <Target size={13} />, value: opportunityStageLabel(nestedDeal.stage) },
+    { label: 'Deal value', icon: <Target size={13} />, value: formatDealValue(nestedDeal.estimated_value) },
+    { label: 'Deal owner', icon: <Users size={13} />, value: nestedDealOwner?.name ?? 'No Deal owner' },
+    { label: 'Associated company', icon: <Buildings size={13} />, value: nestedDealCompany?.name ?? 'No Associated company' },
+    { label: 'Associated people', icon: <Users size={13} />, value: nestedDealPeople.length ? `${nestedDealPeople.length} people` : 'No Associated people' },
+    { label: 'Target date', icon: <CalendarBlank size={13} />, value: nestedDeal.target_date || '—' },
+  ] : []
+  const dealOverview = nestedDeal ? (
+    <>
+      {renderHighlightGrid(dealHighlights)}
+      <div className="peek-activity-head">
+        <div className="peek-block-label spaced">Activity</div>
+        <button className="peek-viewall">View all</button>
+      </div>
+      <div className="peek-activity-card">
+        <div className="peek-act-row"><span className="dot" /><span className="act-txt"><strong>You</strong> changed {nestedDeal.title}'s attributes</span><span className="act-when">{formatAgo(daysSince(nestedDeal.created_at))}</span></div>
+        <div className="peek-act-row"><span className="dot" /><span className="act-txt"><strong>You</strong> created Deal</span><span className="act-when">{formatAgo(daysSince(nestedDeal.created_at))}</span></div>
+      </div>
+    </>
+  ) : null
+  const nestedPersonHighlights = nestedPerson ? [
+    { label: 'Connection strength', icon: <Heartbeat size={13} />, value: (nestedPerson.connection_strength ?? 0).toFixed(1) },
+    { label: 'Relationship', icon: <CircleHalf size={13} />, value: nestedPerson.status },
+    { label: 'Channels', icon: <Broadcast size={13} />, value: [nestedPerson.email && 'email', nestedPerson.phone && 'phone', nestedPerson.linkedin_url && 'linkedin'].filter(Boolean).join(' · ') || '—' },
+    { label: 'Daisy chain', icon: <GitFork size={13} />, value: nestedPerson.referred_by ? contactsById.get(nestedPerson.referred_by)?.name ?? nestedPerson.referred_by : '—' },
+    { label: 'Opportunity', icon: <Target size={13} />, value: nestedPerson.looking_for || '—' },
+    { label: 'Company', icon: <Buildings size={13} />, value: (nestedPersonCompany?.name ?? nestedPerson.company) || 'No company' },
+  ] : []
+  const nestedPersonOverview = nestedPerson ? (
+    <>
+      {renderHighlightGrid(nestedPersonHighlights)}
+      <div className="peek-activity-head">
+        <div className="peek-block-label spaced">Activity</div>
+        <button className="peek-viewall">View all</button>
+      </div>
+      <div className="peek-activity-card">
+        <div className="peek-act-row"><span className="dot" /><span className="act-txt"><strong>You</strong> changed {nestedPerson.name}'s attributes</span><span className="act-when">{formatAgo(daysSince(nestedPerson.updated_at ?? nestedPerson.created_at))}</span></div>
+        <div className="peek-act-row"><span className="dot" /><span className="act-txt"><strong>You</strong> created Person</span><span className="act-when">{formatAgo(daysSince(nestedPerson.created_at))}</span></div>
+      </div>
+    </>
+  ) : null
+  const activityTab = (
+    <div>
+      <div className="peek-block-label">Relationship memory <span className="peek-count">{activityRows.length}</span></div>
+      {activityRows.length > 0 ? (
+        <div className="peek-activity-card">
+          {activityRows.map((row, index) => (
+            <button
+              type="button"
+              className={`peek-act-row${row.hasDetail ? ' clickable' : ''}${row.id === selectedInteractionId ? ' selected' : ''}`}
+              key={`${row.when}-${index}`}
+              onClick={() => row.hasDetail && setSelectedInteractionId(row.id)}
+            >
+              <span className="act-channel-ic" data-channel={row.channel}>{row.icon}</span><span className="act-txt">{row.text}</span><span className="act-when">{row.when}</span>
+            </button>
+          ))}
+        </div>
+      ) : <p className="peek-empty-lists">No activity captured yet.</p>}
+    </div>
+  )
+  const listsTab = (
+    <div className="peek-rel-section">
+      <div className="peek-block-label">Lists <span className="peek-count">{peekListMemberships.length}</span><button className="peek-add-btn" onClick={() => setListPickerOpen(true)}><Plus size={10} />Add to list</button></div>
+      {peekListMemberships.length === 0 ? <p className="peek-empty-lists">Not in any list yet.</p> : peekListMemberships.map(membership => (
+        <div className="peek-rel-row" key={membership.id}>
+          <span className="peek-list-icon" style={{ background: membership.list?.color ?? '#eef0ed' }}>{membership.list?.icon ?? '•'}</span>
+          <span className="peek-rel-main"><strong>{membership.list?.name ?? 'List'}</strong><span>{membership.current_stage}</span></span>
+          <button className="peek-trash" onClick={() => void removeContactFromList(membership.id)} aria-label={`Remove from ${membership.list?.name ?? 'list'}`}><Trash size={12} /></button>
+        </div>
+      ))}
+    </div>
+  )
+  const associatedDealsTab = (
+    <div className="peek-rel-section">
+      <div className="peek-block-label">Associated deals <span className="peek-count">{(nestedPerson ? nestedPersonDeals : peekDeals).length}</span><button className="peek-add-btn" onClick={() => nestedPerson ? setNestedPersonDealPickerOpen(true) : setDealPickerOpen(true)}><Plus size={10} />Add deal</button></div>
+      {(nestedPerson ? nestedPersonDeals : peekDeals).length === 0 ? <p className="peek-empty-lists">No deals associated yet.</p> : (nestedPerson ? nestedPersonDeals : peekDeals).map(deal => (
+        <button className="peek-rel-row" key={deal.id} onClick={() => openNested({ type: 'deal', id: deal.id })}>
+          <Avatar src={deal.company?.logo_url ?? peekCompany?.logo_url ?? nestedPersonCompany?.logo_url} name={deal.company?.name ?? deal.title} sq size={28} />
+          <span className="peek-rel-main"><strong>{deal.title}</strong><span>{deal.stage} · {deal.company?.name ?? 'No company'}</span></span>
+          <span className="peek-row-side">
+            <span className="crm-mono">{formatDealValue(deal.estimated_value)}</span>
+            <button className="peek-trash" onClick={event => { event.stopPropagation(); void (nestedPerson ? removeDealFromNestedPerson(deal) : removeDealFromPeek(deal)) }} aria-label={`Remove ${deal.title}`}><Trash size={12} /></button>
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+  const nestedPersonListsTab = nestedPerson ? (
+    <div className="peek-rel-section">
+      <div className="peek-block-label">Lists <span className="peek-count">{nestedPersonListMemberships.length}</span><button className="peek-add-btn" onClick={() => setNestedPersonListPickerOpen(true)}><Plus size={10} />Add to list</button></div>
+      {nestedPersonListMemberships.length === 0 ? <p className="peek-empty-lists">Not in any list yet.</p> : nestedPersonListMemberships.map(membership => (
+        <div className="peek-rel-row" key={membership.id}>
+          <span className="peek-list-icon" style={{ background: membership.list?.color ?? '#eef0ed' }}>{membership.list?.icon ?? '•'}</span>
+          <span className="peek-rel-main"><strong>{membership.list?.name ?? 'List'}</strong><span>{membership.current_stage}</span></span>
+          <button className="peek-trash" onClick={() => void removeNestedPersonFromList(membership.id)} aria-label={`Remove from ${membership.list?.name ?? 'list'}`}><Trash size={12} /></button>
+        </div>
+      ))}
+    </div>
+  ) : null
+  const nestedCompanyTeamTab = nestedCompany ? (
+    <div className="peek-rel-section">
+      <div className="peek-block-label">Team <span className="peek-count">{nestedCompanyTeam.length}</span><button className="peek-add-btn" onClick={() => setCompanyTeamPickerOpen(true)}><Plus size={10} />Add person</button></div>
+      {nestedCompanyTeam.length === 0 ? <p className="peek-empty-lists">No people associated yet.</p> : nestedCompanyTeam.map(person => (
+        <button className="peek-rel-row" key={person.id} onClick={() => openNested({ type: 'person', id: person.id })}>
+          <ContactAvatar name={person.name} photoUrl={person.profile_photo_url} size={28} />
+          <span className="peek-rel-main"><strong>{person.name}</strong><span>{person.job_title || person.email || 'Person'}</span></span>
+          <span className="peek-row-side">
+            <button className="peek-trash" onClick={event => { event.stopPropagation(); void detachPersonFromNestedCompany(person) }} aria-label={`Remove ${person.name} from ${nestedCompany.name}`}><Trash size={12} /></button>
+            <Target size={12} />
+          </span>
+        </button>
+      ))}
+    </div>
+  ) : null
+  const nestedCompanyDealsTab = nestedCompany ? (
+    <div className="peek-rel-section">
+      <div className="peek-block-label">Associated deals <span className="peek-count">{nestedCompanyDeals.length}</span><button className="peek-add-btn" onClick={() => setCompanyDealPickerOpen(true)}><Plus size={10} />Add deal</button></div>
+      {nestedCompanyDeals.length === 0 ? <p className="peek-empty-lists">No deals associated yet.</p> : nestedCompanyDeals.map(deal => (
+        <button className="peek-rel-row" key={deal.id} onClick={() => openNested({ type: 'deal', id: deal.id })}>
+          <Avatar src={nestedCompany.logo_url} name={nestedCompany.name} sq size={28} />
+          <span className="peek-rel-main"><strong>{deal.title}</strong><span>{deal.stage} · {deal.type}</span></span>
+          <span className="peek-row-side">
+            <span className="crm-mono">{formatDealValue(deal.estimated_value)}</span>
+            <button className="peek-trash" onClick={event => { event.stopPropagation(); void detachDealFromNestedCompany(deal) }} aria-label={`Remove ${deal.title} from ${nestedCompany.name}`}><Trash size={12} /></button>
+            <Target size={12} />
+          </span>
+        </button>
+      ))}
+    </div>
+  ) : null
+  const nestedCompanyListsTab = nestedCompany ? (
+    <div className="peek-rel-section">
+      <div className="peek-block-label">Lists <span className="peek-count">{nestedCompanyLists.length}</span><button className="peek-add-btn" onClick={() => setCompanyListPickerOpen(true)}><Plus size={10} />Add to list</button></div>
+      {nestedCompanyLists.length === 0 ? <p className="peek-empty-lists">Not in any list yet.</p> : nestedCompanyLists.map(membership => (
+        <div className="peek-rel-row" key={membership.id}>
+          <span className="peek-list-icon" style={{ background: membership.list?.color ?? '#eef0ed' }}>{membership.list?.icon ?? '•'}</span>
+          <span className="peek-rel-main"><strong>{membership.list?.name ?? 'List'}</strong><span>{membership.current_stage}</span></span>
+          <button className="peek-trash" onClick={() => void removeNestedCompanyFromList(membership.id)} aria-label={`Remove from ${membership.list?.name ?? 'list'}`}><Trash size={12} /></button>
+        </div>
+      ))}
+    </div>
+  ) : null
+  const nestedDealPeopleTab = nestedDeal ? (
+    <div className="peek-rel-section">
+      <div className="peek-block-label">Associated people <span className="peek-count">{nestedDealPeople.length}</span><button className="peek-add-btn" onClick={() => setDealPeoplePickerOpen(true)}><Plus size={10} />Add person</button></div>
+      {nestedDealPeople.length === 0 ? <p className="peek-empty-lists">No people associated yet.</p> : nestedDealPeople.map(person => (
+        <button className="peek-rel-row" key={person.id} onClick={() => openNested({ type: 'person', id: person.id })}>
+          <ContactAvatar name={person.name} photoUrl={person.profile_photo_url} size={28} />
+          <span className="peek-rel-main"><strong>{person.name}</strong><span>{person.job_title || person.company || person.email || 'Person'}</span></span>
+          <span className="peek-row-side">
+            <button className="peek-trash" onClick={event => { event.stopPropagation(); void removePersonFromNestedDeal(person) }} aria-label={`Remove ${person.name} from ${nestedDeal.title}`}><Trash size={12} /></button>
+            <Target size={12} />
+          </span>
+        </button>
+      ))}
+    </div>
+  ) : null
+  const nestedDealListsTab = nestedDeal ? (
+    <div className="peek-rel-section">
+      <div className="peek-block-label">Lists <span className="peek-count">{nestedDealListMemberships.length}</span><button className="peek-add-btn" onClick={() => setNestedDealListPickerOpen(true)}><Plus size={10} />Add to list</button></div>
+      {nestedDealListMemberships.length === 0 ? <p className="peek-empty-lists">Not in any list yet.</p> : nestedDealListMemberships.map(membership => (
+        <div className="peek-rel-row" key={membership.id}>
+          <span className="peek-list-icon" style={{ background: membership.list?.color ?? '#eef0ed' }}>{membership.list?.icon ?? '•'}</span>
+          <span className="peek-rel-main"><strong>{membership.list?.name ?? 'List'}</strong><span>{membership.current_stage}</span></span>
+          <button className="peek-trash" onClick={() => void removeNestedDealFromList(membership.id)} aria-label={`Remove from ${membership.list?.name ?? 'list'}`}><Trash size={12} /></button>
+        </div>
+      ))}
+    </div>
+  ) : null
+  const valueLedgerTab = (
+    <>
+      <div className="peek-block-label">Value ledger <ValueBalance given={peekValueGiven} received={peekValueReceived} /></div>
+      <div className="peek-ledger">
+        {peekValues.length === 0 ? <p className="peek-empty-lists">No value logs yet.</p> : peekValues.map(v => (
+          <div className={`pl-act ${v.direction === 'received' ? 'received' : 'given'}`} key={v.id}>
+            <span className="pl-dir">{v.direction === 'received' ? <ArrowDownLeft size={11} /> : <ArrowUpRight size={11} />}</span>
+            <span className="pl-txt peek-edit-stack">
+              <EditablePeekSelect value={v.direction} options={[{ value: 'given', label: 'given' }, { value: 'received', label: 'received' }]} onSave={value => updateValueLog(v.id, { direction: value })} />
+              <EditablePeekSelect value={v.type} options={VALUE_TYPES.map(value => ({ value, label: value }))} onSave={value => updateValueLog(v.id, { type: value })} />
+              <EditablePeekInput value={v.description} placeholder="What value moved?" onSave={value => updateValueLog(v.id, { description: value })} />
+            </span>
+            <span className="peek-row-side">
+              <EditablePeekInput type="date" value={v.date} onSave={value => updateValueLog(v.id, { date: value || localDate() })} />
+              <button className="peek-trash" onClick={() => void deleteValueLog(v.id)} aria-label="Delete value log"><Trash size={12} /></button>
+            </span>
+          </div>
+        ))}
+        <div className="peek-add-line">
+          <EditablePeekSelect value={newValueDirection} options={[{ value: 'given', label: 'given' }, { value: 'received', label: 'received' }]} onSave={setNewValueDirection} />
+          <EditablePeekSelect value={newValueType} options={VALUE_TYPES.map(value => ({ value, label: value }))} onSave={setNewValueType} />
+          <input className="peek-inline-input" value={newValueText} onChange={event => setNewValueText(event.target.value)} placeholder="Add value log..." onKeyDown={event => { if (event.key === 'Enter') void addValueLog() }} />
+          <button className="peek-add-btn" onClick={() => void addValueLog()}><Plus size={10} />Add</button>
+        </div>
+      </div>
+    </>
+  )
+  const introductionsTab = (
+    <div className="peek-intro-grid">
+      <div className="peek-intro-col">
+        <div className="peek-intro-hd">Opened for you <span className="peek-count">{introsByPeek.madeBy.length}</span></div>
+        <div className="peek-linked">
+          {introsByPeek.madeBy.length === 0 ? <p className="peek-empty-lists">No introductions captured from this person yet.</p> : introsByPeek.madeBy.map(introRow)}
+          <div className="peek-add-line vertical">
+            <input className="peek-inline-input" value={newIntroByName} onChange={event => setNewIntroByName(event.target.value)} placeholder="Person they introduced" />
+            <input className="peek-inline-input" value={newIntroByCompany} onChange={event => setNewIntroByCompany(event.target.value)} placeholder="Company" onKeyDown={event => { if (event.key === 'Enter') void addIntroduction('received') }} />
+            <button className="peek-add-btn" onClick={() => void addIntroduction('received')}><Plus size={10} />Add intro</button>
+          </div>
+        </div>
+      </div>
+      <div className="peek-intro-col">
+        <div className="peek-intro-hd">You introduced <span className="peek-count">{introsByPeek.madeTo.length}</span></div>
+        <div className="peek-linked">
+          {introsByPeek.madeTo.length === 0 ? <p className="peek-empty-lists">No introductions you made to this person yet.</p> : introsByPeek.madeTo.map(introRow)}
+          <div className="peek-add-line vertical">
+            <input className="peek-inline-input" value={newIntroToName} onChange={event => setNewIntroToName(event.target.value)} placeholder="Person you introduced" />
+            <input className="peek-inline-input" value={newIntroToCompany} onChange={event => setNewIntroToCompany(event.target.value)} placeholder="Company" onKeyDown={event => { if (event.key === 'Enter') void addIntroduction('given') }} />
+            <button className="peek-add-btn" onClick={() => void addIntroduction('given')}><Plus size={10} />Add intro</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+  const factsTab = (
+    <>
+      <div className="peek-block-label">Facts</div>
+      <div className="peek-captured">
+        {peekMemoryFacts.length === 0 ? <p className="peek-empty-lists">No facts yet — add what you learn.</p> : peekMemoryFacts.map(f => (
+          <div className="pk-cap" key={f.id}>
+            <span className="pk-cap-ic"><Info size={13} /></span>
+            <span className="pk-cap-tx peek-edit-stack">
+              <EditablePeekInput value={f.label} placeholder="Label" onSave={value => updateFact(f.id, { label: value })} />
+              <EditablePeekInput value={f.value} placeholder="Fact" onSave={value => updateFact(f.id, { value: value || f.value })} />
+            </span>
+            <button className="peek-trash" onClick={() => void deleteFact(f.id)} aria-label="Delete fact"><Trash size={12} /></button>
+          </div>
+        ))}
+        <div className="peek-add-line">
+          <input className="peek-inline-input" value={newFactText} onChange={event => setNewFactText(event.target.value)} placeholder="Add fact..." onKeyDown={event => { if (event.key === 'Enter') void addFact() }} />
+          <button className="peek-add-btn" onClick={() => void addFact()}><Plus size={10} />Add</button>
+        </div>
+      </div>
+      <div className="peek-block-label spaced">Key dates</div>
+      <div className="peek-captured">
+        {peekDateFacts.length === 0 ? <p className="peek-empty-lists">No key dates yet.</p> : peekDateFacts.map(f => (
+          <div className="pk-cap date" key={f.id}>
+            <span className="pk-cap-ic"><CalendarBlank size={13} /></span>
+            <span className="pk-cap-tx"><EditablePeekInput value={f.label || f.value} placeholder="Date label" onSave={value => updateFact(f.id, { label: value, value: value || f.value })} /></span>
+            <span className="peek-row-side">
+              <EditablePeekInput type="date" value={f.expires_at} onSave={value => updateFact(f.id, { expires_at: value })} />
+              <button className="peek-trash" onClick={() => void deleteFact(f.id)} aria-label="Delete key date"><Trash size={12} /></button>
+            </span>
+          </div>
+        ))}
+        <div className="peek-add-line">
+          <input className="peek-inline-input" value={newDateLabel} onChange={event => setNewDateLabel(event.target.value)} placeholder="Add key date..." />
+          <input className="peek-inline-input" type="date" value={newDateWhen} onChange={event => setNewDateWhen(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void addKeyDate() }} />
+          <button className="peek-add-btn" onClick={() => void addKeyDate()}><Plus size={10} />Add</button>
+        </div>
+      </div>
+    </>
+  )
+  const suggestionsTab = (
+    <div className="peek-suggestions">
+      <div className="peek-block-label">Suggested actions <span className="peek-count">{peekSuggestions.length}</span></div>
+      {peekSuggestions.length === 0 ? (
+        <p className="peek-empty-lists">No pending suggestions for this contact.</p>
+      ) : peekSuggestions.map(suggestion => (
+        <div className="peek-suggestion" key={suggestion.id}>
+          <span className="peek-suggestion-chip">{suggestion.target.replace('_', ' ')}</span>
+          <span className="peek-suggestion-main">
+            <strong>{suggestion.title}</strong>
+            {suggestion.body && <span>{suggestion.body}</span>}
+          </span>
+          <span className="peek-row-side">
+            <button className="rv-ok" onClick={() => void approveSuggestionFromPeek(suggestion)} aria-label={`Approve ${suggestion.title}`}><Check size={13} /></button>
+            <button className="rv-no" onClick={() => void dismissSuggestionFromPeek(suggestion)} aria-label={`Dismiss ${suggestion.title}`}><X size={13} /></button>
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+  const docsTab = (
+    <div className="peek-docs">
+      <div className="peek-block-label">Linked documents <span className="peek-count">{docsFromTodos(peekTodos).length}</span></div>
+      <div className="peek-docs-list">
+        {docsFromTodos(peekTodos).length === 0 ? <p className="peek-empty-lists">No documents linked yet.</p> : docsFromTodos(peekTodos).map((doc, index) => (
+          <div className="peek-doc" key={`${doc.name}-${index}`}>
+            <span className="peek-doc-ic"><Info size={15} /></span>
+            <div className="peek-doc-meta"><span className="peek-doc-name">{doc.name}</span><span className="peek-doc-sub">{doc.type || 'Doc'}{doc.when ? ` · ${doc.when}` : ''}</span></div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+  const recordTabs = nestedPerson ? [
+    { id: 'Overview', label: 'Overview', content: nestedPersonOverview },
+    { id: 'Associated deals', label: 'Associated deals', count: nestedPersonDeals.length, content: associatedDealsTab },
+    { id: 'Lists', label: 'Lists', count: nestedPersonListMemberships.length, content: nestedPersonListsTab },
+  ] : nestedCompany ? [
+    { id: 'Overview', label: 'Overview', content: companyOverview },
+    { id: 'Team', label: 'Team', count: nestedCompanyTeam.length, content: nestedCompanyTeamTab },
+    { id: 'Associated deals', label: 'Associated deals', count: nestedCompanyDeals.length, content: nestedCompanyDealsTab },
+    { id: 'Lists', label: 'Lists', count: nestedCompanyLists.length, content: nestedCompanyListsTab },
+    { id: 'Activity', label: 'Activity', count: 0, content: <div className="peek-docs-empty"><Info size={16} /><span>No activity captured yet.</span></div> },
+  ] : nestedDeal ? [
+    { id: 'Overview', label: 'Overview', content: dealOverview },
+    { id: 'Associated people', label: 'Associated people', count: nestedDealPeople.length, content: nestedDealPeopleTab },
+    { id: 'Lists', label: 'Lists', count: nestedDealListMemberships.length, content: nestedDealListsTab },
+  ] : [
+    { id: 'Overview', label: 'Overview', content: personOverview },
+    { id: 'Associated deals', label: 'Associated deals', count: peekDeals.length, content: associatedDealsTab },
+    { id: 'Activity', label: 'Activity', count: activityRows.length, content: activityTab },
+    { id: 'Suggestions', label: 'Suggestions', count: peekSuggestions.length, content: suggestionsTab },
+    { id: 'Notes', label: 'Notes', count: peekValues.length, content: valueLedgerTab },
+    { id: 'Introductions', label: 'Introductions', count: introsByPeek.madeBy.length + introsByPeek.madeTo.length, content: introductionsTab },
+    { id: 'Facts', label: 'Facts', count: peekFacts.length, content: factsTab },
+    { id: 'Files', label: 'Files', count: docsFromTodos(peekTodos).length, content: docsTab },
+    { id: 'Lists', label: 'Lists', count: peekListMemberships.length, content: listsTab },
+  ]
 
   const contactColumns: CrmColumn<Contact>[] = useMemo(() => [
     {
@@ -714,7 +1800,7 @@ export default function People() {
       key: 'status',
       label: 'Status',
       width: '116px',
-      render: contact => <span className="crm-pill">{contact.status}</span>,
+      render: contact => <RelStatus value={relFromContact(contact.connection_strength, contact.last_interaction_at)} />,
     },
     {
       key: 'this_week',
@@ -731,33 +1817,30 @@ export default function People() {
       key: 'value',
       label: 'Value',
       width: '104px',
-      render: contact => (
-        <span className={`val-bar ${contact.tier === 1 ? 'owe' : 'even'}`}>
-          <span className="val-num">{contact.tier === 1 ? '-1' : '0'}</span>
-          <span className="val-lbl">{contact.tier === 1 ? 'you owe' : 'even'}</span>
-        </span>
-      ),
+      render: contact => <ValueBar ledger={ledgerByContact.get(contact.id) ?? null} />,
     },
     {
       key: 'tier',
       label: 'Tier',
       width: '84px',
-      render: contact => contact.tier
-        ? <span className="crm-chip tier" style={{ '--chip': contact.tier === 1 ? '#3E7A4E' : contact.tier === 2 ? '#D97706' : '#64748B' } as CSSProperties}>T{contact.tier}</span>
-        : <span className="crm-empty">—</span>,
+      render: contact => <TierChip tier={contact.tier} />,
     },
     {
       key: 'company',
       label: 'Company',
       width: '170px',
-      render: contact => contact.company
+      render: contact => {
+        const company = contact.company_id ? companiesById.get(contact.company_id) : null
+        const label = company?.name ?? contact.company
+        return label
         ? (
           <span className="crm-name">
-            <span className="crm-av sq logo">{contact.company[0]?.toUpperCase()}</span>
-            <span className="link">{contact.company}</span>
+            <Avatar src={company?.logo_url} name={label} sq size={24} />
+            <span className="link">{label}</span>
           </span>
         )
-        : <span className="crm-empty">No company</span>,
+        : <span className="crm-empty">No company</span>
+      },
     },
     {
       key: 'channels',
@@ -778,7 +1861,7 @@ export default function People() {
       width: 'minmax(220px, 1fr)',
       render: contact => <span className="crm-next">{contact.notes || contact.looking_for || 'Add the next move.'}</span>,
     },
-  ], [channels])
+  ], [channels, companiesById, ledgerByContact])
 
   return (
     <div className="ppl-page">
@@ -1025,49 +2108,90 @@ export default function People() {
       )}
       <RecordPeek
         open={Boolean(peekContact)}
-        title={peekContact?.name ?? ''}
-        subtitle={peekContact ? [peekContact.job_title, peekContact.company].filter(Boolean).join(' · ') || peekContact.email : undefined}
-        eyebrow="Person"
-        avatar={peekContact && (
+        title={nestedPerson?.name ?? nestedCompany?.name ?? nestedDeal?.title ?? peekContact?.name ?? ''}
+        subtitle={nestedPerson
+          ? [nestedPerson.job_title, nestedPersonCompany?.name ?? nestedPerson.company].filter(Boolean).join(' · ') || nestedPerson.email
+          : nestedCompany
+          ? [nestedCompany.domain, nestedCompany.sector].filter(Boolean).join(' · ')
+          : nestedDeal
+          ? [nestedDealCompany?.name, nestedDeal.stage].filter(Boolean).join(' · ')
+          : peekContact ? [peekContact.job_title, peekCompany?.name ?? peekContact.company].filter(Boolean).join(' · ') || peekContact.email : undefined}
+        eyebrow={nestedPerson ? 'Person' : nestedCompany ? 'Company' : nestedDeal ? 'Deal' : 'Person'}
+        avatar={nestedPerson ? (
+          <ContactAvatar name={nestedPerson.name} photoUrl={nestedPerson.profile_photo_url} size={38} />
+        ) : nestedCompany ? (
+          <Avatar src={nestedCompany.logo_url} name={nestedCompany.name} sq size={38} />
+        ) : nestedDeal ? (
+          <Avatar src={nestedDealCompany?.logo_url ?? peekCompany?.logo_url} name={nestedDealCompany?.name ?? nestedDeal.title} sq size={38} />
+        ) : peekContact && (
           <ContactAvatar name={peekContact.name} photoUrl={peekContact.profile_photo_url} size={38} />
         )}
         index={peekIndex >= 0 ? peekIndex : undefined}
         total={filtered.length}
-        highlights={peekContact ? [
-          { label: 'Connection strength', icon: <Heartbeat size={13} />, value: (peekContact.connection_strength ?? 0).toFixed(1) },
-          { label: 'Relationship', icon: <CircleHalf size={13} />, value: peekContact.status },
-          { label: 'Channels', icon: <Broadcast size={13} />, value: [peekContact.email && 'email', peekContact.phone && 'phone', peekContact.linkedin_url && 'linkedin'].filter(Boolean).join(' · ') || '—' },
-          { label: 'Daisy chain', icon: <GitFork size={13} />, value: referrerName },
-          { label: 'Opportunity', icon: <Target size={13} />, value: peekContact.looking_for || '—' },
-          { label: 'Company', icon: <Buildings size={13} />, value: peekContact.company || 'No company' },
-        ] : []}
-        fields={peekContact ? [
+        tabs={recordTabs}
+        fields={nestedPerson ? [
+          { label: 'Name', icon: <IdentificationCard size={12} />, value: <EditablePeekInput value={nestedPerson.name} placeholder="Name" onSave={value => updateNestedPerson({ name: value || nestedPerson.name })} /> },
+          { label: 'Email', icon: <At size={12} />, value: <EditablePeekInput type="email" value={nestedPerson.email} placeholder="email@company.com" onSave={value => updateNestedPerson({ email: value })} /> },
+          { label: 'Company', icon: <Buildings size={12} />, value: nestedPersonCompany ? <button className="peek-rel-link" onClick={() => openNested({ type: 'company', id: nestedPersonCompany.id })}>{nestedPersonCompany.name}</button> : (nestedPerson.company || 'No company') },
+          { label: 'Role', icon: <Briefcase size={12} />, value: <EditablePeekInput value={nestedPerson.job_title} placeholder="Set role..." onSave={value => updateNestedPerson({ job_title: value })} /> },
+          { label: 'Location', icon: <MapPin size={12} />, value: <EditablePeekInput value={nestedPerson.location} placeholder="Location" onSave={value => updateNestedPerson({ location: value })} /> },
+          { label: 'Phone', icon: <WhatsappLogo size={12} />, value: <EditablePeekInput value={nestedPerson.phone} placeholder="Phone number" onSave={value => updateNestedPerson({ phone: value })} /> },
+          { label: 'LinkedIn', icon: <LinkedinLogo size={12} />, value: <EditablePeekInput value={nestedPerson.linkedin_url} placeholder="LinkedIn URL" onSave={value => updateNestedPerson({ linkedin_url: value })} /> },
+          { label: 'Website', icon: <Buildings size={12} />, value: <EditablePeekInput value={nestedPerson.website} placeholder="https://..." onSave={value => updateNestedPerson({ website: value })} /> },
+          { label: 'Description', icon: <Info size={12} />, value: <EditablePeekInput value={nestedPerson.about} placeholder="Description" onSave={value => updateNestedPerson({ about: value })} /> },
+          { label: 'AngelList', icon: <Target size={12} />, value: <EditablePeekInput value={nestedPerson.angellist_url} placeholder="AngelList URL" onSave={value => updateNestedPerson({ angellist_url: value })} /> },
+          { label: 'Facebook', icon: <Broadcast size={12} />, value: <EditablePeekInput value={nestedPerson.facebook_url} placeholder="Facebook URL" onSave={value => updateNestedPerson({ facebook_url: value })} /> },
+          { label: 'Instagram', icon: <Broadcast size={12} />, value: <EditablePeekInput value={nestedPerson.instagram_url} placeholder="Instagram URL" onSave={value => updateNestedPerson({ instagram_url: value })} /> },
+          { label: 'Twitter', icon: <TwitterLogo size={12} />, value: <EditablePeekInput value={nestedPerson.twitter_url} placeholder="Twitter URL" onSave={value => updateNestedPerson({ twitter_url: value })} /> },
+        ] : nestedCompany ? [
+          { label: 'Domains', icon: <Buildings size={12} />, value: <EditablePeekInput value={nestedCompany.domain} placeholder="domain.com" onSave={value => updateNestedCompany(nestedCompany.id, { domain: value })} /> },
+          { label: 'Name', icon: <Buildings size={12} />, value: <EditablePeekInput value={nestedCompany.name} placeholder="Company name" onSave={value => updateNestedCompany(nestedCompany.id, { name: value || nestedCompany.name })} /> },
+          { label: 'Description', icon: <Info size={12} />, value: <EditablePeekInput value={nestedCompany.description} placeholder="Description" onSave={value => updateNestedCompany(nestedCompany.id, { description: value })} /> },
+          { label: 'Categories', icon: <Target size={12} />, value: <EditablePeekInput value={nestedCompany.sector} placeholder="Set categories..." onSave={value => updateNestedCompany(nestedCompany.id, { sector: value })} /> },
+          { label: 'Primary location', icon: <MapPin size={12} />, value: <EditablePeekInput value={nestedCompany.primary_location ?? nestedCompany.hq_location} placeholder="Location" onSave={value => updateNestedCompany(nestedCompany.id, { primary_location: value, hq_location: value })} /> },
+          { label: 'Website', icon: <Buildings size={12} />, value: <EditablePeekInput value={nestedCompany.website_url} placeholder="https://..." onSave={value => updateNestedCompany(nestedCompany.id, { website_url: value })} /> },
+          { label: 'LinkedIn', icon: <LinkedinLogo size={12} />, value: <EditablePeekInput value={nestedCompany.linkedin_url} placeholder="LinkedIn URL" onSave={value => updateNestedCompany(nestedCompany.id, { linkedin_url: value })} /> },
+          { label: 'AngelList', icon: <Target size={12} />, value: <EditablePeekInput value={nestedCompany.angellist_url} placeholder="AngelList URL" onSave={value => updateNestedCompany(nestedCompany.id, { angellist_url: value })} /> },
+          { label: 'Facebook', icon: <Broadcast size={12} />, value: <EditablePeekInput value={nestedCompany.facebook_url} placeholder="Facebook URL" onSave={value => updateNestedCompany(nestedCompany.id, { facebook_url: value })} /> },
+          { label: 'Instagram', icon: <Broadcast size={12} />, value: <EditablePeekInput value={nestedCompany.instagram_url} placeholder="Instagram URL" onSave={value => updateNestedCompany(nestedCompany.id, { instagram_url: value })} /> },
+          { label: 'Twitter', icon: <TwitterLogo size={12} />, value: <EditablePeekInput value={nestedCompany.twitter_url} placeholder="Twitter URL" onSave={value => updateNestedCompany(nestedCompany.id, { twitter_url: value })} /> },
+        ] : nestedDeal ? [
+          { label: 'Name', icon: <Target size={12} />, value: <EditablePeekInput value={nestedDeal.title} placeholder="Deal name" onSave={value => updateNestedDeal(nestedDeal.id, { title: value || nestedDeal.title })} /> },
+          { label: 'Deal stage', icon: <Target size={12} />, value: <EditablePeekSelect<OpportunityStage> value={nestedDeal.stage} options={OPPORTUNITY_STAGES.map(value => ({ value, label: opportunityStageLabel(value) }))} searchPlaceholder="Search or create stage..." showDot onSave={value => updateNestedDeal(nestedDeal.id, { stage: value })} /> },
+          { label: 'Deal owner', icon: <Users size={12} />, value: <EditablePeekSelect<string> value={nestedDeal.owner_contact_id ?? ''} options={[{ value: '', label: 'Set owner...' }, ...contacts.map(contact => ({ value: contact.id, label: contact.name }))]} searchPlaceholder="Search people..." variant="relation" onSave={value => updateNestedDeal(nestedDeal.id, { owner_contact_id: value || null })} /> },
+          { label: 'Type', icon: <Target size={12} />, value: <EditablePeekSelect<OpportunityType> value={nestedDeal.type} options={OPPORTUNITY_TYPES.map(value => ({ value, label: value }))} onSave={value => updateNestedDeal(nestedDeal.id, { type: value })} /> },
+          { label: 'Associated company', icon: <Buildings size={12} />, value: nestedDealCompany ? <button className="peek-rel-link" onClick={() => openNested({ type: 'company', id: nestedDealCompany.id })}>{nestedDealCompany.name}</button> : 'No company' },
+          { label: 'Associated people', icon: <Users size={12} />, value: <button className="peek-rel-link" onClick={() => setDealPeoplePickerOpen(true)}>{nestedDealPeople.length} people</button> },
+          { label: 'Deal value', icon: <Target size={12} />, value: <EditableCurrencyInput value={nestedDeal.estimated_value} onSave={value => updateNestedDeal(nestedDeal.id, { estimated_value: value })} /> },
+          { label: 'Target date', icon: <CalendarBlank size={12} />, value: <EditablePeekInput type="date" value={nestedDeal.target_date} onSave={value => updateNestedDeal(nestedDeal.id, { target_date: value })} /> },
+          { label: 'Close date', icon: <CalendarBlank size={12} />, value: <EditablePeekInput type="date" value={nestedDeal.close_date} onSave={value => updateNestedDeal(nestedDeal.id, { close_date: value })} /> },
+        ] : peekContact ? [
           { label: 'Name', icon: <IdentificationCard size={12} />, value: <EditablePeekInput value={peekContact.name} placeholder="Name" onSave={value => updatePeekContact({ name: value || peekContact.name })} /> },
           { label: 'Email', icon: <At size={12} />, value: <EditablePeekInput type="email" value={peekContact.email} placeholder="email@company.com" onSave={value => updatePeekContact({ email: value })} /> },
-          { label: 'Company', icon: <Buildings size={12} />, value: <EditablePeekInput value={peekContact.company} placeholder="No company" onSave={value => updatePeekContact({ company: value })} /> },
+          { label: 'Company', icon: <Buildings size={12} />, value: <button className="peek-rel-link" onClick={() => peekCompany ? openNested({ type: 'company', id: peekCompany.id }) : setCompanyPickerOpen(true)}>{(peekCompany?.name ?? peekContact.company) || 'Set company'}</button> },
           { label: 'Role', icon: <Briefcase size={12} />, value: <EditablePeekInput value={peekContact.job_title} placeholder="Set role..." onSave={value => updatePeekContact({ job_title: value })} /> },
           { label: 'Location', icon: <MapPin size={12} />, value: <EditablePeekInput value={peekContact.location} placeholder="Location" onSave={value => updatePeekContact({ location: value })} /> },
+          { label: 'Phone', icon: <WhatsappLogo size={12} />, value: <EditablePeekInput value={peekContact.phone} placeholder="Phone number" onSave={value => updatePeekContact({ phone: value })} /> },
+          { label: 'LinkedIn', icon: <LinkedinLogo size={12} />, value: <EditablePeekInput value={peekContact.linkedin_url} placeholder="LinkedIn URL" onSave={value => updatePeekContact({ linkedin_url: value })} /> },
+          { label: 'Website', icon: <Buildings size={12} />, value: <EditablePeekInput value={peekContact.website} placeholder="https://..." onSave={value => updatePeekContact({ website: value })} /> },
+          { label: 'Description', icon: <Info size={12} />, value: <EditablePeekInput value={peekContact.about} placeholder="Description" onSave={value => updatePeekContact({ about: value })} /> },
+          { label: 'AngelList', icon: <Target size={12} />, value: <EditablePeekInput value={peekContact.angellist_url} placeholder="AngelList URL" onSave={value => updatePeekContact({ angellist_url: value })} /> },
+          { label: 'Facebook', icon: <Broadcast size={12} />, value: <EditablePeekInput value={peekContact.facebook_url} placeholder="Facebook URL" onSave={value => updatePeekContact({ facebook_url: value })} /> },
+          { label: 'Instagram', icon: <Broadcast size={12} />, value: <EditablePeekInput value={peekContact.instagram_url} placeholder="Instagram URL" onSave={value => updatePeekContact({ instagram_url: value })} /> },
+          { label: 'Twitter', icon: <TwitterLogo size={12} />, value: <EditablePeekInput value={peekContact.twitter_url} placeholder="Twitter URL" onSave={value => updatePeekContact({ twitter_url: value })} /> },
         ] : []}
-        recommendedMove={peekTodos[0] ? {
-          verb: peekTodos[0].text,
-          detail: peekTodos[0].date ? `Due ${peekTodos[0].date}` : 'Open next step from this relationship.',
-          action: peekTodos[0].text,
-          accent: 'var(--moss)',
-        } : null}
-        whyNow={peekWhyNow}
-        overviewBeforeHighlights
-        activityTitle="Relationship memory"
-        listItems={[tierEditor, <span className="peek-tag">Recently contacted</span>].filter(Boolean)}
-        docs={docsFromTodos(peekTodos)}
-        activity={peekInteractions.map(interaction => ({
-          text: <><strong>You</strong> logged {interaction.type}{interaction.notes ? ` · ${interaction.notes}` : ''}</>,
-          when: interaction.interaction_date,
-          source: interaction.next_step || undefined,
-        }))}
-        onClose={() => setPeekContactId(null)}
-        onPrev={peekIndex > 0 ? () => setPeekContactId(filtered[peekIndex - 1].id) : undefined}
-        onNext={peekIndex >= 0 && peekIndex < filtered.length - 1 ? () => setPeekContactId(filtered[peekIndex + 1].id) : undefined}
+        listItems={(nestedPerson || nestedCompany || nestedDeal ? [] : [tierEditor, ...peekListMemberships.map(membership => (
+          <span className="peek-tag" key={membership.id}>{membership.list?.icon ?? ''} {membership.list?.name ?? 'List'}</span>
+        ))]).filter(Boolean)}
+        onAddToList={nestedPerson || nestedCompany || nestedDeal ? undefined : () => setListPickerOpen(true)}
+        onClose={() => { setPeekContactId(null); resetNested() }}
+        onBack={nested ? backNested : undefined}
+        backLabel={nested ? `Back to ${nestedBackLabel}` : undefined}
+        onPrev={peekIndex > 0 ? () => { resetNested(); setPeekContactId(filtered[peekIndex - 1].id) } : undefined}
+        onNext={peekIndex >= 0 && peekIndex < filtered.length - 1 ? () => { resetNested(); setPeekContactId(filtered[peekIndex + 1].id) } : undefined}
       >
+        {!nestedCompany && (
+          <>
         <div className="peek-block-label spaced">Value ledger <ValueBalance given={peekValueGiven} received={peekValueReceived} /></div>
         <div className="peek-ledger">
           {peekValues.length === 0 ? <p className="peek-empty-lists">No value logs yet.</p> : peekValues.map(v => (
@@ -1174,7 +2298,419 @@ export default function People() {
             <button className="peek-add-btn" onClick={() => void addKeyDate()}><Plus size={10} />Add</button>
           </div>
         </div>
+          </>
+        )}
       </RecordPeek>
+      {selectedInteraction && selectedInteractionDetail && (
+        <div className="peek-interaction-bg" onClick={() => setSelectedInteractionId(null)}>
+          <div className="peek-interaction-modal" onClick={event => event.stopPropagation()}>
+            <div className="peek-interaction-top">
+              <span className="act-channel-ic large" data-channel={selectedInteraction.channel ?? selectedInteraction.type}>
+                {interactionIcon(selectedInteraction)}
+              </span>
+              <div>
+                <div className="peek-block-label">Interaction detail</div>
+                <strong>{interactionLabel(selectedInteraction) ?? selectedInteraction.type}</strong>
+                <span>
+                  {selectedInteractionDetail.window_start ? new Date(selectedInteractionDetail.window_start).toLocaleString() : selectedInteraction.interaction_date}
+                  {selectedInteractionDetail.window_end ? ` - ${new Date(selectedInteractionDetail.window_end).toLocaleTimeString()}` : ''}
+                  {` · ${selectedInteractionDetail.message_count} messages`}
+                </span>
+              </div>
+              <button className="peek-icn sq" onClick={() => setSelectedInteractionId(null)} aria-label="Close interaction detail"><X size={13} /></button>
+            </div>
+            {selectedInteractionDetail.summary && <p className="peek-interaction-summary">{selectedInteractionDetail.summary}</p>}
+            <div className="peek-excerpts">
+              {selectedInteractionDetail.excerpts.map((excerpt, index) => (
+                <div className={`peek-excerpt ${excerpt.direction ?? ''}`} key={`${excerpt.timestamp}-${index}`}>
+                  <div className="peek-excerpt-meta">
+                    <strong>{excerpt.speaker ?? (excerpt.direction === 'outbound' ? 'Me' : 'Contact')}</strong>
+                    <span>{excerpt.timestamp ? new Date(excerpt.timestamp).toLocaleString() : ''}</span>
+                  </div>
+                  <p>{excerpt.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {peekContact && companyPickerOpen && (
+        <div className="crm-modal-bg" onClick={() => setCompanyPickerOpen(false)}>
+          <div className="crm-modal rel-picker" onClick={event => event.stopPropagation()}>
+            <div className="crm-modal-hd">
+              <span>Associate company</span>
+              <button onClick={() => setCompanyPickerOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="crm-pop-search">
+              <Buildings size={12} />
+              <input
+                autoFocus
+                value={companyPickerQuery}
+                onChange={event => setCompanyPickerQuery(event.target.value)}
+                placeholder="Search records..."
+              />
+            </div>
+            <div className="rel-picker-list">
+              {companies
+                .filter(company => [company.name, company.domain, company.website_url, company.sector].filter(Boolean).join(' ').toLowerCase().includes(companyPickerQuery.toLowerCase()))
+                .map(company => (
+                  <button key={company.id} className="rel-picker-row" onClick={() => void attachCompanyToPeek(company)}>
+                    <Avatar src={company.logo_url} name={company.name} sq size={28} />
+                    <span><strong>{company.name}</strong><em>{company.domain || company.website_url || company.sector || 'Company'}</em></span>
+                  </button>
+                ))}
+              {companies.filter(company => [company.name, company.domain, company.website_url, company.sector].filter(Boolean).join(' ').toLowerCase().includes(companyPickerQuery.toLowerCase())).length === 0 && (
+                <div className="rel-picker-empty"><Buildings size={15} /><span>No companies match.</span></div>
+              )}
+            </div>
+            <div className="crm-pop-foot">
+              <button onClick={() => void createAndAttachCompany()}><Plus size={11} /> Create new record{companyPickerQuery.trim() ? ` "${companyPickerQuery.trim()}"` : ''}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {peekContact && listPickerOpen && (
+        <div className="crm-modal-bg" onClick={() => setListPickerOpen(false)}>
+          <div className="crm-modal rel-picker" onClick={event => event.stopPropagation()}>
+            <div className="crm-modal-hd">
+              <span>Add to list</span>
+              <button onClick={() => setListPickerOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="crm-pop-search">
+              <Target size={12} />
+              <input
+                autoFocus
+                value={listPickerQuery}
+                onChange={event => setListPickerQuery(event.target.value)}
+                placeholder="Search records..."
+              />
+            </div>
+            <div className="rel-picker-list">
+              {lists
+                .filter(list => (list.parent_object ?? 'person') === 'person')
+                .filter(list => [list.name, list.purpose].filter(Boolean).join(' ').toLowerCase().includes(listPickerQuery.toLowerCase()))
+                .map(list => (
+                  <button key={list.id} className="rel-picker-row" onClick={() => void addContactToList(list)}>
+                    <span className="peek-list-icon" style={{ background: list.color ?? '#eef0ed' }}>{list.icon ?? '•'}</span>
+                    <span><strong>{list.name}</strong><em>{list.purpose || 'List'}</em></span>
+                  </button>
+                ))}
+              {lists
+                .filter(list => (list.parent_object ?? 'person') === 'person')
+                .filter(list => [list.name, list.purpose].filter(Boolean).join(' ').toLowerCase().includes(listPickerQuery.toLowerCase())).length === 0 && (
+                  <div className="rel-picker-empty"><Target size={15} /><span>No available lists match.</span></div>
+                )}
+            </div>
+            <div className="crm-pop-foot">
+              <button onClick={() => void createAndAddList()}><Plus size={11} /> Create new record{listPickerQuery.trim() ? ` "${listPickerQuery.trim()}"` : ''}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {peekContact && dealPickerOpen && (
+        <div className="crm-modal-bg" onClick={() => setDealPickerOpen(false)}>
+          <div className="crm-modal rel-picker" onClick={event => event.stopPropagation()}>
+            <div className="crm-modal-hd">
+              <span>Associate deal</span>
+              <button onClick={() => setDealPickerOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="crm-pop-search">
+              <Target size={12} />
+              <input
+                autoFocus
+                value={dealPickerQuery}
+                onChange={event => setDealPickerQuery(event.target.value)}
+                placeholder="Search records..."
+              />
+            </div>
+            <div className="rel-picker-list">
+              {opportunities
+                .filter(deal => !peekDeals.some(existing => existing.id === deal.id))
+                .filter(deal => [deal.title, deal.stage, deal.company?.name].filter(Boolean).join(' ').toLowerCase().includes(dealPickerQuery.toLowerCase()))
+                .map(deal => (
+                  <button key={deal.id} className="rel-picker-row" onClick={() => void addDealToPeek(deal)}>
+                    <Avatar src={deal.company?.logo_url ?? peekCompany?.logo_url} name={deal.company?.name ?? deal.title} sq size={28} />
+                    <span><strong>{deal.title}</strong><em>{deal.company?.name || deal.stage || 'Deal'}</em></span>
+                  </button>
+                ))}
+              {opportunities
+                .filter(deal => !peekDeals.some(existing => existing.id === deal.id))
+                .filter(deal => [deal.title, deal.stage, deal.company?.name].filter(Boolean).join(' ').toLowerCase().includes(dealPickerQuery.toLowerCase())).length === 0 && (
+                  <div className="rel-picker-empty"><Target size={15} /><span>No available deals match.</span></div>
+                )}
+            </div>
+            <div className="crm-pop-foot">
+              <button onClick={() => void createAndAddDeal()}><Plus size={11} /> Create new record{dealPickerQuery.trim() ? ` "${dealPickerQuery.trim()}"` : ''}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {peekContact && nestedPerson && nestedPersonDealPickerOpen && (
+        <div className="crm-modal-bg" onClick={() => setNestedPersonDealPickerOpen(false)}>
+          <div className="crm-modal rel-picker" onClick={event => event.stopPropagation()}>
+            <div className="crm-modal-hd">
+              <span>Associate deal</span>
+              <button onClick={() => setNestedPersonDealPickerOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="crm-pop-search">
+              <Target size={12} />
+              <input
+                autoFocus
+                value={nestedPersonDealPickerQuery}
+                onChange={event => setNestedPersonDealPickerQuery(event.target.value)}
+                placeholder="Search records..."
+              />
+            </div>
+            <div className="rel-picker-list">
+              {opportunities
+                .filter(deal => !nestedPersonDeals.some(existing => existing.id === deal.id))
+                .filter(deal => [deal.title, deal.stage, deal.company?.name].filter(Boolean).join(' ').toLowerCase().includes(nestedPersonDealPickerQuery.toLowerCase()))
+                .map(deal => (
+                  <button key={deal.id} className="rel-picker-row" onClick={() => void addDealToNestedPerson(deal)}>
+                    <Avatar src={deal.company?.logo_url ?? nestedPersonCompany?.logo_url ?? peekCompany?.logo_url} name={deal.company?.name ?? nestedPersonCompany?.name ?? deal.title} sq size={28} />
+                    <span><strong>{deal.title}</strong><em>{deal.company?.name || deal.stage || 'Deal'}</em></span>
+                  </button>
+                ))}
+              {opportunities
+                .filter(deal => !nestedPersonDeals.some(existing => existing.id === deal.id))
+                .filter(deal => [deal.title, deal.stage, deal.company?.name].filter(Boolean).join(' ').toLowerCase().includes(nestedPersonDealPickerQuery.toLowerCase())).length === 0 && (
+                  <div className="rel-picker-empty"><Target size={15} /><span>No available deals match.</span></div>
+                )}
+            </div>
+            <div className="crm-pop-foot">
+              <button onClick={() => void createAndAddDealToNestedPerson()}><Plus size={11} /> Create new record{nestedPersonDealPickerQuery.trim() ? ` "${nestedPersonDealPickerQuery.trim()}"` : ''}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {peekContact && nestedPerson && nestedPersonListPickerOpen && (
+        <div className="crm-modal-bg" onClick={() => setNestedPersonListPickerOpen(false)}>
+          <div className="crm-modal rel-picker" onClick={event => event.stopPropagation()}>
+            <div className="crm-modal-hd">
+              <span>Add to list</span>
+              <button onClick={() => setNestedPersonListPickerOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="crm-pop-search">
+              <Target size={12} />
+              <input
+                autoFocus
+                value={nestedPersonListPickerQuery}
+                onChange={event => setNestedPersonListPickerQuery(event.target.value)}
+                placeholder="Search records..."
+              />
+            </div>
+            <div className="rel-picker-list">
+              {lists
+                .filter(list => (list.parent_object ?? 'person') === 'person')
+                .filter(list => [list.name, list.purpose].filter(Boolean).join(' ').toLowerCase().includes(nestedPersonListPickerQuery.toLowerCase()))
+                .map(list => (
+                  <button key={list.id} className="rel-picker-row" onClick={() => void addNestedPersonToList(list)}>
+                    <span className="peek-list-icon" style={{ background: list.color ?? '#eef0ed' }}>{list.icon ?? '•'}</span>
+                    <span><strong>{list.name}</strong><em>{list.purpose || 'List'}</em></span>
+                  </button>
+                ))}
+              {lists
+                .filter(list => (list.parent_object ?? 'person') === 'person')
+                .filter(list => [list.name, list.purpose].filter(Boolean).join(' ').toLowerCase().includes(nestedPersonListPickerQuery.toLowerCase())).length === 0 && (
+                  <div className="rel-picker-empty"><Target size={15} /><span>No available lists match.</span></div>
+                )}
+            </div>
+            <div className="crm-pop-foot">
+              <button onClick={() => void createAndAddNestedPersonList()}><Plus size={11} /> Create new record{nestedPersonListPickerQuery.trim() ? ` "${nestedPersonListPickerQuery.trim()}"` : ''}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {peekContact && nestedDeal && dealPeoplePickerOpen && (
+        <div className="crm-modal-bg" onClick={() => setDealPeoplePickerOpen(false)}>
+          <div className="crm-modal rel-picker" onClick={event => event.stopPropagation()}>
+            <div className="crm-modal-hd">
+              <span>Associate people</span>
+              <button onClick={() => setDealPeoplePickerOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="crm-pop-search">
+              <Users size={12} />
+              <input
+                autoFocus
+                value={dealPeoplePickerQuery}
+                onChange={event => setDealPeoplePickerQuery(event.target.value)}
+                placeholder="Search records..."
+              />
+            </div>
+            <div className="rel-picker-list">
+              {contacts
+                .filter(person => !nestedDealPeople.some(existing => existing.id === person.id))
+                .filter(person => [person.name, person.job_title, person.company, person.email].filter(Boolean).join(' ').toLowerCase().includes(dealPeoplePickerQuery.toLowerCase()))
+                .map(person => (
+                  <button key={person.id} className="rel-picker-row" onClick={() => void addPersonToNestedDeal(person)}>
+                    <ContactAvatar name={person.name} photoUrl={person.profile_photo_url} size={28} />
+                    <span><strong>{person.name}</strong><em>{person.job_title || person.company || person.email || 'Person'}</em></span>
+                  </button>
+                ))}
+              {contacts
+                .filter(person => !nestedDealPeople.some(existing => existing.id === person.id))
+                .filter(person => [person.name, person.job_title, person.company, person.email].filter(Boolean).join(' ').toLowerCase().includes(dealPeoplePickerQuery.toLowerCase())).length === 0 && (
+                  <div className="rel-picker-empty"><Users size={15} /><span>No available people match.</span></div>
+                )}
+            </div>
+            <div className="crm-pop-foot">
+              <button onClick={() => void createAndAddPersonToNestedDeal()}><Plus size={11} /> Create new record{dealPeoplePickerQuery.trim() ? ` "${dealPeoplePickerQuery.trim()}"` : ''}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {peekContact && nestedDeal && nestedDealListPickerOpen && (
+        <div className="crm-modal-bg" onClick={() => setNestedDealListPickerOpen(false)}>
+          <div className="crm-modal rel-picker" onClick={event => event.stopPropagation()}>
+            <div className="crm-modal-hd">
+              <span>Add to list</span>
+              <button onClick={() => setNestedDealListPickerOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="crm-pop-search">
+              <Target size={12} />
+              <input
+                autoFocus
+                value={nestedDealListPickerQuery}
+                onChange={event => setNestedDealListPickerQuery(event.target.value)}
+                placeholder="Search records..."
+              />
+            </div>
+            <div className="rel-picker-list">
+              {lists
+                .filter(list => (list.parent_object ?? 'person') === 'opportunity')
+                .filter(list => [list.name, list.purpose].filter(Boolean).join(' ').toLowerCase().includes(nestedDealListPickerQuery.toLowerCase()))
+                .map(list => (
+                  <button key={list.id} className="rel-picker-row" onClick={() => void addNestedDealToList(list)}>
+                    <span className="peek-list-icon" style={{ background: list.color ?? '#eef0ed' }}>{list.icon ?? '•'}</span>
+                    <span><strong>{list.name}</strong><em>{list.purpose || 'List'}</em></span>
+                  </button>
+                ))}
+              {lists
+                .filter(list => (list.parent_object ?? 'person') === 'opportunity')
+                .filter(list => [list.name, list.purpose].filter(Boolean).join(' ').toLowerCase().includes(nestedDealListPickerQuery.toLowerCase())).length === 0 && (
+                  <div className="rel-picker-empty"><Target size={15} /><span>No available lists match.</span></div>
+                )}
+            </div>
+            <div className="crm-pop-foot">
+              <button onClick={() => void createAndAddNestedDealList()}><Plus size={11} /> Create new record{nestedDealListPickerQuery.trim() ? ` "${nestedDealListPickerQuery.trim()}"` : ''}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {peekContact && nestedCompany && companyTeamPickerOpen && (
+        <div className="crm-modal-bg" onClick={() => setCompanyTeamPickerOpen(false)}>
+          <div className="crm-modal rel-picker" onClick={event => event.stopPropagation()}>
+            <div className="crm-modal-hd">
+              <span>Add team member</span>
+              <button onClick={() => setCompanyTeamPickerOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="crm-pop-search">
+              <Users size={12} />
+              <input
+                autoFocus
+                value={companyTeamPickerQuery}
+                onChange={event => setCompanyTeamPickerQuery(event.target.value)}
+                placeholder="Search records..."
+              />
+            </div>
+            <div className="rel-picker-list">
+              {contacts
+                .filter(person => !nestedCompanyTeam.some(existing => existing.id === person.id))
+                .filter(person => [person.name, person.job_title, person.company, person.email].filter(Boolean).join(' ').toLowerCase().includes(companyTeamPickerQuery.toLowerCase()))
+                .map(person => (
+                  <button key={person.id} className="rel-picker-row" onClick={() => void attachPersonToNestedCompany(person)}>
+                    <ContactAvatar name={person.name} photoUrl={person.profile_photo_url} size={28} />
+                    <span><strong>{person.name}</strong><em>{person.job_title || person.company || person.email || 'Person'}</em></span>
+                  </button>
+                ))}
+              {contacts
+                .filter(person => !nestedCompanyTeam.some(existing => existing.id === person.id))
+                .filter(person => [person.name, person.job_title, person.company, person.email].filter(Boolean).join(' ').toLowerCase().includes(companyTeamPickerQuery.toLowerCase())).length === 0 && (
+                  <div className="rel-picker-empty"><Users size={15} /><span>No available people match.</span></div>
+                )}
+            </div>
+            <div className="crm-pop-foot">
+              <button onClick={() => void createAndAddPersonToNestedCompany()}><Plus size={11} /> Create new record{companyTeamPickerQuery.trim() ? ` "${companyTeamPickerQuery.trim()}"` : ''}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {peekContact && nestedCompany && companyDealPickerOpen && (
+        <div className="crm-modal-bg" onClick={() => setCompanyDealPickerOpen(false)}>
+          <div className="crm-modal rel-picker" onClick={event => event.stopPropagation()}>
+            <div className="crm-modal-hd">
+              <span>Associate deal</span>
+              <button onClick={() => setCompanyDealPickerOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="crm-pop-search">
+              <Target size={12} />
+              <input
+                autoFocus
+                value={companyDealPickerQuery}
+                onChange={event => setCompanyDealPickerQuery(event.target.value)}
+                placeholder="Search records..."
+              />
+            </div>
+            <div className="rel-picker-list">
+              {opportunities
+                .filter(deal => !nestedCompanyDeals.some(existing => existing.id === deal.id))
+                .filter(deal => [deal.title, deal.stage, deal.company?.name].filter(Boolean).join(' ').toLowerCase().includes(companyDealPickerQuery.toLowerCase()))
+                .map(deal => (
+                  <button key={deal.id} className="rel-picker-row" onClick={() => void attachDealToNestedCompany(deal)}>
+                    <Avatar src={deal.company?.logo_url ?? nestedCompany.logo_url} name={deal.company?.name ?? nestedCompany.name} sq size={28} />
+                    <span><strong>{deal.title}</strong><em>{deal.company?.name || deal.stage || 'Deal'}</em></span>
+                  </button>
+                ))}
+              {opportunities
+                .filter(deal => !nestedCompanyDeals.some(existing => existing.id === deal.id))
+                .filter(deal => [deal.title, deal.stage, deal.company?.name].filter(Boolean).join(' ').toLowerCase().includes(companyDealPickerQuery.toLowerCase())).length === 0 && (
+                  <div className="rel-picker-empty"><Target size={15} /><span>No available deals match.</span></div>
+                )}
+            </div>
+            <div className="crm-pop-foot">
+              <button onClick={() => void createAndAddDealToNestedCompany()}><Plus size={11} /> Create new record{companyDealPickerQuery.trim() ? ` "${companyDealPickerQuery.trim()}"` : ''}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {peekContact && nestedCompany && companyListPickerOpen && (
+        <div className="crm-modal-bg" onClick={() => setCompanyListPickerOpen(false)}>
+          <div className="crm-modal rel-picker" onClick={event => event.stopPropagation()}>
+            <div className="crm-modal-hd">
+              <span>Add to list</span>
+              <button onClick={() => setCompanyListPickerOpen(false)} aria-label="Close">×</button>
+            </div>
+            <div className="crm-pop-search">
+              <Target size={12} />
+              <input
+                autoFocus
+                value={companyListPickerQuery}
+                onChange={event => setCompanyListPickerQuery(event.target.value)}
+                placeholder="Search records..."
+              />
+            </div>
+            <div className="rel-picker-list">
+              {lists
+                .filter(list => (list.parent_object ?? 'person') === 'company')
+                .filter(list => [list.name, list.purpose].filter(Boolean).join(' ').toLowerCase().includes(companyListPickerQuery.toLowerCase()))
+                .map(list => (
+                  <button key={list.id} className="rel-picker-row" onClick={() => void addNestedCompanyToList(list)}>
+                    <span className="peek-list-icon" style={{ background: list.color ?? '#eef0ed' }}>{list.icon ?? '•'}</span>
+                    <span><strong>{list.name}</strong><em>{list.purpose || 'List'}</em></span>
+                  </button>
+                ))}
+              {lists
+                .filter(list => (list.parent_object ?? 'person') === 'company')
+                .filter(list => [list.name, list.purpose].filter(Boolean).join(' ').toLowerCase().includes(companyListPickerQuery.toLowerCase())).length === 0 && (
+                  <div className="rel-picker-empty"><Target size={15} /><span>No available lists match.</span></div>
+                )}
+            </div>
+            <div className="crm-pop-foot">
+              <button onClick={() => void createAndAddNestedCompanyList()}><Plus size={11} /> Create new record{companyListPickerQuery.trim() ? ` "${companyListPickerQuery.trim()}"` : ''}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
