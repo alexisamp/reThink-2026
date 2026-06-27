@@ -507,6 +507,71 @@ export interface Interaction {
   created_at: string
 }
 
+export interface InteractionExcerpt {
+  timestamp?: string
+  speaker?: string
+  direction?: 'inbound' | 'outbound'
+  text: string
+}
+
+export interface InteractionDetail {
+  id: string
+  user_id: string
+  interaction_id: string
+  channel: 'whatsapp' | 'linkedin' | 'email'
+  source_external_id: string
+  window_start: string | null
+  window_end: string | null
+  message_count: number
+  participants: Array<{ name?: string; role?: string; channel_identifier?: string }>
+  summary: string | null
+  excerpts: InteractionExcerpt[]
+  created_at: string
+  updated_at: string
+}
+
+export type InteractionSuggestionTarget =
+  | 'todo'
+  | 'contact_fact'
+  | 'key_date'
+  | 'value_log'
+  | 'intro'
+  | 'next_step'
+
+export interface InteractionSuggestion {
+  id: string
+  user_id: string
+  interaction_id: string | null
+  contact_id: string | null
+  source_external_id: string
+  target: InteractionSuggestionTarget
+  title: string
+  body: string | null
+  payload: Record<string, unknown>
+  confidence: 'low' | 'medium' | 'high'
+  status: 'pending' | 'approved' | 'dismissed'
+  reviewed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ContactKeyDate {
+  id: string
+  user_id: string
+  contact_id: string
+  event_type: string
+  subject: string
+  relation: string | null
+  date_value: string | null
+  date_precision: 'exact' | 'month_day' | 'month' | 'year' | 'unknown'
+  description: string | null
+  source: string
+  source_interaction_date: string | null
+  source_external_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 // ─── Review Queue ────────────────────────────────────────────────────────────
 
 export type ReviewSource = 'notion' | 'conversations' | 'manual'

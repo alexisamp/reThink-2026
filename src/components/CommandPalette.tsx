@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   House, BookOpen, Timer, Check, Target, Flag, CheckSquare, Plus, Users, FileText,
+  Sparkle,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Goal, Milestone, Todo, TodoMentionKind } from '@/types'
@@ -169,9 +170,10 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
 
   const navCommands: Command[] = [
     { id: 'today',    label: 'Go to Today',         Icon: House,         shortcut: '⌘1', group: 'nav', action: () => { navigate('/today');        onClose() } },
-    { id: 'review',   label: 'Go to Review Queue',   Icon: CheckSquare,   shortcut: '⌘2', group: 'nav', action: () => { navigate('/review');       onClose() } },
-    { id: 'playbook', label: 'Go to Playbook',       Icon: BookOpen,      shortcut: '⌘3', group: 'nav', action: () => { navigate('/playbook');     onClose() } },
-    { id: 'goals',    label: 'Go to Goals',          Icon: Target,        shortcut: '⌘4', group: 'nav', action: () => { navigate('/milestones');   onClose() } },
+    { id: 'review',   label: 'Go to Contact Linking', Icon: CheckSquare,   shortcut: '⌘2', group: 'nav', action: () => { navigate('/review');       onClose() } },
+    { id: 'suggestions', label: 'Go to Suggestions',  Icon: Sparkle,       shortcut: '⌘3', group: 'nav', action: () => { navigate('/suggestions');  onClose() } },
+    { id: 'playbook', label: 'Go to Playbook',       Icon: BookOpen,      shortcut: '⌘4', group: 'nav', action: () => { navigate('/playbook');     onClose() } },
+    { id: 'goals',    label: 'Go to Goals',          Icon: Target,        shortcut: '⌘5', group: 'nav', action: () => { navigate('/milestones');   onClose() } },
     { id: 'people',   label: 'Go to People',         Icon: Users,                         group: 'nav', action: () => { navigate('/people');       onClose() } },
     { id: 'timer',    label: 'Start Focus Timer',    Icon: Timer,                         group: 'nav', action: () => { navigate('/today'); onStartTimer?.(); onClose() } },
   ]

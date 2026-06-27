@@ -5,7 +5,7 @@ import {
   Gear,
   MagnifyingGlass, CaretDown, CaretRight,
   SignOut, Bell, Note,
-  Plus,
+  Plus, Sparkle,
 } from '@phosphor-icons/react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
@@ -147,8 +147,9 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
     'cmd+\\': toggleCollapsed,
     'cmd+1': () => navigate('/today'),
     'cmd+2': () => navigate('/review'),
-    'cmd+3': () => navigate('/playbook'),
-    'cmd+4': () => navigate('/milestones'),
+    'cmd+3': () => navigate('/suggestions'),
+    'cmd+4': () => navigate('/playbook'),
+    'cmd+5': () => navigate('/milestones'),
   })
 
   useEffect(() => {
@@ -159,6 +160,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('status', 'pending')
+        .eq('proposed_payload->>source_kind', 'identity_resolution')
       if (!cancelled) setReviewCount(count ?? 0)
     }
     loadReviewCount()
@@ -221,6 +223,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
             label={reviewCount > 0 ? `Review (${reviewCount})` : 'Review'}
             collapsed={collapsed}
           />
+          <NavItem path="/suggestions" icon={<Sparkle size={15} />} label="Suggestions" collapsed={collapsed} />
           <NavItem path="/playbook" icon={<Note size={15} />} label="Playbook" collapsed={collapsed} />
           <NavItem path="/milestones" icon={<Target size={15} />} label="Plan" collapsed={collapsed} />
 

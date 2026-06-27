@@ -4,12 +4,12 @@ import {
   Table, Lightning, Users,
   WhatsappLogo, LinkedinLogo, TwitterLogo, IdentificationCard, At, Buildings,
   Briefcase, MapPin, Heartbeat, CircleHalf, Broadcast, GitFork, Target,
-  ArrowUpRight, ArrowDownLeft, Info, CalendarBlank, Plus, Trash,
+  ArrowUpRight, ArrowDownLeft, Info, CalendarBlank, Plus, Trash, Check, X,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type {
-  Company, Contact, ContactFact, ContactIntroduction, ContactStatus, Interaction, List, Todo,
-  Opportunity, OpportunityStage, OpportunityType, ValueDirection, ValueLog, ValueLogType,
+  Company, Contact, ContactFact, ContactIntroduction, ContactStatus, Interaction, InteractionDetail,
+  InteractionSuggestion, List, Todo, Opportunity, OpportunityStage, OpportunityType, ValueDirection, ValueLog, ValueLogType,
 } from '@/types'
 import { useContacts } from '@/hooks/useContacts'
 import { GMAIL_SYNC_EVENT, type GmailSyncEventDetail } from '@/hooks/useGmailAutoSync'
@@ -25,6 +25,7 @@ import { Avatar, TierChip, ValueBar, RelStatus } from '@/components/crm/cells'
 import { relFromContact } from '@/lib/abm'
 import { OPPORTUNITY_STAGE_OPTIONS, opportunityStageLabel } from '@/lib/opportunityStages'
 import { formatCurrency } from '@/lib/formatters'
+import { approveInteractionSuggestion, dismissInteractionSuggestion } from '@/lib/interactionSuggestions'
 
 // Source label for an Activity row — matches the handoff peek (text "· WhatsApp"),
 // derived from the interaction's channel/type provenance.
@@ -267,6 +268,9 @@ export default function People() {
   const [peekFacts, setPeekFacts] = useState<ContactFact[]>([])
   const [peekValues, setPeekValues] = useState<ValueLog[]>([])
   const [peekInteractions, setPeekInteractions] = useState<Interaction[]>([])
+  const [peekInteractionDetails, setPeekInteractionDetails] = useState<Record<string, InteractionDetail>>({})
+  const [peekSuggestions, setPeekSuggestions] = useState<InteractionSuggestion[]>([])
+  const [selectedInteractionId, setSelectedInteractionId] = useState<string | null>(null)
   const [peekTodos, setPeekTodos] = useState<Todo[]>([])
   const [introductions, setIntroductions] = useState<ContactIntroduction[]>([])
   const [newValueDirection, setNewValueDirection] = useState<ValueDirection>('given')
@@ -545,6 +549,9 @@ export default function People() {
       setPeekFacts([])
       setPeekValues([])
       setPeekInteractions([])
+      setPeekInteractionDetails({})
+      setPeekSuggestions([])
+      setSelectedInteractionId(null)
       setPeekTodos([])
       return
     }
@@ -554,12 +561,31 @@ export default function People() {
       supabase.from('value_logs').select('*').eq('user_id', userId).eq('outreach_log_id', peekContactId).order('date', { ascending: false }).limit(6),
       supabase.from('interactions').select('*').eq('user_id', userId).eq('contact_id', peekContactId).order('interaction_date', { ascending: false }).limit(6),
       supabase.from('todos').select('*').eq('user_id', userId).eq('contact_id', peekContactId).eq('completed', false).order('date', { nullsFirst: false }).limit(6),
-    ]).then(([factsRes, valuesRes, interactionsRes, todosRes]) => {
+      supabase.from('interaction_suggestions').select('*').eq('user_id', userId).eq('contact_id', peekContactId).eq('status', 'pending').order('created_at', { ascending: false }).limit(50),
+    ]).then(async ([factsRes, valuesRes, interactionsRes, todosRes, suggestionsRes]) => {
       if (cancelled) return
       setPeekFacts((factsRes.data ?? []) as ContactFact[])
       setPeekValues((valuesRes.data ?? []) as ValueLog[])
-      setPeekInteractions((interactionsRes.data ?? []) as Interaction[])
+      const nextInteractions = (interactionsRes.data ?? []) as Interaction[]
+      setPeekInteractions(nextInteractions)
       setPeekTodos((todosRes.data ?? []) as Todo[])
+      setPeekSuggestions((suggestionsRes.data ?? []) as InteractionSuggestion[])
+      setSelectedInteractionId(null)
+
+      const interactionIds = nextInteractions.map(interaction => interaction.id)
+      if (interactionIds.length === 0) {
+        setPeekInteractionDetails({})
+        return
+      }
+      const { data } = await supabase
+        .from('interaction_details')
+        .select('*')
+        .eq('user_id', userId)
+        .in('interaction_id', interactionIds)
+      if (cancelled) return
+      setPeekInteractionDetails(Object.fromEntries(
+        ((data ?? []) as InteractionDetail[]).map(detail => [detail.interaction_id, detail]),
+      ))
     })
     return () => { cancelled = true }
   }, [peekContactId, userId])
@@ -1311,6 +1337,29 @@ export default function People() {
     peekContact?.last_interaction_at ? `Last touch ${formatAgo(daysSince(peekContact.last_interaction_at))}` : null,
     peekContact?.status === 'DORMANT' || peekContact?.status === 'RECONNECT' ? 'Relationship needs reactivation' : null,
   ].filter(Boolean) as string[]
+  const selectedInteraction = peekInteractions.find(interaction => interaction.id === selectedInteractionId) ?? null
+  const selectedInteractionDetail = selectedInteractionId ? peekInteractionDetails[selectedInteractionId] ?? null : null
+  const notifyPeek = (message: string) => {
+    window.dispatchEvent(new CustomEvent('rethink:peek-notice', { detail: message }))
+  }
+  const approveSuggestionFromPeek = async (suggestion: InteractionSuggestion) => {
+    const result = await approveInteractionSuggestion(suggestion)
+    if (!result.ok) {
+      notifyPeek(result.error ?? 'Could not approve suggestion')
+      return
+    }
+    setPeekSuggestions(current => current.filter(item => item.id !== suggestion.id))
+    notifyPeek('Suggestion approved')
+  }
+  const dismissSuggestionFromPeek = async (suggestion: InteractionSuggestion) => {
+    const result = await dismissInteractionSuggestion(suggestion)
+    if (!result.ok) {
+      notifyPeek(result.error ?? 'Could not dismiss suggestion')
+      return
+    }
+    setPeekSuggestions(current => current.filter(item => item.id !== suggestion.id))
+    notifyPeek('Suggestion dismissed')
+  }
   const tierEditor = peekContact ? (
     <span className="peek-tier-edit">
       <select
@@ -1357,6 +1406,7 @@ export default function People() {
   )
   const activityRows = peekInteractions.map(interaction => {
     const source = interactionLabel(interaction)
+    const detail = peekInteractionDetails[interaction.id]
     if (interaction.type === 'email') {
       const subject = compactText(emailNotePart(interaction.notes, 'Subject'), 80)
       const summary = compactText(emailNotePart(interaction.notes, 'Summary'), 150)
@@ -1367,6 +1417,8 @@ export default function People() {
         ? `To ${peekContact?.name ?? to ?? 'contact'}`
         : `From ${peekContact?.name ?? from ?? 'contact'}`
       return {
+        id: interaction.id,
+        hasDetail: Boolean(detail),
         text: (
           <span className="act-email">
             <span><strong>{directionLabel}</strong>{source ? <span className="act-src"> · {source}</span> : null}</span>
@@ -1382,6 +1434,8 @@ export default function People() {
       }
     }
     return {
+      id: interaction.id,
+      hasDetail: Boolean(detail),
       text: <><strong>You</strong> {interaction.notes || `logged ${interaction.type.replace('_', ' ')}`}{source ? <span className="act-src"> · {source}</span> : null}</>,
       when: interaction.interaction_date,
     }
@@ -1463,10 +1517,45 @@ export default function People() {
       {activityRows.length > 0 ? (
         <div className="peek-activity-card">
           {activityRows.map((row, index) => (
-            <div className="peek-act-row" key={`${row.when}-${index}`}><span className="dot" /><span className="act-txt">{row.text}</span><span className="act-when">{row.when}</span></div>
+            <button
+              type="button"
+              className={`peek-act-row${row.hasDetail ? ' clickable' : ''}${row.id === selectedInteractionId ? ' selected' : ''}`}
+              key={`${row.when}-${index}`}
+              onClick={() => row.hasDetail && setSelectedInteractionId(row.id)}
+            >
+              <span className="dot" /><span className="act-txt">{row.text}</span><span className="act-when">{row.when}</span>
+            </button>
           ))}
         </div>
       ) : <p className="peek-empty-lists">No activity captured yet.</p>}
+      {selectedInteraction && selectedInteractionDetail && (
+        <div className="peek-interaction-detail">
+          <div className="peek-interaction-top">
+            <div>
+              <div className="peek-block-label">Interaction detail</div>
+              <strong>{interactionLabel(selectedInteraction) ?? selectedInteraction.type}</strong>
+              <span>
+                {selectedInteractionDetail.window_start ? new Date(selectedInteractionDetail.window_start).toLocaleString() : selectedInteraction.interaction_date}
+                {selectedInteractionDetail.window_end ? ` - ${new Date(selectedInteractionDetail.window_end).toLocaleTimeString()}` : ''}
+                {` · ${selectedInteractionDetail.message_count} messages`}
+              </span>
+            </div>
+            <button className="peek-icn sq" onClick={() => setSelectedInteractionId(null)} aria-label="Close interaction detail"><X size={13} /></button>
+          </div>
+          {selectedInteractionDetail.summary && <p className="peek-interaction-summary">{selectedInteractionDetail.summary}</p>}
+          <div className="peek-excerpts">
+            {selectedInteractionDetail.excerpts.map((excerpt, index) => (
+              <div className={`peek-excerpt ${excerpt.direction ?? ''}`} key={`${excerpt.timestamp}-${index}`}>
+                <div className="peek-excerpt-meta">
+                  <strong>{excerpt.speaker ?? (excerpt.direction === 'outbound' ? 'Me' : 'Contact')}</strong>
+                  <span>{excerpt.timestamp ? new Date(excerpt.timestamp).toLocaleString() : ''}</span>
+                </div>
+                <p>{excerpt.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
   const listsTab = (
@@ -1670,6 +1759,26 @@ export default function People() {
       </div>
     </>
   )
+  const suggestionsTab = (
+    <div className="peek-suggestions">
+      <div className="peek-block-label">Suggested actions <span className="peek-count">{peekSuggestions.length}</span></div>
+      {peekSuggestions.length === 0 ? (
+        <p className="peek-empty-lists">No pending suggestions for this contact.</p>
+      ) : peekSuggestions.map(suggestion => (
+        <div className="peek-suggestion" key={suggestion.id}>
+          <span className="peek-suggestion-chip">{suggestion.target.replace('_', ' ')}</span>
+          <span className="peek-suggestion-main">
+            <strong>{suggestion.title}</strong>
+            {suggestion.body && <span>{suggestion.body}</span>}
+          </span>
+          <span className="peek-row-side">
+            <button className="rv-ok" onClick={() => void approveSuggestionFromPeek(suggestion)} aria-label={`Approve ${suggestion.title}`}><Check size={13} /></button>
+            <button className="rv-no" onClick={() => void dismissSuggestionFromPeek(suggestion)} aria-label={`Dismiss ${suggestion.title}`}><X size={13} /></button>
+          </span>
+        </div>
+      ))}
+    </div>
+  )
   const docsTab = (
     <div className="peek-docs">
       <div className="peek-block-label">Linked documents <span className="peek-count">{docsFromTodos(peekTodos).length}</span></div>
@@ -1701,6 +1810,7 @@ export default function People() {
     { id: 'Overview', label: 'Overview', content: personOverview },
     { id: 'Associated deals', label: 'Associated deals', count: peekDeals.length, content: associatedDealsTab },
     { id: 'Activity', label: 'Activity', count: activityRows.length, content: activityTab },
+    { id: 'Suggestions', label: 'Suggestions', count: peekSuggestions.length, content: suggestionsTab },
     { id: 'Notes', label: 'Notes', count: peekValues.length, content: valueLedgerTab },
     { id: 'Introductions', label: 'Introductions', count: introsByPeek.madeBy.length + introsByPeek.madeTo.length, content: introductionsTab },
     { id: 'Facts', label: 'Facts', count: peekFacts.length, content: factsTab },
