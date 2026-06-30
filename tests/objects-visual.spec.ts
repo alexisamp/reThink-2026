@@ -33,7 +33,11 @@ test('companies object settings supports core tabs without out-of-scope actions'
   await expect(page.getByText('Record page layout')).toHaveCount(0)
 
   await page.getByRole('button', { name: /Attributes/ }).click()
-  await expect(page.getByRole('button', { name: /Create attribute/ })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Create attribute/ })).toBeVisible()
+  await page.getByRole('button', { name: /Create attribute/ }).click()
+  await expect(page.getByRole('heading', { name: 'Create attribute' })).toBeVisible()
+  await expect(page.getByText('AI autofill')).toBeVisible()
+  await page.getByRole('button', { name: 'Close' }).click()
   await page.screenshot({ path: '.context/playwright/companies-object-settings.png', fullPage: true })
 })
 
