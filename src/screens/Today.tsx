@@ -1,22 +1,22 @@
 // Today — daily cockpit, rebuilt to the reThink design bundle.
-// Main column = todos (the hero). Right rail = Milestones / This Week / Agenda /
-// Journal (collapsible + drag-to-reorder, persisted). Wired to live Supabase data.
+// Planner = time-block calendar + unscheduled todos, wired to live Supabase data.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Archive, ArrowCounterClockwise, ArrowDown, CalendarBlank, CalendarDots, Check, ChartLineUp, MoonStars, Pause, PencilSimple, Play, Plus, Target, Timer, TrashSimple, X } from '@phosphor-icons/react'
+import { Archive, ArrowCounterClockwise, ArrowDown, CalendarBlank, CalendarDots, Check, ChartLineUp, MoonStars, Pause, PencilSimple, Play, Plus, SidebarSimple, Target, Timer, TrashSimple, X } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { isActiveOpportunityStage } from '@/lib/opportunityStages'
 import type { Todo, Milestone, Goal, Review, TodoContentSegment, TodoMentionKind } from '@/types'
 import MilestonePanel from '@/components/MilestonePanel'
 import DayStartDrawer from '@/components/DayStartDrawer'
 import EndOfDayDrawer from '@/components/EndOfDayDrawer'
-import TodoList from './today/TodoList'
+import FocusTimer from './today/FocusTimer'
+import DayCalendar from './today/DayCalendar'
+import TodoScheduleList from './today/TodoScheduleList'
 import RightRail, { type RailSectionDef } from './today/RightRail'
 import MilestoneRows, { type MilestoneRowData } from './today/MilestoneRows'
 import ThisWeek from './today/ThisWeek'
-import FocusTimer from './today/FocusTimer'
 import { useFocusTimer } from './today/useFocusTimer'
-import type { GroupBy, Mention, TodoMilestoneOption } from './today/types'
+import type { Mention, TodoMilestoneOption } from './today/types'
 import { companyImage, createCrmObject, firstRelation, mentionFromCompany, mentionFromContact, mentionFromOpportunity } from '@/lib/crmObjects'
 
 function fmtClock(seconds: number): string {
@@ -60,7 +60,6 @@ interface DayCloseSummary {
   tomorrowGoal?: string
 }
 
-const GROUP_KEY = 'rethink.today.groupBy'
 const FALLBACK_COLORS = ['#3E7A4E', '#536471', '#7A3E68', '#3E5F7A', '#9A6B4F']
 
 function shouldFallbackWithoutContentSegments(error: { message?: string; code?: string } | null) {
@@ -79,6 +78,18 @@ function legacyTextFromContentSegments(segments: TodoContentSegment[], fallback:
 
 function localDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function hasTodoDragPayload(types: DOMStringList | readonly string[]) {
+  return Array.from(types).includes('text/todo-id') || Array.from(types).includes('text/plain')
+}
+
+function todoIdFromDrag(dataTransfer: DataTransfer) {
+  return dataTransfer.getData('text/todo-id') || dataTransfer.getData('text/plain')
+}
+
+function hasSchedule(todo: Todo) {
+  return todo.scheduled_start_minutes != null && todo.scheduled_duration_minutes != null
 }
 
 function formatDue(target: string | null, today: string): { label: string | null; urgent: boolean } {
@@ -152,13 +163,17 @@ function ObjectiveBar({
 function BacklogBin({
   count,
   armed,
+  activeCount = 0,
   onOpen,
   onDropTodo,
+  onParkAll,
 }: {
   count: number
   armed?: boolean
+  activeCount?: number
   onOpen: () => void
   onDropTodo?: (id: string) => void
+  onParkAll?: () => void
 }) {
   const [over, setOver] = useState(false)
   const hasTodoDrag = (types: DOMStringList | readonly string[]) => {
@@ -166,30 +181,38 @@ function BacklogBin({
     return armed || list.includes('text/todo-id') || list.includes('text/plain')
   }
   return (
-    <button
-      className={`backlog-bin${armed ? ' armed' : ''}${over ? ' over' : ''}`}
-      onClick={onOpen}
-      title="Backlog — drag a todo here to park it"
-      onDragOver={e => {
-        if (hasTodoDrag(e.dataTransfer.types)) {
+    <>
+      <button
+        className={`backlog-bin${armed ? ' armed' : ''}${over ? ' over' : ''}`}
+        onClick={onOpen}
+        title="Backlog — drag a todo here to park it"
+        onDragOver={e => {
+          if (hasTodoDrag(e.dataTransfer.types)) {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+            setOver(true)
+          }
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={e => {
           e.preventDefault()
-          e.dataTransfer.dropEffect = 'move'
-          setOver(true)
-        }
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={e => {
-        e.preventDefault()
-        e.stopPropagation()
-        const id = e.dataTransfer.getData('text/todo-id') || e.dataTransfer.getData('text/plain')
-        setOver(false)
-        if (id) onDropTodo?.(id)
-      }}
-    >
-      <Archive size={14} />
-      <span className="bl-word">Backlog</span>
-      {count > 0 && <span className="bl-count">{count}</span>}
-    </button>
+          e.stopPropagation()
+          const id = todoIdFromDrag(e.dataTransfer)
+          setOver(false)
+          if (id) onDropTodo?.(id)
+        }}
+      >
+        <Archive size={14} />
+        <span className="bl-word">Backlog</span>
+        {count > 0 && <span className="bl-count">{count}</span>}
+      </button>
+      {activeCount > 0 && onParkAll && (
+        <button className="backlog-bin backlog-all" onClick={onParkAll} title="Move all active todos to Backlog">
+          <Archive size={13} />
+          <span className="bl-word">All</span>
+        </button>
+      )}
+    </>
   )
 }
 
@@ -237,16 +260,20 @@ function ReturnDatePicker({
 function BacklogPanel({
   items,
   todayK,
+  activeCount = 0,
   onClose,
   onDropTodo,
+  onParkAll,
   onRestore,
   onSetDate,
   onRemove,
 }: {
   items: Todo[]
   todayK: string
+  activeCount?: number
   onClose: () => void
   onDropTodo?: (id: string) => void
+  onParkAll?: () => void
   onRestore: (id: string) => void
   onSetDate: (id: string, value: string | null) => void
   onRemove: (id: string) => void
@@ -266,7 +293,15 @@ function BacklogPanel({
             <h3>Backlog</h3>
             <span className="bl-hd-count">{items.length}</span>
           </div>
-          <button className="bl-close" onClick={onClose} title="Close"><X size={13} /></button>
+          <div className="bl-hd-actions">
+            {activeCount > 0 && onParkAll && (
+              <button className="bl-move-all" onClick={onParkAll} title="Move all active todos to Backlog">
+                <Archive size={12} />
+                All active
+              </button>
+            )}
+            <button className="bl-close" onClick={onClose} title="Close"><X size={13} /></button>
+          </div>
         </header>
         <p className="bl-sub">Tasks on hold — not deleted. Pull one back with <b>+</b>, or give it a tentative date so it returns on its own.</p>
         <div
@@ -284,7 +319,7 @@ function BacklogPanel({
             e.preventDefault()
             e.stopPropagation()
             setDropOver(false)
-            const id = e.dataTransfer.getData('text/todo-id') || e.dataTransfer.getData('text/plain')
+            const id = todoIdFromDrag(e.dataTransfer)
             if (id && onDropTodo) onDropTodo(id)
           }}
         >
@@ -323,11 +358,54 @@ function AgendaRows({ items = [] }: { items?: Array<never> }) {
   )
 }
 
+function ContextDrawer({
+  open,
+  sections,
+  journal,
+  onJournalChange,
+  onClose,
+}: {
+  open: boolean
+  sections: RailSectionDef[]
+  journal: string
+  onJournalChange: (value: string) => void
+  onClose: () => void
+}) {
+  if (!open) return null
+  return (
+    <>
+      <div className="ctx-scrim" onClick={onClose} />
+      <aside className="ctx-drawer" aria-label="Today context">
+        <header className="ctx-hd">
+          <div>
+            <h3>Context</h3>
+            <span>Milestones, week, agenda, journal</span>
+          </div>
+          <button onClick={onClose} title="Close context"><X size={13} /></button>
+        </header>
+        <RightRail sections={sections.map(section => section.id === 'journal'
+          ? {
+              ...section,
+              body: (
+                <textarea
+                  className="journal-area"
+                  placeholder="What's on your mind?"
+                  value={journal}
+                  onChange={event => onJournalChange(event.target.value)}
+                />
+              ),
+            }
+          : section)}
+        />
+      </aside>
+    </>
+  )
+}
+
 export default function Today() {
   const navigate = useNavigate()
   const today = localDate()
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-
   const weekDates = useMemo(() => {
     const d = new Date()
     const day = d.getDay()
@@ -350,7 +428,6 @@ export default function Today() {
   const [goals, setGoals] = useState<GoalLite[]>([])
   const [mentions, setMentions] = useState<Map<string, Mention>>(new Map())  // key: `${kind}:${id}`
   const [mentionOptions, setMentionOptions] = useState<Mention[]>([])
-  const [groupBy, setGroupBy] = useState<GroupBy>(() => (localStorage.getItem(GROUP_KEY) as GroupBy) || 'priority')
   const [expandedMs, setExpandedMs] = useState<string | null>(null)
   const [journal, setJournal] = useState('')
   const [dailyGoal, setDailyGoal] = useState('')
@@ -358,10 +435,11 @@ export default function Today() {
   const [startOpen, setStartOpen] = useState(false)
   const [endOpen, setEndOpen] = useState(false)
   const [focusOpen, setFocusOpen] = useState(false)
+  const [contextOpen, setContextOpen] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [dayClosed, setDayClosed] = useState(false)
   const [closedSummary, setClosedSummary] = useState<DayCloseSummary | null>(null)
   const focus = useFocusTimer(userId)
-  const [twRefresh] = useState(0)
   const journalTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const journalInit = useRef(false)
 
@@ -428,12 +506,25 @@ export default function Today() {
       if (cancelled) return
 
       const overdueTodos = ((overdueTodosRes.data ?? []) as Todo[]).map(t => ({ ...t, date: today }))
-      const dueBacklogTodos = ((dueBacklogRes.data ?? []) as Todo[]).map(t => ({ ...t, date: today, backlog_at: null, return_date: null }))
+      const dueBacklogTodos = ((dueBacklogRes.data ?? []) as Todo[]).map(t => ({
+        ...t,
+        date: today,
+        backlog_at: null,
+        return_date: null,
+        scheduled_start_minutes: null,
+        scheduled_duration_minutes: null,
+      }))
       if (overdueTodos.length > 0) {
         supabase.from('todos').update({ date: today }).in('id', overdueTodos.map(t => t.id)).then(() => {})
       }
       if (dueBacklogTodos.length > 0) {
-        supabase.from('todos').update({ date: today, backlog_at: null, return_date: null }).in('id', dueBacklogTodos.map(t => t.id)).then(() => {})
+        supabase.from('todos').update({
+          date: today,
+          backlog_at: null,
+          return_date: null,
+          scheduled_start_minutes: null,
+          scheduled_duration_minutes: null,
+        }).in('id', dueBacklogTodos.map(t => t.id)).then(() => {})
       }
       const byTodo = new Map<string, Todo>()
       ;[...dueBacklogTodos, ...overdueTodos, ...((todosRes.data ?? []) as Todo[])].forEach(t => byTodo.set(t.id, t))
@@ -501,8 +592,6 @@ export default function Today() {
     return FALLBACK_COLORS[idx]
   }, [goalsMap])
 
-  // Manually curated focus set — the user picks which milestones surface here
-  // (via the "Show in Today" toggle in the drawer / Manage screen).
   const milestoneRows: MilestoneRowData[] = useMemo(() => {
     return [...milestones]
       .filter(m => m.focused)
@@ -553,24 +642,6 @@ export default function Today() {
       })
   }, [milestones, goalsMap, msProgress, today, colorForGoal])
 
-  // ── todo lookups for TodoList ──────────────────────────────────
-  const milestoneName = useCallback((id: string | null) => {
-    if (!id) return null
-    const m = milestones.find(x => x.id === id)
-    if (!m) return null
-    const g = goalsMap.get(m.goal_id)
-    return g?.alias || m.text
-  }, [milestones, goalsMap])
-  const milestoneColor = useCallback((id: string | null) => {
-    if (!id) return null
-    const m = milestones.find(x => x.id === id)
-    if (!m) return null
-    return m.color ?? colorForGoal(m.goal_id)
-  }, [milestones, colorForGoal])
-
-  const milestoneTotal = useCallback((id: string) => msProgress.get(id)?.total ?? 0, [msProgress])
-  const milestoneOrder = useMemo(() => milestones.map(m => m.id), [milestones])
-
   const resolveMentions = useCallback((t: Todo): Mention[] => {
     const out: Mention[] = []
     if (t.contact_id) { const m = mentions.get(`person:${t.contact_id}`); if (m) out.push(m) }
@@ -583,42 +654,102 @@ export default function Today() {
   const syncMsTodo = (id: string, patch: Partial<MsTodo>) =>
     setMsTodos(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
 
+  const reportSaveError = (action: string, error: { message?: string; code?: string } | null) => {
+    console.error(`Failed to ${action}`, error)
+    const missingColumn = error?.message?.includes('scheduled_') || error?.code === 'PGRST204'
+    setSaveError(missingColumn
+      ? 'Could not save the day plan because the database schema was missing. Reload and try again.'
+      : 'Could not save that change. Reload and try again.')
+    window.setTimeout(() => setSaveError(null), 7000)
+  }
+
   const toggleTodo = async (id: string) => {
     const t = todos.find(x => x.id === id); if (!t) return
     const next = !t.completed
-    setTodos(prev => prev.map(x => x.id === id ? { ...x, completed: next } : x))
+    const completedAt = next ? new Date().toISOString() : null
+    setTodos(prev => prev.map(x => x.id === id ? { ...x, completed: next, completed_at: completedAt } : x))
     syncMsTodo(id, { completed: next })
-    await supabase.from('todos').update({ completed: next, completed_at: next ? new Date().toISOString() : null }).eq('id', id)
-  }
-  const deleteTodo = async (id: string) => {
-    const t = todos.find(x => x.id === id)
-    if (t?.milestone_id) {
-      // Belongs to a milestone → don't destroy it; just remove from today (return to milestone).
-      // Permanent deletion only happens from inside the milestone drawer.
-      setTodos(prev => prev.filter(x => x.id !== id))
-      await supabase.from('todos').update({ date: null }).eq('id', id)
-    } else {
-      setTodos(prev => prev.filter(x => x.id !== id))
-      setMsTodos(prev => prev.filter(x => x.id !== id))
-      await supabase.from('todos').delete().eq('id', id)
+    const { error } = await supabase
+      .from('todos')
+      .update({ completed: next, completed_at: completedAt })
+      .eq('id', id)
+      .select('id, completed, completed_at')
+      .single()
+    if (error) {
+      setTodos(prev => prev.map(x => x.id === id ? t : x))
+      syncMsTodo(id, { completed: t.completed })
+      reportSaveError('toggle todo', error)
     }
   }
   const parkTodo = async (id: string) => {
     const t = todos.find(x => x.id === id)
     if (!t) return
-    const patch = { backlog_at: new Date().toISOString(), return_date: null, date: null }
+    const patch = { backlog_at: new Date().toISOString(), return_date: null, date: null, scheduled_start_minutes: null, scheduled_duration_minutes: null }
     setTodos(prev => prev.filter(x => x.id !== id))
     setBacklog(prev => [{ ...t, ...patch }, ...prev])
     setBacklogOpen(true)
     await supabase.from('todos').update(patch).eq('id', id)
   }
+  const parkAllTodos = async () => {
+    const activeTodos = todos.filter(t => !t.completed)
+    if (activeTodos.length === 0) return
+    const ids = activeTodos.map(t => t.id)
+    const idSet = new Set(ids)
+    const patch = { backlog_at: new Date().toISOString(), return_date: null, date: null, scheduled_start_minutes: null, scheduled_duration_minutes: null }
+    setTodos(prev => prev.filter(t => !idSet.has(t.id)))
+    setBacklog(prev => {
+      const existing = new Set(prev.map(t => t.id))
+      const parked = activeTodos.filter(t => !existing.has(t.id)).map(t => ({ ...t, ...patch }))
+      return [...parked, ...prev]
+    })
+    setBacklogOpen(true)
+    await supabase.from('todos').update(patch).in('id', ids)
+  }
+  const scheduleTodo = async (id: string, startMinutes: number, durationMinutes: number) => {
+    const previous = todos.find(t => t.id === id)
+    if (!previous) return
+    const patch = {
+      scheduled_start_minutes: startMinutes,
+      scheduled_duration_minutes: durationMinutes,
+    }
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
+    const { error } = await supabase
+      .from('todos')
+      .update(patch)
+      .eq('id', id)
+      .select('id, scheduled_start_minutes, scheduled_duration_minutes')
+      .single()
+    if (error) {
+      setTodos(prev => prev.map(t => t.id === id ? previous : t))
+      reportSaveError('schedule todo', error)
+    }
+  }
+  const unscheduleTodo = async (id: string) => {
+    const previous = todos.find(t => t.id === id)
+    if (!previous) return
+    const patch = {
+      scheduled_start_minutes: null,
+      scheduled_duration_minutes: null,
+    }
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
+    const { error } = await supabase
+      .from('todos')
+      .update(patch)
+      .eq('id', id)
+      .select('id, scheduled_start_minutes, scheduled_duration_minutes')
+      .single()
+    if (error) {
+      setTodos(prev => prev.map(t => t.id === id ? previous : t))
+      reportSaveError('unschedule todo', error)
+    }
+  }
   const restoreBacklogTodo = async (id: string) => {
     const t = backlog.find(x => x.id === id)
     if (!t) return
-    const restored: Todo = { ...t, date: today, backlog_at: null, return_date: null }
+    const restored: Todo = { ...t, date: today, backlog_at: null, return_date: null, scheduled_start_minutes: null, scheduled_duration_minutes: null }
     setBacklog(prev => prev.filter(x => x.id !== id))
     setTodos(prev => [...prev, restored])
-    await supabase.from('todos').update({ date: today, backlog_at: null, return_date: null }).eq('id', id)
+    await supabase.from('todos').update({ date: today, backlog_at: null, return_date: null, scheduled_start_minutes: null, scheduled_duration_minutes: null }).eq('id', id)
     if (userId) loadMentions(userId, [...todos, restored])
   }
   const setBacklogReturnDate = async (id: string, returnDate: string | null) => {
@@ -628,12 +759,6 @@ export default function Today() {
   const deleteBacklogTodo = async (id: string) => {
     setBacklog(prev => prev.filter(x => x.id !== id))
     await supabase.from('todos').delete().eq('id', id)
-  }
-  const starTodo = async (id: string) => {
-    const t = todos.find(x => x.id === id); if (!t) return
-    const next = !t.is_featured
-    setTodos(prev => prev.map(x => x.id === id ? { ...x, is_featured: next } : x))
-    await supabase.from('todos').update({ is_featured: next }).eq('id', id)
   }
   const createMention = useCallback(async (kind: TodoMentionKind, name: string, companyId?: string | null) => {
     if (!userId) return null
@@ -703,6 +828,8 @@ export default function Today() {
       completed: false,
       waiting: false,
       completed_at: null,
+      scheduled_start_minutes: null,
+      scheduled_duration_minutes: null,
       sort_order: todos.length,
       url: null,
       outreach_log_id: null,
@@ -767,26 +894,6 @@ export default function Today() {
     }).eq('id', id)
   }
 
-  const reorderTodos = async (orderedActiveIds: string[]) => {
-    setTodos(prev => {
-      const byId = new Map(prev.map(t => [t.id, t]))
-      const active = orderedActiveIds.map(id => byId.get(id)).filter(Boolean) as Todo[]
-      const done = prev.filter(t => t.completed)
-      return [...active, ...done]
-    })
-    await Promise.all(orderedActiveIds.map((id, i) => supabase.from('todos').update({ sort_order: i }).eq('id', id)))
-  }
-
-  // ── journal autosave ───────────────────────────────────────────
-  const onJournalChange = (v: string) => {
-    setJournal(v)
-    if (!userId) return
-    if (journalTimer.current) clearTimeout(journalTimer.current)
-    journalTimer.current = setTimeout(() => {
-      supabase.from('reviews').upsert({ user_id: userId, date: today, notes: v }, { onConflict: 'user_id,date' }).then(() => {})
-    }, 700)
-  }
-
   // ── milestone panel todo sync ──────────────────────────────────
   const onPanelTodoCreate = (t: Todo) => {
     if (t.milestone_id) setMsTodos(prev => prev.some(x => x.id === t.id) ? prev : [...prev, { id: t.id, milestone_id: t.milestone_id, completed: t.completed }])
@@ -809,7 +916,54 @@ export default function Today() {
   const expandedMilestone = milestones.find(m => m.id === expandedMs) ?? null
   const expandedGoal = expandedMilestone ? goalsMap.get(expandedMilestone.goal_id) ?? null : null
 
-  const setGroup = (g: GroupBy) => { setGroupBy(g); localStorage.setItem(GROUP_KEY, g) }
+  const activeTodoCount = todos.filter(t => !t.completed).length
+  const scheduledTodos = todos.filter(hasSchedule)
+  const unscheduledTodos = todos
+    .filter(t => !hasSchedule(t))
+    .sort((a, b) => Number(a.completed) - Number(b.completed) || (a.sort_order ?? 0) - (b.sort_order ?? 0))
+
+  const onJournalChange = (value: string) => {
+    setJournal(value)
+    if (!userId) return
+    if (journalTimer.current) clearTimeout(journalTimer.current)
+    journalTimer.current = setTimeout(() => {
+      supabase.from('reviews').upsert({ user_id: userId, date: today, notes: value }, { onConflict: 'user_id,date' }).then(() => {})
+    }, 700)
+  }
+
+  const contextSections: RailSectionDef[] = userId ? [
+    {
+      id: 'milestones', title: 'Milestones', icon: <Target size={13} />, count: milestoneRows.length,
+      body: <MilestoneRows rows={milestoneRows} activeId={expandedMs} onExpand={setExpandedMs} onManage={() => navigate('/milestones')} />,
+    },
+    {
+      id: 'thisweek', title: 'This week', icon: <ChartLineUp size={13} />, tone: 'lagging',
+      body: <ThisWeek userId={userId} weekDates={weekDates} today={today} onManage={() => navigate('/milestones')} />,
+    },
+    {
+      id: 'agenda', title: 'Agenda', icon: <CalendarDots size={13} />, count: 0,
+      body: <AgendaRows />,
+    },
+    {
+      id: 'journal', title: 'Journal', icon: <PencilSimple size={13} />,
+      body: null,
+    },
+  ] : []
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const editing = target?.closest('input, textarea, [contenteditable="true"]')
+      if (editing) return
+      if (event.key.toLowerCase() === 'j') {
+        event.preventDefault()
+        setContextOpen(open => !open)
+      }
+      if (event.key === 'Escape') setContextOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const reopenDay = async () => {
     if (!userId) return
@@ -840,35 +994,6 @@ export default function Today() {
     }
     setClosedSummary(null)
   }
-
-  // ── rail sections ──────────────────────────────────────────────
-  const sections: RailSectionDef[] = userId ? [
-    {
-      id: 'milestones', title: 'Milestones', icon: <Target size={13} />, count: milestoneRows.length,
-      body: <MilestoneRows rows={milestoneRows} activeId={expandedMs} onExpand={setExpandedMs} onManage={() => navigate('/milestones')} />,
-    },
-    {
-      id: 'thisweek', title: 'This week', icon: <ChartLineUp size={13} />, tone: 'lagging',
-      body: <ThisWeek key={twRefresh} userId={userId} weekDates={weekDates} today={today} onManage={() => navigate('/milestones')} />,
-    },
-    {
-      id: 'agenda', title: 'Agenda', icon: <CalendarDots size={13} />, count: 0,
-      body: <AgendaRows />,
-    },
-    {
-      id: 'journal', title: 'Journal', icon: <PencilSimple size={13} />,
-      body: (
-        <>
-          <textarea
-            className="journal-area"
-            placeholder="What's on your mind?"
-            value={journal}
-            onChange={e => onJournalChange(e.target.value)}
-          />
-        </>
-      ),
-    },
-  ] : []
 
   return (
     <div className="page">
@@ -902,7 +1027,19 @@ export default function Today() {
             <span className="bl-word">Focus</span>
           </button>
         )}
-        <BacklogBin count={backlog.length} armed={dragArmed} onOpen={() => setBacklogOpen(true)} onDropTodo={parkTodo} />
+        <button className="backlog-bin context-bin" onClick={() => setContextOpen(true)} title="Context (J)">
+          <SidebarSimple size={13} />
+          <span className="bl-word">Context</span>
+          <span className="keycap">J</span>
+        </button>
+        <BacklogBin
+          count={backlog.length}
+          armed={dragArmed}
+          activeCount={activeTodoCount}
+          onOpen={() => setBacklogOpen(true)}
+          onDropTodo={parkTodo}
+          onParkAll={parkAllTodos}
+        />
         {dayClosed ? (
           <button className="close-day-btn" onClick={reopenDay} title="Reopen the day">
             <ArrowCounterClockwise size={13} /> Reopen
@@ -925,34 +1062,43 @@ export default function Today() {
         />
       )}
 
-      {!dayClosed && (
-        <div className="two-col">
-          <div className="main-col">
-            <TodoList
-              todos={todos}
-              milestoneName={milestoneName}
-              milestoneColor={milestoneColor}
-              milestoneTotal={milestoneTotal}
-              milestoneOrder={milestoneOrder}
-              resolveMentions={resolveMentions}
-              mentionOptions={mentionOptions}
-              milestoneOptions={milestoneOptions}
-              groupBy={groupBy}
-              onChangeGroup={setGroup}
-              onToggle={toggleTodo}
-              onDelete={deleteTodo}
-              onStar={starTodo}
-              onEditText={editTodoText}
-              onAdd={addTodo}
-              onCreateMention={createMention}
-              onChangeMilestone={changeTodoMilestone}
-              onMilestoneClick={setExpandedMs}
-              onReorder={reorderTodos}
-              onDragArm={setDragArmed}
-            />
-          </div>
+      {saveError && (
+        <div className="day-save-alert" role="status">
+          <span>{saveError}</span>
+          <button onClick={() => setSaveError(null)} title="Dismiss"><X size={12} /></button>
+        </div>
+      )}
 
-          <RightRail sections={sections} />
+      {!dayClosed && (
+        <div className="today-planner">
+          <DayCalendar
+            todos={scheduledTodos}
+            today={today}
+            onSchedule={scheduleTodo}
+            onToggle={toggleTodo}
+            onUnschedule={unscheduleTodo}
+            onBacklog={parkTodo}
+            onDragArm={setDragArmed}
+            resolveMentions={resolveMentions}
+            mentionOptions={mentionOptions}
+            milestoneOptions={milestoneOptions}
+            onEditText={editTodoText}
+            onCreateMention={createMention}
+            onChangeMilestone={changeTodoMilestone}
+          />
+          <TodoScheduleList
+            todos={unscheduledTodos}
+            onToggle={toggleTodo}
+            onAdd={addTodo}
+            onDropTodo={unscheduleTodo}
+            onDragArm={setDragArmed}
+            resolveMentions={resolveMentions}
+            mentionOptions={mentionOptions}
+            milestoneOptions={milestoneOptions}
+            onEditText={editTodoText}
+            onCreateMention={createMention}
+            onChangeMilestone={changeTodoMilestone}
+          />
         </div>
       )}
 
@@ -960,12 +1106,30 @@ export default function Today() {
         <BacklogPanel
           items={backlog}
           todayK={today}
+          activeCount={activeTodoCount}
           onClose={() => setBacklogOpen(false)}
           onDropTodo={parkTodo}
+          onParkAll={parkAllTodos}
           onRestore={restoreBacklogTodo}
           onSetDate={setBacklogReturnDate}
           onRemove={deleteBacklogTodo}
         />
+      )}
+
+      <ContextDrawer
+        open={contextOpen}
+        sections={contextSections}
+        journal={journal}
+        onJournalChange={onJournalChange}
+        onClose={() => setContextOpen(false)}
+      />
+
+      {!contextOpen && !dayClosed && (
+        <button className="context-tab" onClick={() => setContextOpen(true)} title="Open context column (J)">
+          <SidebarSimple size={14} />
+          <span>Context</span>
+          <kbd>J</kbd>
+        </button>
       )}
 
       {userId && expandedMilestone && (

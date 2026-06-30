@@ -189,6 +189,8 @@ export interface Todo {
   date: string | null
   backlog_at?: string | null
   return_date?: string | null
+  scheduled_start_minutes?: number | null
+  scheduled_duration_minutes?: number | null
   sort_order: number
   url: string | null
   outreach_log_id: string | null

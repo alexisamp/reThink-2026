@@ -169,8 +169,6 @@ interface RowProps {
   dragState?: {
     dragId: string | null
     overId: string | null
-    grabbableId: string | null
-    setGrabbableId: (id: string | null) => void
     onDragStart: (id: string, e: DragEvent<HTMLDivElement>) => void
     onDragEnter: (id: string, e: DragEvent<HTMLDivElement>) => void
     onDrop: (id: string, e: DragEvent<HTMLDivElement>) => void
@@ -244,11 +242,10 @@ function TodoRow({
   const draggable = Boolean(dragState && !todo.completed)
   const isDragging = dragState?.dragId === todo.id
   const isOver = dragState?.overId === todo.id && dragState?.dragId !== todo.id
-  const grabbable = dragState?.grabbableId === todo.id
 
   return (
     <div
-      draggable={draggable && grabbable}
+      draggable={draggable && !editing}
       onDragStart={e => dragState?.onDragStart(todo.id, e)}
       onDragEnter={e => dragState?.onDragEnter(todo.id, e)}
       onDragOver={e => { if (draggable) e.preventDefault() }}
@@ -260,8 +257,6 @@ function TodoRow({
         <span
           className="todo-grip grip-todo"
           title="Drag to reorder, or drop in Backlog"
-          onMouseDown={() => dragState?.setGrabbableId(todo.id)}
-          onMouseUp={() => dragState?.setGrabbableId(null)}
         >
           <DotsSixVertical size={12} />
         </span>
@@ -457,7 +452,6 @@ export default function TodoList({
   const done = todos.filter(t => t.completed)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
-  const [grabbableId, setGrabbableId] = useState<string | null>(null)
 
   const reorderByDrop = (fromId: string, toId: string) => {
     if (fromId === toId || !onReorder) return
@@ -470,8 +464,6 @@ export default function TodoList({
   const dragState = {
     dragId,
     overId,
-    grabbableId,
-    setGrabbableId,
     onDragStart: (id: string, e: DragEvent<HTMLDivElement>) => {
       e.dataTransfer.effectAllowed = 'move'
       e.dataTransfer.setData('text/todo-id', id)
@@ -490,13 +482,11 @@ export default function TodoList({
       if (fromId) reorderByDrop(fromId, id)
       setDragId(null)
       setOverId(null)
-      setGrabbableId(null)
       onDragArm?.(false)
     },
     onDragEnd: () => {
       setDragId(null)
       setOverId(null)
-      setGrabbableId(null)
       onDragArm?.(false)
     },
   }
