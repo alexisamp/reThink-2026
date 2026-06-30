@@ -35,11 +35,30 @@ input:focus, textarea:focus { outline: none; }
 .sb-row.indent { padding-left: 18px; font-size: 11px; }
 .sb-pip { width: 14px; height: 14px; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: #fff; }
 .sb-pip i { font-size: 9px; }
+.sb-pip.object { background: #2f6df6; }
+.sb-pip.object.deals { background: #f97316; }
+.sb-pip.object.users { background: #04a6c2; }
+.sb-pip.object.workspaces { background: #8b5cf6; }
+.sb-pip.object.custom { background: #64748b; }
 .sb-badge { margin-left: auto; font-family: var(--font-mono); font-size: 9.5px; font-weight: 600; min-width: 18px; text-align: center; padding: 1px 6px; border-radius: 999px; background: color-mix(in oklab, var(--moss) 16%, transparent); color: var(--moss); }
 .sb-row.active .sb-badge { background: var(--moss); color: #fff; }
 .sb-divider { height: 1px; background: var(--border-1); margin: 6px 8px; }
-.sb-eyebrow { display: flex; align-items: center; gap: 4px; padding: 6px 10px 3px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.10em; color: color-mix(in oklab, var(--shuttle) 55%, transparent); cursor: pointer; }
+.sb-eyebrow { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 6px 10px 3px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.10em; color: color-mix(in oklab, var(--shuttle) 55%, transparent); cursor: pointer; }
 .sb-eyebrow i { font-size: 9px; }
+.sb-eyebrow-main { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.sb-section-gear {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in oklab, var(--shuttle) 55%, transparent);
+  opacity: 0;
+  transition: opacity 120ms, background 120ms, color 120ms;
+}
+.sb-eyebrow:hover .sb-section-gear { opacity: 1; }
+.sb-section-gear:hover { background: color-mix(in oklab, var(--mercury) 45%, transparent); color: var(--burnham); }
 
 .sb-footer { margin-top: auto; padding: 8px; border-top: 1px solid var(--border-1); }
 .sb-user { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 11px; color: var(--burnham); }

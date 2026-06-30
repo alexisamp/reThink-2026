@@ -18,6 +18,8 @@ import ListDetail from '@/screens/ListDetail'
 import CompanyDetail from '@/screens/CompanyDetail'
 import PeopleOpportunities from '@/screens/PeopleOpportunities'
 import OpportunityDetail from '@/screens/OpportunityDetail'
+import ObjectSettingsIndex, { ObjectSettingsDetail } from '@/screens/ObjectSettings'
+import ObjectRecords, { ObjectRecordDetail } from '@/screens/ObjectRecords'
 import MilestonePlan from '@/screens/MilestonePlan'
 import Playbook from '@/screens/Playbook'
 import ContactDetailDrawer from '@/components/ContactDetailDrawer'
@@ -217,6 +219,18 @@ export default function App() {
                   <Route path="/people/opportunities" element={<PeopleOpportunities />} />
                   <Route path="/people/opportunities/:id" element={<OpportunityDetail />} />
                   <Route path="/people/:id" element={<PersonDetail />} />
+                  <Route path="/settings/objects" element={<ObjectSettingsIndex />} />
+                  <Route path="/settings/objects/:slug/:tab?" element={<ObjectSettingsDetail />} />
+                  <Route path="/settings/data/objects" element={<ObjectSettingsIndex />} />
+                  <Route path="/settings/data/objects/:slug/:tab?" element={<ObjectSettingsDetail />} />
+                  <Route path="/records/:slug" element={<ObjectRecords />} />
+                  <Route path="/records/:slug/:recordId" element={<ObjectRecordDetail />} />
+                  <Route path="/companies/view/:viewId" element={<ObjectRecords />} />
+                  <Route path="/people/view/:viewId" element={<ObjectRecords />} />
+                  <Route path="/deals/view/:viewId" element={<ObjectRecords />} />
+                  <Route path="/companies/record/:recordId" element={<ObjectRecordDetail />} />
+                  <Route path="/people/record/:recordId" element={<ObjectRecordDetail />} />
+                  <Route path="/deals/record/:recordId" element={<ObjectRecordDetail />} />
                   <Route path="/lists" element={<Lists />} />
                   <Route path="/lists/:id" element={<ListDetail />} />
                   <Route path="/milestones" element={<MilestonePlan />} />

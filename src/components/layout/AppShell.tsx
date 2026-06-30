@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
-  House, BookBookmark, Users, Buildings, Target,
+  House, Users, Buildings, Target, CurrencyDollar,
   Star, Flame, Gear, List as ListIcon,
   MagnifyingGlass, CaretDown, CaretRight,
-  SignOut, ArrowLeft, CheckSquare,
+  SignOut, ArrowLeft, Bell, Sparkle, Article,
 } from '@phosphor-icons/react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useLists } from '@/hooks/useLists'
+import { useAttioObjects } from '@/hooks/useAttioObjects'
 import CommandPalette from '@/components/CommandPalette'
 import SettingsModal from '@/components/SettingsModal'
 import type { UpdaterState } from '@/hooks/useUpdater'
@@ -86,11 +87,13 @@ function SectionHeader({
   collapsed,
   open,
   onToggle,
+  action,
 }: {
   label: string
   collapsed: boolean
   open: boolean
   onToggle: () => void
+  action?: React.ReactNode
 }) {
   if (collapsed) return <SectionDivider collapsed={collapsed} />
   return (
@@ -98,15 +101,24 @@ function SectionHeader({
       onClick={onToggle}
       className="sb-eyebrow w-full"
     >
-      {open ? <CaretDown size={9} weight="bold" /> : <CaretRight size={9} weight="bold" />}
-      {label}
+      <span className="sb-eyebrow-main">
+        {open ? <CaretDown size={9} weight="bold" /> : <CaretRight size={9} weight="bold" />}
+        {label}
+      </span>
+      {action}
     </button>
   )
+}
+
+function objectRoute(slug: string) {
+  if (['companies', 'people', 'deals'].includes(slug)) return `/${slug}/view/all`
+  return `/records/${slug}`
 }
 
 export default function AppShell({ children, user, updater }: AppShellProps) {
   const navigate = useNavigate()
   const { lists } = useLists(user.id)
+  const { objects } = useAttioObjects(user.id, user.email, user.user_metadata?.full_name as string | undefined)
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === 'true')
   const [crmOpen, setCrmOpen] = useState(() => localStorage.getItem(CRM_KEY) !== 'false')
   const [listsOpen, setListsOpen] = useState(() => localStorage.getItem(LISTS_KEY) !== 'false')
@@ -171,6 +183,16 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
   const initials = (fullName || user.email || 'U')[0].toUpperCase()
 
   const sidebarPx = collapsed ? '48px' : '200px'
+  const objectNavIcon = (slug: string, type: string) => {
+    const icon = slug === 'companies'
+      ? <Buildings size={9} weight="fill" />
+      : slug === 'deals'
+        ? <CurrencyDollar size={9} weight="bold" />
+        : slug === 'people' || slug === 'users'
+          ? <Users size={9} weight="fill" />
+          : <Target size={9} weight="fill" />
+    return <span className={`sb-pip object ${type} ${slug}`}>{icon}</span>
+  }
 
   return (
     <div
@@ -188,7 +210,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
         <div className="sb-brand">
           <img src="/logo.png" alt="reThink" />
           {!collapsed && (
-            <span className="word">reThink 2026</span>
+            <span className="word">Meridian 71</span>
           )}
         </div>
 
@@ -209,43 +231,47 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
 
         {/* Main nav */}
         <nav className="flex-1 overflow-y-auto py-1">
-          <NavItem path="/today" icon={<House size={16} />} label="Today" collapsed={collapsed} />
+          <NavItem path="/today" icon={<House size={16} />} label="Home" collapsed={collapsed} />
           <NavItem
             path="/review"
-            icon={<CheckSquare size={16} />}
+            icon={<Bell size={16} />}
             label={reviewCount > 0 ? `Review (${reviewCount})` : 'Review'}
             collapsed={collapsed}
           />
-          <NavItem path="/playbook" icon={<BookBookmark size={16} />} label="Playbook" collapsed={collapsed} />
-          <NavItem path="/milestones" icon={<Target size={16} />} label="Goals" collapsed={collapsed} />
+          <NavItem path="/__suggestions" icon={<Sparkle size={16} />} label="Suggestions" collapsed={collapsed} onClick={() => {}} />
+          <NavItem path="/playbook" icon={<Article size={16} />} label="Playbook" collapsed={collapsed} />
+          <NavItem path="/plan" icon={<Target size={16} />} label="Plan" collapsed={collapsed} />
 
           <SectionDivider collapsed={collapsed} />
 
-          {/* CRM section */}
-          <SectionHeader label="CRM" collapsed={collapsed} open={crmOpen} onToggle={toggleCrm} />
+          {/* Records section */}
+          <SectionHeader
+            label="Records"
+            collapsed={collapsed}
+            open={crmOpen}
+            onToggle={toggleCrm}
+            action={
+              <span
+                className="sb-section-gear"
+                title="Object settings"
+                onClick={event => { event.stopPropagation(); navigate('/settings/data/objects') }}
+              >
+                <Gear size={12} />
+              </span>
+            }
+          />
           {(crmOpen || collapsed) && (
             <>
-              <NavItem
-                path="/people"
-                icon={<span className="sb-pip" style={{ background: 'var(--midnight)' }}><Users size={9} weight="fill" /></span>}
-                label="People"
-                collapsed={collapsed}
-                indent
-              />
-              <NavItem
-                path="/people/companies"
-                icon={<span className="sb-pip" style={{ background: 'var(--shuttle)' }}><Buildings size={9} weight="fill" /></span>}
-                label="Companies"
-                collapsed={collapsed}
-                indent
-              />
-              <NavItem
-                path="/people/opportunities"
-                icon={<span className="sb-pip" style={{ background: 'var(--burnham)' }}><Target size={9} weight="fill" /></span>}
-                label="Opportunities"
-                collapsed={collapsed}
-                indent
-              />
+              {objects.filter(object => object.is_enabled).map(object => (
+                <NavItem
+                  key={object.id}
+                  path={objectRoute(object.slug)}
+                  icon={objectNavIcon(object.slug, object.object_type)}
+                  label={object.plural_name}
+                  collapsed={collapsed}
+                  indent
+                />
+              ))}
             </>
           )}
 

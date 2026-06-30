@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test:objects:auth": "node tests/auth.setup.mjs",
+    "test:objects:visual": "playwright test tests/objects-visual.spec.ts --project=chromium",
     "preview": "vite preview",
     "tauri": "tauri"
   },
@@ -33,6 +35,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.61.1",
     "@tauri-apps/api": "2.10.1",
     "@tauri-apps/cli": "^2.10.1",
     "@types/node": "^24.10.1",
