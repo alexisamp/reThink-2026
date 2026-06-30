@@ -13,15 +13,25 @@ import { useAttioObjectBundle, useAttioObjects } from '@/hooks/useAttioObjects'
 import {
   ACCESS_RANK,
   ACCESS_LABEL,
+  ATTRIBUTE_OPTION_COLORS,
+  ATTRIBUTE_TYPES_V1,
   addObjectPermission,
+  archiveCustomAttribute,
   createCustomObject,
+  createCustomAttribute,
   deleteCustomObject,
+  duplicateCustomAttribute,
   slugifyObjectName,
+  updateCustomAttribute,
   updateObjectConfig,
   updatePermission,
   getEffectiveAccess,
+  isCreatableAttributeType,
+  type AttributeMutationInput,
   type CrmAccessLevel,
   type CrmAttribute,
+  type CrmAttributeOption,
+  type CreatableAttributeType,
   type CrmObject,
 } from '@/lib/attioObjects'
 
@@ -399,13 +409,179 @@ function attributeTypeInitial(type: string) {
   return type === 'Multi-select' ? 'M' : type.slice(0, 1)
 }
 
-function AttributesTab({ attributes }: { attributes: CrmAttribute[] }) {
+function copyText(value: string) {
+  void navigator.clipboard?.writeText(value)
+}
+
+function AttributeOptionsEditor({ options, setOptions }: { options: CrmAttributeOption[]; setOptions: (options: CrmAttributeOption[]) => void }) {
+  const addOption = () => {
+    const color = ATTRIBUTE_OPTION_COLORS[options.length % ATTRIBUTE_OPTION_COLORS.length]
+    setOptions([...options, { id: `option_${Date.now()}`, label: '', color }])
+  }
+  const updateOption = (index: number, patch: Partial<CrmAttributeOption>) => setOptions(options.map((option, optionIndex) => optionIndex === index ? { ...option, ...patch } : option))
+  const duplicateOption = (index: number) => {
+    const option = options[index]
+    setOptions([...options.slice(0, index + 1), { ...option, id: `option_${Date.now()}`, label: `${option.label} copy` }, ...options.slice(index + 1)])
+  }
+  return (
+    <section className="attr-modal-section">
+      <div className="attr-modal-section-head">
+        <span>Options</span>
+        <button className="attio-btn" type="button" onClick={addOption}><Plus size={12} /> Create option</button>
+      </div>
+      {options.length > 0 && (
+        <div className="attr-option-chips">
+          {options.filter(option => option.label.trim()).map(option => <span key={option.id} className={`attr-option-chip ${option.color}`}>{option.label}</span>)}
+        </div>
+      )}
+      <div className="attr-option-list">
+        {options.map((option, index) => (
+          <div key={option.id} className="attr-option-row">
+            <select value={option.color} onChange={event => updateOption(index, { color: event.target.value })}>
+              {ATTRIBUTE_OPTION_COLORS.map(color => <option key={color} value={color}>{color}</option>)}
+            </select>
+            <input value={option.label} onChange={event => updateOption(index, { label: event.target.value })} placeholder="Option name" />
+            <button type="button" aria-label="Duplicate option" onClick={() => duplicateOption(index)}><Code size={13} /></button>
+            <button type="button" aria-label="Delete option" onClick={() => setOptions(options.filter((_, optionIndex) => optionIndex !== index))}><X size={13} /></button>
+          </div>
+        ))}
+        {options.length === 0 && <p className="attio-muted">Create options that records can choose from.</p>}
+      </div>
+    </section>
+  )
+}
+
+function AttributeModal({
+  object,
+  attribute,
+  onClose,
+  onSaved,
+}: {
+  object: CrmObject
+  attribute: CrmAttribute | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const { user } = useAuth()
+  const editing = Boolean(attribute)
+  const initialType = isCreatableAttributeType(attribute?.attribute_type ?? '') ? attribute!.attribute_type as CreatableAttributeType : 'Text'
+  const [type, setType] = useState<CreatableAttributeType>(initialType)
+  const [name, setName] = useState(attribute?.name ?? '')
+  const [description, setDescription] = useState(attribute?.description ?? '')
+  const [required, setRequired] = useState(Boolean(attribute?.is_required))
+  const [unique, setUnique] = useState(Boolean(attribute?.is_unique))
+  const [defaultValue, setDefaultValue] = useState(attribute?.default_value == null ? '' : String(attribute.default_value))
+  const [options, setOptions] = useState<CrmAttributeOption[]>(attribute?.options ?? [])
+  const [currency, setCurrency] = useState(attribute?.config?.currency?.currency ?? 'USD')
+  const [decimals, setDecimals] = useState(attribute?.config?.currency?.decimals ?? 2)
+  const [display, setDisplay] = useState(attribute?.config?.currency?.display ?? 'symbol')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const selectLike = type === 'Select' || type === 'Multi-select'
+  const canSave = name.trim().length > 0 && (!selectLike || options.some(option => option.label.trim()))
+
+  const save = async () => {
+    if (!user || !canSave) return
+    setSaving(true)
+    setError(null)
+    const payload: AttributeMutationInput = {
+      name,
+      description,
+      attribute_type: type,
+      is_required: required,
+      is_unique: unique,
+      options: selectLike ? options : [],
+      config: type === 'Currency' ? { currency: { currency, decimals, display } } : {},
+      default_value: defaultValue,
+    }
+    const result = attribute
+      ? await updateCustomAttribute(attribute, payload)
+      : await createCustomAttribute(user.id, object, payload)
+    setSaving(false)
+    if (result.error) {
+      setError('Could not save attribute.')
+      return
+    }
+    onSaved()
+  }
+
+  return (
+    <div className="attio-modal-bg" onClick={onClose}>
+      <div className="attio-modal attr-create-modal" onClick={event => event.stopPropagation()}>
+        <div className="attio-modal-hd">
+          <h2>{editing ? 'Edit attribute' : 'Create attribute'}</h2>
+          <button aria-label="Close" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="attio-modal-body">
+          <div className="attr-modal-object"><ObjectIcon object={object} /> {object.plural_name}</div>
+          <label className="attio-field">
+            <span>Type</span>
+            <select value={type} disabled={editing} onChange={event => setType(event.target.value as CreatableAttributeType)}>
+              {ATTRIBUTE_TYPES_V1.map(item => <option key={item.type} value={item.type}>{item.label}</option>)}
+            </select>
+            {editing && <small>Type is locked after an attribute is created.</small>}
+          </label>
+          <label className="attio-field">
+            <span>Name</span>
+            <input value={name} onChange={event => setName(event.target.value)} placeholder="Attribute name" autoFocus />
+          </label>
+          <label className="attio-field">
+            <span>Description</span>
+            <input value={description} onChange={event => setDescription(event.target.value)} placeholder="Add a description" />
+          </label>
+          {selectLike && <AttributeOptionsEditor options={options} setOptions={setOptions} />}
+          {type === 'Currency' && (
+            <section className="attr-modal-section">
+              <div className="attr-modal-section-head"><span>Currency formatting</span></div>
+              <div className="attr-currency-grid">
+                <label className="attio-field"><span>Currency</span><select value={currency} onChange={event => setCurrency(event.target.value)}><option>USD</option><option>EUR</option><option>GBP</option><option>CLP</option><option>MXN</option></select></label>
+                <label className="attio-field"><span>Decimals</span><input type="number" min={0} max={6} value={decimals} onChange={event => setDecimals(Number(event.target.value))} /></label>
+                <label className="attio-field"><span>Display</span><select value={display} onChange={event => setDisplay(event.target.value as typeof display)}><option value="symbol">Symbol</option><option value="code">Code</option><option value="name">Name</option></select></label>
+              </div>
+            </section>
+          )}
+          <label className="attio-field">
+            <span>Default value</span>
+            <input value={defaultValue} onChange={event => setDefaultValue(event.target.value)} placeholder={`Default ${name || 'value'}`} />
+          </label>
+          <section className="attr-modal-section">
+            <div className="attr-modal-section-head"><span>Constraints</span></div>
+            <label className="attr-toggle-row"><input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} /> Required</label>
+            <label className="attr-toggle-row"><input type="checkbox" checked={unique} onChange={event => setUnique(event.target.checked)} /> Unique</label>
+          </section>
+          <div className="attr-ai-row disabled"><Sparkle size={13} /><span><strong>AI autofill</strong><small>Unavailable in Attributes v1</small></span></div>
+          {error && <p className="attio-error">{error}</p>}
+        </div>
+        <div className="attio-modal-actions">
+          <button className="attio-btn" onClick={onClose}>Cancel</button>
+          <button className="attio-btn primary" disabled={saving || !canSave} onClick={save}>{editing ? 'Save changes' : 'Create attribute'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AttributesTab({
+  attributes,
+  canManage,
+  onEdit,
+  onDuplicate,
+  onArchive,
+}: {
+  attributes: CrmAttribute[]
+  canManage: boolean
+  onEdit: (attribute: CrmAttribute) => void
+  onDuplicate: (attribute: CrmAttribute) => void
+  onArchive: (attribute: CrmAttribute) => void
+}) {
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const customActionable = (attribute: CrmAttribute) => attribute.source === 'custom' && !attribute.is_system && !attribute.is_enriched && !attribute.is_relationship
   return (
     <section className="attio-table attr-table">
       <div className="attio-tr attio-th attr-grid"><span><Database size={12} /> Name</span><span><Rows size={12} /> Type</span><span><LockKey size={12} /> Constraints</span><span><Rows size={12} /> Properties</span><span /></div>
       {attributes.map(attribute => (
-        <div key={attribute.id} className="attio-tr attr-grid">
-          <span className="attr-name"><span className="attr-type-icon">{attributeTypeInitial(attribute.attribute_type)}</span><strong>{attribute.name}</strong></span>
+        <div key={attribute.id} className={`attio-tr attr-grid ${attribute.is_archived ? 'attr-archived' : ''}`}>
+          <span className="attr-name"><span className="attr-type-icon">{attributeTypeInitial(attribute.attribute_type)}</span><strong>{attribute.name}</strong>{attribute.is_archived && <Badge>Archived</Badge>}</span>
           <span>{attribute.attribute_type}</span>
           <span className="attr-tags">
             {attribute.is_required && <Badge>Required</Badge>}
@@ -417,7 +593,29 @@ function AttributesTab({ attributes }: { attributes: CrmAttribute[] }) {
             {attribute.is_enriched && <Badge tone="purple">Enriched</Badge>}
             {attribute.is_relationship && <Badge tone="green">Relationship</Badge>}
           </span>
-          <span className="attr-menu" />
+          <span className="attr-menu">
+            <span className="attio-menu-wrap">
+              <button className="icon-menu-btn" aria-label={`${attribute.name} actions`} onClick={() => setOpenMenu(openMenu === attribute.id ? null : attribute.id)}><DotsThreeVertical size={15} /></button>
+              {openMenu === attribute.id && (
+                <AttioMenu>
+                  {customActionable(attribute) && (
+                    <>
+                      <MenuButton disabled={!canManage || !isCreatableAttributeType(attribute.attribute_type)} onClick={() => { setOpenMenu(null); onEdit(attribute) }}><GearSix size={13} /> Edit attribute</MenuButton>
+                      <MenuButton disabled={!canManage || !isCreatableAttributeType(attribute.attribute_type)} onClick={() => { setOpenMenu(null); onDuplicate(attribute) }}><Rows size={13} /> Duplicate attribute</MenuButton>
+                    </>
+                  )}
+                  <MenuButton onClick={() => { setOpenMenu(null); copyText(attribute.id) }}><Code size={13} /> Copy ID</MenuButton>
+                  <MenuButton onClick={() => { setOpenMenu(null); copyText(attribute.key) }}><Code size={13} /> Copy slug</MenuButton>
+                  {customActionable(attribute) && (
+                    <>
+                      <div className="attio-menu-sep" />
+                      <MenuButton danger disabled={!canManage || attribute.is_archived} onClick={() => { setOpenMenu(null); onArchive(attribute) }}><Trash size={13} /> Archive attribute</MenuButton>
+                    </>
+                  )}
+                </AttioMenu>
+              )}
+            </span>
+          </span>
         </div>
       ))}
       {attributes.length === 0 && <div className="attio-empty">No attributes match this filter.</div>}
@@ -526,17 +724,29 @@ export function ObjectSettingsDetail() {
   const routeTab = ROUTE_TO_TAB[tabParam ?? 'general'] ?? 'configuration'
   const [tab, setTab] = useState<SettingsTab>(routeTab)
   const [attributeQuery, setAttributeQuery] = useState('')
+  const [showAttributeFilters, setShowAttributeFilters] = useState(false)
+  const [showArchivedAttributes, setShowArchivedAttributes] = useState(false)
+  const [showSystemAttributes, setShowSystemAttributes] = useState(true)
+  const [showEnrichedAttributes, setShowEnrichedAttributes] = useState(true)
+  const [showRelationshipAttributes, setShowRelationshipAttributes] = useState(true)
+  const [attributeModal, setAttributeModal] = useState<CrmAttribute | 'new' | null>(null)
   const sortedAttributes = useMemo(() => [...attributes].sort((a, b) => a.sort_order - b.sort_order), [attributes])
   const visibleAttributes = useMemo(() => {
     const needle = attributeQuery.trim().toLowerCase()
-    if (!needle) return sortedAttributes
-    return sortedAttributes.filter(attribute =>
+    return sortedAttributes.filter(attribute => {
+      if (attribute.is_archived && !showArchivedAttributes) return false
+      if (attribute.is_system && !showSystemAttributes) return false
+      if (attribute.is_enriched && !showEnrichedAttributes) return false
+      if (attribute.is_relationship && !showRelationshipAttributes) return false
+      if (!needle) return true
+      return (
         attribute.name.toLowerCase().includes(needle) ||
         attribute.key.toLowerCase().includes(needle) ||
         attribute.attribute_type.toLowerCase().includes(needle) ||
         attribute.source.toLowerCase().includes(needle)
-    )
-  }, [attributeQuery, sortedAttributes])
+      )
+    })
+  }, [attributeQuery, showArchivedAttributes, showEnrichedAttributes, showRelationshipAttributes, showSystemAttributes, sortedAttributes])
 
   useEffect(() => {
     setTab(routeTab)
@@ -548,6 +758,18 @@ export function ObjectSettingsDetail() {
   const goTab = (next: SettingsTab) => {
     setTab(next)
     if (slug) navigate(`/settings/data/objects/${slug}/${TAB_TO_ROUTE[next]}`)
+  }
+
+  const handleDuplicateAttribute = async (attribute: CrmAttribute) => {
+    if (!user || !object || !canManage) return
+    await duplicateCustomAttribute(user.id, object, attribute)
+    void reload()
+  }
+
+  const handleArchiveAttribute = async (attribute: CrmAttribute) => {
+    if (!canManage || !window.confirm(`Archive ${attribute.name}? Existing values will be kept.`)) return
+    await archiveCustomAttribute(attribute)
+    void reload()
   }
 
   if (loading) return <div className="attio-settings-page"><main className="attio-settings-main"><div className="attio-empty">Loading...</div></main></div>
@@ -582,18 +804,44 @@ export function ObjectSettingsDetail() {
             <div className="objects-section-head attr-section-head">
               <div>
                 <h2>Attributes</h2>
-                <p>Review object attribute metadata. Attribute creation and editing are handled in the next branch.</p>
+                <p>Create, edit, duplicate, archive, and inspect attributes for this object.</p>
               </div>
+              <button className="attio-btn primary" disabled={!canManage} onClick={() => setAttributeModal('new')}><Plus size={13} /> Create attribute</button>
             </div>
             <div className="attio-settings-toolbar">
               <div className="attio-search"><MagnifyingGlass size={13} /><input value={attributeQuery} onChange={event => setAttributeQuery(event.target.value)} placeholder="Search attributes..." /></div>
+              <span className="attio-menu-wrap">
+                <button className={`attio-btn ${showAttributeFilters ? 'active' : ''}`} onClick={() => setShowAttributeFilters(value => !value)}><Rows size={13} /> Filter</button>
+                {showAttributeFilters && (
+                  <AttioMenu>
+                    <label className="attr-filter-check"><input type="checkbox" checked={showArchivedAttributes} onChange={event => setShowArchivedAttributes(event.target.checked)} /> Show archived</label>
+                    <label className="attr-filter-check"><input type="checkbox" checked={showSystemAttributes} onChange={event => setShowSystemAttributes(event.target.checked)} /> Show system</label>
+                    <label className="attr-filter-check"><input type="checkbox" checked={showEnrichedAttributes} onChange={event => setShowEnrichedAttributes(event.target.checked)} /> Show enriched</label>
+                    <label className="attr-filter-check"><input type="checkbox" checked={showRelationshipAttributes} onChange={event => setShowRelationshipAttributes(event.target.checked)} /> Show relationships</label>
+                  </AttioMenu>
+                )}
+              </span>
             </div>
-            <AttributesTab attributes={visibleAttributes} />
+            <AttributesTab
+              attributes={visibleAttributes}
+              canManage={canManage}
+              onEdit={attribute => setAttributeModal(attribute)}
+              onDuplicate={handleDuplicateAttribute}
+              onArchive={handleArchiveAttribute}
+            />
           </>
         )}
         {tab === 'permissions' && <PermissionsTab object={object} permissions={permissions} canManage={canManage} onReload={() => void reload()} />}
         {object.object_type === 'custom' && tab === 'configuration' && <p className="attio-warning"><Warning size={13} /> Custom object deletion is permanent, matching Attio semantics.</p>}
         </div>
+        {attributeModal && (
+          <AttributeModal
+            object={object}
+            attribute={attributeModal === 'new' ? null : attributeModal}
+            onClose={() => setAttributeModal(null)}
+            onSaved={() => { setAttributeModal(null); void reload() }}
+          />
+        )}
       </main>
     </div>
   )

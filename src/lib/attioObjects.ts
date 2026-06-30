@@ -5,6 +5,23 @@ export type CrmObjectType = 'standard' | 'custom'
 export type CrmBackingSource = 'people' | 'companies' | 'deals' | 'generic'
 export type CrmAccessLevel = 'read_only' | 'read_write' | 'full_access'
 export type CrmAttributeSource = 'system' | 'custom' | 'enriched' | 'relationship'
+export type CreatableAttributeType = 'Text' | 'Number' | 'Date' | 'Select' | 'Multi-select' | 'Checkbox' | 'URL' | 'Email' | 'Phone' | 'Currency'
+
+export interface CrmAttributeOption {
+  id: string
+  label: string
+  color: string
+}
+
+export interface CrmCurrencyConfig {
+  currency: string
+  decimals: number
+  display: 'symbol' | 'code' | 'name'
+}
+
+export interface CrmAttributeConfig {
+  currency?: CrmCurrencyConfig
+}
 
 export interface CrmObject {
   id: string
@@ -39,10 +56,25 @@ export interface CrmAttribute {
   is_required: boolean
   is_unique: boolean
   is_editable: boolean
+  is_archived: boolean
+  options: CrmAttributeOption[] | null
+  config: CrmAttributeConfig | null
+  default_value: unknown
   description: string | null
   sort_order: number
   created_at: string
   updated_at: string
+}
+
+export interface AttributeMutationInput {
+  name: string
+  description?: string | null
+  attribute_type: CreatableAttributeType
+  is_required?: boolean
+  is_unique?: boolean
+  options?: CrmAttributeOption[]
+  config?: CrmAttributeConfig
+  default_value?: unknown
 }
 
 export interface CrmRecord {
@@ -113,6 +145,25 @@ export const ACCESS_LABEL: Record<CrmAccessLevel, string> = {
   read_only: 'Read only',
   read_write: 'Read and write',
   full_access: 'Full access',
+}
+
+export const ATTRIBUTE_TYPES_V1: Array<{ type: CreatableAttributeType; label: string }> = [
+  { type: 'Text', label: 'Text' },
+  { type: 'Number', label: 'Number' },
+  { type: 'Date', label: 'Date' },
+  { type: 'Select', label: 'Select' },
+  { type: 'Multi-select', label: 'Multi-select' },
+  { type: 'Checkbox', label: 'Checkbox' },
+  { type: 'URL', label: 'URL' },
+  { type: 'Email', label: 'Email' },
+  { type: 'Phone', label: 'Phone' },
+  { type: 'Currency', label: 'Currency' },
+]
+
+export const ATTRIBUTE_OPTION_COLORS = ['gray', 'blue', 'green', 'yellow', 'orange', 'red', 'pink', 'purple', 'cyan']
+
+export function isCreatableAttributeType(type: string): type is CreatableAttributeType {
+  return ATTRIBUTE_TYPES_V1.some(item => item.type === type)
 }
 
 const ensureObjectsCache = new Map<string, Promise<void>>()
@@ -269,6 +320,108 @@ export function slugifyObjectName(value: string) {
     .slice(0, 48)
 }
 
+export function slugifyAttributeName(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48)
+}
+
+function makeOptionId(label: string) {
+  const clean = slugifyAttributeName(label)
+  return `${clean || 'option'}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function normalizeOptions(options: CrmAttributeOption[] | undefined) {
+  return (options ?? [])
+    .map((option, index) => ({
+      id: option.id || makeOptionId(option.label),
+      label: option.label.trim(),
+      color: option.color || ATTRIBUTE_OPTION_COLORS[index % ATTRIBUTE_OPTION_COLORS.length],
+    }))
+    .filter(option => option.label)
+}
+
+async function uniqueAttributeKey(objectId: string, name: string, excludeId?: string) {
+  const base = slugifyAttributeName(name) || 'attribute'
+  const { data } = await supabase
+    .from('crm_attributes')
+    .select('id,key')
+    .eq('object_id', objectId)
+  const existing = new Set(
+    (data ?? [])
+      .filter(row => row.id !== excludeId)
+      .map(row => row.key),
+  )
+  if (!existing.has(base)) return base
+  let suffix = 2
+  while (existing.has(`${base}_${suffix}`)) suffix += 1
+  return `${base}_${suffix}`
+}
+
+function cleanCurrencyConfig(config?: CrmAttributeConfig | null): CrmAttributeConfig {
+  const currency = config?.currency
+  return {
+    currency: {
+      currency: currency?.currency || 'USD',
+      decimals: Number.isFinite(currency?.decimals) ? Math.max(0, Math.min(6, Number(currency?.decimals))) : 2,
+      display: currency?.display || 'symbol',
+    },
+  }
+}
+
+export function normalizeAttributeValue(attribute: Pick<CrmAttribute, 'attribute_type' | 'options' | 'config'>, input: unknown): unknown {
+  if (input === null || input === undefined) return null
+  if (typeof input === 'string' && !input.trim()) return null
+
+  switch (attribute.attribute_type) {
+    case 'Number': {
+      const number = typeof input === 'number' ? input : Number(String(input).replace(/,/g, ''))
+      return Number.isFinite(number) ? number : null
+    }
+    case 'Date':
+      return String(input).slice(0, 10) || null
+    case 'Checkbox':
+      return Boolean(input)
+    case 'Select': {
+      const value = typeof input === 'string' ? input : String(input)
+      const options = attribute.options ?? []
+      const match = options.find(option => option.id === value || option.label === value)
+      return match?.id ?? value
+    }
+    case 'Multi-select': {
+      const rawValues = Array.isArray(input) ? input : String(input).split(',')
+      const options = attribute.options ?? []
+      const values = rawValues
+        .map(value => String(value).trim())
+        .filter(Boolean)
+        .map(value => options.find(option => option.id === value || option.label === value)?.id ?? value)
+      return values.length ? values : null
+    }
+    case 'Currency': {
+      if (typeof input === 'object' && input && 'amount' in input) {
+        const value = input as { amount?: unknown; currency?: unknown }
+        const amount = typeof value.amount === 'number' ? value.amount : Number(String(value.amount ?? '').replace(/,/g, ''))
+        return Number.isFinite(amount)
+          ? { amount, currency: String(value.currency || attribute.config?.currency?.currency || 'USD') }
+          : null
+      }
+      const amount = typeof input === 'number' ? input : Number(String(input).replace(/,/g, ''))
+      return Number.isFinite(amount) ? { amount, currency: attribute.config?.currency?.currency || 'USD' } : null
+    }
+    case 'Text':
+    case 'URL':
+    case 'Email':
+    case 'Phone':
+      return String(input).trim() || null
+    default:
+      return input
+  }
+}
+
 function attrPayload(seed: StandardObjectSeed['attributes'][number], userId: string, objectId: string, index: number, forceSystem = false) {
   const source = seed.source ?? (seed.system ? 'system' : 'custom')
   const isSystem = Boolean(seed.system || forceSystem)
@@ -287,6 +440,10 @@ function attrPayload(seed: StandardObjectSeed['attributes'][number], userId: str
     is_unique: Boolean(seed.unique),
     is_editable: seed.editable ?? !seed.system,
     description: seed.description ?? null,
+    is_archived: false,
+    options: [],
+    config: seed.type === 'Currency' ? cleanCurrencyConfig() : {},
+    default_value: null,
     sort_order: index,
   }
 }
@@ -418,6 +575,7 @@ export async function fetchAttributeCounts(userId: string, objectIds: string[]) 
     .select('object_id')
     .eq('user_id', userId)
     .in('object_id', objectIds)
+    .eq('is_archived', false)
 
   return (data ?? []).reduce<Record<string, number>>((counts, row) => {
     counts[row.object_id] = (counts[row.object_id] ?? 0) + 1
@@ -443,6 +601,160 @@ export async function fetchObjectBundle(userId: string, slug: string) {
     attributes: (attributes ?? []) as CrmAttribute[],
     permissions: (permissions ?? []) as CrmObjectPermission[],
   }
+}
+
+export async function createCustomAttribute(userId: string, object: CrmObject, input: AttributeMutationInput) {
+  const type = input.attribute_type
+  if (!isCreatableAttributeType(type)) return { attribute: null, error: new Error('Unsupported attribute type') }
+  const options = type === 'Select' || type === 'Multi-select' ? normalizeOptions(input.options) : []
+  const config = type === 'Currency' ? cleanCurrencyConfig(input.config) : (input.config ?? {})
+  const key = await uniqueAttributeKey(object.id, input.name)
+  const { data: orderRows } = await supabase
+    .from('crm_attributes')
+    .select('sort_order')
+    .eq('object_id', object.id)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+  const sortOrder = ((orderRows?.[0]?.sort_order as number | undefined) ?? 0) + 10
+  const defaultValue = normalizeAttributeValue({ attribute_type: type, options, config }, input.default_value)
+
+  const { data, error } = await supabase.from('crm_attributes').insert({
+    user_id: userId,
+    object_id: object.id,
+    key,
+    name: input.name.trim(),
+    attribute_type: type,
+    scope: 'object',
+    source: 'custom',
+    is_system: false,
+    is_enriched: false,
+    is_relationship: false,
+    is_required: Boolean(input.is_required),
+    is_unique: Boolean(input.is_unique),
+    is_editable: true,
+    is_archived: false,
+    description: input.description?.trim() || null,
+    options,
+    config,
+    default_value: defaultValue,
+    sort_order: sortOrder,
+  }).select('*').single()
+
+  return { attribute: (data ?? null) as CrmAttribute | null, error }
+}
+
+export async function updateCustomAttribute(attribute: CrmAttribute, patch: Partial<AttributeMutationInput>) {
+  if (attribute.source !== 'custom' || attribute.is_system || attribute.is_enriched || attribute.is_relationship) {
+    return { data: null, error: new Error('Only custom attributes can be edited') }
+  }
+  const type = attribute.attribute_type
+  const options = type === 'Select' || type === 'Multi-select'
+    ? normalizeOptions(patch.options ?? attribute.options ?? [])
+    : []
+  const config = type === 'Currency'
+    ? cleanCurrencyConfig(patch.config ?? attribute.config)
+    : (patch.config ?? attribute.config ?? {})
+  const defaultValue = 'default_value' in patch
+    ? normalizeAttributeValue({ attribute_type: type, options, config }, patch.default_value)
+    : attribute.default_value
+
+  return supabase.from('crm_attributes').update({
+    name: patch.name?.trim() || attribute.name,
+    description: patch.description === undefined ? attribute.description : (patch.description?.trim() || null),
+    is_required: patch.is_required ?? attribute.is_required,
+    is_unique: patch.is_unique ?? attribute.is_unique,
+    options,
+    config,
+    default_value: defaultValue,
+  }).eq('id', attribute.id).select('*').single()
+}
+
+export async function archiveCustomAttribute(attribute: CrmAttribute) {
+  if (attribute.source !== 'custom' || attribute.is_system || attribute.is_enriched || attribute.is_relationship) {
+    return { error: new Error('Only custom attributes can be archived') }
+  }
+  return supabase.from('crm_attributes').update({ is_archived: true }).eq('id', attribute.id)
+}
+
+export async function duplicateCustomAttribute(userId: string, object: CrmObject, attribute: CrmAttribute) {
+  if (attribute.source !== 'custom' || attribute.is_system || attribute.is_enriched || attribute.is_relationship || !isCreatableAttributeType(attribute.attribute_type)) {
+    return { attribute: null, error: new Error('Only custom v1 attributes can be duplicated') }
+  }
+  return createCustomAttribute(userId, object, {
+    name: `${attribute.name} copy`,
+    description: attribute.description,
+    attribute_type: attribute.attribute_type,
+    is_required: attribute.is_required,
+    is_unique: false,
+    options: attribute.options ?? [],
+    config: attribute.config ?? {},
+    default_value: attribute.default_value,
+  })
+}
+
+export async function fetchRecordCustomValues(userId: string, object: CrmObject, recordIds: string[]) {
+  if (!recordIds.length || object.backing_source === 'generic') return {}
+  const { data: attributes } = await supabase
+    .from('crm_attributes')
+    .select('id,key')
+    .eq('object_id', object.id)
+    .eq('source', 'custom')
+  const byId = new Map((attributes ?? []).map(row => [row.id, row.key]))
+  if (byId.size === 0) return {}
+
+  const { data: values } = await supabase
+    .from('crm_record_attribute_values')
+    .select('record_id,attribute_id,value')
+    .eq('user_id', userId)
+    .eq('object_id', object.id)
+    .in('record_id', recordIds)
+
+  return (values ?? []).reduce<Record<string, Record<string, unknown>>>((acc, row) => {
+    const key = byId.get(row.attribute_id)
+    if (!key) return acc
+    acc[row.record_id] = { ...(acc[row.record_id] ?? {}), [key]: row.value }
+    return acc
+  }, {})
+}
+
+export async function saveRecordAttributeValue(userId: string, object: CrmObject, record: UnifiedRecord, attribute: CrmAttribute, input: unknown) {
+  if (!attribute.is_editable) return { error: new Error('Attribute is read-only') }
+  const value = normalizeAttributeValue(attribute, input)
+
+  if (attribute.source === 'custom' && object.backing_source !== 'generic') {
+    if (value === null) {
+      return supabase
+        .from('crm_record_attribute_values')
+        .delete()
+        .eq('user_id', userId)
+        .eq('attribute_id', attribute.id)
+        .eq('record_id', record.id)
+    }
+    return supabase.from('crm_record_attribute_values').upsert({
+      user_id: userId,
+      object_id: object.id,
+      record_id: record.id,
+      attribute_id: attribute.id,
+      value,
+    }, { onConflict: 'attribute_id,record_id' })
+  }
+
+  if (object.backing_source === 'generic') {
+    const nextValues = { ...record.values }
+    delete nextValues.record_id
+    delete nextValues.created_at
+    delete nextValues.created_by
+    if (value === null) delete nextValues[attribute.key]
+    else nextValues[attribute.key] = value
+    if (attribute.key === 'title' || attribute.key === 'name') {
+      return updateObjectRecord(userId, object, record.id, { ...nextValues, title: typeof value === 'string' ? value : record.title })
+    }
+    return updateObjectRecord(userId, object, record.id, nextValues)
+  }
+
+  const patch: Record<string, unknown> = { [attribute.key]: value }
+  if (attribute.key === 'title') patch.title = value
+  return updateObjectRecord(userId, object, record.id, patch)
 }
 
 export async function countObjectRecords(userId: string, object: CrmObject): Promise<number> {
@@ -481,10 +793,19 @@ function deriveCountry(row: Record<string, unknown>) {
   return parts.length > 1 ? parts[parts.length - 1] : undefined
 }
 
+async function withCustomValues(userId: string, object: CrmObject, records: UnifiedRecord[]) {
+  if (object.backing_source === 'generic' || records.length === 0) return records
+  const overlays = await fetchRecordCustomValues(userId, object, records.map(record => record.id))
+  return records.map(record => ({
+    ...record,
+    values: { ...record.values, ...(overlays[record.id] ?? {}) },
+  }))
+}
+
 export async function fetchObjectRecords(userId: string, object: CrmObject): Promise<UnifiedRecord[]> {
   if (object.backing_source === 'people') {
     const { data } = await supabase.from('outreach_logs').select('*').eq('user_id', userId).order('name')
-    return ((data ?? []) as Contact[]).map(row => ({
+    const records = ((data ?? []) as Contact[]).map(row => ({
       id: row.id,
       title: row.name,
       subtitle: [row.job_title, row.company].filter(Boolean).join(' · ') || row.email,
@@ -493,10 +814,11 @@ export async function fetchObjectRecords(userId: string, object: CrmObject): Pro
       createdAt: row.created_at,
       raw: row,
     }))
+    return withCustomValues(userId, object, records)
   }
   if (object.backing_source === 'companies') {
     const { data } = await supabase.from('companies').select('*').eq('user_id', userId).order('name')
-    return ((data ?? []) as Company[]).map(row => ({
+    const records = ((data ?? []) as Company[]).map(row => ({
       id: row.id,
       title: row.name,
       subtitle: row.domain || row.sector || row.headline,
@@ -505,10 +827,11 @@ export async function fetchObjectRecords(userId: string, object: CrmObject): Pro
       createdAt: row.created_at,
       raw: row,
     }))
+    return withCustomValues(userId, object, records)
   }
   if (object.backing_source === 'deals') {
     const { data } = await supabase.from('opportunities').select('*, company:companies(*)').eq('user_id', userId).order('created_at', { ascending: false })
-    return ((data ?? []) as Opportunity[]).map(row => ({
+    const records = ((data ?? []) as Opportunity[]).map(row => ({
       id: row.id,
       title: row.title,
       subtitle: [row.company?.name, row.stage, row.type].filter(Boolean).join(' · '),
@@ -517,6 +840,7 @@ export async function fetchObjectRecords(userId: string, object: CrmObject): Pro
       createdAt: row.created_at,
       raw: row,
     }))
+    return withCustomValues(userId, object, records)
   }
   const { data } = await supabase
     .from('crm_records')
