@@ -103,6 +103,8 @@ export default function DayCalendar({
   onDragArm,
   activeDragTodoId,
   onDragTodo,
+  pointerOverMinute,
+  onPointerDragStart,
   resolveMentions,
   mentionOptions,
   milestoneOptions,
@@ -119,6 +121,8 @@ export default function DayCalendar({
   onDragArm?: (armed: boolean) => void
   activeDragTodoId?: string | null
   onDragTodo?: (id: string | null) => void
+  pointerOverMinute?: number | null
+  onPointerDragStart?: (todo: Todo, event: PointerEvent<HTMLElement>) => void
   resolveMentions: (todo: Todo) => Mention[]
   mentionOptions: Mention[]
   milestoneOptions: TodoMilestoneOption[]
@@ -204,6 +208,8 @@ export default function DayCalendar({
     }
   }, [interaction, onSchedule])
 
+  const visibleOverMinute = overMinute ?? pointerOverMinute ?? null
+
   const startInteraction = (type: Interaction['type'], todo: Todo, event: PointerEvent<HTMLElement>) => {
     if (!isScheduled(todo)) return
     event.preventDefault()
@@ -252,7 +258,8 @@ export default function DayCalendar({
       </header>
       <div
         ref={gridRef}
-        className={`day-calendar-grid${overMinute != null ? ' drop-over' : ''}`}
+        data-day-calendar-grid
+        className={`day-calendar-grid${visibleOverMinute != null ? ' drop-over' : ''}`}
         style={{ ['--cal-height' as string]: `${gridHeight}px` }}
         onDragOver={event => {
           if (!hasTodoDrag(event)) return
@@ -281,9 +288,9 @@ export default function DayCalendar({
           ))}
         </div>
 
-        {overMinute != null && (
-          <div className="day-calendar-drop-line" style={{ top: `${(overMinute - DAY_START) * PX_PER_MINUTE}px` }}>
-            <span>Schedule at {formatClock(overMinute)}</span>
+        {visibleOverMinute != null && (
+          <div className="day-calendar-drop-line" style={{ top: `${(visibleOverMinute - DAY_START) * PX_PER_MINUTE}px` }}>
+            <span>Schedule at {formatClock(visibleOverMinute)}</span>
           </div>
         )}
 
@@ -325,7 +332,10 @@ export default function DayCalendar({
                     onDragArm?.(false)
                     onDragTodo?.(null)
                   }}
-                  onPointerDown={event => event.stopPropagation()}
+                  onPointerDown={event => {
+                    event.stopPropagation()
+                    onPointerDragStart?.(todo, event)
+                  }}
                   title="Drag to Todos or Backlog"
                 >
                   <DotsSixVertical size={11} />

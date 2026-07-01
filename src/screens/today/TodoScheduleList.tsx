@@ -1,4 +1,4 @@
-import { useState, type DragEvent, type FormEvent } from 'react'
+import { useState, type DragEvent, type FormEvent, type PointerEvent } from 'react'
 import { Check, DotsSixVertical, Plus } from '@phosphor-icons/react'
 import type { Todo, TodoContentSegment, TodoMentionKind } from '@/types'
 import EditableTodoText from './EditableTodoText'
@@ -14,6 +14,7 @@ export default function TodoScheduleList({
   onDragArm,
   activeDragTodoId,
   onDragTodo,
+  onPointerDragStart,
   resolveMentions,
   mentionOptions,
   milestoneOptions,
@@ -28,6 +29,7 @@ export default function TodoScheduleList({
   onDragArm?: (armed: boolean) => void
   activeDragTodoId?: string | null
   onDragTodo?: (id: string | null) => void
+  onPointerDragStart?: (todo: Todo, event: PointerEvent<HTMLElement>) => void
   resolveMentions: (todo: Todo) => Mention[]
   mentionOptions: Mention[]
   milestoneOptions: TodoMilestoneOption[]
@@ -56,6 +58,11 @@ export default function TodoScheduleList({
     return Boolean(activeDragTodoId) || types.includes('text/todo-id') || types.includes('text/plain')
   }
 
+  const shouldStartRowPointerDrag = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false
+    return !target.closest('button, input, textarea, a, [contenteditable="true"], .editable-todo-text')
+  }
+
   const submit = (event: FormEvent) => {
     event.preventDefault()
     const next = text.trim()
@@ -75,6 +82,7 @@ export default function TodoScheduleList({
       </header>
 
       <div
+        data-todo-unschedule-drop
         className={`todo-schedule-items${dropOver ? ' drop-over' : ''}`}
         onDragOver={event => {
           if (!onDropTodo) return
@@ -112,6 +120,9 @@ export default function TodoScheduleList({
                 onDragArm?.(false)
                 onDragTodo?.(null)
               }}
+              onPointerDown={event => {
+                if (shouldStartRowPointerDrag(event.target)) onPointerDragStart?.(todo, event)
+              }}
             >
               <span
                 className="todo-schedule-grip"
@@ -121,6 +132,7 @@ export default function TodoScheduleList({
                   onDragArm?.(false)
                   onDragTodo?.(null)
                 }}
+                onPointerDown={event => onPointerDragStart?.(todo, event)}
                 title="Drag to schedule"
               >
                 <DotsSixVertical size={12} />

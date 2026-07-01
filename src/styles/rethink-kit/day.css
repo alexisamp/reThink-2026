@@ -147,7 +147,9 @@
 .todo-schedule-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) 16px; gap: 5px; align-items: center; min-height: 36px; padding: 7px 8px; border-radius: 8px; background: var(--bg-1); color: var(--burnham); box-shadow: inset 0 0 0 1px var(--border-1); transition: background 120ms ease, box-shadow 120ms ease; }
 .todo-schedule-row:hover { background: color-mix(in oklab, var(--mercury) 24%, #fff); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--moss) 20%, var(--border-1)); }
 .todo-schedule-row.done { color: color-mix(in oklab, var(--shuttle) 72%, transparent); background: color-mix(in oklab, var(--mercury) 24%, #fff); }
-.todo-schedule-grip { display: inline-flex; color: color-mix(in oklab, var(--shuttle) 48%, transparent); cursor: grab; }
+.todo-schedule-row:active { cursor: grabbing; }
+.todo-schedule-grip { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 24px; margin-left: -4px; color: color-mix(in oklab, var(--shuttle) 62%, transparent); cursor: grab; }
+.todo-schedule-row:hover .todo-schedule-grip { color: var(--shuttle); }
 .todo-schedule-grip:active { cursor: grabbing; }
 .todo-schedule-check { grid-column: 3; grid-row: 1; width: 14px; height: 14px; color: transparent; opacity: 1; }
 .todo-schedule-check.checked { background: var(--moss); border-color: var(--moss); color: #fff; opacity: 1; }
@@ -162,6 +164,13 @@
 .todo-schedule-add { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 10px; padding: 8px 10px; border-radius: 9px; background: var(--bg-1); box-shadow: inset 0 0 0 1px var(--border-1); color: var(--fg-3); }
 .todo-schedule-add input { min-width: 0; border: 0; background: transparent; outline: none; color: var(--burnham); font-size: 13px; }
 .todo-schedule-add:focus-within { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--moss) 45%, transparent); }
+
+.today-pointer-dragging, .today-pointer-dragging * { cursor: grabbing !important; }
+.todo-pointer-ghost { position: fixed; left: 0; top: 0; z-index: 500; max-width: min(360px, calc(100vw - 32px)); display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #fff; border: 1px solid color-mix(in oklab, var(--moss) 28%, var(--border-1)); color: var(--burnham); box-shadow: 0 16px 40px rgba(0,55,32,0.18), 0 3px 10px rgba(0,55,32,0.10); pointer-events: none; user-select: none; will-change: transform; }
+.todo-pointer-ghost span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 500; line-height: 1.2; }
+.todo-pointer-ghost b { flex-shrink: 0; font-family: var(--font-mono); font-size: 9px; font-weight: 600; padding: 3px 6px; border-radius: 999px; background: color-mix(in oklab, var(--moss) 14%, transparent); color: var(--moss); text-transform: uppercase; letter-spacing: 0.04em; }
+.todo-pointer-ghost.over-backlog b { background: color-mix(in oklab, var(--acc-amber) 18%, transparent); color: color-mix(in oklab, var(--acc-amber) 82%, #000); }
+.todo-pointer-ghost.over-todos b { background: color-mix(in oklab, var(--shuttle) 12%, transparent); color: var(--shuttle); }
 
 /* ── Todo hover preview ────────────────────────────────────── */
 .todo-hover-card { position: fixed; z-index: 300; width: 380px; max-width: calc(100vw - 32px); max-height: 320px; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 10px; background: #fff; border: 1px solid color-mix(in oklab, var(--border-1) 78%, transparent); box-shadow: 0 18px 42px rgba(0,55,32,0.14), 0 4px 14px rgba(0,55,32,0.08); color: var(--burnham); pointer-events: auto; animation: todo-hover-in 110ms ease; }

@@ -1,6 +1,6 @@
 // Today — daily cockpit, rebuilt to the reThink design bundle.
 // Planner = time-block calendar + unscheduled todos, wired to live Supabase data.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Archive, ArrowCounterClockwise, ArrowDown, CalendarBlank, CalendarDots, Check, ChartLineUp, MoonStars, Pause, PencilSimple, Play, Plus, SidebarSimple, Target, Timer, TrashSimple, X } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
@@ -26,6 +26,42 @@ function fmtClock(seconds: number): string {
 
 type GoalLite = Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'>
 interface MsTodo { id: string; milestone_id: string | null; completed: boolean }
+
+const POINTER_DAY_START = 7 * 60
+const POINTER_DAY_END = 23 * 60
+const POINTER_SNAP = 5
+const POINTER_DEFAULT_DURATION = 10
+const POINTER_PX_PER_MINUTE = 1.8
+
+type PointerDropTarget =
+  | { kind: 'calendar'; minute: number }
+  | { kind: 'todos' }
+  | { kind: 'backlog' }
+
+type PointerTodoDrag = {
+  id: string
+  text: string
+  x: number
+  y: number
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function snapPointerMinute(value: number) {
+  return Math.round(value / POINTER_SNAP) * POINTER_SNAP
+}
+
+function pointerMinuteFromGrid(clientY: number, grid: HTMLElement) {
+  const rect = grid.getBoundingClientRect()
+  const minutes = POINTER_DAY_START + ((clientY - rect.top + grid.scrollTop) / POINTER_PX_PER_MINUTE)
+  return clampNumber(snapPointerMinute(minutes), POINTER_DAY_START, POINTER_DAY_END - POINTER_DEFAULT_DURATION)
+}
+
+function isPointInside(clientX: number, clientY: number, rect: DOMRect) {
+  return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
+}
 interface TodoLinks {
   contactId?: string | null
   companyId?: string | null
@@ -181,6 +217,7 @@ function BacklogBin({
   return (
     <>
       <button
+        data-todo-backlog-drop
         className={`backlog-bin${armed ? ' armed' : ''}${over ? ' over' : ''}`}
         onClick={onOpen}
         title="Backlog — drag a todo here to park it"
@@ -305,6 +342,7 @@ function BacklogPanel({
         </header>
         <p className="bl-sub">Tasks on hold — not deleted. Pull one back with <b>+</b>, or give it a tentative date so it returns on its own.</p>
         <div
+          data-todo-backlog-drop
           className={`bl-list${dropOver ? ' drop' : ''}`}
           onDragOver={(e) => {
             if (!onDropTodo) return
@@ -423,6 +461,8 @@ export default function Today() {
   const [backlogOpen, setBacklogOpen] = useState(false)
   const [dragArmed, setDragArmed] = useState(false)
   const [activeDragTodoId, setActiveDragTodoId] = useState<string | null>(null)
+  const [pointerTodoDrag, setPointerTodoDrag] = useState<PointerTodoDrag | null>(null)
+  const [pointerDropTarget, setPointerDropTarget] = useState<PointerDropTarget | null>(null)
   const [msTodos, setMsTodos] = useState<MsTodo[]>([])      // all milestone-linked todos (for progress)
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [goalsMap, setGoalsMap] = useState<Map<string, GoalLite>>(new Map())
@@ -447,6 +487,18 @@ export default function Today() {
   const setTodoDrag = useCallback((id: string | null) => {
     setActiveDragTodoId(id)
     setDragArmed(Boolean(id))
+  }, [])
+
+  const getPointerDropTarget = useCallback((clientX: number, clientY: number): PointerDropTarget | null => {
+    const grid = document.querySelector<HTMLElement>('[data-day-calendar-grid]')
+    if (grid && isPointInside(clientX, clientY, grid.getBoundingClientRect())) {
+      return { kind: 'calendar', minute: pointerMinuteFromGrid(clientY, grid) }
+    }
+
+    const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null
+    if (element?.closest('[data-todo-unschedule-drop]')) return { kind: 'todos' }
+    if (element?.closest('[data-todo-backlog-drop]')) return { kind: 'backlog' }
+    return null
   }, [])
 
   // ── load mentions for a set of todos ───────────────────────────
@@ -749,6 +801,77 @@ export default function Today() {
       reportSaveError('unschedule todo', error)
     }
   }
+
+  const scheduleTodoRef = useRef(scheduleTodo)
+  const unscheduleTodoRef = useRef(unscheduleTodo)
+  const parkTodoRef = useRef(parkTodo)
+
+  useEffect(() => {
+    scheduleTodoRef.current = scheduleTodo
+    unscheduleTodoRef.current = unscheduleTodo
+    parkTodoRef.current = parkTodo
+  })
+
+  const startPointerTodoDrag = useCallback((todo: Todo, event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    setTodoDrag(todo.id)
+    setPointerDropTarget(getPointerDropTarget(event.clientX, event.clientY))
+    setPointerTodoDrag({
+      id: todo.id,
+      text: todo.text || 'Untitled todo',
+      x: event.clientX,
+      y: event.clientY,
+    })
+  }, [getPointerDropTarget, setTodoDrag])
+
+  const activePointerDragId = pointerTodoDrag?.id ?? null
+
+  useEffect(() => {
+    if (!activePointerDragId) return
+
+    const move = (event: globalThis.PointerEvent) => {
+      event.preventDefault()
+      setPointerTodoDrag(current => current ? { ...current, x: event.clientX, y: event.clientY } : current)
+      setPointerDropTarget(getPointerDropTarget(event.clientX, event.clientY))
+    }
+
+    const finish = (event: globalThis.PointerEvent) => {
+      event.preventDefault()
+      const drop = getPointerDropTarget(event.clientX, event.clientY)
+      const id = activePointerDragId
+      setPointerTodoDrag(null)
+      setPointerDropTarget(null)
+      setTodoDrag(null)
+
+      if (drop?.kind === 'calendar') {
+        void scheduleTodoRef.current(id, drop.minute, POINTER_DEFAULT_DURATION)
+      } else if (drop?.kind === 'todos') {
+        void unscheduleTodoRef.current(id)
+      } else if (drop?.kind === 'backlog') {
+        void parkTodoRef.current(id)
+      }
+    }
+
+    const cancel = () => {
+      setPointerTodoDrag(null)
+      setPointerDropTarget(null)
+      setTodoDrag(null)
+    }
+
+    document.body.classList.add('today-pointer-dragging')
+    window.addEventListener('pointermove', move, { passive: false })
+    window.addEventListener('pointerup', finish, { once: true, passive: false })
+    window.addEventListener('pointercancel', cancel, { once: true })
+    return () => {
+      document.body.classList.remove('today-pointer-dragging')
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', finish)
+      window.removeEventListener('pointercancel', cancel)
+    }
+  }, [activePointerDragId, getPointerDropTarget, setTodoDrag])
+
   const restoreBacklogTodo = async (id: string) => {
     const t = backlog.find(x => x.id === id)
     if (!t) return
@@ -1076,6 +1199,18 @@ export default function Today() {
         </div>
       )}
 
+      {pointerTodoDrag && (
+        <div
+          className={`todo-pointer-ghost${pointerDropTarget ? ` over-${pointerDropTarget.kind}` : ''}`}
+          style={{ transform: `translate3d(${pointerTodoDrag.x + 12}px, ${pointerTodoDrag.y + 12}px, 0)` }}
+        >
+          <span>{pointerTodoDrag.text}</span>
+          {pointerDropTarget?.kind === 'calendar' && <b>Schedule</b>}
+          {pointerDropTarget?.kind === 'todos' && <b>Todos</b>}
+          {pointerDropTarget?.kind === 'backlog' && <b>Backlog</b>}
+        </div>
+      )}
+
       {!dayClosed && (
         <div className="today-planner">
           <DayCalendar
@@ -1088,6 +1223,8 @@ export default function Today() {
             onDragArm={setDragArmed}
             activeDragTodoId={activeDragTodoId}
             onDragTodo={setTodoDrag}
+            pointerOverMinute={pointerDropTarget?.kind === 'calendar' ? pointerDropTarget.minute : null}
+            onPointerDragStart={startPointerTodoDrag}
             resolveMentions={resolveMentions}
             mentionOptions={mentionOptions}
             milestoneOptions={milestoneOptions}
@@ -1103,6 +1240,7 @@ export default function Today() {
             onDragArm={setDragArmed}
             activeDragTodoId={activeDragTodoId}
             onDragTodo={setTodoDrag}
+            onPointerDragStart={startPointerTodoDrag}
             resolveMentions={resolveMentions}
             mentionOptions={mentionOptions}
             milestoneOptions={milestoneOptions}
