@@ -80,10 +80,6 @@ function localDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function hasTodoDragPayload(types: DOMStringList | readonly string[]) {
-  return Array.from(types).includes('text/todo-id') || Array.from(types).includes('text/plain')
-}
-
 function todoIdFromDrag(dataTransfer: DataTransfer) {
   return dataTransfer.getData('text/todo-id') || dataTransfer.getData('text/plain')
 }
