@@ -101,6 +101,8 @@ export default function DayCalendar({
   onUnschedule,
   onBacklog,
   onDragArm,
+  activeDragTodoId,
+  onDragTodo,
   resolveMentions,
   mentionOptions,
   milestoneOptions,
@@ -115,6 +117,8 @@ export default function DayCalendar({
   onUnschedule: (id: string) => void
   onBacklog: (id: string) => void
   onDragArm?: (armed: boolean) => void
+  activeDragTodoId?: string | null
+  onDragTodo?: (id: string | null) => void
   resolveMentions: (todo: Todo) => Mention[]
   mentionOptions: Mention[]
   milestoneOptions: TodoMilestoneOption[]
@@ -219,6 +223,12 @@ export default function DayCalendar({
     event.dataTransfer.setData('text/todo-id', todo.id)
     event.dataTransfer.setData('text/plain', todo.id)
     onDragArm?.(true)
+    onDragTodo?.(todo.id)
+  }
+
+  const hasTodoDrag = (event: DragEvent<HTMLElement>) => {
+    const types = Array.from(event.dataTransfer.types)
+    return Boolean(activeDragTodoId) || types.includes('text/todo-id') || types.includes('text/plain')
   }
 
   const jumpToNow = () => {
@@ -245,7 +255,7 @@ export default function DayCalendar({
         className={`day-calendar-grid${overMinute != null ? ' drop-over' : ''}`}
         style={{ ['--cal-height' as string]: `${gridHeight}px` }}
         onDragOver={event => {
-          if (!Array.from(event.dataTransfer.types).some(t => t === 'text/todo-id' || t === 'text/plain')) return
+          if (!hasTodoDrag(event)) return
           event.preventDefault()
           event.dataTransfer.dropEffect = 'move'
           setOverMinute(minutesFromPoint(event.clientY, gridRef.current))
@@ -253,7 +263,7 @@ export default function DayCalendar({
         onDragLeave={() => setOverMinute(null)}
         onDrop={event => {
           event.preventDefault()
-          const id = todoDragId(event.dataTransfer)
+          const id = todoDragId(event.dataTransfer) || activeDragTodoId || ''
           const start = minutesFromPoint(event.clientY, gridRef.current)
           setOverMinute(null)
           if (id) onSchedule(id, start, DEFAULT_DURATION)
@@ -311,7 +321,10 @@ export default function DayCalendar({
                   className="cal-grip"
                   draggable
                   onDragStart={event => startBlockDrag(todo, event)}
-                  onDragEnd={() => onDragArm?.(false)}
+                  onDragEnd={() => {
+                    onDragArm?.(false)
+                    onDragTodo?.(null)
+                  }}
                   onPointerDown={event => event.stopPropagation()}
                   title="Drag to Todos or Backlog"
                 >

@@ -159,6 +159,7 @@ function ObjectiveBar({
 function BacklogBin({
   count,
   armed,
+  activeDragTodoId,
   activeCount = 0,
   onOpen,
   onDropTodo,
@@ -166,6 +167,7 @@ function BacklogBin({
 }: {
   count: number
   armed?: boolean
+  activeDragTodoId?: string | null
   activeCount?: number
   onOpen: () => void
   onDropTodo?: (id: string) => void
@@ -174,7 +176,7 @@ function BacklogBin({
   const [over, setOver] = useState(false)
   const hasTodoDrag = (types: DOMStringList | readonly string[]) => {
     const list = Array.from(types)
-    return armed || list.includes('text/todo-id') || list.includes('text/plain')
+    return armed || Boolean(activeDragTodoId) || list.includes('text/todo-id') || list.includes('text/plain')
   }
   return (
     <>
@@ -193,7 +195,7 @@ function BacklogBin({
         onDrop={e => {
           e.preventDefault()
           e.stopPropagation()
-          const id = todoIdFromDrag(e.dataTransfer)
+          const id = todoIdFromDrag(e.dataTransfer) || activeDragTodoId || ''
           setOver(false)
           if (id) onDropTodo?.(id)
         }}
@@ -256,6 +258,7 @@ function ReturnDatePicker({
 function BacklogPanel({
   items,
   todayK,
+  activeDragTodoId,
   activeCount = 0,
   onClose,
   onDropTodo,
@@ -266,6 +269,7 @@ function BacklogPanel({
 }: {
   items: Todo[]
   todayK: string
+  activeDragTodoId?: string | null
   activeCount?: number
   onClose: () => void
   onDropTodo?: (id: string) => void
@@ -277,7 +281,7 @@ function BacklogPanel({
   const [dropOver, setDropOver] = useState(false)
   const hasTodoDrag = (types: DOMStringList | readonly string[]) => {
     const list = Array.from(types)
-    return list.includes('text/todo-id') || list.includes('text/plain')
+    return Boolean(activeDragTodoId) || list.includes('text/todo-id') || list.includes('text/plain')
   }
   return (
     <>
@@ -315,7 +319,7 @@ function BacklogPanel({
             e.preventDefault()
             e.stopPropagation()
             setDropOver(false)
-            const id = todoIdFromDrag(e.dataTransfer)
+            const id = todoIdFromDrag(e.dataTransfer) || activeDragTodoId || ''
             if (id && onDropTodo) onDropTodo(id)
           }}
         >
@@ -418,6 +422,7 @@ export default function Today() {
   const [backlog, setBacklog] = useState<Todo[]>([])
   const [backlogOpen, setBacklogOpen] = useState(false)
   const [dragArmed, setDragArmed] = useState(false)
+  const [activeDragTodoId, setActiveDragTodoId] = useState<string | null>(null)
   const [msTodos, setMsTodos] = useState<MsTodo[]>([])      // all milestone-linked todos (for progress)
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [goalsMap, setGoalsMap] = useState<Map<string, GoalLite>>(new Map())
@@ -438,6 +443,11 @@ export default function Today() {
   const focus = useFocusTimer(userId)
   const journalTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const journalInit = useRef(false)
+
+  const setTodoDrag = useCallback((id: string | null) => {
+    setActiveDragTodoId(id)
+    setDragArmed(Boolean(id))
+  }, [])
 
   // ── load mentions for a set of todos ───────────────────────────
   const loadMentions = useCallback(async (uid: string, list: Todo[]) => {
@@ -1031,6 +1041,7 @@ export default function Today() {
         <BacklogBin
           count={backlog.length}
           armed={dragArmed}
+          activeDragTodoId={activeDragTodoId}
           activeCount={activeTodoCount}
           onOpen={() => setBacklogOpen(true)}
           onDropTodo={parkTodo}
@@ -1075,6 +1086,8 @@ export default function Today() {
             onUnschedule={unscheduleTodo}
             onBacklog={parkTodo}
             onDragArm={setDragArmed}
+            activeDragTodoId={activeDragTodoId}
+            onDragTodo={setTodoDrag}
             resolveMentions={resolveMentions}
             mentionOptions={mentionOptions}
             milestoneOptions={milestoneOptions}
@@ -1088,6 +1101,8 @@ export default function Today() {
             onAdd={addTodo}
             onDropTodo={unscheduleTodo}
             onDragArm={setDragArmed}
+            activeDragTodoId={activeDragTodoId}
+            onDragTodo={setTodoDrag}
             resolveMentions={resolveMentions}
             mentionOptions={mentionOptions}
             milestoneOptions={milestoneOptions}
@@ -1102,6 +1117,7 @@ export default function Today() {
         <BacklogPanel
           items={backlog}
           todayK={today}
+          activeDragTodoId={activeDragTodoId}
           activeCount={activeTodoCount}
           onClose={() => setBacklogOpen(false)}
           onDropTodo={parkTodo}

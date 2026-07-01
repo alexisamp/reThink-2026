@@ -12,6 +12,8 @@ export default function TodoScheduleList({
   onAdd,
   onDropTodo,
   onDragArm,
+  activeDragTodoId,
+  onDragTodo,
   resolveMentions,
   mentionOptions,
   milestoneOptions,
@@ -24,6 +26,8 @@ export default function TodoScheduleList({
   onAdd: (text: string, milestoneId: string | null, contentSegments: TodoContentSegment[]) => void
   onDropTodo?: (id: string) => void
   onDragArm?: (armed: boolean) => void
+  activeDragTodoId?: string | null
+  onDragTodo?: (id: string | null) => void
   resolveMentions: (todo: Todo) => Mention[]
   mentionOptions: Mention[]
   milestoneOptions: TodoMilestoneOption[]
@@ -35,14 +39,21 @@ export default function TodoScheduleList({
   const [dropOver, setDropOver] = useState(false)
 
   const startDrag = (todo: Todo, event: DragEvent<HTMLElement>) => {
+    event.stopPropagation()
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/todo-id', todo.id)
     event.dataTransfer.setData('text/plain', todo.id)
     onDragArm?.(true)
+    onDragTodo?.(todo.id)
   }
 
   const dragTodoId = (event: DragEvent<HTMLElement>) => {
-    return event.dataTransfer.getData('text/todo-id') || event.dataTransfer.getData('text/plain')
+    return event.dataTransfer.getData('text/todo-id') || event.dataTransfer.getData('text/plain') || activeDragTodoId || ''
+  }
+
+  const hasTodoDrag = (event: DragEvent<HTMLElement>) => {
+    const types = Array.from(event.dataTransfer.types)
+    return Boolean(activeDragTodoId) || types.includes('text/todo-id') || types.includes('text/plain')
   }
 
   const submit = (event: FormEvent) => {
@@ -67,7 +78,7 @@ export default function TodoScheduleList({
         className={`todo-schedule-items${dropOver ? ' drop-over' : ''}`}
         onDragOver={event => {
           if (!onDropTodo) return
-          if (!Array.from(event.dataTransfer.types).some(type => type === 'text/todo-id' || type === 'text/plain')) return
+          if (!hasTodoDrag(event)) return
           event.preventDefault()
           event.dataTransfer.dropEffect = 'move'
           setDropOver(true)
@@ -95,12 +106,21 @@ export default function TodoScheduleList({
               mentions={rowMentions}
               mentionOptions={mentionOptions}
               className={`todo-schedule-row${todo.completed ? ' done' : ''}`}
+              draggable
+              onDragStart={event => startDrag(todo, event)}
+              onDragEnd={() => {
+                onDragArm?.(false)
+                onDragTodo?.(null)
+              }}
             >
               <span
                 className="todo-schedule-grip"
                 draggable
                 onDragStart={event => startDrag(todo, event)}
-                onDragEnd={() => onDragArm?.(false)}
+                onDragEnd={() => {
+                  onDragArm?.(false)
+                  onDragTodo?.(null)
+                }}
                 title="Drag to schedule"
               >
                 <DotsSixVertical size={12} />
