@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ElementType } from 'react'
+import type { ElementType, ReactNode } from 'react'
 import {
   ArrowClockwise,
   Briefcase,
@@ -143,6 +143,39 @@ function filtered<T extends { name?: string; title?: string; company?: unknown }
   const q = query.trim().toLowerCase()
   if (!q) return items.slice(0, 12)
   return items.filter(item => [item.name, item.title, companyLabel(item.company)].some(v => v?.toLowerCase().includes(q))).slice(0, 12)
+}
+
+function objectLabel(type: CaptureIntent | TargetType) {
+  if (type === 'company') return 'Company'
+  if (type === 'deal' || type === 'opportunity') return 'Deal'
+  if (type === 'news') return 'Post'
+  return 'Person'
+}
+
+function ObjectGlyph({ type }: { type: CaptureIntent | TargetType | 'list' | 'source' }) {
+  const Icon = type === 'company'
+    ? Buildings
+    : type === 'deal' || type === 'opportunity'
+      ? Briefcase
+      : type === 'news' || type === 'source'
+        ? Newspaper
+        : type === 'list'
+          ? LinkIcon
+          : UserIcon
+  return (
+    <span className={`mc-glyph ${type}`}>
+      <Icon size={13} weight={type === 'company' || type === 'deal' || type === 'opportunity' ? 'fill' : 'regular'} />
+    </span>
+  )
+}
+
+function FieldRow({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  return (
+    <div className="mc-field-row">
+      <span className="mc-field-label"><i>{icon}</i>{label}</span>
+      <div className="mc-field-value">{children}</div>
+    </div>
+  )
 }
 
 export default function MobileCapture({ user }: Props) {
@@ -449,39 +482,39 @@ export default function MobileCapture({ user }: Props) {
   const activeMatches = targetType === 'person' ? personMatches : targetType === 'company' ? companyMatches : opportunityMatches
 
   return (
-    <div className="min-h-screen bg-[#f7f7f3] text-burnham">
-      <main className="mx-auto flex min-h-screen w-full max-w-[520px] flex-col">
-        <header className="sticky top-0 z-10 border-b border-burnham/10 bg-[#f7f7f3]/95 px-4 py-3 backdrop-blur">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-medium uppercase text-shuttle">Mobile capture</p>
-              <h1 className="text-lg font-semibold leading-tight">Add to reThink</h1>
-            </div>
-            <button type="button" onClick={finishCapture} className="rounded-md border border-burnham/15 px-3 py-2 text-xs font-medium text-shuttle">
-              Done
-            </button>
+    <div className="mc-shell">
+      <main className="mc-panel">
+        <header className="mc-header">
+          <div className="mc-brand">
+            <span className="mc-mark">r</span>
+            <span>Add to reThink</span>
           </div>
+          <button type="button" onClick={finishCapture} className="mc-ghost-btn">
+            Done
+          </button>
         </header>
 
-        <section className="space-y-4 px-4 pb-28 pt-4">
-          <div className="rounded-lg border border-burnham/10 bg-white p-3 shadow-sm">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-gossip text-burnham">
-                <LinkIcon size={18} weight="bold" />
+        <section className="mc-body">
+          <div className="mc-record-card">
+            <div className="mc-title-row">
+              <ObjectGlyph type={intent === 'deal' ? 'opportunity' : intent} />
+              <div className="mc-title-stack">
+                <strong>{title || url || 'Untitled capture'}</strong>
+                <span>{sourceDomain || source}</span>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 text-[11px] font-medium uppercase text-shuttle">
-                  <span className="truncate">{sourceDomain || source}</span>
-                  {source === 'ios_shortcut' && <span className="rounded bg-mercury/60 px-1.5 py-0.5 normal-case">iPhone Shortcut</span>}
-                </div>
-                <h2 className="mt-1 break-words text-sm font-semibold leading-snug">{title || url || 'Untitled capture'}</h2>
-                {url && <p className="mt-1 truncate text-xs text-shuttle">{url}</p>}
-                {text && <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-shuttle">{text}</p>}
-              </div>
+              <a className="mc-icon-btn" href={url || '#'} target="_blank" rel="noreferrer" aria-label="Open source">
+                <LinkIcon size={13} />
+              </a>
             </div>
+            <div className="mc-chip-row">
+              <span className="mc-chip">{objectLabel(intent)}</span>
+              <span className="mc-chip">{source === 'ios_shortcut' ? 'iPhone Shortcut' : source}</span>
+              {url && <span className="mc-chip truncate">{sourceDomain}</span>}
+            </div>
+            {text && <p className="mc-excerpt">{text}</p>}
           </div>
 
-          <div className="grid grid-cols-4 gap-1 rounded-lg border border-burnham/10 bg-white p-1">
+          <div className="mc-tabs" role="tablist" aria-label="Capture type">
             {INTENTS.map(item => {
               const Icon = item.icon
               const active = intent === item.id
@@ -490,222 +523,173 @@ export default function MobileCapture({ user }: Props) {
                   key={item.id}
                   type="button"
                   onClick={() => setIntent(item.id)}
-                  className={[
-                    'flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-md px-1 text-[11px] font-medium transition',
-                    active ? 'bg-burnham text-gossip' : 'text-shuttle hover:bg-mercury/40',
-                  ].join(' ')}
+                  className={active ? 'active' : ''}
                 >
-                  <Icon size={17} weight={active ? 'fill' : 'regular'} />
+                  <Icon size={14} weight={active ? 'fill' : 'regular'} />
                   <span>{item.label}</span>
                 </button>
               )
             })}
           </div>
 
-          {intent === 'news' && (
-            <div className="rounded-lg border border-burnham/10 bg-white p-3">
-              <label className="text-xs font-semibold text-burnham">Link this post to</label>
-              <div className="mt-2 grid grid-cols-3 gap-1">
-                {[
-                  ['person', 'Person'],
-                  ['company', 'Company'],
-                  ['opportunity', 'Deal'],
-                ].map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setTargetType(id as TargetType)}
-                    className={[
-                      'rounded-md px-2 py-2 text-xs font-medium',
-                      targetType === id ? 'bg-burnham text-gossip' : 'bg-mercury/40 text-shuttle',
-                    ].join(' ')}
-                  >
-                    {label}
+          <div className="mc-card">
+            {intent === 'news' ? (
+              <FieldRow icon={<ObjectGlyph type="source" />} label="Link to">
+                <div className="mc-segment">
+                  {[
+                    ['person', 'Person'],
+                    ['company', 'Company'],
+                    ['opportunity', 'Deal'],
+                  ].map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setTargetType(id as TargetType)}
+                      className={targetType === id ? 'active' : ''}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </FieldRow>
+            ) : (
+              <FieldRow icon={<ObjectGlyph type={intent === 'deal' ? 'opportunity' : intent} />} label="Action">
+                <div className="mc-segment">
+                  <button type="button" onClick={() => setMode('create')} className={mode === 'create' ? 'active' : ''}>
+                    Create new
                   </button>
-                ))}
-              </div>
-            </div>
-          )}
+                  <button type="button" onClick={() => setMode('link')} className={mode === 'link' ? 'active' : ''}>
+                    Link existing
+                  </button>
+                </div>
+              </FieldRow>
+            )}
 
-          {intent !== 'news' && (
-            <div className="rounded-lg border border-burnham/10 bg-white p-3">
-              <label className="text-xs font-semibold text-burnham">Action</label>
-              <div className="mt-2 grid grid-cols-2 gap-1">
-                <button
-                  type="button"
-                  onClick={() => setMode('create')}
-                  className={`rounded-md px-3 py-2 text-xs font-medium ${mode === 'create' ? 'bg-burnham text-gossip' : 'bg-mercury/40 text-shuttle'}`}
-                >
-                  Create new
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode('link')}
-                  className={`rounded-md px-3 py-2 text-xs font-medium ${mode === 'link' ? 'bg-burnham text-gossip' : 'bg-mercury/40 text-shuttle'}`}
-                >
-                  Link existing
-                </button>
-              </div>
-            </div>
-          )}
-
-          {mode === 'create' && intent !== 'news' ? (
-            <div className="rounded-lg border border-burnham/10 bg-white p-3">
-              <label className="text-xs font-semibold text-burnham">
-                {intent === 'person' ? 'Person name' : intent === 'company' ? 'Company name' : 'Deal title'}
-              </label>
-              <input
-                value={intent === 'person' ? createName : intent === 'company' ? createCompanyName : createDealTitle}
-                onChange={e => {
-                  if (intent === 'person') setCreateName(e.target.value)
-                  else if (intent === 'company') setCreateCompanyName(e.target.value)
-                  else setCreateDealTitle(e.target.value)
-                }}
-                className="mt-2 w-full rounded-md border border-mercury px-3 py-3 text-sm outline-none focus:border-burnham"
-                placeholder={intent === 'person' ? 'Name' : intent === 'company' ? 'Company' : 'Opportunity'}
-              />
-              {intent === 'deal' && (
-                <select
-                  value={selectedCompanyId}
-                  onChange={e => setSelectedCompanyId(e.target.value)}
-                  className="mt-2 w-full rounded-md border border-mercury bg-white px-3 py-3 text-sm outline-none focus:border-burnham"
-                >
-                  <option value="">No company</option>
-                  {companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
-                </select>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-burnham/10 bg-white p-3">
-              <label className="text-xs font-semibold text-burnham">Search existing</label>
-              <div className="mt-2 flex items-center gap-2 rounded-md border border-mercury px-3">
-                <MagnifyingGlass size={16} className="text-shuttle" />
-                <input
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  placeholder={`Search ${targetType === 'person' ? 'people' : targetType === 'company' ? 'companies' : 'deals'}`}
-                  className="h-11 flex-1 bg-transparent text-sm outline-none"
-                />
-              </div>
-              <div className="mt-2 max-h-64 overflow-y-auto">
-                {loading ? (
-                  <p className="py-4 text-center text-xs text-shuttle">Loading...</p>
-                ) : activeMatches.length === 0 ? (
-                  <p className="py-4 text-center text-xs text-shuttle">No matches</p>
-                ) : (
-                  activeMatches.map(item => {
-                    const id = item.id
-                    const active = targetType === 'person'
-                      ? selectedPersonId === id
-                      : targetType === 'company'
-                        ? selectedCompanyId === id
-                        : selectedOpportunityId === id
-                    const label = 'title' in item ? item.title : item.name
-                    const sub = targetType === 'person'
-                      ? [(item as PersonOption).job_title, (item as PersonOption).company].filter(Boolean).join(' · ')
-                      : targetType === 'company'
-                        ? [(item as Company).domain, (item as Company).sector].filter(Boolean).join(' · ')
-                        : [(item as Opportunity).company?.name, (item as Opportunity).stage].filter(Boolean).join(' · ')
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => {
-                          if (targetType === 'person') setSelectedPersonId(id)
-                          else if (targetType === 'company') setSelectedCompanyId(id)
-                          else setSelectedOpportunityId(id)
-                        }}
-                        className={[
-                          'flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left',
-                          active ? 'bg-gossip' : 'hover:bg-mercury/30',
-                        ].join(' ')}
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">{label}</span>
-                          {sub && <span className="block truncate text-xs text-shuttle">{sub}</span>}
-                        </span>
-                        {active && <Check size={16} weight="bold" />}
-                      </button>
-                    )
-                  })
+            {mode === 'create' && intent !== 'news' ? (
+              <>
+                <FieldRow icon={<ObjectGlyph type={intent === 'deal' ? 'opportunity' : intent} />} label={intent === 'person' ? 'Name' : intent === 'company' ? 'Company' : 'Deal name'}>
+                  <input
+                    value={intent === 'person' ? createName : intent === 'company' ? createCompanyName : createDealTitle}
+                    onChange={e => {
+                      if (intent === 'person') setCreateName(e.target.value)
+                      else if (intent === 'company') setCreateCompanyName(e.target.value)
+                      else setCreateDealTitle(e.target.value)
+                    }}
+                    placeholder={intent === 'person' ? 'Name' : intent === 'company' ? 'Company' : 'Opportunity'}
+                  />
+                </FieldRow>
+                {intent === 'deal' && (
+                  <FieldRow icon={<ObjectGlyph type="company" />} label="Company">
+                    <select value={selectedCompanyId} onChange={e => setSelectedCompanyId(e.target.value)}>
+                      <option value="">No company</option>
+                      {companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
+                    </select>
+                  </FieldRow>
                 )}
+              </>
+            ) : (
+              <div className="mc-picker">
+                <div className="mc-picker-search">
+                  <MagnifyingGlass size={13} />
+                  <input
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    placeholder={`Find ${targetType === 'person' ? 'person' : targetType === 'company' ? 'company' : 'deal'}...`}
+                  />
+                </div>
+                <div className="mc-picker-list">
+                  {loading ? (
+                    <div className="mc-empty">Loading...</div>
+                  ) : activeMatches.length === 0 ? (
+                    <div className="mc-empty">No matches</div>
+                  ) : (
+                    activeMatches.map(item => {
+                      const id = item.id
+                      const active = targetType === 'person'
+                        ? selectedPersonId === id
+                        : targetType === 'company'
+                          ? selectedCompanyId === id
+                          : selectedOpportunityId === id
+                      const label = 'title' in item ? item.title : item.name
+                      const sub = targetType === 'person'
+                        ? [(item as PersonOption).job_title, (item as PersonOption).company].filter(Boolean).join(' · ')
+                        : targetType === 'company'
+                          ? [(item as Company).domain, (item as Company).sector].filter(Boolean).join(' · ')
+                          : [(item as Opportunity).company?.name, (item as Opportunity).stage].filter(Boolean).join(' · ')
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => {
+                            if (targetType === 'person') setSelectedPersonId(id)
+                            else if (targetType === 'company') setSelectedCompanyId(id)
+                            else setSelectedOpportunityId(id)
+                          }}
+                          className={active ? 'active' : ''}
+                        >
+                          <ObjectGlyph type={targetType} />
+                          <span>
+                            <strong>{label}</strong>
+                            <em>{sub || `Existing ${objectLabel(targetType).toLowerCase()}`}</em>
+                          </span>
+                          {active && <Check size={13} weight="bold" />}
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-
-          <div className="rounded-lg border border-burnham/10 bg-white p-3">
-            <label className="text-xs font-semibold text-burnham">Relationship</label>
-            <select
-              value={relationship}
-              onChange={e => setRelationship(e.target.value)}
-              className="mt-2 w-full rounded-md border border-mercury bg-white px-3 py-3 text-sm outline-none focus:border-burnham"
-            >
-              <option value="about">About this record</option>
-              <option value="authored_by">Authored or shared by them</option>
-              <option value="signal_for">Signal for follow-up</option>
-              <option value="source_for">Source/evidence</option>
-            </select>
+            )}
           </div>
 
-          {intent !== 'news' && (
-            <div className="rounded-lg border border-burnham/10 bg-white p-3">
-              <label className="text-xs font-semibold text-burnham">Add to list</label>
-              <select
-                value={selectedListId}
-                onChange={e => setSelectedListId(e.target.value)}
-                className="mt-2 w-full rounded-md border border-mercury bg-white px-3 py-3 text-sm outline-none focus:border-burnham"
-              >
-                <option value="">No list</option>
-                {lists.map(list => <option key={list.id} value={list.id}>{list.icon ? `${list.icon} ` : ''}{list.name}</option>)}
+          <div className="mc-card">
+            <FieldRow icon={<ObjectGlyph type="source" />} label="Relationship">
+              <select value={relationship} onChange={e => setRelationship(e.target.value)}>
+                <option value="about">About this record</option>
+                <option value="authored_by">Authored or shared by them</option>
+                <option value="signal_for">Signal for follow-up</option>
+                <option value="source_for">Source/evidence</option>
               </select>
-            </div>
-          )}
+            </FieldRow>
 
-          <div className="rounded-lg border border-burnham/10 bg-white p-3">
-            <label className="text-xs font-semibold text-burnham">Note</label>
-            <textarea
-              value={note}
-              onChange={e => setNote(e.target.value)}
-              rows={4}
-              className="mt-2 w-full resize-none rounded-md border border-mercury px-3 py-3 text-sm outline-none focus:border-burnham"
-              placeholder="Why this matters, what to do next, or what context to remember."
-            />
+            {intent !== 'news' && (
+              <FieldRow icon={<ObjectGlyph type="list" />} label="List">
+                <select value={selectedListId} onChange={e => setSelectedListId(e.target.value)}>
+                  <option value="">No list</option>
+                  {lists.map(list => <option key={list.id} value={list.id}>{list.icon ? `${list.icon} ` : ''}{list.name}</option>)}
+                </select>
+              </FieldRow>
+            )}
+
+            <div className="mc-note-row">
+              <span className="mc-field-label"><i><ObjectGlyph type="source" /></i>Note</span>
+              <textarea
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                rows={4}
+                placeholder="Why this matters, next step, or context to remember."
+              />
+            </div>
           </div>
 
           {message && (
-            <div className={`flex items-start gap-2 rounded-lg border px-3 py-3 text-sm ${status === 'error' ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-800'}`}>
-              {status === 'error' ? <WarningCircle size={18} weight="bold" /> : <Check size={18} weight="bold" />}
+            <div className={`mc-status ${status === 'error' ? 'error' : 'ok'}`}>
+              {status === 'error' ? <WarningCircle size={15} weight="bold" /> : <Check size={15} weight="bold" />}
               <span>{message}</span>
             </div>
           )}
         </section>
 
-        <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-burnham/10 bg-white/95 px-4 py-3 backdrop-blur">
-          <div className="mx-auto grid max-w-[520px] grid-cols-[1fr_auto] gap-2">
-            <button
-              type="button"
-              disabled={status === 'saving'}
-              onClick={() => handleSave(false)}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-burnham px-4 text-sm font-semibold text-gossip disabled:opacity-60"
-            >
-              {status === 'saving' ? <ArrowClockwise size={17} className="animate-spin" /> : <Plus size={17} weight="bold" />}
+        <footer className="mc-footer">
+          <div className="mc-actions">
+            <button type="button" disabled={status === 'saving'} onClick={() => handleSave(false)} className="mc-primary">
+              {status === 'saving' ? <ArrowClockwise size={15} className="animate-spin" /> : <Plus size={15} weight="bold" />}
               Save
             </button>
-            <button
-              type="button"
-              disabled={status === 'saving'}
-              onClick={handleReview}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-burnham/15 px-3 text-sm font-medium text-shuttle disabled:opacity-60"
-              aria-label="Send to review"
-            >
-              <WarningCircle size={18} />
+            <button type="button" disabled={status === 'saving'} onClick={handleReview} className="mc-icon-action" aria-label="Send to review">
+              <WarningCircle size={17} />
             </button>
-            <button
-              type="button"
-              disabled={status === 'saving'}
-              onClick={() => handleSave(true)}
-              className="col-span-2 h-10 rounded-md border border-burnham/15 text-sm font-medium text-shuttle disabled:opacity-60"
-            >
+            <button type="button" disabled={status === 'saving'} onClick={() => handleSave(true)} className="mc-secondary">
               Save & add another
             </button>
           </div>
