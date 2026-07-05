@@ -74,6 +74,14 @@ function normalizeDomain(value: string | null) {
   return domain
 }
 
+function normalizeCaptureUrlInput(value: string) {
+  const trimmed = cleanText(value)
+  if (!trimmed) return ''
+  if (safeUrl(trimmed)) return trimmed
+  if (/^[\w.-]+\.[a-z]{2,}(?:[/:?#].*)?$/i.test(trimmed)) return `https://${trimmed}`
+  return trimmed
+}
+
 function inferIntent(url: string | null, explicit: string | null): CaptureIntent {
   if (explicit === 'person' || explicit === 'company' || explicit === 'news' || explicit === 'deal') return explicit
   const parsed = safeUrl(url)
@@ -184,11 +192,15 @@ export default function MobileCapture({ user }: Props) {
   const title = cleanText(params.get('title') || params.get('name')) || guessName(params.get('text') ?? '', url)
   const text = cleanText(params.get('text') || params.get('description'))
   const source = cleanText(params.get('source')) || 'mobile'
-  const initialIntent = inferIntent(url, params.get('intent'))
+  const explicitIntent = params.get('intent')
+  const initialIntent = inferIntent(url, explicitIntent)
+  const hasCaptureSource = Boolean(url || title || text)
 
   const [intent, setIntent] = useState<CaptureIntent>(initialIntent)
   const [targetType, setTargetType] = useState<TargetType>(initialIntent === 'deal' ? 'opportunity' : initialIntent === 'company' ? 'company' : 'person')
-  const [mode, setMode] = useState<SaveMode>(initialIntent === 'news' ? 'link' : 'create')
+  const [mode, setMode] = useState<SaveMode>('link')
+  const [typeConfirmed, setTypeConfirmed] = useState(Boolean(explicitIntent))
+  const [manualUrl, setManualUrl] = useState(url)
   const [query, setQuery] = useState('')
   const [selectedPersonId, setSelectedPersonId] = useState('')
   const [selectedCompanyId, setSelectedCompanyId] = useState('')
@@ -240,9 +252,9 @@ export default function MobileCapture({ user }: Props) {
   }, [user.id])
 
   useEffect(() => {
-    if (intent === 'person') { setTargetType('person'); setMode('create') }
-    if (intent === 'company') { setTargetType('company'); setMode('create') }
-    if (intent === 'deal') { setTargetType('opportunity'); setMode('create') }
+    if (intent === 'person') { setTargetType('person'); setMode('link') }
+    if (intent === 'company') { setTargetType('company'); setMode('link') }
+    if (intent === 'deal') { setTargetType('opportunity'); setMode('link') }
     if (intent === 'news') { setMode('link') }
     setQuery('')
     setSelectedPersonId('')
@@ -251,6 +263,23 @@ export default function MobileCapture({ user }: Props) {
     setMessage('')
     setStatus('idle')
   }, [intent])
+
+  function handleManualPreview(event?: { preventDefault: () => void }) {
+    event?.preventDefault()
+    const normalized = normalizeCaptureUrlInput(manualUrl)
+    if (!safeUrl(normalized)) {
+      setStatus('error')
+      setMessage('Paste a valid URL first.')
+      return
+    }
+    const nextParams = new URLSearchParams({ url: normalized, source: 'manual' })
+    window.location.replace(`/capture?${nextParams.toString()}`)
+  }
+
+  function chooseIntent(nextIntent: CaptureIntent) {
+    setIntent(nextIntent)
+    setTypeConfirmed(true)
+  }
 
   const personMatches = filtered(people, query)
   const companyMatches = filtered(companies, query)
@@ -495,6 +524,39 @@ export default function MobileCapture({ user }: Props) {
         </header>
 
         <section className="mc-body">
+          {!hasCaptureSource ? (
+            <form className="mc-url-gate" onSubmit={handleManualPreview}>
+              <div className="mc-url-icon">
+                <LinkIcon size={16} />
+              </div>
+              <div className="mc-url-copy">
+                <strong>Add a URL</strong>
+                <span>Paste a LinkedIn profile, company page, post, article, or deal source.</span>
+              </div>
+              <div className="mc-url-input-row">
+                <input
+                  value={manualUrl}
+                  onChange={event => {
+                    setManualUrl(event.target.value)
+                    if (message) setMessage('')
+                  }}
+                  inputMode="url"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  placeholder="https://linkedin.com/in/..."
+                  autoFocus
+                />
+                <button type="submit">Preview</button>
+              </div>
+              {message && (
+                <div className={`mc-status ${status === 'error' ? 'error' : 'ok'}`}>
+                  {status === 'error' ? <WarningCircle size={15} weight="bold" /> : <Check size={15} weight="bold" />}
+                  <span>{message}</span>
+                </div>
+              )}
+            </form>
+          ) : (
+            <>
           <div className="mc-record-card">
             <div className="mc-title-row">
               <ObjectGlyph type={intent === 'deal' ? 'opportunity' : intent} />
@@ -507,7 +569,7 @@ export default function MobileCapture({ user }: Props) {
               </a>
             </div>
             <div className="mc-chip-row">
-              <span className="mc-chip">{objectLabel(intent)}</span>
+              <span className="mc-chip">{typeConfirmed ? objectLabel(intent) : 'Preview'}</span>
               <span className="mc-chip">{source === 'ios_shortcut' ? 'iPhone Shortcut' : source}</span>
               {url && <span className="mc-chip truncate">{sourceDomain}</span>}
             </div>
@@ -517,12 +579,12 @@ export default function MobileCapture({ user }: Props) {
           <div className="mc-tabs" role="tablist" aria-label="Capture type">
             {INTENTS.map(item => {
               const Icon = item.icon
-              const active = intent === item.id
+              const active = typeConfirmed && intent === item.id
               return (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setIntent(item.id)}
+                  onClick={() => chooseIntent(item.id)}
                   className={active ? 'active' : ''}
                 >
                   <Icon size={14} weight={active ? 'fill' : 'regular'} />
@@ -532,6 +594,13 @@ export default function MobileCapture({ user }: Props) {
             })}
           </div>
 
+          {!typeConfirmed ? (
+            <div className="mc-card mc-step-hint">
+              <ObjectGlyph type={intent === 'deal' ? 'opportunity' : intent} />
+              <span>Choose what this link should attach to.</span>
+            </div>
+          ) : (
+            <>
           <div className="mc-card">
             {intent === 'news' ? (
               <FieldRow icon={<ObjectGlyph type="source" />} label="Link to">
@@ -555,11 +624,11 @@ export default function MobileCapture({ user }: Props) {
             ) : (
               <FieldRow icon={<ObjectGlyph type={intent === 'deal' ? 'opportunity' : intent} />} label="Action">
                 <div className="mc-segment">
-                  <button type="button" onClick={() => setMode('create')} className={mode === 'create' ? 'active' : ''}>
-                    Create new
-                  </button>
                   <button type="button" onClick={() => setMode('link')} className={mode === 'link' ? 'active' : ''}>
                     Link existing
+                  </button>
+                  <button type="button" onClick={() => setMode('create')} className={mode === 'create' ? 'active' : ''}>
+                    Create new
                   </button>
                 </div>
               </FieldRow>
@@ -595,6 +664,7 @@ export default function MobileCapture({ user }: Props) {
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     placeholder={`Find ${targetType === 'person' ? 'person' : targetType === 'company' ? 'company' : 'deal'}...`}
+                    autoFocus
                   />
                 </div>
                 <div className="mc-picker-list">
@@ -678,8 +748,13 @@ export default function MobileCapture({ user }: Props) {
               <span>{message}</span>
             </div>
           )}
+            </>
+          )}
+            </>
+          )}
         </section>
 
+        {hasCaptureSource && typeConfirmed && (
         <footer className="mc-footer">
           <div className="mc-actions">
             <button type="button" disabled={status === 'saving'} onClick={() => handleSave(false)} className="mc-primary">
@@ -694,6 +769,7 @@ export default function MobileCapture({ user }: Props) {
             </button>
           </div>
         </footer>
+        )}
       </main>
     </div>
   )
