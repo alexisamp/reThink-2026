@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { List, ListMembership, ListStage } from '@/types'
 
+export type ListRecordType = 'person' | 'company' | 'opportunity'
+
 // ─── Templates — ready-made lists for first-time use ────────────────────────
 
 export const LIST_TEMPLATES: Array<{
@@ -168,7 +170,7 @@ export function useLists(userId: string | null | undefined) {
   useEffect(() => { load() }, [load])
 
   const createList = useCallback(async (
-    input: Pick<List, 'name' | 'purpose' | 'stages' | 'color' | 'icon'>,
+    input: Pick<List, 'name' | 'purpose' | 'stages' | 'color' | 'icon'> & { parent_object?: ListRecordType },
   ): Promise<List | null> => {
     if (!userId) return null
     const { data, error } = await supabase
@@ -198,7 +200,7 @@ export function useLists(userId: string | null | undefined) {
 
   const updateList = useCallback(async (
     id: string,
-    patch: Partial<Pick<List, 'name' | 'purpose' | 'stages' | 'color' | 'icon' | 'is_archived'>>,
+    patch: Partial<Pick<List, 'name' | 'purpose' | 'stages' | 'color' | 'icon' | 'is_archived' | 'parent_object'>>,
   ) => {
     const { error } = await supabase.from('lists').update(patch).eq('id', id)
     if (!error) await load()
@@ -220,7 +222,7 @@ export function useLists(userId: string | null | undefined) {
 
 export function useListMemberships(
   userId: string | null | undefined,
-  opts: { listId?: string; contactId?: string } = {},
+  opts: { listId?: string; contactId?: string; companyId?: string; opportunityId?: string } = {},
 ) {
   const [memberships, setMemberships] = useState<ListMembership[]>([])
   const [loading, setLoading] = useState(false)
@@ -231,25 +233,32 @@ export function useListMemberships(
     let q = supabase.from('list_memberships').select('*').eq('user_id', userId)
     if (opts.listId) q = q.eq('list_id', opts.listId)
     if (opts.contactId) q = q.eq('contact_id', opts.contactId)
+    if (opts.companyId) q = q.eq('company_id', opts.companyId)
+    if (opts.opportunityId) q = q.eq('opportunity_id', opts.opportunityId)
     const { data } = await q.order('entered_at', { ascending: false })
     setMemberships((data ?? []) as ListMembership[])
     setLoading(false)
-  }, [userId, opts.listId, opts.contactId])
+  }, [userId, opts.listId, opts.contactId, opts.companyId, opts.opportunityId])
 
   useEffect(() => { load() }, [load])
 
-  const addToList = useCallback(async (
-    contactId: string,
+  const addRecordToList = useCallback(async (
+    record: { type: ListRecordType; id: string },
     listId: string,
     stage: string,
     notes?: string,
     attributes: Record<string, unknown> = {},
   ): Promise<ListMembership | null> => {
     if (!userId) return null
+    const recordColumns = {
+      contact_id: record.type === 'person' ? record.id : null,
+      company_id: record.type === 'company' ? record.id : null,
+      opportunity_id: record.type === 'opportunity' ? record.id : null,
+    }
     const { data, error } = await supabase
       .from('list_memberships')
       .insert({
-        contact_id: contactId,
+        ...recordColumns,
         list_id: listId,
         user_id: userId,
         current_stage: stage,
@@ -265,6 +274,16 @@ export function useListMemberships(
     await load()
     return data as ListMembership
   }, [userId, load])
+
+  const addToList = useCallback(async (
+    contactId: string,
+    listId: string,
+    stage: string,
+    notes?: string,
+    attributes: Record<string, unknown> = {},
+  ): Promise<ListMembership | null> => {
+    return addRecordToList({ type: 'person', id: contactId }, listId, stage, notes, attributes)
+  }, [addRecordToList])
 
   const moveStage = useCallback(async (
     membershipId: string,
@@ -282,5 +301,5 @@ export function useListMemberships(
     await load()
   }, [load])
 
-  return { memberships, loading, addToList, moveStage, removeFromList, reload: load }
+  return { memberships, loading, addToList, addRecordToList, moveStage, removeFromList, reload: load }
 }

@@ -370,6 +370,7 @@ export interface List {
   stages: ListStage[]
   color: string | null
   icon: string | null
+  parent_object?: 'person' | 'company' | 'opportunity' | null
   is_archived: boolean
   created_at: string
   updated_at: string
@@ -378,7 +379,9 @@ export interface List {
 export interface ListMembership {
   id: string
   list_id: string
-  contact_id: string
+  contact_id: string | null
+  company_id?: string | null
+  opportunity_id?: string | null
   user_id: string
   current_stage: string
   entered_at: string

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
 // Screens (lazy-loaded later; for now direct imports)
 import Login from '@/screens/Login'
+import MobileCapture from '@/screens/MobileCapture'
 import CompactMode from '@/screens/CompactMode'
 import AppShell from '@/components/layout/AppShell'
 import Assessment from '@/screens/Assessment'
@@ -36,6 +37,22 @@ function Splash() {
       </div>
     </div>
   )
+}
+
+function LoginRoute({ user }: { user: User | null }) {
+  const location = useLocation()
+  const next = new URLSearchParams(location.search).get('next')
+  if (user) return <Navigate to={next || '/'} replace />
+  return <Login />
+}
+
+function MobileCaptureRoute({ user }: { user: User | null }) {
+  const location = useLocation()
+  if (!user) {
+    const next = `${location.pathname}${location.search}`
+    return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />
+  }
+  return <MobileCapture user={user} />
 }
 
 export default function App() {
@@ -178,7 +195,10 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         {/* Public */}
-        <Route path="/login" element={!user ? <Login /> : <Navigate to="/" replace />} />
+        <Route path="/login" element={<LoginRoute user={user} />} />
+
+        {/* Mobile capture — standalone route for iPhone Shortcuts/deep links */}
+        <Route path="/capture" element={<MobileCaptureRoute user={user} />} />
 
         {/* Compact mode — standalone window, no AppShell */}
         <Route path="/compact" element={<CompactMode />} />
