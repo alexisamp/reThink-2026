@@ -426,15 +426,7 @@ export default function MobileCapture({ user }: Props) {
     setStatus(result.ok ? 'saved' : 'error')
     setMessage(result.message)
     if (result.ok && resetAfter) {
-      setQuery('')
-      setSelectedPersonId('')
-      setSelectedCompanyId('')
-      setSelectedOpportunityId('')
-      setNote('')
-      setSelectedListId('')
-      setCreateName('')
-      setCreateCompanyName('')
-      setCreateDealTitle('')
+      window.location.replace('/capture')
     }
   }
 
@@ -450,6 +442,10 @@ export default function MobileCapture({ user }: Props) {
     setMessage(result.message)
   }
 
+  function finishCapture() {
+    window.location.replace('/capture')
+  }
+
   const activeMatches = targetType === 'person' ? personMatches : targetType === 'company' ? companyMatches : opportunityMatches
 
   return (
@@ -461,9 +457,9 @@ export default function MobileCapture({ user }: Props) {
               <p className="text-[11px] font-medium uppercase text-shuttle">Mobile capture</p>
               <h1 className="text-lg font-semibold leading-tight">Add to reThink</h1>
             </div>
-            <a href="/today" className="rounded-md border border-burnham/15 px-3 py-2 text-xs font-medium text-shuttle">
+            <button type="button" onClick={finishCapture} className="rounded-md border border-burnham/15 px-3 py-2 text-xs font-medium text-shuttle">
               Done
-            </a>
+            </button>
           </div>
         </header>
 
