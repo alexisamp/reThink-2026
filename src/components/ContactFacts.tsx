@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Plus, PencilSimple, TrashSimple, X, Star } from '@phosphor-icons/react'
 import { useAuth } from '@/hooks/useAuth'
 import { useContactFacts, FACT_CATEGORIES, factEmoji, factCategoryLabel } from '@/hooks/useContactFacts'
+import { isLinkedSignalFact } from '@/lib/contactSignals'
 import type { ContactFact, ContactFactCategory } from '@/types'
 
 /**
@@ -13,6 +14,7 @@ import type { ContactFact, ContactFactCategory } from '@/types'
 export default function ContactFacts({ contactId }: { contactId: string }) {
   const { user } = useAuth()
   const { facts, addFact, updateFact, deleteFact } = useContactFacts(user?.id, contactId)
+  const visibleFacts = facts.filter(f => !isLinkedSignalFact(f))
   const [editing, setEditing] = useState<ContactFact | null>(null)
   const [creating, setCreating] = useState(false)
 
@@ -26,7 +28,7 @@ export default function ContactFacts({ contactId }: { contactId: string }) {
   }
 
   // Group by category, then sort by importance within each
-  const grouped = facts.reduce<Record<string, ContactFact[]>>((acc, f) => {
+  const grouped = visibleFacts.reduce<Record<string, ContactFact[]>>((acc, f) => {
     (acc[f.category] = acc[f.category] ?? []).push(f)
     return acc
   }, {})
@@ -43,7 +45,7 @@ export default function ContactFacts({ contactId }: { contactId: string }) {
         </button>
       </div>
 
-      {facts.length === 0 ? (
+      {visibleFacts.length === 0 ? (
         <p className="text-[11px] text-shuttle/50 italic">
           Capture what matters about this person — family, obsessions, life phase — to surprise them in the next conversation.
         </p>

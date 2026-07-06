@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useValueLogs } from '@/hooks/useValueLogs'
 import ContactFacts from '@/components/ContactFacts'
+import ContactLinkedSignals from '@/components/ContactLinkedSignals'
 import ContactListMemberships from '@/components/ContactListMemberships'
 import ContactTodosFiles from '@/components/ContactTodosFiles'
 import { strengthBucket, strengthLabel, strengthNormalized, strengthVsTier } from '@/lib/connectionStrength'
@@ -801,6 +802,8 @@ export default function PersonDetail() {
               <div className="bg-white border border-mercury rounded-lg p-3">
                 <ContactFacts contactId={contact.id} />
               </div>
+
+              <ContactLinkedSignals contactId={contact.id} className="bg-white border border-mercury rounded-lg p-3" />
 
               {/* Active in lists */}
               <div className="bg-white border border-mercury rounded-lg p-3">

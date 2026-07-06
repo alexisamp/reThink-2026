@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Briefcase, Clock, MagnifyingGlass, NotePencil, PencilSimple, Plus, User, Users } from '@phosphor-icons/react'
+import { Briefcase, Buildings, Clock, MagnifyingGlass, NotePencil, PencilSimple, Plus, Target, User, Users } from '@phosphor-icons/react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLists, useListMemberships } from '@/hooks/useLists'
 import { supabase } from '@/lib/supabase'
 import CrmTable, { type CrmColumn } from '@/components/crm/CrmTable'
 import RecordPeek from '@/components/crm/RecordPeek'
 import ListEditorModal from '@/components/ListEditorModal'
-import type { Contact, List, ListMembership } from '@/types'
+import type { Company, Contact, List, ListMembership, Opportunity } from '@/types'
 
 interface EnrichedMember extends ListMembership {
-  contact: Contact
+  record: ListRecord
 }
+
+type ListRecord =
+  | { type: 'person'; id: string; label: string; subtitle: string; imageUrl?: string | null; route: string; contact: Contact }
+  | { type: 'company'; id: string; label: string; subtitle: string; imageUrl?: string | null; route: string; company: Company }
+  | { type: 'opportunity'; id: string; label: string; subtitle: string; imageUrl?: string | null; route: string; opportunity: Opportunity }
 
 type HandoffListKind = 'job' | 'consult' | 'mentor' | 'board' | 'family' | 'default'
 
@@ -43,6 +48,8 @@ export default function ListDetail() {
   const { lists, reload: reloadLists } = useLists(user?.id)
   const { memberships, moveStage, addToList, reload } = useListMemberships(user?.id, { listId: id })
   const [contactsById, setContactsById] = useState<Record<string, Contact>>({})
+  const [companiesById, setCompaniesById] = useState<Record<string, Company>>({})
+  const [opportunitiesById, setOpportunitiesById] = useState<Record<string, Opportunity>>({})
   const [showAdd, setShowAdd] = useState(false)
   const [showEditor, setShowEditor] = useState(false)
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('kanban')
@@ -53,30 +60,51 @@ export default function ListDetail() {
   const attr = handoffAttr(listKind)
   const cadenceList = listKind === 'board' || listKind === 'family'
 
-  // Load contacts for each membership
+  // Load records for each membership. Manual add still adds people; mobile capture
+  // can add companies/opportunities through the same membership table.
   useEffect(() => {
     if (!user || memberships.length === 0) {
       setContactsById({})
+      setCompaniesById({})
+      setOpportunitiesById({})
       return
     }
-    const ids = memberships.map(m => m.contact_id)
-    supabase
-      .from('outreach_logs')
-      .select('*')
-      .in('id', ids)
-      .then(({ data }) => {
-        if (!data) return
-        const map: Record<string, Contact> = {}
-        for (const c of data as Contact[]) map[c.id] = c
-        setContactsById(map)
-      })
+    const ids = memberships.map(m => m.contact_id).filter((id): id is string => Boolean(id))
+    const companyIds = memberships.map(m => m.company_id).filter((companyId): companyId is string => Boolean(companyId))
+    const opportunityIds = memberships.map(m => m.opportunity_id).filter((opportunityId): opportunityId is string => Boolean(opportunityId))
+    Promise.all([
+      ids.length
+        ? supabase.from('outreach_logs').select('*').in('id', ids)
+        : Promise.resolve({ data: [] }),
+      companyIds.length
+        ? supabase.from('companies').select('*').in('id', companyIds)
+        : Promise.resolve({ data: [] }),
+      opportunityIds.length
+        ? supabase.from('opportunities').select('*, company:companies(*)').in('id', opportunityIds)
+        : Promise.resolve({ data: [] }),
+    ]).then(([contactsRes, companiesRes, opportunitiesRes]) => {
+      const contactMap: Record<string, Contact> = {}
+      for (const contact of (contactsRes.data ?? []) as Contact[]) contactMap[contact.id] = contact
+      setContactsById(contactMap)
+
+      const companyMap: Record<string, Company> = {}
+      for (const company of (companiesRes.data ?? []) as Company[]) companyMap[company.id] = company
+      setCompaniesById(companyMap)
+
+      const opportunityMap: Record<string, Opportunity> = {}
+      for (const opportunity of (opportunitiesRes.data ?? []) as Opportunity[]) opportunityMap[opportunity.id] = opportunity
+      setOpportunitiesById(opportunityMap)
+    })
   }, [user, memberships])
 
   const enriched: EnrichedMember[] = useMemo(() =>
     memberships
-      .map(m => ({ ...m, contact: contactsById[m.contact_id] }))
-      .filter(m => m.contact) as EnrichedMember[],
-    [memberships, contactsById],
+      .map(member => {
+        const record = recordForMembership(member, contactsById, companiesById, opportunitiesById)
+        return record ? { ...member, record } : null
+      })
+      .filter((member): member is EnrichedMember => Boolean(member)),
+    [memberships, contactsById, companiesById, opportunitiesById],
   )
   const peekIndex = enriched.findIndex(member => member.id === peekId)
   const peekMember = peekIndex >= 0 ? enriched[peekIndex] : null
@@ -84,23 +112,24 @@ export default function ListDetail() {
   const columns: CrmColumn<EnrichedMember>[] = useMemo(() => [
     {
       key: 'person',
-      label: 'Person',
+      label: 'Record',
       locked: true,
       width: 'minmax(220px, 1.4fr)',
       icon: <Users size={12} />,
       render: member => (
         <span className="crm-name">
-          {member.contact.profile_photo_url ? (
-            <span className="crm-av"><img src={member.contact.profile_photo_url} alt="" /></span>
+          {member.record.imageUrl ? (
+            <span className="crm-av"><img src={member.record.imageUrl} alt="" /></span>
           ) : (
             <span className="crm-av">
-              {member.contact.name[0]?.toUpperCase()}
+              {member.record.label[0]?.toUpperCase()}
             </span>
           )}
           <span className="min-w-0">
-            <span className="link">{member.contact.name}</span>
-            <span className="block truncate text-[10px] text-shuttle">{[member.contact.job_title, member.contact.company].filter(Boolean).join(' @ ') || '—'}</span>
+            <span className="link">{member.record.label}</span>
+            <span className="block truncate text-[10px] text-shuttle">{member.record.subtitle || '—'}</span>
           </span>
+          <span className="crm-chip muted">{recordTypeLabel(member.record.type)}</span>
         </span>
       ),
     },
@@ -124,7 +153,7 @@ export default function ListDetail() {
       label: attr.label,
       width: listKind === 'job' ? '180px' : '160px',
       icon: <Briefcase size={12} />,
-      render: member => <span className={listKind === 'board' ? 'crm-chip muted' : 'crm-soft'}>{String((member.attributes?.[attr.key] ?? (attr.key === 'role' ? member.contact.job_title : '')) || attr.empty)}</span>,
+      render: member => <span className={listKind === 'board' ? 'crm-chip muted' : 'crm-soft'}>{String((member.attributes?.[attr.key] ?? (attr.key === 'role' && member.record.type === 'person' ? member.record.contact.job_title : '')) || attr.empty)}</span>,
     },
     {
       key: 'cadence',
@@ -139,7 +168,7 @@ export default function ListDetail() {
       label: 'Relation',
       width: '130px',
       defaultOff: true,
-      render: member => <span className="text-shuttle">{String(member.attributes?.relation ?? member.contact.relationship_domain ?? '—')}</span>,
+      render: member => <span className="text-shuttle">{String(member.attributes?.relation ?? (member.record.type === 'person' ? member.record.contact.relationship_domain : null) ?? '—')}</span>,
     },
     {
       key: 'notes',
@@ -176,7 +205,7 @@ export default function ListDetail() {
         <div className="list-hd-txt">
           <div className="list-hd-top">
             <h1 className="list-title">{list.name}</h1>
-            <span className="list-obj"><User size={11} /> People</span>
+            <span className="list-obj"><User size={11} /> Records</span>
             <span className="list-count">{enriched.length} {enriched.length === 1 ? 'entry' : 'entries'}</span>
           </div>
           <p className="list-sub">{list.purpose || 'A contextual relationship funnel with list-specific attributes.'}</p>
@@ -239,7 +268,7 @@ export default function ListDetail() {
       {showAdd && (
         <AddContactToListModal
           list={list}
-          existingIds={new Set(memberships.map(m => m.contact_id))}
+          existingIds={new Set(memberships.map(m => m.contact_id).filter((id): id is string => Boolean(id)))}
           onClose={() => setShowAdd(false)}
           onAdded={async (contactId, stage, notes, attributes) => {
             await addToList(contactId, list.id, stage, notes, attributes)
@@ -264,10 +293,10 @@ export default function ListDetail() {
       {peekMember && (
         <RecordPeek
           open
-          title={peekMember.contact.name}
-          subtitle={[peekMember.contact.job_title, peekMember.contact.company].filter(Boolean).join(' @ ') || 'List member'}
-          eyebrow={list.name}
-          avatar={<ListPeekAvatar contact={peekMember.contact} />}
+        title={peekMember.record.label}
+        subtitle={peekMember.record.subtitle || 'List member'}
+        eyebrow={list.name}
+        avatar={<ListPeekAvatar record={peekMember.record} />}
           index={peekIndex}
           total={enriched.length}
           highlights={[
@@ -275,13 +304,14 @@ export default function ListDetail() {
             { label: 'Age', value: `${daysAgo(peekMember.stage_changed_at)}d in stage` },
           ]}
           fields={[
-            { label: 'Role', value: String(peekMember.attributes?.role ?? peekMember.contact.job_title ?? '—') },
+            { label: 'Type', value: recordTypeLabel(peekMember.record.type) },
+            { label: 'Role', value: String(peekMember.attributes?.role ?? (peekMember.record.type === 'person' ? peekMember.record.contact.job_title : null) ?? '—') },
             { label: 'Cadence', value: String(peekMember.attributes?.cadence ?? '—') },
-            { label: 'Relation', value: String(peekMember.attributes?.relation ?? peekMember.contact.relationship_domain ?? '—') },
+            { label: 'Relation', value: String(peekMember.attributes?.relation ?? (peekMember.record.type === 'person' ? peekMember.record.contact.relationship_domain : null) ?? '—') },
             { label: 'Notes', value: peekMember.notes || String(peekMember.attributes?.notes ?? '—'), wide: true },
           ]}
           onClose={() => setPeekId(null)}
-          onOpenFull={() => navigate(`/people/${peekMember.contact.id}`)}
+          onOpenFull={() => navigate(peekMember.record.route)}
           onPrev={() => setPeekId(enriched[(peekIndex - 1 + enriched.length) % enriched.length].id)}
           onNext={() => setPeekId(enriched[(peekIndex + 1) % enriched.length].id)}
         >
@@ -297,9 +327,65 @@ export default function ListDetail() {
   )
 }
 
-function ListPeekAvatar({ contact }: { contact: Contact }) {
-  if (contact.profile_photo_url) return <img src={contact.profile_photo_url} alt="" />
-  return <span>{contact.name.trim().slice(0, 2).toUpperCase()}</span>
+function recordForMembership(
+  member: ListMembership,
+  contactsById: Record<string, Contact>,
+  companiesById: Record<string, Company>,
+  opportunitiesById: Record<string, Opportunity>,
+): ListRecord | null {
+  if (member.contact_id) {
+    const contact = contactsById[member.contact_id]
+    if (!contact) return null
+    return {
+      type: 'person',
+      id: contact.id,
+      label: contact.name,
+      subtitle: [contact.job_title, contact.company].filter(Boolean).join(' @ '),
+      imageUrl: contact.profile_photo_url,
+      route: `/people/${contact.id}`,
+      contact,
+    }
+  }
+  if (member.company_id) {
+    const company = companiesById[member.company_id]
+    if (!company) return null
+    return {
+      type: 'company',
+      id: company.id,
+      label: company.name,
+      subtitle: [company.domain, company.account_stage].filter(Boolean).join(' · '),
+      imageUrl: company.logo_url,
+      route: `/people/companies/${company.id}`,
+      company,
+    }
+  }
+  if (member.opportunity_id) {
+    const opportunity = opportunitiesById[member.opportunity_id]
+    if (!opportunity) return null
+    return {
+      type: 'opportunity',
+      id: opportunity.id,
+      label: opportunity.title,
+      subtitle: [opportunity.company?.name, opportunity.stage].filter(Boolean).join(' · '),
+      imageUrl: opportunity.company?.logo_url,
+      route: `/people/opportunities/${opportunity.id}`,
+      opportunity,
+    }
+  }
+  return null
+}
+
+function recordTypeLabel(type: ListRecord['type']) {
+  if (type === 'company') return 'Company'
+  if (type === 'opportunity') return 'Deal'
+  return 'Person'
+}
+
+function ListPeekAvatar({ record }: { record: ListRecord }) {
+  if (record.imageUrl) return <img src={record.imageUrl} alt="" />
+  if (record.type === 'company') return <Buildings size={16} weight="fill" />
+  if (record.type === 'opportunity') return <Target size={16} weight="fill" />
+  return <span>{record.label.trim().slice(0, 2).toUpperCase()}</span>
 }
 
 function daysAgo(iso: string): number {
