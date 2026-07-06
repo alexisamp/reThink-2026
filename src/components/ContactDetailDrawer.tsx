@@ -23,6 +23,7 @@ import { syncGmailInteractions } from '@/lib/gmail'
 import { TierInfoHelper } from '@/components/TierInfoHelper'
 import ContactListMemberships from '@/components/ContactListMemberships'
 import ContactFacts from '@/components/ContactFacts'
+import ContactLinkedSignals from '@/components/ContactLinkedSignals'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -1100,6 +1101,9 @@ export default function ContactDetailDrawer({
             </div>
 
             {/* ── 2.6. Key facts ───────────────────────────────────────────── */}
+            <ContactLinkedSignals contactId={contact.id} className="px-4 py-3 border-b border-mercury" />
+
+            {/* ── 2.7. Key facts ───────────────────────────────────────────── */}
             <div className="px-4 py-3 border-b border-mercury">
               <ContactFacts contactId={contact.id} />
             </div>
