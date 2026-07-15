@@ -191,6 +191,8 @@ export interface Todo {
   return_date?: string | null
   scheduled_start_minutes?: number | null
   scheduled_duration_minutes?: number | null
+  must_do?: boolean | null
+  recurring_id?: string | null
   sort_order: number
   url: string | null
   outreach_log_id: string | null
@@ -214,6 +216,7 @@ export interface Review {
   time_logs_updated: boolean
   tomorrow_reviewed: boolean
   day_locked_at: string | null
+  today_close_summary?: Record<string, unknown> | null
   created_at: string
   updated_at: string
 }
@@ -360,6 +363,8 @@ export interface ListStage {
   label: string
   description?: string
   color?: string
+  trackTime?: boolean
+  confetti?: boolean
 }
 
 export interface List {
@@ -370,7 +375,27 @@ export interface List {
   stages: ListStage[]
   color: string | null
   icon: string | null
+  object_slug?: string
+  views?: Array<{
+    id: string
+    type: 'table' | 'kanban'
+    title: string
+    columns: string[]
+  }>
+  active_view_id?: string
+  folder_id?: string | null
+  position?: number
   is_archived: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ListFolder {
+  id: string
+  user_id: string
+  name: string
+  position: number
+  is_collapsed: boolean
   created_at: string
   updated_at: string
 }
@@ -498,6 +523,7 @@ export interface Company {
   notes: string | null
   key_insight: string | null
   logo_url: string | null
+  favicon_url: string | null
   created_at: string
   // LI-enriched fields (populated by the Conversations company deep-scrape)
   headline: string | null
@@ -535,6 +561,8 @@ export interface Opportunity {
   interview_map: Record<string, unknown> | null
   negotiation_prep: Record<string, unknown> | null
   created_at: string
+  applied_at?: string | null
+  application_confirmation_id?: string | null
   // Joined fields
   company?: Company | null
 }

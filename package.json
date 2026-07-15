@@ -1,7 +1,7 @@
 {
   "name": "rethink-2026",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.159",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,11 @@
     "lint": "eslint .",
     "test:objects:auth": "node tests/auth.setup.mjs",
     "test:objects:visual": "playwright test tests/objects-visual.spec.ts --project=chromium",
+    "test:crm-scroll": "playwright test tests/crm-scroll.spec.ts --project=chromium",
+    "test:crm-views": "playwright test tests/crm-view-logic.spec.ts --project=chromium",
+    "test:list-icon": "playwright test tests/list-icon-layer.spec.ts --project=chromium",
+    "test:list-identity": "playwright test tests/list-identity.spec.ts --project=chromium",
+    "test:handoff": "playwright test tests/handoff-preview.spec.ts --project=chromium",
     "preview": "vite preview",
     "tauri": "tauri"
   },

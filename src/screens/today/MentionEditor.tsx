@@ -60,9 +60,11 @@ export function MentionChip({
     <span
       className={[
         editor ? 'td-editor-chip' : 'td-chip-mention',
+        mention.kind,
         onClick ? 'clickable' : '',
         selected ? 'selected' : '',
       ].filter(Boolean).join(' ')}
+      data-kind={mention.kind}
       onClick={onClick ? (e) => { e.stopPropagation(); onClick() } : undefined}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}

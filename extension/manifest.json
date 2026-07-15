@@ -15,7 +15,9 @@
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",
-    "https://media.licdn.com/*"
+    "https://media.licdn.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
   ],
   "background": {
     "service_worker": "src/background/service-worker.js",
@@ -25,6 +27,11 @@
     {
       "matches": ["https://www.linkedin.com/*"],
       "js": ["src/content-scripts/linkedin-profile.js", "src/content-scripts/floating-trigger.js", "src/content-scripts/linkedin-dm.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["http://127.0.0.1/*", "http://localhost/*"],
+      "js": ["src/content-scripts/rethink-app-bridge.js"],
       "run_at": "document_idle"
     }
   ],

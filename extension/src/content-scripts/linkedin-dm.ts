@@ -1,79 +1,136 @@
-// LinkedIn DM content script — Phase 6
-// Detects when user sends/receives LinkedIn messages and reports to service worker
+// Detect LinkedIn messages and report normalized outreach events to the service worker.
 
 import { normalizeLinkedInUrl } from '../lib/linkedinNormalizer'
 
 console.log('reThink People: LinkedIn DM content script loaded')
 
+const MESSAGE_SELECTOR = [
+  '.msg-s-event-listitem',
+  '.msg-s-message-list-item',
+  '.msg-s-message-list__event',
+].join(', ')
+const CONTAINER_SELECTOR = [
+  '.msg-convo-wrapper',
+  '.msg-thread',
+  '.msg-s-message-list',
+  '.msg-s-message-list-container',
+  '.msg-overlay-conversation-bubble',
+  '[data-control-name="message_body"]',
+].join(', ')
+
 const processedMessages = new Set<string>()
+const observedContainers = new WeakSet<Element>()
 
-function initLinkedInDMObserver() {
-  const checkReady = setInterval(() => {
-    const container = document.querySelector('.msg-convo-wrapper') ?? document.querySelector('[data-control-name="message_body"]')
-    if (container) {
-      clearInterval(checkReady)
-      startObserving(container)
-      console.log('reThink: LinkedIn DM observer attached')
-    }
-  }, 1000)
-  setTimeout(() => clearInterval(checkReady), 30000)
+function messageTimestamp(messageElement: HTMLElement): number | null {
+  const dateTime = messageElement.querySelector('time[datetime]')?.getAttribute('datetime')
+    ?? messageElement.getAttribute('data-created-at')
+  if (!dateTime) return null
+  const timestamp = Date.parse(dateTime)
+  return Number.isFinite(timestamp) ? timestamp : null
 }
 
-function startObserving(container: Element) {
-  const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      mutation.addedNodes.forEach((node) => {
-        if (node.nodeType !== Node.ELEMENT_NODE) return
-        const el = node as HTMLElement
-        if (el.classList.contains('msg-s-event-listitem') || el.classList.contains('msg-s-message-list-item')) {
-          handleNewMessage(el)
-        }
-        el.querySelectorAll('.msg-s-event-listitem, .msg-s-message-list-item').forEach(msg => {
-          handleNewMessage(msg as HTMLElement)
-        })
-      })
-    }
-  })
-  observer.observe(container, { childList: true, subtree: true })
+function messageIdentifier(messageElement: HTMLElement, direction: 'inbound' | 'outbound', timestamp: number): string {
+  const nativeId = messageElement.getAttribute('data-event-urn')
+    ?? messageElement.getAttribute('data-urn')
+    ?? messageElement.id
+  if (nativeId) return nativeId
+  const body = messageElement.querySelector('.msg-s-event-listitem__body, .msg-s-message-list__message-bubble')
+    ?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 160) ?? ''
+  return `${direction}:${timestamp}:${body}`
 }
 
-function handleNewMessage(messageElement: HTMLElement) {
+function conversationProfileUrl(messageElement: HTMLElement): string | null {
+  const conversation = messageElement.closest('.msg-convo-wrapper, .msg-thread, .msg-overlay-conversation-bubble') ?? document
+  const selectors = [
+    '.msg-thread__link-to-profile[href*="/in/"]',
+    'a[data-control-name="view_profile"][href*="/in/"]',
+    '.msg-overlay-bubble-header a[href*="/in/"]',
+    '.msg-entity-lockup a[href*="/in/"]',
+  ]
+  for (const selector of selectors) {
+    const link = conversation.querySelector(selector) as HTMLAnchorElement | null
+    const normalized = link?.href ? normalizeLinkedInUrl(link.href) : null
+    if (normalized) return normalized
+  }
+  return null
+}
+
+function handleMessage(messageElement: HTMLElement, existing = false) {
   try {
-    // Deduplicate — use text content as ID
-    const msgId = messageElement.querySelector('.msg-s-event-listitem__body')?.textContent?.slice(0, 50) ?? messageElement.innerText?.slice(0, 50)
-    if (!msgId || processedMessages.has(msgId)) return
-    processedMessages.add(msgId)
+    const direction: 'inbound' | 'outbound' = messageElement.matches('.msg-s-event-listitem--other, .msg-s-message-list__event--other')
+      || Boolean(messageElement.closest('.msg-s-event-listitem--other, .msg-s-message-list__event--other'))
+      ? 'inbound'
+      : 'outbound'
+    const parsedTimestamp = messageTimestamp(messageElement)
+    // Existing history is only safe to import when LinkedIn exposes a machine timestamp.
+    if (existing && parsedTimestamp == null) return
+    const timestamp = parsedTimestamp ?? Date.now()
+    const messageId = messageIdentifier(messageElement, direction, timestamp)
+    if (processedMessages.has(messageId)) return
 
-    // Detect direction: messages from others have class msg-s-event-listitem--other
-    const isInbound = messageElement.classList.contains('msg-s-event-listitem--other')
-    const direction: 'inbound' | 'outbound' = isInbound ? 'inbound' : 'outbound'
-
-    // Get LinkedIn URL from conversation header
-    const profileLink = document.querySelector('a[data-control-name="view_profile"]') as HTMLAnchorElement | null
-    if (!profileLink?.href) {
-      console.warn('reThink: Could not find profile link in LinkedIn DM')
-      return
-    }
-
-    const linkedinUrl = normalizeLinkedInUrl(profileLink.href)
+    const linkedinUrl = conversationProfileUrl(messageElement)
     if (!linkedinUrl) {
-      console.warn('reThink: Could not normalize LinkedIn URL:', profileLink.href)
+      console.warn('reThink: Could not identify the LinkedIn conversation profile')
       return
     }
+    processedMessages.add(messageId)
 
     chrome.runtime.sendMessage({
       type: 'linkedin_message',
       linkedinUrl,
       direction,
-      timestamp: Date.now(),
-    }).catch(err => console.error('reThink: Failed to send LinkedIn DM event:', err))
+      timestamp,
+      messageId,
+    }).then(result => {
+      if (result && !result.success) processedMessages.delete(messageId)
+    }).catch(error => {
+      processedMessages.delete(messageId)
+      console.error('reThink: Failed to send LinkedIn DM event:', error)
+    })
   } catch (error) {
     console.error('reThink: Error handling LinkedIn DM:', error)
   }
 }
 
+function observeContainer(container: Element) {
+  if (observedContainers.has(container)) return
+  observedContainers.add(container)
+
+  container.querySelectorAll(MESSAGE_SELECTOR).forEach(element => handleMessage(element as HTMLElement, true))
+  const observer = new MutationObserver(mutations => {
+    for (const mutation of mutations) {
+      mutation.addedNodes.forEach(node => {
+        if (node.nodeType !== Node.ELEMENT_NODE) return
+        const element = node as HTMLElement
+        if (element.matches(MESSAGE_SELECTOR)) handleMessage(element)
+        element.querySelectorAll(MESSAGE_SELECTOR).forEach(message => handleMessage(message as HTMLElement))
+      })
+    }
+  })
+  observer.observe(container, { childList: true, subtree: true })
+  console.log('reThink: LinkedIn DM observer attached')
+}
+
+function findConversationContainers() {
+  document.querySelectorAll(CONTAINER_SELECTOR).forEach(observeContainer)
+}
+
+let observedUrl = window.location.href
+const pageObserver = new MutationObserver(() => {
+  if (window.location.href !== observedUrl) {
+    observedUrl = window.location.href
+    processedMessages.clear()
+  }
+  findConversationContainers()
+})
+
+function init() {
+  findConversationContainers()
+  pageObserver.observe(document.documentElement, { childList: true, subtree: true })
+}
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initLinkedInDMObserver)
+  document.addEventListener('DOMContentLoaded', init, { once: true })
 } else {
-  initLinkedInDMObserver()
+  init()
 }

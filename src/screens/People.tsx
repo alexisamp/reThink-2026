@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, type CSSProperties } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Table, Lightning, Users,
   WhatsappLogo, LinkedinLogo, TwitterLogo, IdentificationCard, At, Buildings,
@@ -20,6 +20,7 @@ import NewPersonPeek from '@/components/crm/NewPersonPeek'
 import RecordPeek from '@/components/crm/RecordPeek'
 import { TierInfoHelper } from '@/components/TierInfoHelper'
 import MergeContactsModal from '@/components/MergeContactsModal'
+import { eventTypesForMetric } from './today/outreachMetrics'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -229,6 +230,7 @@ function ChannelIcons({ channels }: { channels: Array<{ channel: string }> }) {
 type ViewMode = 'focus' | 'table' | 'network'
 
 export default function People() {
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [userId, setUserId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('focus')
@@ -255,6 +257,7 @@ export default function People() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkTagging, setBulkTagging] = useState(false)
   const [mergeModalOpen, setMergeModalOpen] = useState(false)
+  const [todayStageIds, setTodayStageIds] = useState<Set<string> | null>(null)
 
   // Contact channels (loaded separately)
   const [channels, setChannels] = useState<Array<{ outreach_log_id: string; channel: string }>>([])
@@ -273,6 +276,16 @@ export default function People() {
       .select('outreach_log_id, channel')
       .then(({ data }) => setChannels(data ?? []))
   }, [userId])
+
+  useEffect(() => {
+    if (!userId) return
+    const stage = searchParams.get('todayStage')
+    const date = searchParams.get('date')
+    if (!stage || !date) { setTodayStageIds(null); return }
+    const eventTypes = eventTypesForMetric(stage)
+    if (eventTypes.length === 0) { setTodayStageIds(new Set()); return }
+    supabase.from('outreach_daily_metric_contacts').select('contact_id').eq('user_id', userId).in('event_type', [...eventTypes]).eq('occurred_on', date).not('contact_id', 'is', null).then(({ data }) => setTodayStageIds(new Set((data ?? []).map(row => row.contact_id as string))))
+  }, [searchParams, userId])
 
   useEffect(() => {
     if (!userId) return
@@ -304,7 +317,7 @@ export default function People() {
       .then(({ data }) => setGoals(data ?? []))
   }, [userId])
 
-  const filtered = [...contacts].sort((a, b) => {
+  const filtered = contacts.filter(contact => !todayStageIds || todayStageIds.has(contact.id)).sort((a, b) => {
     const aDate = a.last_interaction_at ?? a.created_at
     const bDate = b.last_interaction_at ?? b.created_at
     return bDate.localeCompare(aDate)
