@@ -3,6 +3,7 @@
    Built on the reThink tokens (colors_and_type.css). */
 
 /* ── Top bar (replaces .page-hd on Today) ───────────────────── */
+.today-page { --today-ink: #1F2321; --burnham: var(--today-ink); --moss: var(--today-ink); --featured-accent: var(--today-ink); }
 .day-bar { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
 .day-bar-l { display: flex; align-items: baseline; gap: 14px; }
 .day-date { font-family: var(--font-display); font-size: 36px; font-weight: 400; color: var(--burnham); letter-spacing: -0.025em; line-height: 1.05; margin: 0; white-space: nowrap; }
@@ -279,6 +280,7 @@
 .st-obj-input { width: 100%; border: 0; background: transparent; outline: none; font-family: var(--font-display); font-size: 26px; font-weight: 400; line-height: 1.18; letter-spacing: -0.02em; color: var(--burnham); border-bottom: 2px solid color-mix(in oklab, var(--acc-amber) 40%, transparent); padding-bottom: 6px; }
 .st-obj-input::placeholder { color: color-mix(in oklab, var(--shuttle) 45%, transparent); }
 .st-hint { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: color-mix(in oklab, var(--acc-clay) 88%, #000); margin-top: 12px; }
+.st-hint.error { color: var(--danger, #d64545); }
 .st-recall { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-2); font-family: var(--font-display); font-style: italic; font-size: 13.5px; color: var(--shuttle); line-height: 1.5; }
 .st-recall i { color: color-mix(in oklab, var(--shuttle) 50%, transparent); margin-top: 2px; flex-shrink: 0; }
 
@@ -361,4 +363,320 @@
 @media (max-width: 720px) {
   .day-screen .ds-inner { padding: 40px 22px 48px; }
   .start-screen .ds-title, .close-screen .ds-title { font-size: 30px; }
+}
+
+/* Must-do (2/day) + recurring tasks */
+.backlog-bin.recurring-bin.on { color: var(--burnham); box-shadow: inset 0 0 0 1px var(--border-2), var(--shadow-card); }
+
+.todo-schedule-row { grid-template-columns: 10px 14px minmax(0, 1fr) auto; }
+.todo-schedule-check { grid-column: auto; grid-row: auto; }
+.todo-schedule-text { grid-column: auto; grid-row: auto; }
+.todo-schedule-actions { display: inline-flex; align-items: center; gap: 2px; justify-self: end; }
+.todo-schedule-row.mustdo { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--burnham) 55%, transparent); }
+.todo-schedule-row.mustdo .editable-todo-body { font-weight: 600; color: var(--burnham); }
+
+.tp-star { align-self: center; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 0; border-radius: 6px; background: transparent; color: color-mix(in oklab, var(--shuttle) 40%, transparent); cursor: pointer; opacity: 0; transition: all 120ms ease; flex-shrink: 0; padding: 0; }
+.todo-schedule-row:hover .tp-star { opacity: 1; }
+.tp-star:hover { background: color-mix(in oklab, var(--mercury) 45%, transparent); color: var(--burnham); }
+.tp-star.on { opacity: 1; color: var(--burnham); }
+
+.tp-recur { align-self: center; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 5px; color: color-mix(in oklab, var(--shuttle) 55%, transparent); cursor: pointer; flex-shrink: 0; background: transparent; border: 0; transition: all 120ms ease; opacity: 0; padding: 0; }
+.todo-schedule-row:hover .tp-recur { opacity: 1; }
+.tp-recur:hover { background: color-mix(in oklab, var(--mercury) 45%, transparent); color: var(--burnham); }
+.tp-recur.on { opacity: 1; color: var(--burnham); }
+
+.tp-recur-badge { align-self: center; display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 4px; color: color-mix(in oklab, var(--shuttle) 60%, transparent); cursor: pointer; flex-shrink: 0; background: transparent; border: 0; padding: 0; }
+.tp-recur-badge:hover { color: var(--burnham); }
+.cal-title-row { position: relative; padding-right: 16px; }
+.cal-title-row > .tp-recur-badge { position: absolute; right: 0; top: 0; }
+
+.day-calendar-block .tp-star { width: 16px; height: 16px; opacity: 1; }
+.day-calendar-block .tp-recur { width: 16px; height: 16px; opacity: 1; }
+.day-calendar-block.mustdo { border-color: color-mix(in oklab, var(--burnham) 60%, var(--border-1)); box-shadow: inset 3px 0 0 var(--burnham), 0 0 0 1.5px color-mix(in oklab, var(--burnham) 55%, transparent), 0 1px 2px rgba(0,0,0,0.05); }
+.day-calendar-block.mustdo .cal-editable-title .editable-todo-body { font-weight: 700; color: var(--burnham); }
+
+.rec-scrim { position: fixed; inset: 0; z-index: 220; background: rgba(20,20,20,0.22); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; animation: tp-fade 130ms ease; }
+@keyframes tp-fade { from { opacity: 0; } to { opacity: 1; } }
+.rec-modal { width: 420px; max-width: 92vw; max-height: 88vh; overflow-y: auto; background: var(--bg-1); border-radius: var(--radius-lg); border: 1px solid color-mix(in oklab, var(--burnham) 10%, transparent); box-shadow: var(--shadow-pop); padding: 18px 20px 16px; animation: rec-pop 140ms ease; }
+@keyframes rec-pop { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+.rec-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; color: var(--shuttle); }
+.rec-hd h3 { flex: 1; margin: 0; font-size: 15px; font-weight: 600; color: var(--burnham); letter-spacing: 0; }
+.rec-hd .x { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; background: transparent; color: var(--shuttle); border-radius: 6px; cursor: pointer; }
+.rec-hd .x:hover { background: color-mix(in oklab, var(--mercury) 45%, transparent); color: var(--burnham); }
+.rec-field { display: block; margin-bottom: 13px; }
+.rec-field .lab { display: block; font-size: 11px; font-weight: 500; color: var(--shuttle); margin-bottom: 6px; }
+.rec-field .lab small { font-weight: 400; color: var(--fg-3); }
+.rec-field input[type="text"], .rec-field input:not([type]), .rec-field > input { width: 100%; box-sizing: border-box; height: 34px; padding: 0 10px; border: 1px solid var(--border-1); border-radius: 8px; background: var(--bg-1); font: inherit; font-size: 13px; color: var(--burnham); outline: none; transition: border-color 120ms ease; }
+.rec-field input[type="date"], .rec-field input[type="time"] { width: 100%; box-sizing: border-box; height: 34px; padding: 0 10px; border: 1px solid var(--border-1); border-radius: 8px; background: var(--bg-1); font: inherit; font-size: 12.5px; color: var(--burnham); outline: none; }
+.rec-field input:focus { border-color: color-mix(in oklab, var(--burnham) 35%, var(--border-1)); }
+.rec-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rp-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rp-chip { height: 28px; padding: 0 10px; border: 1px solid var(--border-1); border-radius: 7px; background: var(--bg-1); color: var(--shuttle); font-size: 11.5px; font-weight: 500; cursor: pointer; transition: all 120ms ease; }
+.rp-chip:hover { border-color: var(--border-2); color: var(--burnham); }
+.rp-chip.on { background: var(--burnham); border-color: var(--burnham); color: #fff; }
+.rp-chip-custom { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px; border: 1px dashed var(--border-2); border-radius: 7px; color: var(--fg-3); font-size: 11px; }
+.rp-chip-custom input { width: 34px; border: 0; background: transparent; outline: none; font: inherit; font-size: 11.5px; color: var(--burnham); text-align: right; }
+.rp-days { display: flex; align-items: center; gap: 6px; }
+.rp-day { width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--border-1); background: var(--bg-1); color: var(--shuttle); font-size: 11px; font-weight: 600; cursor: pointer; transition: all 120ms ease; }
+.rp-day:hover { border-color: var(--border-2); color: var(--burnham); }
+.rp-day.on { background: var(--burnham); border-color: var(--burnham); color: #fff; }
+.rp-end-opts { display: inline-flex; align-items: center; gap: 1px; padding: 2px; border-radius: 7px; background: color-mix(in oklab, var(--mercury) 40%, transparent); }
+.rp-end-opts button { border: 0; background: transparent; font-size: 11.5px; font-weight: 500; color: var(--fg-3); padding: 5px 9px; border-radius: 5px; cursor: pointer; transition: all 120ms ease; }
+.rp-end-opts button.on { background: var(--bg-1); color: var(--burnham); box-shadow: var(--shadow-card); }
+.rp-end-input { margin-top: 8px; }
+.rp-end-input.rp-end-count { display: inline-flex; align-items: center; gap: 7px; }
+.rp-end-input.rp-end-count input { width: 60px; height: 30px; padding: 0 8px; border: 1px solid var(--border-1); border-radius: 7px; background: var(--bg-1); font: inherit; font-size: 12.5px; color: var(--burnham); outline: none; }
+.rp-end-input.rp-end-count span { font-size: 11.5px; color: var(--fg-3); }
+.rec-ft { display: flex; align-items: center; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-1); }
+.rec-ft .sp { flex: 1; }
+.rec-danger { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 0; background: transparent; color: #C23A3A; font-size: 12px; font-weight: 500; border-radius: 7px; cursor: pointer; }
+.rec-danger:hover { background: rgba(214,69,69,0.1); }
+.rec-cancel { height: 32px; padding: 0 13px; border: 1px solid var(--border-1); border-radius: 7px; background: var(--bg-1); color: var(--shuttle); font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.rec-cancel:hover { color: var(--burnham); border-color: var(--border-2); }
+.rec-save { height: 32px; padding: 0 14px; border: 0; border-radius: 7px; background: var(--burnham); color: #fff; font-size: 12.5px; font-weight: 500; cursor: pointer; transition: opacity 120ms ease; }
+.rec-save:hover { background: color-mix(in oklab, var(--burnham) 88%, #000); }
+.rec-save:disabled { opacity: 0.45; cursor: default; }
+
+.rec-scopemenu { z-index: 200; width: 224px; padding: 6px; border-radius: var(--radius-lg); background: #fff; border: 1px solid color-mix(in oklab, var(--burnham) 8%, transparent); box-shadow: var(--shadow-pop); animation: rec-pop 110ms ease; }
+.rec-sm-h { padding: 6px 8px 4px; font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--fg-3); }
+.rec-sm-sep { height: 1px; margin: 4px 4px; background: var(--border-1); }
+.rec-scopemenu button { width: 100%; display: flex; align-items: center; gap: 9px; padding: 8px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--burnham); font-size: 12.5px; text-align: left; cursor: pointer; transition: background 100ms ease; }
+.rec-scopemenu button:hover { background: color-mix(in oklab, var(--mercury) 45%, transparent); }
+.rec-scopemenu button.danger { color: #C23A3A; }
+.rec-scopemenu button.danger:hover { background: rgba(214,69,69,0.08); }
+
+.rec-panel { position: fixed; z-index: 140; width: 320px; padding: 6px; border-radius: var(--radius-lg); background: #fff; border: 1px solid color-mix(in oklab, var(--burnham) 8%, transparent); box-shadow: var(--shadow-pop); animation: rec-pop 110ms ease; }
+.rec-panel-hd { display: flex; align-items: center; gap: 7px; padding: 8px 8px 9px; color: var(--shuttle); }
+.rec-panel-hd h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--burnham); flex: 1; }
+.rec-panel-empty { padding: 20px 10px; text-align: center; font-size: 12px; color: var(--fg-3); }
+.rec-panel-item { padding: 7px 8px 8px; border-radius: 8px; transition: background 120ms ease; }
+.rec-panel-item:hover { background: color-mix(in oklab, var(--mercury) 26%, transparent); }
+.rpi-top { display: flex; align-items: center; gap: 6px; }
+.rpi-top .nm { flex: 1; font-size: 12.5px; font-weight: 500; color: var(--burnham); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rpi-top .ic { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: 0; background: transparent; color: var(--shuttle); border-radius: 6px; cursor: pointer; opacity: 0; transition: opacity 120ms ease; }
+.rec-panel-item:hover .ic { opacity: 1; }
+.rpi-top .ic:hover { background: color-mix(in oklab, var(--mercury) 55%, transparent); color: var(--burnham); }
+.rpi-meta { margin-top: 2px; font-family: var(--font-mono); font-size: 9.5px; color: var(--fg-3); }
+.rec-panel-new { width: 100%; margin-top: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; border: 1px dashed var(--border-2); border-radius: 8px; background: transparent; color: var(--shuttle); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 120ms ease; }
+.rec-panel-new:hover { color: var(--burnham); border-color: var(--border-1); background: color-mix(in oklab, var(--mercury) 24%, transparent); }
+
+.tp-toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 240; display: inline-flex; align-items: center; gap: 9px; padding: 10px 15px; background: var(--burnham); color: #fff; border-radius: 999px; box-shadow: var(--shadow-pop); font-size: 12.5px; animation: tp-toast-in 180ms var(--ease-out-soft); }
+@keyframes tp-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.tp-toast .e { display: inline-flex; align-items: center; }
+
+/* Handoff-aligned Today shell */
+.today-page {
+  max-width: none;
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 16px clamp(20px, 2.6vw, 40px) 0;
+  background: var(--bg-1);
+}
+.today-page .day-bar {
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.today-page .day-bar-l {
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.today-page .day-date {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--fg-3);
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+.today-page .day-state {
+  font-size: 10px;
+  text-transform: lowercase;
+}
+.today-page .day-bar-r {
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.today-page .backlog-bin,
+.today-page .close-day-btn {
+  height: 30px;
+  border-radius: 6px;
+  box-shadow: none;
+  border: 1px solid var(--border-1);
+  background: transparent;
+  color: var(--shuttle);
+}
+.today-page .backlog-bin:hover {
+  color: var(--burnham);
+  background: color-mix(in oklab, var(--mercury) 26%, transparent);
+  box-shadow: none;
+}
+.today-page .close-day-btn {
+  border-color: var(--burnham);
+  background: var(--burnham);
+  color: #fff;
+}
+.today-page .close-day-btn:hover {
+  background: color-mix(in oklab, var(--burnham) 88%, #000);
+  transform: none;
+  box-shadow: none;
+}
+.today-page .objective-bar {
+  max-width: 760px;
+  margin: 7px 0 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.today-page .objective-bar:hover {
+  background: transparent;
+}
+.today-page .objective-bar .obj-icon,
+.today-page .objective-bar .obj-label {
+  display: none;
+}
+.today-page .objective-bar .obj-text,
+.today-page .objective-bar .obj-input {
+  font-family: var(--font-sans);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+.today-page .today-planner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail-w, 380px);
+  gap: 0;
+  align-items: stretch;
+  justify-content: stretch;
+  min-height: calc(100vh - 118px);
+  margin-left: calc(clamp(20px, 2.6vw, 40px) * -1);
+  margin-right: calc(clamp(20px, 2.6vw, 40px) * -1);
+}
+.today-page .todo-schedule-list {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px clamp(16px, 2vw, 30px) 0 clamp(20px, 2.6vw, 40px);
+}
+.today-page .todo-schedule-hd {
+  align-items: center;
+  margin-bottom: 6px;
+}
+.today-page .todo-schedule-hd h3,
+.today-page .day-calendar-hd h3 {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.today-page .todo-schedule-hd span,
+.today-page .day-calendar-hd span {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+.today-page .todo-schedule-hd strong {
+  font-size: 11px;
+  background: color-mix(in oklab, var(--mercury) 40%, transparent);
+}
+.today-page .todo-schedule-items {
+  flex: 1;
+  max-height: none;
+  gap: 0;
+  padding: 2px 6px 40px 0;
+}
+.today-page .todo-schedule-row {
+  min-height: 36px;
+  padding: 9px 8px;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  transition: background 110ms ease;
+}
+.today-page .todo-schedule-row:hover {
+  background: color-mix(in oklab, var(--mercury) 24%, transparent);
+  box-shadow: none;
+}
+.today-page .todo-schedule-grip {
+  opacity: 0;
+  transition: opacity 110ms ease;
+}
+.today-page .todo-schedule-row:hover .todo-schedule-grip {
+  opacity: 1;
+}
+.today-page .todo-schedule-add {
+  margin: 6px 8px 0;
+  padding: 9px 8px;
+  border: 1px dashed var(--border-2);
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+}
+.today-page .todo-schedule-add:focus-within {
+  border-style: solid;
+  border-color: color-mix(in oklab, var(--burnham) 45%, transparent);
+  background: color-mix(in oklab, var(--burnham) 4%, transparent);
+  box-shadow: none;
+}
+.today-page .day-calendar {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--border-1);
+  background: color-mix(in oklab, var(--bg-sidebar) 55%, var(--bg-1));
+  padding: 0;
+}
+.today-page .day-calendar-hd {
+  align-items: center;
+  padding: 18px 16px 10px;
+  margin: 0;
+  flex-shrink: 0;
+}
+.today-page .day-calendar-grid {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.today-page .day-calendar-block {
+  background: color-mix(in oklab, var(--burnham) 7%, var(--bg-1));
+  border: 0;
+  border-radius: 6px;
+  box-shadow: none;
+  padding-right: 44px;
+}
+.today-page .day-calendar-block:hover {
+  background: color-mix(in oklab, var(--burnham) 13%, var(--bg-1));
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.today-page .day-calendar-block.done {
+  background: color-mix(in oklab, var(--mercury) 22%, var(--bg-1));
+}
+.today-page .cal-actions button {
+  background: color-mix(in oklab, var(--bg-1) 80%, transparent);
+}
+@media (max-width: 880px) {
+  .today-page .today-planner {
+    grid-template-columns: 1fr;
+    margin-left: 0;
+    margin-right: 0;
+  }
+  .today-page .day-calendar {
+    display: none;
+  }
+  .today-page .todo-schedule-list {
+    padding-left: 0;
+    padding-right: 0;
+  }
 }

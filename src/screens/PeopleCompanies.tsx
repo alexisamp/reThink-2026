@@ -12,6 +12,7 @@ import {
   ICP_CFG, ACCOUNT_SOURCE_CFG, MOTION_CFG, ACCOUNT_STAGE_CFG, ACCOUNT_STAGE_ORDER,
 } from '@/lib/crmConfig'
 import { accountCoverage, personForCoverage, type CoveragePerson, type Coverage } from '@/lib/abm'
+import { companyImage } from '@/lib/crmObjects'
 import type { Company } from '@/types'
 
 interface CompanyRow extends Company {
@@ -234,7 +235,7 @@ export default function PeopleCompanies() {
         title={peek?.name ?? ''}
         subtitle={peek?.sector || peek?.hq_location || undefined}
         eyebrow="All companies"
-        avatar={peek ? <Avatar src={peek.logo_url} name={peek.name} sq size={40} /> : undefined}
+        avatar={peek ? <Avatar src={companyImage(peek.logo_url, peek.domain, peek.favicon_url)} name={peek.name} sq size={40} /> : undefined}
         fields={peek ? [
           { label: 'Name', icon: <Icon name="buildings" size={12} />, value: peek.name },
           { label: 'People', icon: <Icon name="users" size={12} />, value: peek.people.length },

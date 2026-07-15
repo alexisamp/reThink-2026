@@ -1,5 +1,9 @@
 import { invoke } from '@tauri-apps/api/core'
 
+export function isTauriRuntime(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+}
+
 /**
  * Opens a URL in the system's default browser.
  * In Tauri: uses a custom Rust command (open on macOS) — most reliable approach.
@@ -7,7 +11,7 @@ import { invoke } from '@tauri-apps/api/core'
  */
 export function openLink(url: string): void {
   if (!url) return
-  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+  if (isTauriRuntime()) {
     invoke('open_url_in_browser', { url }).catch(() => {
       window.open(url, '_blank', 'noopener,noreferrer')
     })
@@ -18,7 +22,7 @@ export function openLink(url: string): void {
 
 export async function openFileInBrowser(pathOrUrl: string): Promise<void> {
   if (!pathOrUrl) return
-  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+  if (isTauriRuntime()) {
     await invoke('open_file_in_default_browser', { pathOrUrl })
     return
   }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   countObjectRecords,
   ensureAttioObjects,
@@ -47,17 +47,26 @@ export function useAttioObjectBundle(userId: string | null | undefined, slug: st
   const [attributes, setAttributes] = useState<CrmAttribute[]>([])
   const [permissions, setPermissions] = useState<CrmObjectPermission[]>([])
   const [loading, setLoading] = useState(false)
+  const requestId = useRef(0)
 
   const reload = useCallback(async () => {
-    if (!userId || !slug) return
+    const request = ++requestId.current
+    if (!userId || !slug) {
+      setObject(null)
+      setAttributes([])
+      setPermissions([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const bundle = await fetchObjectBundle(userId, slug)
+      if (request !== requestId.current) return
       setObject(bundle?.object ?? null)
       setAttributes(bundle?.attributes ?? [])
       setPermissions(bundle?.permissions ?? [])
     } finally {
-      setLoading(false)
+      if (request === requestId.current) setLoading(false)
     }
   }, [slug, userId])
 
