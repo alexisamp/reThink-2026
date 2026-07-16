@@ -368,6 +368,11 @@ export default function TodayHandoffView(props: TodayHandoffViewProps) {
   const msBtn = useRef<HTMLButtonElement | null>(null)
   const recurBtn = useRef<HTMLButtonElement | null>(null)
 
+  const isPointerOverBacklogTarget = (event: PointerEvent) => {
+    const target = document.elementFromPoint(event.clientX, event.clientY)
+    return target instanceof Element && Boolean(target.closest('.tp-backlog-drop,.tp-backlog-tray'))
+  }
+
   useEffect(() => setObjective(props.dailyGoal), [props.dailyGoal])
   useEffect(() => {
     const openCommand = () => setPaletteOpen(true)
@@ -397,10 +402,11 @@ export default function TodayHandoffView(props: TodayHandoffViewProps) {
   useEffect(() => {
     if (!interaction) return
     const move = (event: PointerEvent) => {
+      if (Math.abs(event.clientY - interaction.startY) < 4) return
       const delta = snap((event.clientY - interaction.startY) / hourPx)
       const start = interaction.kind === 'move' ? clamp(interaction.start + delta, DAY_START, DAY_END - interaction.dur) : interaction.start
       const dur = interaction.kind === 'resize' ? clamp(interaction.dur + delta, 10, DAY_END - interaction.start) : interaction.dur
-      if (interaction.kind === 'move') setDropBacklog(event.clientY > window.innerHeight - 118)
+      if (interaction.kind === 'move') setDropBacklog(event.clientY > window.innerHeight - 118 || isPointerOverBacklogTarget(event))
       setDrafts(current => {
         const next = { ...current, [interaction.id]: { start, dur } }
         draftRef.current = next
@@ -408,7 +414,7 @@ export default function TodayHandoffView(props: TodayHandoffViewProps) {
       })
     }
     const up = (event: PointerEvent) => {
-      if (interaction.kind === 'move' && event.clientY > window.innerHeight - 118) {
+      if (interaction.kind === 'move' && (event.clientY > window.innerHeight - 118 || isPointerOverBacklogTarget(event))) {
         props.onBacklogTodo(interaction.id)
         setInteraction(null)
         setDragTodoId(null)
@@ -518,6 +524,9 @@ export default function TodayHandoffView(props: TodayHandoffViewProps) {
     event.currentTarget.setPointerCapture?.(event.pointerId)
     setHoverB(null)
     setInteraction({ kind: 'resize', id: block.id, startY: event.clientY, start: block.start, dur: block.dur })
+  }
+  const stopBlockControlPointer = (event: ReactPointerEvent<HTMLElement>) => {
+    event.stopPropagation()
   }
   const openMs = () => {
     if (msBtn.current) setMsRect(msBtn.current.getBoundingClientRect())
@@ -750,36 +759,26 @@ export default function TodayHandoffView(props: TodayHandoffViewProps) {
                       key={block.id}
                       className={cls}
                       style={{ top, height, left, width }}
-                      draggable={Boolean(source) && !props.isHistorical && !interaction}
                       onMouseEnter={event => setHoverB({ b: block, rect: event.currentTarget.getBoundingClientRect() })}
                       onMouseLeave={() => setHoverB(h => h?.b.id === block.id ? null : h)}
                       onClick={() => { if (!source && block.type === 'meeting') setMeetingModal({ id: block.id, title: block.title || 'Meeting', start: block.start, dur: block.dur, logo: block.logo, attendees: props.calendarEvents.find(event => event.id === block.id)?.attendees || [], conferenceUrl: props.calendarEvents.find(event => event.id === block.id)?.conferenceUrl, platform: props.calendarEvents.find(event => event.id === block.id)?.platform }) }}
                       onPointerDown={event => { if (props.isHistorical || !source || (event.target as HTMLElement).closest('button,.tp-resize')) return; setHoverB(null); setDragTodoId(block.id); setInteraction({ kind: 'move', id: block.id, startY: event.clientY, start: block.start, dur: block.dur }) }}
-                      onDragStart={event => {
-                        if (interaction?.kind === 'resize') {
-                          event.preventDefault()
-                          return
-                        }
-                        if (!source) {
-                          event.preventDefault()
-                          return
-                        }
-                        event.dataTransfer.setData('text/sched', block.id)
-                        event.dataTransfer.setData('text/todo-id', block.id)
-                        event.dataTransfer.effectAllowed = 'move'
-                        setDragTodoId(block.id)
-                      }}
-                      onDragEnd={endTodoDrag}
                     >
                       {source ? (
-                        <button disabled={props.isHistorical} className={`tp-check${block.completed ? ' on' : ''}`} onClick={() => props.onToggleTodo(block.id)}>{block.completed && <Icon name="check" size={9} sw={2.4} />}</button>
+                        <button
+                          disabled={props.isHistorical}
+                          draggable={false}
+                          className={`tp-check${block.completed ? ' on' : ''}`}
+                          onPointerDown={stopBlockControlPointer}
+                          onClick={event => { event.stopPropagation(); props.onToggleTodo(block.id) }}
+                        >{block.completed && <Icon name="check" size={9} sw={2.4} />}</button>
                       ) : (
                         <span className="mtile"><Icon name={block.type === 'meeting' ? 'calendar' : 'clock'} size={10} /></span>
                       )}
                       <div className="bl-body">
                         <span className="bl-toprow">
                           <span className="bl-time">{minToHHMM(block.start)}-{minToHHMM(block.start + block.dur)}</span>
-                          {source?.recurring_id && <button className="tp-recur-badge" onClick={event => props.onRecurringIconClick(source, true, event.currentTarget.getBoundingClientRect())} title="Recurring task"><Icon name="repeat" size={9} /></button>}
+                          {source?.recurring_id && <button className="tp-recur-badge" draggable={false} onPointerDown={stopBlockControlPointer} onClick={event => { event.stopPropagation(); props.onRecurringIconClick(source, true, event.currentTarget.getBoundingClientRect()) }} title="Recurring task"><Icon name="repeat" size={9} /></button>}
                           {!source && block.fyi && <span className="tp-fyi-badge">FYI</span>}
                         </span>
                         <span className="bl-title">{block.segments ? <SegmentText segments={block.segments} /> : block.title}</span>
@@ -787,12 +786,12 @@ export default function TodayHandoffView(props: TodayHandoffViewProps) {
                       </div>
                       {source && !props.isHistorical && (
                         <div className="bl-acts">
-                          <button className={block.mustDo ? 'on' : ''} title={block.mustDo ? 'Must-do' : 'Mark as must-do (max 2/day)'} onClick={() => props.onToggleMustDoSched(block.id)}><Icon name="star" size={11} fill={Boolean(block.mustDo)} /></button>
-                          {!source.recurring_id && <button className="tp-recur" title="Make recurring" onClick={event => props.onRecurringIconClick(source, true, event.currentTarget.getBoundingClientRect())}><Icon name="repeat" size={11} /></button>}
-                          <button title="Change time" onClick={event => setSchedulePop({ rect: event.currentTarget.getBoundingClientRect(), blockId: block.id, initial: block.start })}><Icon name="clock" size={11} /></button>
-                          <button title="Move to to-do list" onClick={() => props.onUnscheduleTodo(block.id)}><Icon name="enter" size={11} /></button>
-                          <button title="Move to Backlog" onClick={() => props.onBacklogTodo(block.id)}><Icon name="folder" size={11} /></button>
-                          <button title="Delete todo" onClick={event => props.onDeleteTodo(block.id, event.currentTarget.getBoundingClientRect(), true)}><Icon name="trash" size={11} /></button>
+                          <button draggable={false} onPointerDown={stopBlockControlPointer} className={block.mustDo ? 'on' : ''} title={block.mustDo ? 'Must-do' : 'Mark as must-do (max 2/day)'} onClick={event => { event.stopPropagation(); props.onToggleMustDoSched(block.id) }}><Icon name="star" size={11} fill={Boolean(block.mustDo)} /></button>
+                          {!source.recurring_id && <button draggable={false} onPointerDown={stopBlockControlPointer} className="tp-recur" title="Make recurring" onClick={event => { event.stopPropagation(); props.onRecurringIconClick(source, true, event.currentTarget.getBoundingClientRect()) }}><Icon name="repeat" size={11} /></button>}
+                          <button draggable={false} onPointerDown={stopBlockControlPointer} title="Change time" onClick={event => { event.stopPropagation(); setSchedulePop({ rect: event.currentTarget.getBoundingClientRect(), blockId: block.id, initial: block.start }) }}><Icon name="clock" size={11} /></button>
+                          <button draggable={false} onPointerDown={stopBlockControlPointer} title="Move to to-do list" onClick={event => { event.stopPropagation(); props.onUnscheduleTodo(block.id) }}><Icon name="enter" size={11} /></button>
+                          <button draggable={false} onPointerDown={stopBlockControlPointer} title="Move to Backlog" onClick={event => { event.stopPropagation(); props.onBacklogTodo(block.id) }}><Icon name="folder" size={11} /></button>
+                          <button draggable={false} onPointerDown={stopBlockControlPointer} title="Delete todo" onClick={event => { event.stopPropagation(); props.onDeleteTodo(block.id, event.currentTarget.getBoundingClientRect(), true) }}><Icon name="trash" size={11} /></button>
                         </div>
                       )}
                       {!source && block.type === 'meeting' && !props.isHistorical && (
@@ -800,6 +799,8 @@ export default function TodayHandoffView(props: TodayHandoffViewProps) {
                           <button
                             className={block.fyi ? 'on' : ''}
                             title={block.fyi ? 'Count as my meeting' : 'FYI only, not my meeting'}
+                            draggable={false}
+                            onPointerDown={stopBlockControlPointer}
                             onClick={event => { event.stopPropagation(); props.onToggleCalendarFyi(block.id) }}
                           ><Icon name={block.fyi ? 'eyeOff' : 'eye'} size={11} /></button>
                         </div>
