@@ -786,12 +786,7 @@ export default function TodayHandoffView(props: TodayHandoffViewProps) {
                       </div>
                       {source && !props.isHistorical && (
                         <div className="bl-acts">
-                          <button draggable={false} onPointerDown={stopBlockControlPointer} className={block.mustDo ? 'on' : ''} title={block.mustDo ? 'Must-do' : 'Mark as must-do (max 2/day)'} onClick={event => { event.stopPropagation(); props.onToggleMustDoSched(block.id) }}><Icon name="star" size={11} fill={Boolean(block.mustDo)} /></button>
-                          {!source.recurring_id && <button draggable={false} onPointerDown={stopBlockControlPointer} className="tp-recur" title="Make recurring" onClick={event => { event.stopPropagation(); props.onRecurringIconClick(source, true, event.currentTarget.getBoundingClientRect()) }}><Icon name="repeat" size={11} /></button>}
-                          <button draggable={false} onPointerDown={stopBlockControlPointer} title="Change time" onClick={event => { event.stopPropagation(); setSchedulePop({ rect: event.currentTarget.getBoundingClientRect(), blockId: block.id, initial: block.start }) }}><Icon name="clock" size={11} /></button>
                           <button draggable={false} onPointerDown={stopBlockControlPointer} title="Move to to-do list" onClick={event => { event.stopPropagation(); props.onUnscheduleTodo(block.id) }}><Icon name="enter" size={11} /></button>
-                          <button draggable={false} onPointerDown={stopBlockControlPointer} title="Move to Backlog" onClick={event => { event.stopPropagation(); props.onBacklogTodo(block.id) }}><Icon name="folder" size={11} /></button>
-                          <button draggable={false} onPointerDown={stopBlockControlPointer} title="Delete todo" onClick={event => { event.stopPropagation(); props.onDeleteTodo(block.id, event.currentTarget.getBoundingClientRect(), true) }}><Icon name="trash" size={11} /></button>
                         </div>
                       )}
                       {!source && block.type === 'meeting' && !props.isHistorical && (
