@@ -254,7 +254,7 @@ export default function App() {
             !user ? <Navigate to="/login" replace />
               : hasWorkbook === null ? <Splash />
                 : !hasWorkbook ? <Navigate to="/assessment" replace />
-                  : <RouteErrorBoundary><FullAppShell user={user} /></RouteErrorBoundary>
+                  : <RouteErrorBoundary><FullAppShell user={user} updater={updater} /></RouteErrorBoundary>
           }
         >
           <Route path="/" element={<Navigate to="/today" replace />} />

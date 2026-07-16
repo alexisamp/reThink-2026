@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type DragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type DragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import { useAttioObjects } from '@/hooks/useAttioObjects'
@@ -7,9 +7,14 @@ import { Icon, type TodayIconName } from '@/screens/today/TodayIcons'
 import ListGlyph from '@/components/crm/ListGlyph'
 import ListTitleEditor from '@/components/crm/ListTitleEditor'
 import CrmPopFrame from '@/components/crm/CrmPopFrame'
+import SettingsModal from '@/components/SettingsModal'
+import type { UpdaterState } from '@/hooks/useUpdater'
 
 const THEME_KEY = 'rethink.theme'
 const SIDEBAR_WIDTH_KEY = 'rethink.sidebar.width'
+const ZOOM_KEY = 'rethink-ui-zoom'
+const ZOOM_OPTIONS = [80, 90, 100] as const
+type ZoomLevel = typeof ZOOM_OPTIONS[number]
 
 function initialSidebarWidth() {
   const parsed = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY))
@@ -28,7 +33,18 @@ function recordIcon(slug: string): TodayIconName {
   return 'contact'
 }
 
-export default function FullAppShell({ children, user }: { children?: ReactNode; user: User }) {
+type FullAppShellProps = {
+  children?: ReactNode
+  user: User
+  updater: UpdaterState & {
+    isTauri: boolean
+    checkForUpdates: () => Promise<void>
+    downloadAndInstall: () => Promise<void>
+    restartApp: () => Promise<void>
+  }
+}
+
+export default function FullAppShell({ children, user, updater }: FullAppShellProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const { lists, folders, updateList, deleteList, createFolder, updateFolder, reorderLists, reorderFolders } = useLists(user.id)
@@ -42,9 +58,21 @@ export default function FullAppShell({ children, user }: { children?: ReactNode;
   const [dragOverList, setDragOverList] = useState<{ id: string; placement: 'before' | 'after' } | null>(null)
   const [dragOverZone, setDragOverZone] = useState<string | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [zoom, setZoom] = useState<ZoomLevel>(() => {
+    const saved = Number.parseInt(window.localStorage.getItem(ZOOM_KEY) ?? '100', 10)
+    return (ZOOM_OPTIONS.includes(saved as ZoomLevel) ? saved : 100) as ZoomLevel
+  })
   const fullName = (user.user_metadata?.full_name as string | undefined) || user.email || 'User'
   const initials = fullName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase()
   const avatarUrl = user.user_metadata?.avatar_url as string | undefined
+  const showUpdateDot = updater.status === 'available' || updater.status === 'ready'
+
+  const setZoomLevel = useCallback((level: number) => {
+    const next = ZOOM_OPTIONS.includes(level as ZoomLevel) ? level as ZoomLevel : 100
+    setZoom(next)
+    window.localStorage.setItem(ZOOM_KEY, String(next))
+  }, [])
 
   const records = useMemo(() => {
     const fallbacks = {
@@ -266,10 +294,20 @@ export default function FullAppShell({ children, user }: { children?: ReactNode;
             </div>
           })}
         </div>
-        <div className="sb-footer"><div className="sb-user"><span className="av">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials}</span><span>{fullName}</span></div></div>
+        <div className="sb-footer">
+          <div className="sb-user">
+            <span className="av">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials}</span>
+            <span>{fullName}</span>
+          </div>
+          <button className="sb-row" onClick={() => setSettingsOpen(true)}>
+            <span className="ico"><Icon name="gear" size={15} /></span>
+            <span className="sb-label">Settings</span>
+            {showUpdateDot && <span className="soon-tag">Update</span>}
+          </button>
+        </div>
         <div className="sidebar-resizer" onMouseDown={startSidebarResize} />
       </aside>
-      <main className="main">
+      <main className="main" style={{ zoom: zoom / 100 }}>
         {!isRecordDetail && <div className="topbar">
           <div className="tb-title">{isToday && <Icon name="home" size={16} />}{currentList ? <ListTitleEditor list={currentList} onUpdate={patch => updateList(currentList.id, patch)} onDelete={async () => { const result = await deleteList(currentList.id); if (result?.error) { notify('x', result.error.message || 'Could not delete list'); return }; notify('trash', 'List deleted'); navigate('/lists', { replace: true }) }} onNotify={notify} /> : title}</div>
           <div className="tb-spacer" />
@@ -282,6 +320,13 @@ export default function FullAppShell({ children, user }: { children?: ReactNode;
       </main>
       {createMenuAnchor && <CrmPopFrame anchor={createMenuAnchor} width={190} onClose={() => setCreateMenuAnchor(null)}><button className="pop-item" onClick={() => { setCreateMenuAnchor(null); navigate('/lists?new=1') }}><span className="ico"><Icon name="listadd" size={14} /></span><span className="lbl">New list</span></button><button className="pop-item" onClick={() => { setCreateMenuAnchor(null); setFolderModal(true) }}><span className="ico"><Icon name="folder" size={14} /></span><span className="lbl">New folder</span></button></CrmPopFrame>}
       {folderModal && <div className="scrim" onClick={() => setFolderModal(false)}><div className="modal sm" onClick={event => event.stopPropagation()}><div className="modal-hd"><Icon name="folder" size={15} />New folder<button className="x" onClick={() => setFolderModal(false)}><Icon name="x" size={15} /></button></div><div className="modal-bd"><div className="field-lbl">Folder name</div><input className="txt" autoFocus placeholder="Business lists" value={folderName} onChange={event => setFolderName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void createFolderFromModal(); if (event.key === 'Escape') setFolderModal(false) }} /></div><div className="modal-ft"><button className="btn btn-ghost" onClick={() => setFolderModal(false)}>Cancel</button><button className="btn btn-primary" onClick={() => void createFolderFromModal()}>Create folder<span className="kbd">↵</span></button></div></div></div>}
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        updater={updater}
+        zoom={zoom}
+        onZoomChange={setZoomLevel}
+      />
       {toast && <div className="toast"><span className="em"><Icon name={toast.icon} size={13} /></span>{toast.text}</div>}
     </div>
   )
