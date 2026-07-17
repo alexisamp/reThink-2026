@@ -3,6 +3,8 @@
 
 import { supabase } from '../lib/supabase'
 
+const OUTREACH_SOURCE = 'linkedin'
+
 const SUPABASE_URL = 'https://amvezbymrnvrwcypivkf.supabase.co'
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtdmV6Ynltcm52cndjeXBpdmtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwMTIxNTgsImV4cCI6MjA4NDU4ODE1OH0.6qgaygMynKaKYB9TlcJAlyLMt87wc7D8PbA5ZeDGDUg'
 
@@ -223,6 +225,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ success: true })
           break
 
+        case 'LINKEDIN_CONNECTION_STATE': {
+          const result = await handleLinkedInConnectionState(message)
+          sendResponse(result)
+          break
+        }
+
+        case 'OPEN_LINKEDIN_BATCH': {
+          const result = await openLinkedInBatchTabs(message.urls)
+          sendResponse({ ...result, requestId: message.requestId })
+          break
+        }
+
         case 'CHECK_CONTACT_LINKEDIN': {
           const userId = await getCurrentUserId()
           if (!userId) { sendResponse({ exists: false }); break }
@@ -336,6 +350,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 .eq('user_id', userId)
                 .eq('linkedin_url', message.linkedinUrl)
             }
+          }
+
+          if (message.profileMarkdown && message.linkedinUrl) {
+            void saveLinkedInProfileCapture({
+              linkedinUrl: message.linkedinUrl,
+              name: message.name ?? null,
+              markdown: message.profileMarkdown,
+            }).catch(error => console.warn('LinkedIn profile capture save failed:', error))
           }
 
           // Upload photo in background (non-blocking)
@@ -647,6 +669,87 @@ async function getCurrentUserId(): Promise<string | null> {
   return session?.user?.id ?? null
 }
 
+async function saveLinkedInProfileCapture(input: { linkedinUrl: string; name: string | null; markdown: string }) {
+  const userId = await getCurrentUserId()
+  if (!userId) return { success: false, error: 'not_authenticated' }
+  const contact = await findContactByLinkedInUrl(userId, input.linkedinUrl)
+  if (!contact) return { success: false, error: 'contact_not_found' }
+
+  const capturedDate = localDateKey(new Date())
+  const title = `LinkedIn profile capture — ${input.name || contact.name}`
+  const { data: existing } = await supabase
+    .from('captures')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('linked_record_slug', 'people')
+    .eq('linked_record_id', contact.id)
+    .eq('url', input.linkedinUrl)
+    .eq('captured_date', capturedDate)
+    .ilike('title', 'LinkedIn profile capture%')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (existing?.id) {
+    const { error } = await supabase
+      .from('captures')
+      .update({
+        title,
+        body: input.markdown,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existing.id)
+      .eq('user_id', userId)
+    return error ? { success: false, error: error.message } : { success: true, updated: true }
+  }
+
+  const { error } = await supabase.from('captures').insert({
+    user_id: userId,
+    type: 'learning',
+    title,
+    body: input.markdown,
+    url: input.linkedinUrl,
+    captured_date: capturedDate,
+    linked_record_slug: 'people',
+    linked_record_id: contact.id,
+  })
+  return error ? { success: false, error: error.message } : { success: true }
+}
+
+function cleanBatchLinkedInUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const raw = value.trim()
+  if (!raw) return null
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+  try {
+    const url = new URL(candidate)
+    if (!/linkedin\.com$/i.test(url.hostname.replace(/^www\./, ''))) return null
+    const match = url.pathname.match(/^\/in\/([^/?#]+)/)
+    if (!match) return null
+    return `https://www.linkedin.com/in/${match[1]}`
+  } catch {
+    return null
+  }
+}
+
+async function openLinkedInBatchTabs(input: unknown) {
+  const urls = Array.isArray(input)
+    ? Array.from(new Set(input.map(cleanBatchLinkedInUrl).filter((url): url is string => Boolean(url)))).slice(0, 15)
+    : []
+  if (!urls.length) return { success: false, opened: 0, error: 'no_linkedin_urls' }
+
+  let opened = 0
+  for (const [index, url] of urls.entries()) {
+    try {
+      await chrome.tabs.create({ url, active: index === 0 })
+      opened += 1
+    } catch (error) {
+      console.warn('Could not open LinkedIn tab:', url, error)
+    }
+  }
+  return { success: opened > 0, opened }
+}
+
 interface Contact {
   id: string
   name: string
@@ -692,10 +795,235 @@ async function findContactByLinkedInUrl(userId: string, linkedinUrl: string): Pr
     .select('id, name')
     .eq('user_id', userId)
     .in('linkedin_url', variants)
+    .limit(1)
     .maybeSingle()
 
   if (error || !data) return null
   return { id: data.id, name: data.name }
+}
+
+async function resolveConnectedContact(userId: string, linkedinUrl: string, profileName?: string | null, connectedOn?: string | null): Promise<Contact | null> {
+  const byUrl = await findContactByLinkedInUrl(userId, linkedinUrl)
+  if (byUrl) return byUrl
+  const cleanName = profileName?.replace(/\s+/g, ' ').trim()
+  if (!cleanName) return null
+
+  const { data: byName } = await supabase
+    .from('outreach_logs')
+    .select('id, name')
+    .eq('user_id', userId)
+    .ilike('name', cleanName)
+    .limit(2)
+  if (byName?.length === 1) {
+    await supabase
+      .from('outreach_logs')
+      .update({ linkedin_url: linkedinUrl })
+      .eq('id', byName[0].id)
+      .eq('user_id', userId)
+    return byName[0]
+  }
+
+  const { data: created, error } = await supabase.from('outreach_logs').insert({
+    user_id: userId,
+    name: cleanName,
+    linkedin_url: linkedinUrl,
+    status: 'CONNECTED',
+    contact_type: 'networking',
+    log_date: connectedOn ?? localDateKey(new Date()),
+    notes: 'Created from LinkedIn Connections sync.',
+  }).select('id, name').single()
+  return error ? null : created
+}
+
+function localDateKey(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+
+async function logOutreachEvent(input: {
+  userId: string
+  contactId: string
+  eventType: string
+  payload?: Record<string, unknown>
+  sourceExternalId?: string | null
+  listId?: string | null
+  membershipId?: string | null
+  occurredAt?: string | null
+}) {
+  if (!input.contactId || !input.eventType) return { success: false, error: 'contactId and eventType are required' }
+  const occurredAt = input.occurredAt ?? new Date().toISOString()
+  const occurredOn = localDateKey(new Date(occurredAt))
+  const { error } = await supabase.from('outreach_events').insert({
+    user_id: input.userId,
+    contact_id: input.contactId,
+    list_id: input.listId ?? null,
+    membership_id: input.membershipId ?? null,
+    event_type: input.eventType,
+    occurred_at: occurredAt,
+    occurred_on: occurredOn,
+    source: OUTREACH_SOURCE,
+    source_external_id: input.sourceExternalId ?? null,
+    payload: input.payload ?? {},
+  })
+  if (error?.code === '23505') return { success: true, duplicate: true }
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+
+async function latestRequestSentEvent(userId: string, contactId: string, occurredBefore?: string) {
+  let query = supabase
+    .from('outreach_events')
+    .select('id, list_id, membership_id, occurred_at')
+    .eq('user_id', userId)
+    .eq('contact_id', contactId)
+    .eq('event_type', 'request_sent')
+  if (occurredBefore) query = query.lte('occurred_at', occurredBefore)
+  const { data, error } = await query
+    .order('occurred_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error || !data) return null
+  return data
+}
+
+async function recordLinkedInAcceptanceObservation(input: {
+  userId: string
+  contactId: string
+  connectedOn: string | null
+  observedAt: Date
+  rawLabel: string | null
+  request: { id: string; list_id: string | null; membership_id: string | null; occurred_at: string } | null
+  linkedinUrl: string
+  source?: string
+  confidence?: number
+  inferenceRule?: string
+}) {
+  const source = input.source ?? (input.rawLabel === 'Connections list'
+    ? 'linkedin_connections_page'
+    : input.rawLabel === 'Accepted invitation notification'
+      ? 'linkedin_acceptance_notification'
+      : 'linkedin_profile_state')
+  const occurredOn = input.connectedOn ?? localDateKey(input.observedAt)
+  const occurredAt = input.connectedOn
+    ? new Date(`${input.connectedOn}T23:59:00`).toISOString()
+    : input.observedAt.toISOString()
+  const confidence = input.confidence ?? (input.connectedOn
+    ? 100
+    : source === 'linkedin_acceptance_notification'
+      ? 90
+      : 60)
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  const sourceExternalId = `${source}:${input.contactId}:${occurredOn}`
+  const { data, error } = await supabase.rpc('record_linkedin_acceptance_observation', {
+    p_user_id: input.userId,
+    p_contact_id: input.contactId,
+    p_occurred_on: occurredOn,
+    p_occurred_at: occurredAt,
+    p_observed_at: input.observedAt.toISOString(),
+    p_source: source,
+    p_source_external_id: sourceExternalId,
+    p_confidence: confidence,
+    p_timezone: timezone,
+    p_raw_label: input.rawLabel,
+    p_payload: {
+      linkedin_url: input.linkedinUrl,
+      request_event_id: input.request?.id ?? null,
+      connected_on: input.connectedOn,
+      inference_rule: input.inferenceRule ?? (input.connectedOn ? 'linkedin_displayed_connection_date' : 'observed_connected_state'),
+    },
+    p_list_id: input.request?.list_id ?? null,
+    p_membership_id: input.request?.membership_id ?? null,
+  })
+  if (error) return { success: false, error: error.message }
+  return { success: true, eventId: data }
+}
+
+async function markContactConnected(userId: string, contactId: string) {
+  await supabase
+    .from('outreach_logs')
+    .update({ status: 'CONNECTED', updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('id', contactId)
+    .eq('status', 'PROSPECT')
+}
+
+async function recordAcceptanceFromLinkedInInbound(userId: string, contactId: string, event: LinkedInMessageEvent) {
+  const occurredAt = new Date(event.timestamp).toISOString()
+  const request = await latestRequestSentEvent(userId, contactId, occurredAt)
+  if (!request) return { success: true, ignored: true, reason: 'request_sent_not_found' }
+  return recordLinkedInAcceptanceObservation({
+    userId,
+    contactId,
+    connectedOn: null,
+    observedAt: new Date(event.timestamp),
+    rawLabel: 'Inbound LinkedIn reply visible',
+    request,
+    linkedinUrl: event.linkedinUrl,
+    source: 'linkedin_dm_inbound',
+    confidence: 85,
+    inferenceRule: 'inbound_reply_received',
+  })
+}
+
+async function handleLinkedInConnectionState(message: {
+  linkedinUrl?: string
+  state?: 'connect_available' | 'pending' | 'connected'
+  rawLabel?: string | null
+  profileName?: string | null
+  connectedOn?: string | null
+  timestamp?: number
+}) {
+  const userId = await getCurrentUserId()
+  if (!userId) return { success: false, error: 'not_authenticated' }
+  if (!message.linkedinUrl || !message.state) return { success: false, error: 'invalid_connection_state' }
+  const contact = message.state === 'connected'
+    ? await resolveConnectedContact(userId, message.linkedinUrl, message.profileName, message.connectedOn)
+    : await findContactByLinkedInUrl(userId, message.linkedinUrl)
+  if (!contact) return { success: false, error: 'contact_not_found' }
+  const request = await latestRequestSentEvent(userId, contact.id)
+
+  const observedAt = new Date(message.timestamp ?? Date.now())
+  const occurredAt = message.connectedOn
+    ? new Date(`${message.connectedOn}T12:00:00`).toISOString()
+    : observedAt.toISOString()
+  const payload = {
+    linkedin_url: message.linkedinUrl,
+    detected_state: message.state,
+    raw_label: message.rawLabel ?? null,
+    connected_on: message.connectedOn ?? null,
+    request_event_id: request?.id ?? null,
+  }
+  if (message.state === 'pending') {
+    if (!request) return { success: false, error: 'request_sent_not_found', contactId: contact.id }
+    return logOutreachEvent({
+      userId, contactId: contact.id, listId: request.list_id, membershipId: request.membership_id,
+      eventType: 'linkedin_pending_detected', occurredAt,
+      sourceExternalId: `linkedin-request:${request.id}:pending`, payload,
+    })
+  }
+  if (message.state === 'connected') {
+    const isNotification = message.rawLabel === 'Accepted invitation notification'
+    const requestAge = request ? observedAt.getTime() - new Date(request.occurred_at).getTime() : Number.POSITIVE_INFINITY
+    if (!message.connectedOn && !isNotification && (!request || requestAge > 30 * 24 * 60 * 60 * 1000)) {
+      await markContactConnected(userId, contact.id)
+      return { success: true, ignored: true, reason: 'acceptance_date_not_observable' }
+    }
+    const result = await recordLinkedInAcceptanceObservation({
+      userId,
+      contactId: contact.id,
+      connectedOn: message.connectedOn ?? null,
+      observedAt,
+      rawLabel: message.rawLabel ?? null,
+      request,
+      linkedinUrl: message.linkedinUrl,
+    })
+    if (result.success) await markContactConnected(userId, contact.id)
+    return result
+  }
+  return { success: true, ignored: true }
 }
 
 // F01: Get stored Attio API key from chrome.storage.local
@@ -760,6 +1088,7 @@ interface LinkedInMessageEvent {
   linkedinUrl: string
   direction: 'inbound' | 'outbound'
   timestamp: number
+  messageId?: string
 }
 
 async function handleLinkedInMessage(event: LinkedInMessageEvent) {
@@ -771,14 +1100,33 @@ async function handleLinkedInMessage(event: LinkedInMessageEvent) {
     if (!contact) return // Unknown LinkedIn contact — no popup for DMs
 
     const activeWindow = await findActiveWindow(userId, contact.id, 'linkedin_msg')
+    const eventKey = event.messageId || String(event.timestamp)
 
     if (activeWindow) {
       await supabase
         .from('extension_interaction_windows')
         .update({ message_count: activeWindow.message_count + 1, updated_at: new Date().toISOString() })
         .eq('id', activeWindow.id)
+      await logOutreachEvent({
+        userId,
+        contactId: contact.id,
+        eventType: event.direction === 'inbound' ? 'inbound_reply_received' : 'follow_up_sent',
+        occurredAt: new Date(event.timestamp).toISOString(),
+        sourceExternalId: event.messageId
+          ? `linkedin-message:${event.messageId}:${event.direction}`
+          : `linkedin-dm:${contact.id}:${event.direction}:${eventKey}`,
+        payload: {
+          linkedin_url: event.linkedinUrl,
+          direction: event.direction,
+          interaction_window_id: activeWindow.id,
+        },
+      })
+      if (event.direction === 'inbound') {
+        await recordAcceptanceFromLinkedInInbound(userId, contact.id, event)
+        await markContactConnected(userId, contact.id)
+      }
     } else {
-      const interactionDate = new Date(event.timestamp).toISOString().split('T')[0]
+      const interactionDate = localDateKey(new Date(event.timestamp))
 
       const { data: interaction, error: interactionError } = await supabase
         .from('interactions')
@@ -816,6 +1164,25 @@ async function handleLinkedInMessage(event: LinkedInMessageEvent) {
         })
 
       if (windowError) throw windowError
+
+      await logOutreachEvent({
+        userId,
+        contactId: contact.id,
+        eventType: event.direction === 'inbound' ? 'inbound_reply_received' : 'follow_up_sent',
+        occurredAt: new Date(event.timestamp).toISOString(),
+        sourceExternalId: event.messageId
+          ? `linkedin-message:${event.messageId}:${event.direction}`
+          : `linkedin-dm:${contact.id}:${event.direction}:${eventKey}`,
+        payload: {
+          linkedin_url: event.linkedinUrl,
+          direction: event.direction,
+          interaction_id: interaction.id,
+        },
+      })
+      if (event.direction === 'inbound') {
+        await recordAcceptanceFromLinkedInInbound(userId, contact.id, event)
+        await markContactConnected(userId, contact.id)
+      }
 
       await updateNetworkingHabit(userId, interactionDate)
     }

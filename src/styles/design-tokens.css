@@ -21,6 +21,10 @@
   --pastel:     #79D65E;  /* logo background only — kept for the brand mark */
   --gossip:     #EAF6CC;  /* refined — active nav, selection */
   --midnight:   #1A1A1A;  /* near-black — high-emphasis text & contained chips */
+  --attio-blue: #2f6df6;
+  --mchip-person:  oklch(0.56 0.12 300);
+  --mchip-company: oklch(0.58 0.11 55);
+  --mchip-opp:     var(--attio-blue);
 
   /* ── Semantic foreground / background tokens ──────────────── */
   --fg-1:       var(--burnham);          /* primary text */

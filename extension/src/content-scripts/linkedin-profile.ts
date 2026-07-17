@@ -86,6 +86,66 @@ function extractCompany(): string | null {
   return null
 }
 
+function normalizeText(text: string) {
+  return text.replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+function sectionText(label: string): string | null {
+  const main = document.querySelector('main')
+  if (!main) return null
+  const headings = Array.from(main.querySelectorAll('section h2, section [role="heading"], h2')) as HTMLElement[]
+  const heading = headings.find(element => normalizeText(element.innerText || '').toLowerCase().startsWith(label.toLowerCase()))
+  const section = heading?.closest('section') as HTMLElement | null
+  const text = normalizeText(section?.innerText || '')
+  if (!text) return null
+  return text.replace(new RegExp(`^${label}\\s*`, 'i'), '').trim() || null
+}
+
+function extractLocation(): string | null {
+  const selectors = [
+    '.text-body-small.inline.t-black--light.break-words',
+    '.pv-text-details__left-panel span.text-body-small',
+    '.ph5 span.text-body-small',
+  ]
+  for (const sel of selectors) {
+    const el = document.querySelector(sel) as HTMLElement | null
+    const text = normalizeText(el?.innerText ?? '')
+    if (text && text.length > 2 && !/contact info/i.test(text)) return text
+  }
+  return null
+}
+
+function extractProfileMarkdown(input: {
+  name: string | null
+  jobTitle: string | null
+  company: string | null
+  linkedinUrl: string
+}) {
+  const main = document.querySelector('main') as HTMLElement | null
+  const location = extractLocation()
+  const about = sectionText('About')
+  const experience = sectionText('Experience')
+  const education = sectionText('Education')
+  const featured = sectionText('Featured')
+  const activity = sectionText('Activity')
+  const fullText = normalizeText(main?.innerText || '')
+  const parts = [
+    `# ${input.name || 'LinkedIn profile'}`,
+    `- LinkedIn: ${input.linkedinUrl}`,
+    `- Captured: ${new Date().toISOString()}`,
+    input.jobTitle ? `- Headline: ${input.jobTitle}` : null,
+    input.company ? `- Current company: ${input.company}` : null,
+    location ? `- Location: ${location}` : null,
+    about ? `\n## About\n${about}` : null,
+    featured ? `\n## Featured\n${featured}` : null,
+    experience ? `\n## Experience\n${experience}` : null,
+    education ? `\n## Education\n${education}` : null,
+    activity ? `\n## Activity\n${activity}` : null,
+    fullText ? `\n## Full visible profile text\n${fullText}` : null,
+  ]
+  return parts.filter(Boolean).join('\n')
+}
+
 function findProfilePhotoUrl(): string | null {
   // The logged-in user's own avatar lives in the nav/header, NOT in <main>.
   // The visited contact's profile photo is always inside <main>.
@@ -108,6 +168,105 @@ function findProfilePhotoUrl(): string | null {
   }
 
   return null
+}
+
+function extractConnectionState(): { state: 'connect_available' | 'pending' | 'connected'; rawLabel: string | null } | null {
+  const mainEl = document.querySelector('main')
+  if (!mainEl) return null
+  const labels = Array.from(mainEl.querySelectorAll('button, a'))
+    .map(element => ((element as HTMLElement).innerText || element.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+  const pending = labels.find(label => /pending|pendiente/i.test(label))
+  if (pending) return { state: 'pending', rawLabel: pending }
+  const connect = labels.find(label => /^(connect|conectar)$/i.test(label) || /connect with|conectar con/i.test(label))
+  if (connect) return { state: 'connect_available', rawLabel: connect }
+  const degree = (mainEl.textContent ?? '').match(/(?:·\s*1st\b|1st degree connection|conexi[oó]n de primer grado)/i)?.[0]
+  if (degree) return { state: 'connected', rawLabel: degree }
+  return null
+}
+
+function localDateKey(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+
+function connectedOnFromText(text: string, capturedAt = new Date()): string | null {
+  const absolute = text.match(/(?:connected|conectad[oa])(?:\s+on|\s+el)?\s+([A-Z][a-z]+\s+\d{1,2},\s+\d{4})/i)
+  if (absolute) {
+    const parsed = new Date(`${absolute[1]} 12:00:00`)
+    if (!Number.isNaN(parsed.getTime())) return localDateKey(parsed)
+  }
+  const days = text.match(/(?:connected|conectad[oa])\s+(\d+)\s+(?:days?|d[ií]as?)\s+ago/i)
+  if (days) {
+    const parsed = new Date(capturedAt)
+    parsed.setDate(parsed.getDate() - Number(days[1]))
+    return localDateKey(parsed)
+  }
+  if (/(?:connected|conectad[oa])\s+(?:yesterday|ayer)/i.test(text)) {
+    const parsed = new Date(capturedAt)
+    parsed.setDate(parsed.getDate() - 1)
+    return localDateKey(parsed)
+  }
+  if (/(?:connected|conectad[oa])\s+(?:today|hoy)/i.test(text)) return localDateKey(capturedAt)
+  const compact = text.match(/\b(\d+)\s*([hdw])\b/i)
+  if (compact) {
+    const parsed = new Date(capturedAt)
+    const quantity = Number(compact[1])
+    const unit = compact[2].toLowerCase()
+    if (unit === 'h') parsed.setHours(parsed.getHours() - quantity)
+    else parsed.setDate(parsed.getDate() - quantity * (unit === 'w' ? 7 : 1))
+    return localDateKey(parsed)
+  }
+  return null
+}
+
+const reportedConnections = new Set<string>()
+
+function reportConnectedProfile(rawUrl: string, rawLabel: string, profileName?: string | null, connectedOn?: string | null) {
+  const linkedinUrl = cleanLinkedInUrl(rawUrl)
+  const reportKey = `${linkedinUrl}:${connectedOn ?? 'observed'}`
+  if (!linkedinUrl || reportedConnections.has(reportKey)) return
+  reportedConnections.add(reportKey)
+  chrome.runtime.sendMessage({
+    type: 'LINKEDIN_CONNECTION_STATE',
+    linkedinUrl,
+    state: 'connected',
+    rawLabel,
+    profileName: profileName?.trim() || null,
+    connectedOn: connectedOn ?? null,
+    timestamp: Date.now(),
+  }).then(result => {
+    if (result && !result.success) {
+      reportedConnections.delete(reportKey)
+    }
+  }).catch(() => reportedConnections.delete(reportKey))
+}
+
+function scanConnectionSurfaces() {
+  const main = document.querySelector('main')
+  if (!main) return
+  if (/\/mynetwork\/invite-connect\/connections/i.test(window.location.pathname)) {
+    main.querySelectorAll('li, [class*="connection-card"]').forEach(row => {
+      const link = row.querySelector('a[href*="linkedin.com/in/"], a[href^="/in/"]') as HTMLAnchorElement | null
+      if (!link?.href) return
+      const text = (row.textContent ?? '').replace(/\s+/g, ' ').trim()
+      const name = (link.textContent ?? '').replace(/\s+/g, ' ').trim()
+      const connectedOn = connectedOnFromText(text)
+      if (connectedOn) reportConnectedProfile(link.href, 'Connections list', name, connectedOn)
+    })
+  }
+  main.querySelectorAll('li, article').forEach(row => {
+    const text = (row.textContent ?? '').replace(/\s+/g, ' ').trim()
+    if (!/accepted your invitation|acept[oó] tu invitaci[oó]n/i.test(text)) return
+    const link = row.querySelector('a[href*="linkedin.com/in/"], a[href^="/in/"]') as HTMLAnchorElement | null
+    if (link?.href) {
+      const name = (link.textContent ?? '').replace(/\s+/g, ' ').trim()
+      reportConnectedProfile(link.href, 'Accepted invitation notification', name, connectedOnFromText(text))
+    }
+  })
 }
 
 // Fetch the photo from the content-script context (which has LinkedIn session cookies)
@@ -152,6 +311,7 @@ function compressToBase64(blob: Blob): Promise<string | null> {
 }
 
 async function init() {
+  scanConnectionSurfaces()
   const name = extractName()
   const jobTitle = extractJobTitle()
   const company = extractCompany()
@@ -177,16 +337,61 @@ async function init() {
     linkedinUrl,
     profilePhotoUrl: photoUrl,   // keep raw URL as fallback
     photoBase64,                  // compressed base64 — preferred for upload
+    profileMarkdown: extractProfileMarkdown({ name, jobTitle, company, linkedinUrl }),
   })
+
+  const connectionState = extractConnectionState()
+  if (connectionState) {
+    const connectedOn = connectionState.state === 'connected'
+      ? connectedOnFromText(document.querySelector('main')?.textContent ?? '')
+      : null
+    chrome.runtime.sendMessage({
+      type: 'LINKEDIN_CONNECTION_STATE',
+      linkedinUrl,
+      state: connectionState.state,
+      rawLabel: connectionState.rawLabel,
+      profileName: name,
+      connectedOn,
+      timestamp: Date.now(),
+    }).then(result => {
+      if (result && !result.success) console.warn('reThink: connection state was not recorded:', result.error)
+    }).catch(() => {})
+  }
 }
 
-// Run after LinkedIn SPA settles — try at 1.5s and again at 4s in case page was slow
+let observedUrl = window.location.href
+let scheduleGeneration = 0
+let surfaceScanTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleInit() {
+  const generation = ++scheduleGeneration
+  setTimeout(() => { if (generation === scheduleGeneration) void init() }, 1200)
+  setTimeout(() => { if (generation === scheduleGeneration) void init() }, 3200)
+}
+
+function scheduleSurfaceScan() {
+  if (surfaceScanTimer) clearTimeout(surfaceScanTimer)
+  surfaceScanTimer = setTimeout(() => {
+    surfaceScanTimer = null
+    scanConnectionSurfaces()
+  }, 500)
+}
+
+// LinkedIn navigates between profiles without reloading the document.
+const routeObserver = new MutationObserver(() => {
+  scheduleSurfaceScan()
+  if (window.location.href === observedUrl) return
+  observedUrl = window.location.href
+  scheduleInit()
+})
+routeObserver.observe(document.documentElement, { childList: true, subtree: true })
+window.addEventListener('popstate', () => {
+  observedUrl = window.location.href
+  scheduleInit()
+})
+
+// Run after LinkedIn settles and again after SPA route changes.
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => init(), 1500)
-    setTimeout(() => init(), 4000)
-  })
+  document.addEventListener('DOMContentLoaded', scheduleInit)
 } else {
-  setTimeout(() => init(), 1500)
-  setTimeout(() => init(), 4000)
+  scheduleInit()
 }

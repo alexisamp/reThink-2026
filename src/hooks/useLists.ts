@@ -1,6 +1,12 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { List, ListMembership, ListStage } from '@/types'
+import type { List, ListFolder, ListMembership, ListStage } from '@/types'
+
+const LISTS_CHANGED_EVENT = 'rethink:lists-changed'
+
+function notifyListsChanged() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(LISTS_CHANGED_EVENT))
+}
 
 // ─── Templates — ready-made lists for first-time use ────────────────────────
 
@@ -148,41 +154,101 @@ export const LIST_TEMPLATES: Array<{
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
 
+function useRealtimeRefresh(userId: string | null | undefined, channelName: string, tables: string[], reload: () => Promise<void>) {
+  const timer = useRef<number | null>(null)
+  const tablesKey = tables.join(',')
+  const schedule = useCallback(() => {
+    if (timer.current) window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => {
+      timer.current = null
+      void reload()
+    }, 120)
+  }, [reload])
+
+  useEffect(() => {
+    if (!userId) return
+    const onFocus = () => schedule()
+    const onVisibility = () => { if (document.visibilityState === 'visible') schedule() }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener(LISTS_CHANGED_EVENT, schedule)
+
+    const subscribedTables = tablesKey.split(',').filter(Boolean)
+    const channel = subscribedTables.reduce((current, table) => current.on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table,
+      filter: `user_id=eq.${userId}`,
+    }, schedule), supabase.channel(`${channelName}-${userId}`))
+    channel.subscribe()
+
+    return () => {
+      if (timer.current) window.clearTimeout(timer.current)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener(LISTS_CHANGED_EVENT, schedule)
+      void supabase.removeChannel(channel)
+    }
+  }, [channelName, schedule, tablesKey, userId])
+}
+
 export function useLists(userId: string | null | undefined) {
   const [lists, setLists] = useState<List[]>([])
+  const [folders, setFolders] = useState<ListFolder[]>([])
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
-    if (!userId) return
+    if (!userId) { setLists([]); setFolders([]); setLoading(false); return }
     setLoading(true)
-    const { data } = await supabase
-      .from('lists')
+    let listQuery = await supabase
+        .from('lists')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_archived', false)
+        .order('folder_id', { nullsFirst: true })
+        .order('position')
+        .order('created_at')
+    if (listQuery.error) {
+      listQuery = await supabase
+        .from('lists')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_archived', false)
+        .order('created_at')
+    }
+    const folderResult = await supabase
+      .from('list_folders')
       .select('*')
       .eq('user_id', userId)
-      .eq('is_archived', false)
+      .order('position')
       .order('created_at')
-    setLists((data ?? []) as List[])
+    setLists(((listQuery.data ?? []) as List[]).sort((left, right) => (left.folder_id ?? '').localeCompare(right.folder_id ?? '') || (left.position ?? 0) - (right.position ?? 0) || left.created_at.localeCompare(right.created_at)))
+    setFolders((folderResult.data ?? []) as ListFolder[])
     setLoading(false)
   }, [userId])
 
   useEffect(() => { load() }, [load])
+  useRealtimeRefresh(userId, 'lists-sync', ['lists', 'list_folders'], load)
 
   const createList = useCallback(async (
-    input: Pick<List, 'name' | 'purpose' | 'stages' | 'color' | 'icon'>,
+    input: Pick<List, 'name' | 'purpose' | 'stages' | 'color' | 'icon'> & { object_slug?: string },
   ): Promise<List | null> => {
     if (!userId) return null
+    const nextPosition = lists.filter(list => (list.folder_id ?? null) === null).length
     const { data, error } = await supabase
       .from('lists')
-      .insert({ ...input, user_id: userId })
+      .insert({ ...input, user_id: userId, folder_id: null, position: nextPosition })
       .select()
       .single()
     if (error) {
       console.error('createList failed', error)
       return null
     }
+    setLists(current => current.some(list => list.id === data.id) ? current : [...current, data as List])
+    notifyListsChanged()
     await load()
     return data as List
-  }, [userId, load])
+  }, [userId, load, lists])
 
   const createFromTemplate = useCallback(async (templateKey: string): Promise<List | null> => {
     const tpl = LIST_TEMPLATES.find(t => t.key === templateKey)
@@ -198,22 +264,120 @@ export function useLists(userId: string | null | undefined) {
 
   const updateList = useCallback(async (
     id: string,
-    patch: Partial<Pick<List, 'name' | 'purpose' | 'stages' | 'color' | 'icon' | 'is_archived'>>,
+    patch: Partial<Pick<List, 'name' | 'purpose' | 'stages' | 'color' | 'icon' | 'object_slug' | 'active_view_id' | 'folder_id' | 'position' | 'is_archived'>>,
   ) => {
-    const { error } = await supabase.from('lists').update(patch).eq('id', id)
-    if (!error) await load()
-  }, [load])
+    if (!userId) return { error: new Error('Not authenticated') }
+    const { data, error: updateError } = await supabase.from('lists').update(patch).eq('id', id).eq('user_id', userId).select('id').maybeSingle()
+    const error = updateError ?? (!data ? new Error('List update did not persist') : null)
+    if (!error) {
+      notifyListsChanged()
+      await load()
+    }
+    return { error }
+  }, [load, userId])
 
   const archiveList = useCallback(async (id: string) => {
     await updateList(id, { is_archived: true })
   }, [updateList])
 
   const deleteList = useCallback(async (id: string) => {
-    await supabase.from('lists').delete().eq('id', id)
-    await load()
-  }, [load])
+    if (!userId) return { error: new Error('Not authenticated') }
+    const { data, error: deleteError } = await supabase.from('lists').delete().eq('id', id).eq('user_id', userId).select('id').maybeSingle()
+    const error = deleteError ?? (!data ? new Error('List delete did not persist') : null)
+    if (!error) {
+      notifyListsChanged()
+      await load()
+    }
+    return { error }
+  }, [load, userId])
 
-  return { lists, loading, createList, createFromTemplate, updateList, archiveList, deleteList, reload: load }
+  const createFolder = useCallback(async (name: string): Promise<ListFolder | null> => {
+    if (!userId) return null
+    const { data, error } = await supabase
+      .from('list_folders')
+      .insert({ user_id: userId, name: name.trim() || 'Untitled folder', position: folders.length })
+      .select()
+      .single()
+    if (error) {
+      console.error('createFolder failed', error)
+      return null
+    }
+    setFolders(current => current.some(folder => folder.id === data.id) ? current : [...current, data as ListFolder])
+    notifyListsChanged()
+    await load()
+    return data as ListFolder
+  }, [folders.length, load, userId])
+
+  const updateFolder = useCallback(async (
+    id: string,
+    patch: Partial<Pick<ListFolder, 'name' | 'position' | 'is_collapsed'>>,
+  ) => {
+    if (!userId) return { error: new Error('Not authenticated') }
+    const { data, error: updateError } = await supabase.from('list_folders').update(patch).eq('id', id).eq('user_id', userId).select('id').maybeSingle()
+    const error = updateError ?? (!data ? new Error('Folder update did not persist') : null)
+    if (!error) {
+      notifyListsChanged()
+      await load()
+    }
+    return { error }
+  }, [load, userId])
+
+  const deleteFolder = useCallback(async (id: string) => {
+    if (!userId) return { error: new Error('Not authenticated') }
+    const { data, error: deleteError } = await supabase.from('list_folders').delete().eq('id', id).eq('user_id', userId).select('id').maybeSingle()
+    const error = deleteError ?? (!data ? new Error('Folder delete did not persist') : null)
+    if (!error) {
+      notifyListsChanged()
+      await load()
+    }
+    return { error }
+  }, [load, userId])
+
+  const reorderLists = useCallback(async (updates: Array<{ id: string; folder_id: string | null; position: number }>) => {
+    if (!userId || !updates.length) return { error: null as Error | null }
+    setLists(current => current.map(list => {
+      const next = updates.find(update => update.id === list.id)
+      return next ? { ...list, folder_id: next.folder_id, position: next.position } : list
+    }))
+    const results = await Promise.all(updates.map(update => supabase
+      .from('lists')
+      .update({ folder_id: update.folder_id, position: update.position })
+      .eq('id', update.id)
+      .eq('user_id', userId)
+      .select('id')
+      .maybeSingle()))
+    const failed = results.find(result => result.error || !result.data)
+    if (failed) {
+      await load()
+      return { error: failed.error ?? new Error('List order did not persist') }
+    }
+    notifyListsChanged()
+    return { error: null }
+  }, [load, userId])
+
+  const reorderFolders = useCallback(async (updates: Array<{ id: string; position: number }>) => {
+    if (!userId || !updates.length) return { error: null as Error | null }
+    setFolders(current => current.map(folder => {
+      const next = updates.find(update => update.id === folder.id)
+      return next ? { ...folder, position: next.position } : folder
+    }).sort((left, right) => left.position - right.position))
+    const results = await Promise.all(updates.map(update => supabase
+      .from('list_folders')
+      .update({ position: update.position })
+      .eq('id', update.id)
+      .eq('user_id', userId)
+      .select('id')
+      .maybeSingle()))
+    const failed = results.find(result => result.error || !result.data)
+    if (failed) {
+      await load()
+      return { error: failed.error ?? new Error('Folder order did not persist') }
+    }
+    notifyListsChanged()
+    return { error: null }
+  }, [load, userId])
+
+  return { lists, folders, loading, createList, createFromTemplate, updateList, archiveList, deleteList, createFolder, updateFolder, deleteFolder, reorderLists, reorderFolders, reload: load }
 }
 
 // ─── Memberships ────────────────────────────────────────────────────────────
@@ -226,7 +390,7 @@ export function useListMemberships(
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
-    if (!userId) return
+    if (!userId) { setMemberships([]); setLoading(false); return }
     setLoading(true)
     let q = supabase.from('list_memberships').select('*').eq('user_id', userId)
     if (opts.listId) q = q.eq('list_id', opts.listId)
@@ -237,6 +401,7 @@ export function useListMemberships(
   }, [userId, opts.listId, opts.contactId])
 
   useEffect(() => { load() }, [load])
+  useRealtimeRefresh(userId, 'list-memberships-sync', ['list_memberships'], load)
 
   const addToList = useCallback(async (
     contactId: string,

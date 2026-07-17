@@ -7,6 +7,7 @@
 @import './styles/rethink-kit/day.css';
 @import './styles/rethink-kit/abm.css';
 @import './styles/rethink-kit/story.css';
+@import './styles/handoff-lists.css';
 @import './styles/today.css';
 
 @tailwind base;

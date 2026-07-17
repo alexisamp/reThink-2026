@@ -1,5 +1,5 @@
 import { useState, type DragEvent, type FormEvent } from 'react'
-import { Check, DotsSixVertical, Plus } from '@phosphor-icons/react'
+import { Check, DotsSixVertical, Plus, Repeat, Star } from '@phosphor-icons/react'
 import type { Todo, TodoContentSegment, TodoMentionKind } from '@/types'
 import EditableTodoText from './EditableTodoText'
 import TodoPreviewTarget from './TodoPreviewTarget'
@@ -9,6 +9,8 @@ import type { TodoLinks } from '@/lib/todoContent'
 export default function TodoScheduleList({
   todos,
   onToggle,
+  onToggleMustDo,
+  onRecurringClick,
   onAdd,
   onDropTodo,
   onDragArm,
@@ -21,6 +23,8 @@ export default function TodoScheduleList({
 }: {
   todos: Todo[]
   onToggle: (id: string) => void
+  onToggleMustDo: (id: string) => void
+  onRecurringClick: (todo: Todo, isScheduled: boolean, rect: DOMRect) => void
   onAdd: (text: string, milestoneId: string | null, contentSegments: TodoContentSegment[]) => void
   onDropTodo?: (id: string) => void
   onDragArm?: (armed: boolean) => void
@@ -57,8 +61,8 @@ export default function TodoScheduleList({
     <aside className="todo-schedule-list" aria-label="Unscheduled todos">
       <header className="todo-schedule-hd">
         <div>
-          <h3>Todos</h3>
-          <span>Drag in or drop back here</span>
+          <h3>Unscheduled</h3>
+          <span>new · mention · drag to plan</span>
         </div>
         <strong>{todos.length}</strong>
       </header>
@@ -94,7 +98,7 @@ export default function TodoScheduleList({
               todo={todo}
               mentions={rowMentions}
               mentionOptions={mentionOptions}
-              className={`todo-schedule-row${todo.completed ? ' done' : ''}`}
+              className={`todo-schedule-row${todo.completed ? ' done' : ''}${todo.must_do ? ' mustdo' : ''}${todo.recurring_id ? ' recurring' : ''}`}
             >
               <span
                 className="todo-schedule-grip"
@@ -118,6 +122,26 @@ export default function TodoScheduleList({
                 onCreateMention={onCreateMention}
                 onChangeMilestone={onChangeMilestone}
               />
+              <span className="todo-schedule-actions">
+                {!todo.completed && (
+                  <button
+                    className={`tp-star${todo.must_do ? ' on' : ''}`}
+                    title={todo.must_do ? 'Must-do' : 'Mark as must-do (max 2/day)'}
+                    onClick={(event) => { event.stopPropagation(); onToggleMustDo(todo.id) }}
+                  >
+                    <Star size={12} weight={todo.must_do ? 'fill' : 'regular'} />
+                  </button>
+                )}
+                {!todo.completed && (
+                  <button
+                    className={`tp-recur${todo.recurring_id ? ' on' : ''}`}
+                    title={todo.recurring_id ? 'Recurring task' : 'Make recurring'}
+                    onClick={(event) => { event.stopPropagation(); onRecurringClick(todo, false, event.currentTarget.getBoundingClientRect()) }}
+                  >
+                    <Repeat size={11} />
+                  </button>
+                )}
+              </span>
             </TodoPreviewTarget>
           )
         })}
@@ -125,7 +149,7 @@ export default function TodoScheduleList({
 
       <form className="todo-schedule-add" onSubmit={submit}>
         <Plus size={12} />
-        <input value={text} placeholder="Add a task" onChange={event => setText(event.target.value)} />
+        <input value={text} placeholder="Add a task..." onChange={event => setText(event.target.value)} />
       </form>
     </aside>
   )

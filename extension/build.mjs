@@ -59,6 +59,17 @@ async function buildExtension() {
     format: 'esm',
   })
 
+  // Build reThink app bridge content script
+  console.log('  📦 Building reThink app bridge content script...')
+  await build({
+    entryPoints: ['src/content-scripts/rethink-app-bridge.ts'],
+    bundle: true,
+    outfile: 'dist/src/content-scripts/rethink-app-bridge.js',
+    platform: 'browser',
+    target: 'es2020',
+    format: 'esm',
+  })
+
   // Build sidebar
   console.log('  📦 Building sidebar...')
   await build({

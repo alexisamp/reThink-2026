@@ -12,7 +12,7 @@ interface DayStartDrawerProps {
   closedYesterday?: boolean
   yesterdayNote?: string | null
   onClose: () => void
-  onSave: (goal: string) => void
+  onSave: (goal: string) => void | Promise<void>
 }
 
 function cleanTodoText(text: string) {
@@ -38,6 +38,7 @@ export default function DayStartDrawer({
 }: DayStartDrawerProps) {
   const [goal, setGoal] = useState(initialGoal ?? '')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const dayLabel = new Date(today + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
   const hour = new Date().getHours()
@@ -45,6 +46,7 @@ export default function DayStartDrawer({
   const greeting = `${greetingBase}${userName ? `, ${userName}` : ''}.`
   const activeTodos = todos.filter(t => !t.completed)
   const featured = activeTodos.find(t => t.is_featured)
+  const hasSavedInitialGoal = Boolean(initialGoal?.trim())
 
   useEffect(() => {
     setGoal(initialGoal ?? '')
@@ -56,12 +58,26 @@ export default function DayStartDrawer({
     const next = goal.trim()
     if (!next) return
     setSaving(true)
-    await supabase.from('reviews').upsert(
+    setError(null)
+    const { error: saveError } = await supabase.from('reviews').upsert(
       { user_id: userId, date: today, one_thing: next },
       { onConflict: 'user_id,date' }
     )
+    if (saveError) {
+      console.error('Could not save day objective', saveError)
+      setError('Could not save the objective. Try again.')
+      setSaving(false)
+      return
+    }
+    try {
+      await onSave(next)
+    } catch (callbackError) {
+      console.error('Could not finish saving day objective', callbackError)
+      setError('Could not save the objective. Try again.')
+      setSaving(false)
+      return
+    }
     setSaving(false)
-    onSave(next)
   }
 
   return (
@@ -75,7 +91,7 @@ export default function DayStartDrawer({
 
         <section className="st-objective">
           <div className="st-obj-label"><Target size={12} /> Day objective</div>
-          {closedYesterday && goal ? (
+          {closedYesterday && hasSavedInitialGoal ? (
             <p className="st-obj-text">{goal}</p>
           ) : (
             <input
@@ -90,6 +106,7 @@ export default function DayStartDrawer({
           {!closedYesterday && (
             <span className="st-hint"><Info size={11} /> You didn't close yesterday — set the objective and dive in.</span>
           )}
+          {error && <span className="st-hint error"><Info size={11} /> {error}</span>}
           {closedYesterday && yesterdayNote && (
             <div className="st-recall"><span><Info size={12} /></span>{yesterdayNote}</div>
           )}

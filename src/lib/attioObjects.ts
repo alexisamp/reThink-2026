@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { companyImage } from '@/lib/crmObjects'
 import type { Company, Contact, Opportunity } from '@/types'
 
 export type CrmObjectType = 'standard' | 'custom'
@@ -110,6 +111,27 @@ export interface UnifiedRecord {
   values: Record<string, unknown>
   createdAt?: string | null
   raw: unknown
+}
+
+export function crmUrlPresentation(value: unknown, attributeType = 'URL') {
+  const raw = String(value ?? '').trim()
+  if (!raw) return { label: '', href: '' }
+  if (attributeType === 'Email') return { label: raw, href: `mailto:${raw}` }
+
+  const candidate = /^[a-z][a-z\d+.-]*:/i.test(raw) ? raw : `https://${raw}`
+  try {
+    const url = new URL(candidate)
+    const host = url.hostname.replace(/^www\./i, '')
+    const parts = url.pathname.split('/').map(part => decodeURIComponent(part)).filter(Boolean)
+    const socialHosts = ['linkedin.com', 'x.com', 'twitter.com', 'instagram.com', 'facebook.com', 'angel.co', 'wellfound.com']
+    const isSocialProfile = socialHosts.some(domain => host === domain || host.endsWith(`.${domain}`))
+    const label = isSocialProfile && parts.length
+      ? parts[parts.length - 1]
+      : `${host}${url.pathname === '/' ? '' : url.pathname}`
+    return { label: label || host || raw, href: url.toString() }
+  } catch {
+    return { label: raw.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, ''), href: raw }
+  }
 }
 
 interface StandardObjectSeed {
@@ -774,10 +796,11 @@ export async function countObjectRecords(userId: string, object: CrmObject): Pro
   return count ?? 0
 }
 
-function companyImage(logoUrl?: string | null, domain?: string | null) {
-  if (logoUrl) return logoUrl
-  if (!domain) return null
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`
+function contactImage(photoUrl?: string | null) {
+  if (!photoUrl) return null
+  if (!photoUrl.includes('media.licdn.com')) return photoUrl
+  const baseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
+  return baseUrl ? `${baseUrl}/functions/v1/proxy-image?url=${encodeURIComponent(photoUrl)}` : photoUrl
 }
 
 function valueMap(row: Record<string, unknown>) {
@@ -809,8 +832,14 @@ export async function fetchObjectRecords(userId: string, object: CrmObject): Pro
       id: row.id,
       title: row.name,
       subtitle: [row.job_title, row.company].filter(Boolean).join(' · ') || row.email,
-      imageUrl: row.profile_photo_url ?? null,
-      values: valueMap({ ...(row as unknown as Record<string, unknown>), country: deriveCountry(row as unknown as Record<string, unknown>) }),
+      imageUrl: contactImage(row.profile_photo_url),
+      values: valueMap({
+        ...(row as unknown as Record<string, unknown>),
+        profile_picture_url: row.profile_photo_url,
+        phone_numbers: row.phone,
+        description: row.about ?? row.personal_context ?? row.notes,
+        country: deriveCountry(row as unknown as Record<string, unknown>),
+      }),
       createdAt: row.created_at,
       raw: row,
     }))
@@ -822,7 +851,7 @@ export async function fetchObjectRecords(userId: string, object: CrmObject): Pro
       id: row.id,
       title: row.name,
       subtitle: row.domain || row.sector || row.headline,
-      imageUrl: companyImage(row.logo_url, row.domain),
+      imageUrl: companyImage(row.logo_url, row.domain, row.favicon_url),
       values: valueMap(row as unknown as Record<string, unknown>),
       createdAt: row.created_at,
       raw: row,
@@ -835,7 +864,7 @@ export async function fetchObjectRecords(userId: string, object: CrmObject): Pro
       id: row.id,
       title: row.title,
       subtitle: [row.company?.name, row.stage, row.type].filter(Boolean).join(' · '),
-      imageUrl: companyImage(row.company?.logo_url, row.company?.domain),
+      imageUrl: companyImage(row.company?.logo_url, row.company?.domain, row.company?.favicon_url),
       values: valueMap({ ...row, company: row.company?.name }),
       createdAt: row.created_at,
       raw: row,

@@ -6,6 +6,7 @@ import {
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { companyImage } from '@/lib/crmObjects'
 import type { Company, Contact, Opportunity } from '@/types'
 
 function formatNumber(n: number | null | undefined): string {
@@ -183,10 +184,7 @@ export default function CompanyDetail() {
           {/* ── Header: logo + name + headline ─────────────────── */}
           <div className="flex items-start gap-4 mb-5">
             {(() => {
-              const logoSrc = company.logo_url
-                || (company.domain
-                  ? `https://www.google.com/s2/favicons?domain=${company.domain}&sz=128`
-                  : null)
+              const logoSrc = companyImage(company.logo_url, company.domain, company.favicon_url)
               return logoSrc ? (
                 <img
                   src={logoSrc}

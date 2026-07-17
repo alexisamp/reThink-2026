@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent } from 'react'
-import { Archive, ArrowBendUpLeft, Check, DotsSixVertical } from '@phosphor-icons/react'
+import { Archive, ArrowBendUpLeft, Check, DotsSixVertical, Repeat, Star } from '@phosphor-icons/react'
 import type { Todo, TodoContentSegment, TodoMentionKind } from '@/types'
 import EditableTodoText from './EditableTodoText'
 import TodoPreviewTarget from './TodoPreviewTarget'
@@ -98,6 +98,8 @@ export default function DayCalendar({
   today,
   onSchedule,
   onToggle,
+  onToggleMustDo,
+  onRecurringClick,
   onUnschedule,
   onBacklog,
   onDragArm,
@@ -112,6 +114,8 @@ export default function DayCalendar({
   today: string
   onSchedule: (id: string, startMinutes: number, durationMinutes: number) => void
   onToggle: (id: string) => void
+  onToggleMustDo: (id: string) => void
+  onRecurringClick: (todo: Todo, isScheduled: boolean, rect: DOMRect) => void
   onUnschedule: (id: string) => void
   onBacklog: (id: string) => void
   onDragArm?: (armed: boolean) => void
@@ -298,7 +302,7 @@ export default function DayCalendar({
                 mentions={blockMentions}
                 mentionOptions={mentionOptions}
                 scheduleLabel={scheduleLabel}
-                className={`day-calendar-block${todo.completed ? ' done' : ''}${sizeClass}${interaction?.id === todo.id ? ' moving' : ''}`}
+                className={`day-calendar-block${todo.completed ? ' done' : ''}${todo.must_do ? ' mustdo' : ''}${sizeClass}${interaction?.id === todo.id ? ' moving' : ''}`}
                 style={{
                   top: `${(start - DAY_START) * PX_PER_MINUTE}px`,
                   height: `${Math.max(10, duration * PX_PER_MINUTE - 2)}px`,
@@ -328,6 +332,16 @@ export default function DayCalendar({
                 <div className="cal-copy" onPointerDown={event => event.stopPropagation()}>
                   <div className="cal-title-row">
                     <span className="cal-time">{formatClock(start)} - {formatClock(start + duration)}</span>
+                    {todo.recurring_id && (
+                      <button
+                        className="tp-recur-badge"
+                        onPointerDown={event => event.stopPropagation()}
+                        onClick={(event) => { event.stopPropagation(); onRecurringClick(todo, true, event.currentTarget.getBoundingClientRect()) }}
+                        title="Recurring task"
+                      >
+                        <Repeat size={9} />
+                      </button>
+                    )}
                     <EditableTodoText
                       todo={todo}
                       mentions={blockMentions}
@@ -341,6 +355,20 @@ export default function DayCalendar({
                   </div>
                 </div>
                 <div className="cal-actions" onPointerDown={event => event.stopPropagation()}>
+                  <button
+                    className={`tp-star${todo.must_do ? ' on' : ''}`}
+                    onClick={() => onToggleMustDo(todo.id)}
+                    title={todo.must_do ? 'Must-do' : 'Mark as must-do (max 2/day)'}
+                  >
+                    <Star size={11} weight={todo.must_do ? 'fill' : 'regular'} />
+                  </button>
+                  <button
+                    className={`tp-recur${todo.recurring_id ? ' on' : ''}`}
+                    onClick={(event) => onRecurringClick(todo, true, event.currentTarget.getBoundingClientRect())}
+                    title={todo.recurring_id ? 'Recurring task' : 'Make recurring'}
+                  >
+                    <Repeat size={11} />
+                  </button>
                   <button onClick={() => onUnschedule(todo.id)} title="Return to unscheduled list"><ArrowBendUpLeft size={11} /></button>
                   <button onClick={() => onBacklog(todo.id)} title="Move to Backlog"><Archive size={11} /></button>
                 </div>
