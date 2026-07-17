@@ -222,7 +222,7 @@ export default function App() {
 
       for (const trigger of triggers) {
         const { title, body } = formatNotificationMessage(trigger)
-        if (body) new Notification(title, { body, icon: '/logo-sm.png' })
+        if (body) new Notification(title, { body, icon: '/favicon-48.png' })
       }
     }
 
