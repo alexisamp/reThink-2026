@@ -27,3 +27,4 @@ test-results/
 
 # Supabase CLI temp
 supabase/.temp/
+.vercel
