@@ -79,6 +79,7 @@ export function MentionChip({
 
 function fileKindLabel(file: Pick<TodoFileSegment, 'label' | 'openMode' | 'mimeType'>) {
   if (file.openMode === 'sheets') return 'Sheet'
+  if (file.mimeType === 'text/uri-list') return 'URL'
   const label = file.label.toLowerCase()
   if (label.endsWith('.pdf') || file.mimeType === 'application/pdf') return 'PDF'
   if (label.endsWith('.md') || file.mimeType === 'text/markdown') return 'MD'
