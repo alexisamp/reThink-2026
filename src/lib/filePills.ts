@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
-import type { TodoFileSegment } from '@/lib/todoContent'
+import { urlToFileSegment, type TodoFileSegment } from '@/lib/todoContent'
 import { importSpreadsheetToSheets } from '@/lib/googleDrive'
 import { openFileInBrowser, openLink } from '@/lib/openLink'
 
@@ -29,21 +29,6 @@ function labelFromPath(path: string) {
   return decodeURIComponent(path.split(/[\\/]/).pop() || path)
 }
 
-function labelFromUrl(url: string) {
-  try {
-    const parsed = new URL(url)
-    const fileName = parsed.pathname.split('/').filter(Boolean).pop()
-    if (parsed.hostname.includes('docs.google.com')) {
-      if (parsed.pathname.includes('/spreadsheets/')) return 'Google Sheet'
-      if (parsed.pathname.includes('/document/')) return 'Google Doc'
-      if (parsed.pathname.includes('/presentation/')) return 'Google Slides'
-    }
-    return decodeURIComponent(fileName || parsed.hostname)
-  } catch {
-    return url
-  }
-}
-
 function fileUrl(path: string) {
   if (path.startsWith('file://')) return path
   return `file://${path.split('/').map(part => encodeURIComponent(part)).join('/')}`
@@ -57,17 +42,8 @@ function blobFromBase64(base64: string, mimeType: string) {
 }
 
 export function fileSegmentFromUrl(url: string): TodoFileSegment | null {
-  const trimmed = url.trim()
-  if (!/^https?:\/\//i.test(trimmed)) return null
-  return {
-    type: 'file',
-    id: randomId(),
-    label: labelFromUrl(trimmed),
-    source: trimmed.includes('docs.google.com') || trimmed.includes('drive.google.com') ? 'google_drive' : 'url',
-    mimeType: null,
-    url: trimmed,
-    openMode: trimmed.includes('/spreadsheets/') ? 'sheets' : 'browser',
-  }
+  const segment = urlToFileSegment(url)
+  return segment ? { ...segment, id: randomId() } : null
 }
 
 export async function fileSegmentFromLocalPath(path: string): Promise<TodoFileSegment> {
