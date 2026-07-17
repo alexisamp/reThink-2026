@@ -176,6 +176,99 @@
 .mchip.opp:hover { border-color: color-mix(in oklab, var(--mchip-opp) 42%, transparent); }
 .mchip.opp .ico { color: var(--mchip-opp); display: inline-flex; }
 
+.td-chip-mention,
+.td-editor-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  max-width: min(240px, 100%);
+  height: 18px;
+  padding: 0 6px 0 3px;
+  margin: 0 1px;
+  border: 1px solid color-mix(in oklab, var(--midnight) 9%, transparent);
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--midnight) 3%, transparent);
+  color: color-mix(in oklab, var(--midnight) 68%, transparent);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  vertical-align: baseline;
+  white-space: nowrap;
+  user-select: none;
+}
+.td-chip-mention > span:last-child,
+.td-editor-chip > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.td-chip-mention.clickable,
+.td-editor-chip.clickable { cursor: pointer; }
+.td-chip-mention.clickable:hover,
+.td-editor-chip.clickable:hover {
+  border-color: color-mix(in oklab, var(--burnham) 22%, transparent);
+  color: var(--burnham);
+}
+.td-chip-mention .av,
+.td-editor-chip .av {
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--mercury) 58%, #fff);
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: 6.8px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.td-chip-mention .av.sq,
+.td-editor-chip .av.sq { border-radius: 3px; }
+.td-chip-mention .av img,
+.td-editor-chip .av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.td-chip-mention.person,
+.td-editor-chip[data-kind="person"] { border-color: color-mix(in oklab, var(--mchip-person) 26%, transparent); background: color-mix(in oklab, var(--mchip-person) 8%, transparent); color: color-mix(in oklab, var(--mchip-person) 78%, black); }
+.td-chip-mention.company,
+.td-editor-chip[data-kind="company"] { border-color: color-mix(in oklab, var(--mchip-company) 26%, transparent); background: color-mix(in oklab, var(--mchip-company) 8%, transparent); color: color-mix(in oklab, var(--mchip-company) 78%, black); }
+.td-chip-mention.opportunity,
+.td-editor-chip[data-kind="opportunity"] { border-color: color-mix(in oklab, var(--mchip-opp) 26%, transparent); background: color-mix(in oklab, var(--mchip-opp) 7%, transparent); color: color-mix(in oklab, var(--mchip-opp) 82%, black); }
+.td-file-chip {
+  border-color: color-mix(in oklab, var(--attio-blue) 20%, transparent);
+  background: color-mix(in oklab, var(--attio-blue) 6%, transparent);
+  color: color-mix(in oklab, var(--attio-blue) 82%, black);
+}
+.td-file-chip .av {
+  width: auto;
+  min-width: 20px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--attio-blue) 12%, #fff);
+  color: var(--attio-blue);
+  font-size: 7px;
+}
+.td-mention-editor {
+  min-height: 20px;
+  outline: none;
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--burnham);
+  letter-spacing: -0.005em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.td-mention-editor:empty::before {
+  content: attr(data-placeholder);
+  color: color-mix(in oklab, var(--shuttle) 45%, transparent);
+  pointer-events: none;
+}
+
 /* composing editor chip — same type tints via data-kind */
 .tp-chip[data-kind="person"] { border-color: color-mix(in oklab, var(--mchip-person) 26%, transparent); background: color-mix(in oklab, var(--mchip-person) 8%, transparent); color: color-mix(in oklab, var(--mchip-person) 78%, black); }
 .tp-chip[data-kind="company"] { border-color: color-mix(in oklab, var(--mchip-company) 26%, transparent); background: color-mix(in oklab, var(--mchip-company) 8%, transparent); color: color-mix(in oklab, var(--mchip-company) 78%, black); }

@@ -17,12 +17,96 @@ export type EditorSegment =
 
 export type TodoFileSegment = Extract<TodoContentSegment, { type: 'file' }>
 
+const URL_RE = /((?:https?:\/\/|www\.)[^\s<>"']+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>"']*)?)/gi
+const TRAILING_URL_PUNCT = /[),.;:!?]+$/
+
 export function mentionKey(m: Pick<Mention, 'kind' | 'id' | 'name'>) {
   return `${m.kind}:${m.id ?? m.name}`
 }
 
 export function fileKey(file: Pick<TodoFileSegment, 'id' | 'label'>) {
   return `file:${file.id || file.label}`
+}
+
+function normalizedUrl(raw: string) {
+  const trimmed = raw.trim().replace(TRAILING_URL_PUNCT, '')
+  if (!trimmed || trimmed.includes('@')) return null
+  const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  try {
+    const url = new URL(candidate)
+    if (!url.hostname.includes('.')) return null
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
+function titleCaseSlug(value: string) {
+  return value
+    .replace(/\.[a-z0-9]{1,8}$/i, '')
+    .replace(/[-_+]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b([a-z])([a-z]*)/gi, (_, first: string, rest: string) => `${first.toUpperCase()}${rest}`)
+}
+
+export function linkLabelFromUrl(raw: string) {
+  const href = normalizedUrl(raw) ?? raw
+  try {
+    const url = new URL(href)
+    const host = url.hostname.replace(/^www\./i, '')
+    const parts = url.pathname.split('/').map(part => decodeURIComponent(part)).filter(Boolean)
+    if (parts.length) {
+      const slug = titleCaseSlug(parts[parts.length - 1])
+      if (slug) return `${host} · ${slug}`
+    }
+    return host
+  } catch {
+    return raw.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '')
+  }
+}
+
+export function urlToFileSegment(raw: string): TodoFileSegment | null {
+  const href = normalizedUrl(raw)
+  if (!href) return null
+  return {
+    type: 'file',
+    id: `url:${href}`,
+    label: linkLabelFromUrl(href),
+    source: href.includes('docs.google.com') || href.includes('drive.google.com') ? 'google_drive' : 'url',
+    mimeType: 'text/uri-list',
+    url: href,
+    openMode: href.includes('/spreadsheets/') ? 'sheets' : 'browser',
+  }
+}
+
+function textToAutoLinkedSegments(text: string): EditorSegment[] {
+  const out: EditorSegment[] = []
+  let cursor = 0
+  URL_RE.lastIndex = 0
+  for (const match of text.matchAll(URL_RE)) {
+    const token = match[0]
+    const index = match.index ?? 0
+    const segment = urlToFileSegment(token)
+    if (!segment) continue
+    const cleanToken = token.replace(TRAILING_URL_PUNCT, '')
+    const end = index + cleanToken.length
+    if (index > cursor) out.push({ type: 'text', text: text.slice(cursor, index) })
+    out.push({ type: 'file', file: segment })
+    if (end < index + token.length) out.push({ type: 'text', text: token.slice(cleanToken.length) })
+    cursor = index + token.length
+  }
+  if (cursor < text.length) out.push({ type: 'text', text: text.slice(cursor) })
+  return out.length ? out : [{ type: 'text', text }]
+}
+
+export function autoLinkEditorSegments(segments: EditorSegment[]): EditorSegment[] {
+  const out: EditorSegment[] = []
+  for (const segment of segments) {
+    if (segment.type === 'text') out.push(...textToAutoLinkedSegments(segment.text))
+    else out.push(segment)
+  }
+  return out
 }
 
 export function hasMentionTokens(text: string) {
@@ -70,7 +154,7 @@ export function editorToContentSegments(segments: EditorSegment[]): TodoContentS
     if (last?.type === 'text') last.text += text
     else out.push({ type: 'text', text })
   }
-  for (const segment of segments) {
+  for (const segment of autoLinkEditorSegments(segments)) {
     if (segment.type === 'text') pushText(segment.text)
     else if (segment.type === 'mention') {
       const mention = mentionToSegment(segment.mention)
@@ -93,7 +177,7 @@ export function contentToEditorSegments(segments: TodoContentSegment[] | null | 
       out.push({ type: 'file', file: segment })
     }
   }
-  return out
+  return normalizeEditorSegments(out)
 }
 
 export function legacyTextToEditorSegments(text: string, options: Mention[] = []): EditorSegment[] {
@@ -108,7 +192,7 @@ export function legacyTextToEditorSegments(text: string, options: Mention[] = []
     return token
   })
   if (last < text.length) segments.push({ type: 'text', text: text.slice(last) })
-  return segments
+  return normalizeEditorSegments(segments)
 }
 
 export function segmentsForTodo(todo: Todo, linked: Mention[] = [], options: Mention[] = []): EditorSegment[] {
@@ -120,7 +204,7 @@ export function segmentsForTodo(todo: Todo, linked: Mention[] = [], options: Men
     return legacyTextToEditorSegments(todo.text, source)
   }
   const out: EditorSegment[] = []
-  if (todo.text) out.push({ type: 'text', text: todo.text })
+  if (todo.text) out.push(...textToAutoLinkedSegments(todo.text))
   linked.forEach((mention, index) => {
     if (out.length > 0 || index > 0) out.push({ type: 'text', text: ' ' })
     out.push({ type: 'mention', mention })
@@ -175,7 +259,7 @@ export function normalizeEditorSegments(segments: EditorSegment[]): EditorSegmen
     if (last?.type === 'text') last.text += text
     else out.push({ type: 'text', text })
   }
-  for (const segment of segments) {
+  for (const segment of autoLinkEditorSegments(segments)) {
     if (segment.type === 'text') pushText(segment.text)
     else out.push(segment)
   }
