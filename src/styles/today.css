@@ -175,6 +175,31 @@
 .mchip.opp { padding-left: 5px; border-color: color-mix(in oklab, var(--mchip-opp) 26%, transparent); background: color-mix(in oklab, var(--mchip-opp) 7%, transparent); color: color-mix(in oklab, var(--mchip-opp) 82%, black); }
 .mchip.opp:hover { border-color: color-mix(in oklab, var(--mchip-opp) 42%, transparent); }
 .mchip.opp .ico { color: var(--mchip-opp); display: inline-flex; }
+.mchip.linkchip {
+  border-color: color-mix(in oklab, var(--attio-blue) 22%, transparent);
+  background: color-mix(in oklab, var(--attio-blue) 6%, transparent);
+  color: color-mix(in oklab, var(--attio-blue) 82%, black);
+  vertical-align: baseline;
+}
+.mchip.linkchip .ico { color: var(--attio-blue); display: inline-flex; }
+.mchip.linkchip:hover {
+  border-color: color-mix(in oklab, var(--attio-blue) 38%, transparent);
+  color: var(--attio-blue);
+  text-decoration: none;
+}
+.tp-file-chip {
+  border-color: color-mix(in oklab, var(--attio-blue) 22%, transparent);
+  background: color-mix(in oklab, var(--attio-blue) 6%, transparent);
+  color: color-mix(in oklab, var(--attio-blue) 82%, black);
+}
+.tp-file-chip .tp-chip-av {
+  width: auto;
+  min-width: 20px;
+  padding: 0 3px;
+  background: color-mix(in oklab, var(--attio-blue) 12%, #fff);
+  color: var(--attio-blue);
+  font-size: 7px;
+}
 
 .td-chip-mention,
 .td-editor-chip {
