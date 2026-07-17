@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { TodoContentSegment, TodoMentionKind } from '@/types'
+import { urlToFileSegment, type TodoFileSegment } from '@/lib/todoContent'
+import { openLink } from '@/lib/openLink'
 import type { Mention, TodoMilestoneOption } from './types'
 import { Icon, Logo } from './TodayIcons'
 
 export type EditorSegment =
   | { type: 'text'; text: string }
+  | { type: 'file'; file: TodoFileSegment }
   | {
       type: 'mention'
       kind: TodoMentionKind
@@ -49,13 +52,51 @@ const BRAND: Record<string, { bg: string; fg: string }> = {
   wander: { bg: '#1f6feb', fg: '#fff' },
 }
 
+const URL_RE = /((?:https?:\/\/|www\.)[^\s<>"']+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>"']*)?)/gi
+const TRAILING_URL_PUNCT = /[),.;:!?]+$/
+
+function textToSegments(text: string): EditorSegment[] {
+  const out: EditorSegment[] = []
+  let cursor = 0
+  URL_RE.lastIndex = 0
+  for (const match of text.matchAll(URL_RE)) {
+    const token = match[0]
+    const index = match.index ?? 0
+    const file = urlToFileSegment(token)
+    if (!file) continue
+    const clean = token.replace(TRAILING_URL_PUNCT, '')
+    const end = index + clean.length
+    if (index > cursor) out.push({ type: 'text', text: text.slice(cursor, index) })
+    out.push({ type: 'file', file })
+    if (end < index + token.length) out.push({ type: 'text', text: token.slice(clean.length) })
+    cursor = index + token.length
+  }
+  if (cursor < text.length) out.push({ type: 'text', text: text.slice(cursor) })
+  return out.length ? out : [{ type: 'text', text }]
+}
+
+function normalizeSegments(segments: EditorSegment[]): EditorSegment[] {
+  const out: EditorSegment[] = []
+  const pushText = (text: string) => {
+    if (!text) return
+    const last = out[out.length - 1]
+    if (last?.type === 'text') last.text += text
+    else out.push({ type: 'text', text })
+  }
+  for (const segment of segments) {
+    if (segment.type === 'text') textToSegments(segment.text).forEach(next => next.type === 'text' ? pushText(next.text) : out.push(next))
+    else out.push(segment)
+  }
+  return out.filter(segment => segment.type !== 'text' || Boolean(segment.text))
+}
+
 export function toEditorSegments(segments: TodoContentSegment[] | null | undefined, fallback: string): EditorSegment[] {
   if (segments?.length) {
-    return segments.flatMap<EditorSegment>(segment => {
-      if (segment.type === 'text') return [{ type: 'text' as const, text: segment.text }]
+    return normalizeSegments(segments.flatMap<EditorSegment>(segment => {
+      if (segment.type === 'text') return [{ type: 'text', text: segment.text }]
       if (segment.type === 'mention') {
         return [{
-          type: 'mention' as const,
+          type: 'mention',
           kind: segment.kind,
           id: segment.id,
           name: segment.label,
@@ -64,15 +105,16 @@ export function toEditorSegments(segments: TodoContentSegment[] | null | undefin
           companyId: segment.companyId,
         }]
       }
-      return [{ type: 'text' as const, text: segment.label }]
-    })
+      return [{ type: 'file', file: segment }]
+    }))
   }
-  return fallback ? [{ type: 'text', text: fallback }] : []
+  return fallback ? textToSegments(fallback) : []
 }
 
 export function editorSegmentsToTodo(segments: EditorSegment[]): TodoContentSegment[] {
-  return segments.map(segment => {
+  return normalizeSegments(segments).map(segment => {
     if (segment.type === 'text') return segment
+    if (segment.type === 'file') return segment.file
     return {
       type: 'mention',
       kind: segment.kind,
@@ -85,7 +127,11 @@ export function editorSegmentsToTodo(segments: EditorSegment[]): TodoContentSegm
 }
 
 export function editorText(segments: EditorSegment[]) {
-  return segments.map(segment => segment.type === 'text' ? segment.text : segment.name).join('').replace(/\s{2,}/g, ' ').trim()
+  return normalizeSegments(segments).map(segment => {
+    if (segment.type === 'text') return segment.text
+    if (segment.type === 'file') return segment.file.label
+    return segment.name
+  }).join('').replace(/\s{2,}/g, ' ').trim()
 }
 
 function avatarHTML(m: EditorSegment & { type: 'mention' }) {
@@ -110,6 +156,29 @@ function makeChip(m: Mention | EditorSegment & { type: 'mention' }) {
   return span
 }
 
+function makeFileChip(file: TodoFileSegment) {
+  const span = document.createElement('span')
+  span.className = 'tp-chip tp-file-chip'
+  span.setAttribute('contenteditable', 'false')
+  span.dataset.file = 'true'
+  span.dataset.id = file.id
+  span.dataset.label = file.label
+  span.dataset.source = file.source
+  span.dataset.mimeType = file.mimeType ?? ''
+  span.dataset.path = file.path ?? ''
+  span.dataset.url = file.url ?? ''
+  span.dataset.googleFileId = file.googleFileId ?? ''
+  span.dataset.openMode = file.openMode
+  const avatar = document.createElement('span')
+  avatar.className = 'tp-chip-av sq'
+  avatar.textContent = 'URL'
+  const label = document.createElement('span')
+  label.className = 'tp-chip-nm'
+  label.textContent = file.label
+  span.append(avatar, label)
+  return span
+}
+
 function readSegments(el: HTMLElement): EditorSegment[] {
   const segs: EditorSegment[] = []
   el.childNodes.forEach(node => {
@@ -121,6 +190,23 @@ function readSegments(el: HTMLElement): EditorSegment[] {
       return
     }
     const element = node as HTMLElement
+    if (element.dataset?.file === 'true') {
+      segs.push({
+        type: 'file',
+        file: {
+          type: 'file',
+          id: element.dataset.id || `url:${element.dataset.url || element.dataset.label || crypto.randomUUID()}`,
+          label: element.dataset.label || 'Link',
+          source: (element.dataset.source as TodoFileSegment['source']) || 'url',
+          mimeType: element.dataset.mimeType || null,
+          path: element.dataset.path || null,
+          url: element.dataset.url || null,
+          googleFileId: element.dataset.googleFileId || null,
+          openMode: (element.dataset.openMode as TodoFileSegment['openMode']) || 'browser',
+        },
+      })
+      return
+    }
     if (element.dataset?.kind) {
       segs.push({
         type: 'mention',
@@ -141,11 +227,11 @@ function readSegments(el: HTMLElement): EditorSegment[] {
     last.text = last.text.replace(/\s+$/, '')
     if (!last.text) segs.pop()
   }
-  return segs.filter(segment => segment.type !== 'text' || Boolean(segment.text))
+  return normalizeSegments(segs.filter(segment => segment.type !== 'text' || Boolean(segment.text)))
 }
 
 function segEmpty(segs: EditorSegment[]) {
-  return !segs.some(segment => segment.type === 'mention' || (segment.text && segment.text.trim()))
+  return !segs.some(segment => segment.type === 'mention' || segment.type === 'file' || (segment.text && segment.text.trim()))
 }
 
 export function MentionChip({ m }: { m: EditorSegment & { type: 'mention' } }) {
@@ -159,9 +245,23 @@ export function MentionChip({ m }: { m: EditorSegment & { type: 'mention' } }) {
 export function SegmentText({ segments }: { segments?: EditorSegment[] }) {
   return (
     <>
-      {(segments || []).map((segment, i) => segment.type === 'mention'
-        ? <MentionChip key={i} m={segment} />
-        : <span key={i} className="seg-t">{segment.text}</span>)}
+      {normalizeSegments(segments || []).map((segment, i) => {
+        if (segment.type === 'mention') return <MentionChip key={i} m={segment} />
+        if (segment.type === 'file') {
+          return (
+            <button
+              key={i}
+              type="button"
+              className="mchip linkchip"
+              title={segment.file.url ?? segment.file.label}
+              onClick={(event) => { event.stopPropagation(); if (segment.file.url) openLink(segment.file.url) }}
+            >
+              <span className="ico"><Icon name="link" size={10} /></span>{segment.file.label}
+            </button>
+          )
+        }
+        return <span key={i} className="seg-t">{segment.text}</span>
+      })}
     </>
   )
 }
@@ -206,6 +306,7 @@ export function TodoEditor({
     el.innerHTML = ''
     ;(initialSegments || []).forEach(segment => {
       if (segment.type === 'mention') el.appendChild(makeChip(segment))
+      else if (segment.type === 'file') el.appendChild(makeFileChip(segment.file))
       else el.appendChild(document.createTextNode(segment.text))
     })
     if (autoFocus) {
