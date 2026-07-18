@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import type { TodoMentionKind } from '@/types'
 import type { Mention, TodoMilestoneOption } from './types'
 import {
@@ -946,7 +947,7 @@ export default function MentionEditor({
           if (e.key === 'Escape') { e.preventDefault(); onCancel() }
         }}
       />
-      {trigger && pickerStyle && (
+      {trigger && pickerStyle && createPortal(
         trigger.type === 'mention'
           ? <MentionPicker actions={actions} selected={selected} style={pickerStyle} onPick={action => { void pickAction(action) }} />
           : trigger.type === 'file'
@@ -963,7 +964,8 @@ export default function MentionEditor({
                 onPickDrive={pickDriveFile}
               />
             )
-            : <MilestonePicker actions={msActions} selected={selected} style={pickerStyle} onPick={pickMilestone} />
+            : <MilestonePicker actions={msActions} selected={selected} style={pickerStyle} onPick={pickMilestone} />,
+        document.body,
       )}
     </div>
   )

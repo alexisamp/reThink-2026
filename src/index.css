@@ -9,6 +9,7 @@
 @import './styles/rethink-kit/story.css';
 @import './styles/handoff-lists.css';
 @import './styles/today.css';
+@import './styles/week-plan.css';
 
 @tailwind base;
 @tailwind components;
