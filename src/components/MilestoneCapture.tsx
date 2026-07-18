@@ -150,30 +150,31 @@ export function MilestoneCapture({ userId, today, goals, onClose, onCreated }: M
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="legacy-flow-scrim milestone-capture-scrim fixed inset-0 z-50 flex items-center justify-center"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-burnham/10 backdrop-blur-[2px]" />
+      <div className="legacy-flow-backdrop absolute inset-0 bg-burnham/10 backdrop-blur-[2px]" />
 
       {/* Panel */}
       <div
-        className="relative bg-white border border-mercury rounded-2xl shadow-2xl shadow-burnham/5 w-full max-w-md mx-4 overflow-hidden"
+        className="legacy-flow-panel milestone-capture-panel relative bg-white border border-mercury rounded-lg shadow-[var(--shadow-pop)] w-full max-w-md mx-4 overflow-hidden"
         onKeyDown={handleKeyDown}
       >
         {/* Header */}
-        <div className="flex items-center gap-2 px-5 pt-5 pb-4 border-b border-mercury/50">
+        <div className="legacy-flow-head flex items-center gap-2 px-5 pt-5 pb-4 border-b border-mercury/50">
           <Flag size={14} className="text-burnham shrink-0" />
           <span className="text-[12px] font-semibold text-burnham uppercase tracking-widest">New milestone</span>
           <button
             onClick={onClose}
+            aria-label="Close milestone capture"
             className="ml-auto text-shuttle/30 hover:text-shuttle transition-colors p-0.5 rounded"
           >
             <X size={14} />
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-4">
+        <div className="legacy-flow-body px-5 py-4 space-y-4">
           {/* Name */}
           <input
             ref={nameRef}
@@ -207,7 +208,7 @@ export function MilestoneCapture({ userId, today, goals, onClose, onCreated }: M
               {selectedDate && (
                 <button
                   onClick={() => { setSelectedDate(''); setCustomDateOpen(false) }}
-                  className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border border-red-200 text-red-400 hover:border-red-300 transition-colors"
+                  className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md border border-red-200 text-red-400 hover:border-red-300 transition-colors"
                 >
                   <X size={9} />
                   {formatChipDate(selectedDate, today)}
@@ -217,7 +218,7 @@ export function MilestoneCapture({ userId, today, goals, onClose, onCreated }: M
                 <button
                   key={chip.value}
                   onClick={() => { setSelectedDate(chip.value); setCustomDateOpen(false) }}
-                  className="text-[11px] px-2.5 py-1 rounded-full border border-mercury text-shuttle/60 hover:border-burnham/30 hover:text-burnham transition-colors"
+                  className="text-[11px] px-2.5 py-1 rounded-md border border-mercury text-shuttle/60 hover:border-burnham/30 hover:text-burnham transition-colors"
                 >
                   {chip.label}
                 </button>
@@ -225,7 +226,7 @@ export function MilestoneCapture({ userId, today, goals, onClose, onCreated }: M
               {!selectedDate && (
                 <button
                   onClick={() => setCustomDateOpen(v => !v)}
-                  className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border border-mercury text-shuttle/50 hover:border-burnham/30 hover:text-burnham transition-colors"
+                  className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md border border-mercury text-shuttle/50 hover:border-burnham/30 hover:text-burnham transition-colors"
                 >
                   <CalendarBlank size={10} />
                   Custom
@@ -271,7 +272,7 @@ export function MilestoneCapture({ userId, today, goals, onClose, onCreated }: M
                       title={t.addToday ? 'Remove from today' : 'Add to today'}
                       className={`shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded transition-all ${
                         t.addToday
-                          ? 'bg-gossip text-burnham border border-pastel/50'
+                          ? 'bg-gossip text-burnham border border-gossip'
                           : 'border border-mercury/50 text-shuttle/30 hover:border-shuttle/30 hover:text-shuttle/50'
                       }`}
                     >
@@ -299,8 +300,8 @@ export function MilestoneCapture({ userId, today, goals, onClose, onCreated }: M
         </div>
 
         {/* Footer */}
-        <div className="px-5 pb-5 flex items-center justify-between">
-          <span className="text-[10px] text-shuttle/30 font-mono">esc · ⌘↵ to save</span>
+        <div className="legacy-flow-foot px-5 pb-5 flex items-center justify-between">
+          <span className="text-[10px] text-shuttle/30 font-mono">Esc · Cmd+Enter to save</span>
           <button
             onClick={save}
             disabled={!canSave || saving}

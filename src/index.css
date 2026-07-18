@@ -9,6 +9,8 @@
 @import './styles/rethink-kit/story.css';
 @import './styles/handoff-lists.css';
 @import './styles/today.css';
+@import './styles/week-plan.css';
+@import './styles/attio-polish.css';
 
 @tailwind base;
 @tailwind components;
@@ -17,14 +19,14 @@
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
   body { @apply bg-canvas text-burnham font-sans antialiased; font-feature-settings: 'cv11', 'ss03'; }
-  ::selection { background-color: #EAF6CC; color: #003720; }
+  ::selection { background-color: #E4EDFF; color: #101113; }
   ::-webkit-scrollbar { width: 0; background: transparent; }
 
   /* Custom checkbox */
   .custom-checkbox {
     appearance: none;
     width: 1.15em; height: 1.15em;
-    border: 1.5px solid #E3E3E3;
+    border: 1.5px solid var(--mercury);
     border-radius: 0.35em;
     display: grid; place-content: center;
     cursor: pointer;
@@ -40,8 +42,8 @@
     clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
   }
   .custom-checkbox:checked {
-    background-color: #1A1A1A;
-    border-color: #1A1A1A;
+    background-color: var(--moss);
+    border-color: var(--moss);
   }
   .custom-checkbox:checked::before { transform: scale(1); }
   input:focus, textarea:focus, select:focus {
@@ -53,7 +55,7 @@
 /* Custom select — refined, matches design system */
 select {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23536471' opacity='0.35'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236F7988' opacity='0.45'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
   padding-right: 28px !important;

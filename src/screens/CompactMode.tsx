@@ -51,11 +51,11 @@ export default function CompactMode() {
   const doneCount = habits.filter(h => logs.some(l => l.habit_id === h.id && l.value === 1)).length
 
   return (
-    <div className="h-screen w-screen bg-white text-burnham font-sans flex flex-col select-none overflow-hidden">
+    <div className="compact-screen h-screen w-screen bg-white text-burnham font-sans flex flex-col select-none overflow-hidden">
       {/* Title bar */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-mercury bg-[#F8F9F9]">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-mercury bg-mercury/20">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-burnham tracking-widest">rT</span>
+          <span className="text-[10px] font-semibold text-burnham tracking-widest">rT</span>
           <span className="text-[10px] text-shuttle">{weekday}</span>
         </div>
         <div className="flex items-center gap-2">
@@ -79,12 +79,12 @@ export default function CompactMode() {
               onClick={() => toggleHabit(h.id)}
               className={`w-full flex items-center gap-3 py-2 px-3 rounded-lg border text-left transition-all ${
                 done
-                  ? 'bg-gossip/30 border-pastel/30 opacity-70'
+                  ? 'bg-gossip/30 border-gossip opacity-70'
                   : 'bg-white border-mercury hover:border-shuttle'
               }`}
             >
               <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                done ? 'bg-pastel border-pastel' : 'border-mercury'
+                done ? 'bg-burnham border-burnham' : 'border-mercury'
               }`}>
                 {done && <Check size={9} weight="bold" className="text-burnham" />}
               </div>
@@ -92,7 +92,7 @@ export default function CompactMode() {
                 {h.text}
               </span>
               {h.default_time && (
-                <span className="ml-auto text-[9px] font-mono text-shuttle/50">{h.default_time}</span>
+                <span className="ml-auto text-[10px] font-mono text-shuttle/50">{h.default_time}</span>
               )}
             </button>
           )
@@ -107,7 +107,7 @@ export default function CompactMode() {
             <div className="w-1.5 h-1.5 rounded-full bg-mercury shrink-0" />
             <span className="text-xs text-shuttle truncate flex-1">{m.text}</span>
             {m.target_date && (
-              <span className="text-[9px] font-mono text-shuttle/50 shrink-0">
+              <span className="text-[10px] font-mono text-shuttle/50 shrink-0">
                 {new Date(m.target_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </span>
             )}
@@ -119,7 +119,7 @@ export default function CompactMode() {
           <>
             <div className="h-px bg-mercury" />
             <div className="px-3 py-1.5">
-              <p className="text-[9px] uppercase tracking-widest text-shuttle/60 mb-1">One Thing</p>
+              <p className="text-[10px] uppercase tracking-widest text-shuttle/60 mb-1">One Thing</p>
               <p className="text-xs font-medium text-burnham">{review.one_thing}</p>
             </div>
           </>

@@ -28,12 +28,12 @@ export default function StreakCelebration({ streak, habitName, onDismiss }: Stre
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-white/95 backdrop-blur-sm cursor-pointer"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-white/95 backdrop-blur-sm cursor-pointer"
       onClick={onDismiss}
     >
       <div className="text-center space-y-4">
-        <div className="text-8xl select-none flex items-center justify-center"><Flame size={96} weight="fill" className="text-pastel" /></div>
-        <div className="text-7xl font-bold text-burnham tracking-tight">{streak}</div>
+        <div className="text-8xl select-none flex items-center justify-center"><Flame size={96} weight="fill" className="text-burnham" /></div>
+        <div className="text-7xl font-semibold text-burnham tracking-tight">{streak}</div>
         <div className="text-2xl font-semibold text-burnham">Day Streak</div>
         <div className="text-base text-shuttle">{habitName}</div>
         <div className="text-xs text-shuttle/60 mt-4">Click anywhere to continue</div>

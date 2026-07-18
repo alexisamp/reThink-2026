@@ -139,7 +139,7 @@ export function SuggestionsPanel({ userId, today, onAddTodo }: SuggestionsPanelP
           <span className="flex-1 text-[13px] text-shuttle/35 min-w-0 truncate">
             {s.nextStep ?? `Follow up with ${s.name}`}
           </span>
-          <span className={`text-[9px] font-mono shrink-0 ${
+          <span className={`text-[10px] font-mono shrink-0 ${
             s.daysOverdue && s.daysOverdue > 0 ? 'text-red-400/50' : 'text-shuttle/25'
           }`}>{s.reason}</span>
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -174,8 +174,8 @@ export function SuggestionsPanel({ userId, today, onAddTodo }: SuggestionsPanelP
           <span className="flex-1 text-[13px] text-shuttle/35 min-w-0 truncate">
             {s.todo.text}
           </span>
-          <span className="text-[9px] font-mono text-shuttle/20 shrink-0 truncate max-w-[80px]">
-            {s.milestone.text.length > 16 ? s.milestone.text.slice(0, 16) + '…' : s.milestone.text}
+          <span className="text-[10px] font-mono text-shuttle/20 shrink-0 truncate max-w-[80px]">
+            {s.milestone.text.length > 16 ? s.milestone.text.slice(0, 16) + '...' : s.milestone.text}
           </span>
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
             <button

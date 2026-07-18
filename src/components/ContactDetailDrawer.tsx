@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  X, ArrowLeft, ArrowSquareOut, ChatCircle, Envelope, Phone,
+  X, ArrowLeft, ArrowRight, ArrowSquareOut, ChatCircle, Envelope, Phone,
   VideoCamera, Users, CaretDown, CaretUp, Trash, Plus, Check,
   Globe, Sparkle, SpinnerGap, PencilSimple, NotePencil,
+  CalendarBlank, Gift, Baby, Heart, Confetti, Briefcase,
+  Star, LinkSimple, Newspaper, FileText, ArrowUp, ArrowDown, Minus,
 } from '@phosphor-icons/react'
 import { useInteractions } from '@/hooks/useInteractions'
 import { useContactEnricher, hasGeminiEnrichKey } from '@/hooks/useContactEnricher'
@@ -32,15 +34,6 @@ function localDate(d = new Date()) {
 
 // ── Milestone helpers ─────────────────────────────────────────────────────────
 
-const MILESTONE_EMOJI: Record<ContactMilestone['type'], string> = {
-  birthday_contact: '🎂',
-  birthday_child:   '👶',
-  birthday_partner: '💑',
-  anniversary:      '🎉',
-  anniversary_work: '💼',
-  custom:           '⭐',
-}
-
 const MILESTONE_LABELS: Record<ContactMilestone['type'], string> = {
   birthday_contact: 'Their birthday',
   birthday_child:   "Child's birthday",
@@ -48,6 +41,18 @@ const MILESTONE_LABELS: Record<ContactMilestone['type'], string> = {
   anniversary:      'Anniversary',
   anniversary_work: 'Work anniversary',
   custom:           'Custom',
+}
+
+function MilestoneIcon({ type, size = 14 }: { type: ContactMilestone['type']; size?: number }) {
+  const className = "text-shuttle/70 flex-shrink-0"
+  switch (type) {
+    case 'birthday_contact': return <Gift size={size} className={className} />
+    case 'birthday_child': return <Baby size={size} className={className} />
+    case 'birthday_partner': return <Heart size={size} className={className} />
+    case 'anniversary': return <Confetti size={size} className={className} />
+    case 'anniversary_work': return <Briefcase size={size} className={className} />
+    case 'custom': return <Star size={size} className={className} />
+  }
 }
 
 function formatMilestoneDateDisplay(m: ContactMilestone): string {
@@ -76,14 +81,13 @@ function daysUntilMilestone(m: ContactMilestone): number | null {
 
 // ── Link type icons ───────────────────────────────────────────────────────────
 
-const LINK_TYPE_ICONS: Record<string, string> = {
-  shared_doc:    '📄',
-  their_content: '📰',
-  resource:      '🔗',
-}
-
-function getLinkIcon(type?: string): string {
-  return LINK_TYPE_ICONS[type ?? 'resource'] ?? '🔗'
+function LinkTypeIcon({ type, size = 14 }: { type?: string; size?: number }) {
+  const className = "text-shuttle/70 flex-shrink-0"
+  switch (type ?? 'resource') {
+    case 'shared_doc': return <FileText size={size} className={className} />
+    case 'their_content': return <Newspaper size={size} className={className} />
+    default: return <LinkSimple size={size} className={className} />
+  }
 }
 
 function daysSince(dateStr: string | null): number | null {
@@ -101,25 +105,25 @@ function formatAgo(days: number): string {
 
 function healthDotColor(score: number): string {
   if (score <= 3) return 'text-red-400'
-  if (score <= 6) return 'text-yellow-400'
-  return 'text-pastel'
+  if (score <= 6) return 'text-shuttle'
+  return 'text-burnham'
 }
 
 function healthScoreColor(score: number): string {
-  if (score >= 7) return '#79D65E'
-  if (score >= 4) return '#F59E0B'
-  return '#EF4444'
+  if (score >= 7) return '#266DF0'
+  if (score >= 4) return '#6F7988'
+  return 'var(--danger, #C23A3A)'
 }
 
-function getScoreTrend(score: number, interactions: Interaction[]): '↑' | '→' | '↓' {
+function getScoreTrend(score: number, interactions: Interaction[]): 'up' | 'flat' | 'down' {
   const now = Date.now()
   const lastInteraction = interactions[0]?.interaction_date
-  if (!lastInteraction) return score <= 3 ? '↓' : '→'
+  if (!lastInteraction) return score <= 3 ? 'down' : 'flat'
   const lastMs = new Date(lastInteraction).getTime()
   const daysSince = (now - lastMs) / (24 * 60 * 60 * 1000)
-  if (daysSince < 30) return '↑'
-  if (daysSince > 60) return '↓'
-  return '→'
+  if (daysSince < 30) return 'up'
+  if (daysSince > 60) return 'down'
+  return 'flat'
 }
 
 const INTERACTION_TYPE_LABELS: Record<Interaction['type'], string> = {
@@ -522,7 +526,7 @@ export default function ContactDetailDrawer({
       } else {
         await onSyncToAttio(contact.id)
       }
-      setAttioToast('✓ Synced')
+      setAttioToast('Synced')
       setTimeout(() => setAttioToast(''), 3000)
     } finally {
       setSyncing(false)
@@ -564,7 +568,7 @@ export default function ContactDetailDrawer({
   // Sync error display helpers
   const syncErrRaw = saveError ?? null
   const syncErrShort = syncErrRaw && syncErrRaw.length > 100
-    ? syncErrRaw.slice(0, 100) + '…'
+    ? syncErrRaw.slice(0, 100) + '...'
     : syncErrRaw
 
   // ── context banner visibility ────────────────────────────────────────────
@@ -599,7 +603,7 @@ export default function ContactDetailDrawer({
   // ── milestone save ────────────────────────────────────────────────────────
   async function saveMilestone() {
     if (!contact) return
-    // Map recurrence → isAnnual for backward compat
+    // Map recurrence to isAnnual for backward compatibility.
     const isAnnual = newMilestone.recurrence === 'annual' || newMilestone.recurrence === 'semi_annual'
     const payload: Record<string, unknown> = {
       contact_id: contact.id,
@@ -819,21 +823,21 @@ export default function ContactDetailDrawer({
       {/* Backdrop */}
       {open && (
         <div
-          className="fixed inset-0 z-[199] bg-black/10"
+          className="contact-detail-backdrop fixed inset-0 z-40 bg-black/10"
           onClick={onClose}
         />
       )}
 
       {/* Drawer */}
       <div
-        className={`fixed inset-y-0 right-0 z-[200] w-96 bg-white border-l border-mercury shadow-2xl flex flex-col overflow-y-auto transform transition-transform duration-200 ease-in-out ${
+        className={`contact-detail-drawer fixed inset-y-0 right-0 z-50 w-96 bg-white border-l border-mercury shadow-[var(--shadow-pop)] flex flex-col overflow-y-auto transform transition-transform duration-200 ease-in-out ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         {!contact ? null : (
           <>
             {/* ── 1. Header ───────────────────────────────────────────────── */}
-            <div className="p-4 border-b border-mercury flex items-start justify-between sticky top-0 bg-white z-10">
+            <div className="contact-detail-head p-4 border-b border-mercury flex items-start justify-between sticky top-0 bg-white z-10">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   <button
@@ -843,7 +847,7 @@ export default function ContactDetailDrawer({
                     <ArrowLeft size={16} />
                   </button>
                   <h2 className="text-sm font-semibold text-burnham truncate">
-                    {contact.name}'s profile
+                    {contact.name}
                   </h2>
                 </div>
               </div>
@@ -857,8 +861,8 @@ export default function ContactDetailDrawer({
 
             {/* ── 1c. Meeting suggestion banner (F07) ──────────────────────── */}
             {meetingSuggestion && !todoSuggestionDismissed && (
-              <div className="mx-4 mt-3 p-3 bg-gossip/50 rounded-xl border border-pastel/30 flex items-start gap-2">
-                <span className="text-sm">📅</span>
+              <div className="mx-4 mt-3 p-3 bg-gossip/50 rounded-lg border border-gossip flex items-start gap-2">
+                <CalendarBlank size={15} className="text-shuttle/70 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-burnham">Meeting: {meetingSuggestion.summary}</p>
                   <p className="text-[10px] text-shuttle/70">
@@ -882,15 +886,21 @@ export default function ContactDetailDrawer({
                     + Create prep todo (due day before)
                   </button>
                 </div>
-                <button onClick={() => setTodoSuggestionDismissed(true)} className="text-shuttle/40 hover:text-shuttle text-lg leading-none">×</button>
+                <button
+                  onClick={() => setTodoSuggestionDismissed(true)}
+                  aria-label="Dismiss prep todo suggestion"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-shuttle/40 hover:text-shuttle hover:bg-mercury/30 transition-colors"
+                >
+                  <X size={12} weight="bold" />
+                </button>
               </div>
             )}
 
             {/* ── 1b. Personal context first-flow banner ───────────────────── */}
             {showContextBanner && (
-              <div className="mx-4 mt-4 bg-gossip/20 border border-pastel/40 rounded-xl p-4 mb-4">
+              <div className="mx-4 mt-4 bg-gossip/20 border border-gossip rounded-lg p-4 mb-4">
                 <div className="flex items-center gap-1.5 mb-1">
-                  <Sparkle size={14} weight="fill" className="text-pastel flex-shrink-0" />
+                  <Sparkle size={14} weight="fill" className="text-burnham flex-shrink-0" />
                   <p className="text-xs font-semibold text-burnham">Add context to power AI enrichment</p>
                 </div>
                 <p className="text-[11px] text-shuttle/70 mb-2">
@@ -900,7 +910,7 @@ export default function ContactDetailDrawer({
                   value={contextBannerText}
                   onChange={e => setContextBannerText(e.target.value)}
                   placeholder="Met at Latam Conf..."
-                  className="w-full min-h-[80px] text-xs text-burnham/80 bg-white/70 border border-pastel/30 rounded-lg p-2 placeholder-shuttle/30 resize-none focus:outline-none focus:border-burnham/30 mb-2"
+                  className="w-full min-h-[80px] text-xs text-burnham/80 bg-white/70 border border-gossip rounded-lg p-2 placeholder-shuttle/30 resize-none focus:outline-none focus:border-burnham/30 mb-2"
                 />
                 <div className="flex items-center justify-end gap-2">
                   <button
@@ -924,12 +934,12 @@ export default function ContactDetailDrawer({
                     {enriching ? (
                       <>
                         <SpinnerGap size={12} className="animate-spin" />
-                        Enriching…
+                        Enriching...
                       </>
                     ) : (
                       <>
                         <Sparkle size={12} weight="fill" />
-                        Save &amp; Enrich →
+                        Save &amp; Enrich <ArrowRight size={12} />
                       </>
                     )}
                   </button>
@@ -987,7 +997,7 @@ export default function ContactDetailDrawer({
                     <select
                       value={localCategory ?? ''}
                       onChange={e => handleCategoryChange(e.target.value as ContactCategory)}
-                      className="text-[9px] uppercase bg-mercury/30 text-shuttle rounded px-1.5 py-0.5 border-0 focus:outline-none focus:ring-1 focus:ring-burnham/20 cursor-pointer"
+                      className="text-[10px] uppercase bg-mercury/30 text-shuttle rounded px-1.5 py-0.5 border-0 focus:outline-none focus:ring-1 focus:ring-burnham/20 cursor-pointer"
                     >
                       {(Object.entries(CATEGORY_LABELS) as [ContactCategory, string][]).map(([val, label]) => (
                         <option key={val} value={val}>{label}</option>
@@ -1142,7 +1152,7 @@ export default function ContactDetailDrawer({
                 )}
                 {/* Birthday */}
                 <div className="flex items-center gap-2">
-                  <span className="text-sm leading-none flex-shrink-0">🎂</span>
+                  <Gift size={14} className="text-shuttle/70 flex-shrink-0" />
                   <div className="flex-1">
                     <input
                       type="text"
@@ -1166,8 +1176,8 @@ export default function ContactDetailDrawer({
                       const days = birthdayDaysUntil(birthdayInput)
                       if (days === null) return null
                       if (days > 30) return null
-                      if (days === 0) return <p className="text-[10px] text-green-500 mt-0.5">🎉 Today!</p>
-                      return <p className="text-[10px] text-green-600 mt-0.5">🎂 {days} day{days === 1 ? '' : 's'} away</p>
+                      if (days === 0) return <p className="text-[10px] text-burnham mt-0.5">Today</p>
+                      return <p className="text-[10px] text-burnham mt-0.5">{days} day{days === 1 ? '' : 's'} away</p>
                     })()}
                   </div>
                 </div>
@@ -1252,14 +1262,15 @@ export default function ContactDetailDrawer({
                   </span>
                   {(() => {
                     const trend = getScoreTrend(healthScore, sortedInteractions)
-                    const color = trend === '↑' ? '#22c55e' : trend === '↓' ? '#ef4444' : '#f97316'
+                    const color = trend === 'up' ? '#266DF0' : trend === 'down' ? '#C23A3A' : '#6F7988'
+                    const TrendIcon = trend === 'up' ? ArrowUp : trend === 'down' ? ArrowDown : Minus
                     return (
-                      <span className="text-sm font-bold leading-none" style={{ color }} title={
-                        trend === '↑' ? 'Trending up — recent interaction' :
-                        trend === '↓' ? 'Trending down — no contact in 60+ days' :
-                        'Stable — no contact in 30-60 days'
+                      <span className="text-sm font-semibold leading-none" style={{ color }} title={
+                        trend === 'up' ? 'Trending up - recent interaction' :
+                        trend === 'down' ? 'Trending down - no contact in 60+ days' :
+                        'Stable - no contact in 30-60 days'
                       }>
-                        {trend}
+                        <TrendIcon size={14} weight="bold" />
                       </span>
                     )
                   })()}
@@ -1295,11 +1306,11 @@ export default function ContactDetailDrawer({
               </div>
 
               {milestonesLoading && (
-                <p className="text-[11px] text-shuttle/40">Loading…</p>
+                <p className="text-[11px] text-shuttle/40">Loading...</p>
               )}
 
               {!milestonesLoading && milestones.length === 0 && !showAddMilestone && (
-                <p className="text-[11px] text-shuttle/40">No milestones yet — add birthdays, anniversaries…</p>
+                <p className="text-[11px] text-shuttle/40">No milestones yet - add birthdays, anniversaries...</p>
               )}
 
               {milestones.length > 0 && (
@@ -1308,14 +1319,14 @@ export default function ContactDetailDrawer({
                     const days = daysUntilMilestone(m)
                     return (
                       <li key={m.id} className="group flex items-center gap-2">
-                        <span className="text-sm leading-none flex-shrink-0">{MILESTONE_EMOJI[m.type]}</span>
+                        <MilestoneIcon type={m.type} />
                         <div className="flex-1 min-w-0">
                           <span className="text-xs text-burnham/80 truncate block">{m.label}</span>
                           <div className="flex items-center gap-1.5">
                             <span className="text-[10px] text-shuttle/50">{formatMilestoneDateDisplay(m)}</span>
                             {days !== null && days >= 0 && days <= 30 && (
-                              <span className={`text-[10px] font-medium ${days === 0 ? 'text-green-500' : 'text-green-600'}`}>
-                                {days === 0 ? 'today! 🎉' : `in ${days} day${days === 1 ? '' : 's'}`}
+                              <span className="text-[10px] font-medium text-burnham">
+                                {days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}
                               </span>
                             )}
                             {days !== null && days < 0 && (
@@ -1344,7 +1355,7 @@ export default function ContactDetailDrawer({
                     className="w-full text-xs bg-white border border-mercury rounded px-2 py-1.5 text-burnham focus:outline-none"
                   >
                     {(Object.keys(MILESTONE_LABELS) as ContactMilestone['type'][]).map(t => (
-                      <option key={t} value={t}>{MILESTONE_EMOJI[t]} {MILESTONE_LABELS[t]}</option>
+                      <option key={t} value={t}>{MILESTONE_LABELS[t]}</option>
                     ))}
                   </select>
                   <input
@@ -1471,7 +1482,7 @@ export default function ContactDetailDrawer({
                               {INTERACTION_TYPE_LABELS[interaction.type]}
                             </span>
                             <span className="text-[10px] text-shuttle/40">
-                              {interaction.direction === 'outbound' ? '→' : '←'}
+                              {interaction.direction === 'outbound' ? <ArrowRight size={10} /> : <ArrowLeft size={10} />}
                             </span>
                             <span className="text-[10px] text-shuttle/40">
                               {days === null ? interaction.interaction_date : formatAgo(days)}
@@ -1519,13 +1530,17 @@ export default function ContactDetailDrawer({
                       <button
                         key={dir}
                         onClick={() => setLogDirection(dir)}
-                        className={`flex-1 text-[10px] font-medium py-1 rounded border transition-colors capitalize ${
+                        className={`flex-1 inline-flex items-center justify-center gap-1 text-[10px] font-medium py-1 rounded border transition-colors capitalize ${
                           logDirection === dir
                             ? 'bg-burnham text-white border-burnham'
                             : 'bg-white text-shuttle border-mercury hover:border-shuttle/40'
                         }`}
                       >
-                        {dir === 'outbound' ? '→ Outbound' : '← Inbound'}
+                        {dir === 'outbound' ? (
+                          <><ArrowRight size={10} /> Outbound</>
+                        ) : (
+                          <><ArrowLeft size={10} /> Inbound</>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -1555,7 +1570,7 @@ export default function ContactDetailDrawer({
                       className="flex-1 flex items-center justify-center gap-1 text-[11px] font-medium bg-burnham text-white rounded px-3 py-1.5 hover:bg-burnham/90 disabled:opacity-50 transition-colors"
                     >
                       <Check size={11} weight="bold" />
-                      {logSaving ? 'Saving…' : 'Save'}
+                      {logSaving ? 'Saving...' : 'Save'}
                     </button>
                     <button
                       onClick={() => setLogFormOpen(false)}
@@ -1577,7 +1592,7 @@ export default function ContactDetailDrawer({
                 onChange={e => setNotes(e.target.value)}
                 onBlur={saveNotes}
                 rows={3}
-                placeholder="Any notes about this person…"
+                placeholder="Any notes about this person..."
                 className="w-full text-xs text-burnham/80 bg-mercury/10 border border-mercury rounded-lg p-2 placeholder-shuttle/30 resize-none focus:outline-none focus:border-burnham/30"
               />
             </div>
@@ -1604,7 +1619,7 @@ export default function ContactDetailDrawer({
                     placeholder="company.com"
                     className="flex-1 text-xs bg-mercury/10 border border-mercury rounded px-2 py-1 placeholder-shuttle/30 text-burnham focus:outline-none focus:border-burnham/30"
                   />
-                  <span className="text-[9px] text-shuttle/40 flex-shrink-0">Domain</span>
+                  <span className="text-[10px] text-shuttle/40 flex-shrink-0">Domain</span>
                 </div>
 
                 {/* Single Sync to Attio button — syncs person + company */}
@@ -1617,9 +1632,9 @@ export default function ContactDetailDrawer({
                   <button
                     onClick={handleSyncAll}
                     disabled={syncing}
-                    className="text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors disabled:opacity-40"
+                    className="inline-flex items-center gap-1 text-[10px] text-burnham/70 hover:text-burnham border border-burnham/20 hover:border-burnham/50 rounded px-2 py-0.5 transition-colors disabled:opacity-40"
                   >
-                    {syncing ? 'Syncing…' : attioToast === '✓ Synced' ? '✓ Synced' : 'Sync to Attio'}
+                    {syncing ? 'Syncing...' : attioToast === 'Synced' ? <><Check size={10} weight="bold" /> Synced</> : 'Sync to Attio'}
                   </button>
                 </div>
 
@@ -1642,7 +1657,7 @@ export default function ContactDetailDrawer({
 
                 {/* Toast */}
                 {attioToast && (
-                  <p className="mt-1.5 text-[11px] text-pastel font-medium">{attioToast}</p>
+                  <p className="mt-1.5 text-[11px] text-burnham font-medium">{attioToast}</p>
                 )}
               </div>
             )}
@@ -1656,18 +1671,18 @@ export default function ContactDetailDrawer({
                   disabled={enriching}
                   className={`w-full flex items-center justify-center gap-1.5 text-xs font-medium rounded-lg px-3 py-2 transition-colors disabled:opacity-40 ${
                     enrichStatus === 'success'
-                      ? 'border border-pastel/40 text-pastel bg-gossip/10'
+                      ? 'border border-gossip text-burnham bg-gossip/20'
                       : 'border border-shuttle/20 hover:border-shuttle/50 text-shuttle'
                   }`}
                 >
                   {enriching ? (
                     <>
                       <SpinnerGap size={13} className="animate-spin" />
-                      Enriching…
+                      Enriching...
                     </>
                   ) : enrichStatus === 'success' ? (
                     <>
-                      <Check size={13} weight="bold" className="text-pastel" />
+                      <Check size={13} weight="bold" className="text-burnham" />
                       Enriched
                     </>
                   ) : (
@@ -1709,7 +1724,7 @@ export default function ContactDetailDrawer({
                 <ul className="space-y-1.5 mb-2">
                   {links.map((link, idx) => (
                     <li key={idx} className="group flex items-center gap-2">
-                      <span className="text-sm leading-none flex-shrink-0">{getLinkIcon(link.type)}</span>
+                      <LinkTypeIcon type={link.type} />
                       <button
                         onClick={() => openLink(link.url)}
                         className="flex-1 text-xs text-burnham/80 hover:text-burnham truncate text-left transition-colors"
@@ -1750,9 +1765,9 @@ export default function ContactDetailDrawer({
                     onChange={e => setNewLinkType(e.target.value)}
                     className="w-full text-xs bg-white border border-mercury rounded px-2 py-1.5 text-burnham focus:outline-none"
                   >
-                    <option value="resource">🔗 Resource</option>
-                    <option value="their_content">📰 Their content</option>
-                    <option value="shared_doc">📄 Shared doc</option>
+                    <option value="resource">Resource</option>
+                    <option value="their_content">Their content</option>
+                    <option value="shared_doc">Shared doc</option>
                   </select>
                   <div className="flex gap-2">
                     <button
@@ -1788,7 +1803,7 @@ export default function ContactDetailDrawer({
                   const dateStr = new Date(evt.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                   return (
                     <div key={evt.id} className={`flex items-start gap-2 py-1.5 border-b border-mercury/30 last:border-0 ${evt.isPast ? 'opacity-60' : ''}`}>
-                      <span className="text-[10px] mt-0.5">{evt.isPast ? '✓' : '📅'}</span>
+                      <span className="text-[10px] mt-0.5 text-shuttle/60">{evt.isPast ? <Check size={10} /> : <CalendarBlank size={10} />}</span>
                       <div className="min-w-0">
                         <p className="text-xs text-burnham font-medium truncate">{evt.summary}</p>
                         <p className="text-[10px] text-shuttle/60">{dateStr}{evt.isPast ? ' · past' : ' · upcoming'}</p>
@@ -1810,7 +1825,7 @@ export default function ContactDetailDrawer({
                     className="flex items-center gap-1.5 text-[10px] font-medium text-burnham border border-mercury rounded-lg px-2.5 py-1 hover:bg-mercury/30 disabled:opacity-40 transition-colors"
                   >
                     {gmailSyncing
-                      ? <><SpinnerGap size={10} className="animate-spin" /> Syncing…</>
+                      ? <><SpinnerGap size={10} className="animate-spin" /> Syncing...</>
                       : <><Envelope size={10} /> Sync emails</>
                     }
                   </button>
@@ -1830,11 +1845,11 @@ export default function ContactDetailDrawer({
             )}
 
             {/* ── Footer: delete ────────────────────────────────────────────── */}
-            <div className="p-4 border-t border-mercury mt-auto sticky bottom-0 bg-white">
+            <div className="contact-detail-foot p-4 border-t border-mercury mt-auto sticky bottom-0 bg-white">
               {/* Save error banner */}
               {saveError && !attioEligible && (
                 <p className="mb-2 text-xs text-red-500 text-center">
-                  {saveError.length > 120 ? saveError.slice(0, 120) + '…' : saveError}
+                  {saveError.length > 120 ? saveError.slice(0, 120) + '...' : saveError}
                 </p>
               )}
               {confirmDelete ? (
@@ -1869,7 +1884,7 @@ export default function ContactDetailDrawer({
       {/* Import Meeting Notes overlay */}
       {showImportNotes && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[80vh] flex flex-col mx-4">
+          <div className="bg-white rounded-lg shadow-[var(--shadow-pop)] w-[480px] max-h-[80vh] flex flex-col mx-4">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-mercury/60">
               <div>
@@ -1890,7 +1905,7 @@ export default function ContactDetailDrawer({
                     onChange={e => setImportNotesText(e.target.value)}
                     placeholder="Paste your Granola notes or any meeting notes here..."
                     rows={8}
-                    className="w-full text-sm bg-mercury/10 border border-mercury rounded-xl px-3 py-2.5 text-burnham placeholder-shuttle/30 focus:outline-none focus:border-burnham/30 resize-none"
+                    className="w-full text-sm bg-mercury/10 border border-mercury rounded-lg px-3 py-2.5 text-burnham placeholder-shuttle/30 focus:outline-none focus:border-burnham/30 resize-none"
                   />
                   <div className="flex gap-3">
                     <div className="flex-1">
@@ -1924,7 +1939,7 @@ export default function ContactDetailDrawer({
                 /* Step 2: Review suggestions */
                 <>
                   {importSuggestions.meeting_summary && (
-                    <div className="bg-gossip/40 rounded-xl px-3 py-2.5">
+                    <div className="bg-gossip/40 rounded-lg px-3 py-2.5">
                       <p className="text-[10px] text-shuttle/60 uppercase tracking-wide font-medium mb-1">Meeting summary</p>
                       <p className="text-xs text-burnham">{importSuggestions.meeting_summary}</p>
                     </div>
@@ -1987,9 +2002,9 @@ export default function ContactDetailDrawer({
                 <>
                   <button
                     onClick={() => setImportSuggestions(null)}
-                    className="text-xs text-shuttle hover:text-burnham transition-colors"
+                    className="inline-flex items-center gap-1 text-xs text-shuttle hover:text-burnham transition-colors"
                   >
-                    ← Edit notes
+                    <ArrowLeft size={12} /> Edit notes
                   </button>
                   <button
                     onClick={handleImportNotesSave}
@@ -2014,7 +2029,7 @@ export default function ContactDetailDrawer({
                     className="flex items-center gap-2 bg-burnham text-white text-xs font-medium px-4 py-2 rounded-lg hover:bg-burnham/90 disabled:opacity-40 transition-colors"
                   >
                     {importAnalyzing ? <SpinnerGap size={12} className="animate-spin" /> : <Sparkle size={12} />}
-                    {importAnalyzing ? 'Analyzing…' : 'Analyze notes'}
+                    {importAnalyzing ? 'Analyzing...' : 'Analyze notes'}
                   </button>
                 </>
               )}

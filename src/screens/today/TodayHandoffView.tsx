@@ -307,15 +307,18 @@ function NowBand({
     const pct = clamp(((liveNow - current.start) / current.dur) * 100, 0, 100)
     const risk = current.type === 'todo' && left <= 5
     return (
-      <div className={`now-band live ${current.type}${risk ? ' risk' : ''}`}>
-        <span className="nb-ey"><span className="nb-pip" />{risk ? 'Wrapping up' : 'Now'}</span>
-        <span className="nb-title">{title(current)}</span>
-        <span className="nb-meta">{minToHHMM(current.start)}-{minToHHMM(current.start + current.dur)}</span>
-        <span className="sp" />
-        {next && <span className="nb-next">{minToHHMM(next.start)} {title(next)}</span>}
-        {current.type === 'todo' && <button className="nb-act primary" title="Mark done" onClick={() => onComplete(current.id)}><Icon name="check" size={12} sw={2.2} /></button>}
-        <button className="nb-act" title="Focus session" onClick={onFocus}><Icon name="clock" size={12} /></button>
-        <span className="nb-rem">{left}m left</span>
+      <div className={`now-band live ${current.type}${risk ? ' risk' : ''}`} aria-current="time">
+        <span className="nb-ey"><span className="nb-pip" />Now</span>
+        <span className="nb-main">
+          <span className="nb-title">{title(current)}</span>
+          <span className="nb-meta">{minToHHMM(current.start)}-{minToHHMM(current.start + current.dur)}</span>
+        </span>
+        {next && <span className="nb-next"><span className="nb-next-k">Next</span>{minToHHMM(next.start)} {title(next)}</span>}
+        <span className="nb-actions">
+          {current.type === 'todo' && <button className="nb-act primary" title="Mark done" aria-label="Mark current task done" onClick={() => onComplete(current.id)}><Icon name="check" size={12} sw={2.2} /></button>}
+          <button className="nb-act" title="Focus session" aria-label="Start focus session" onClick={onFocus}><Icon name="clock" size={12} /></button>
+          <span className="nb-rem"><span>{left}</span><span>m</span></span>
+        </span>
         <span className="nb-prog" style={{ width: `${pct}%` }} />
       </div>
     )
@@ -324,19 +327,22 @@ function NowBand({
     return (
       <div className="now-band next">
         <span className="nb-ey">Next</span>
-        <span className="nb-title">{title(next)}</span>
-        <span className="nb-meta">{minToHHMM(next.start)}-{minToHHMM(next.start + next.dur)}</span>
-        <span className="sp" />
-        <button className="nb-act" title="Focus session" onClick={onFocus}><Icon name="clock" size={12} /></button>
-        <span className="nb-rem soft">in {next.start - liveNow}m</span>
+        <span className="nb-main">
+          <span className="nb-title">{title(next)}</span>
+          <span className="nb-meta">{minToHHMM(next.start)}-{minToHHMM(next.start + next.dur)}</span>
+        </span>
+        <span className="nb-actions">
+          <button className="nb-act" title="Focus session" aria-label="Start focus session" onClick={onFocus}><Icon name="clock" size={12} /></button>
+          <span className="nb-rem soft"><span>in</span><span>{next.start - liveNow}m</span></span>
+        </span>
       </div>
     )
   }
   return (
-    <div className="now-band free">
-      <span className="nb-ey">Clear</span>
-      <span className="nb-title-sm">No blocks ahead{unscheduledCount > 0 ? ` · ${unscheduledCount} unscheduled · drag one onto the plan` : ' · plan is done'}</span>
-    </div>
+      <div className="now-band free">
+        <span className="nb-ey">Clear</span>
+        <span className="nb-main"><span className="nb-title-sm">Free time{unscheduledCount > 0 ? ` · ${unscheduledCount} unscheduled` : ' · plan complete'}</span></span>
+      </div>
   )
 }
 

@@ -342,7 +342,7 @@ export default function CrmTable<T extends { id: string }>({
                 className="kb-col"
               >
                 <div className="kb-col-hd">
-                  <span className="kb-dot" style={{ backgroundColor: stage.color ?? '#536471' }} />
+                  <span className="kb-dot" style={{ backgroundColor: stage.color ?? '#6F7988' }} />
                   <span className="kb-col-name">{stage.label}</span>
                   <span className="kb-col-n">{stageRows.length}</span>
                 </div>

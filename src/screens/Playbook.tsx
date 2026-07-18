@@ -125,14 +125,14 @@ function CoverageMatrix({
   const gaps = themes.flatMap(theme => topics.map(topic => ({ theme, topic, count: cell(theme, topic) }))).filter(x => x.count === 0)
   const filtered = bricks.filter(b => (!sel.theme || b.themes.includes(sel.theme)) && (!sel.topic || b.topics.includes(sel.topic)))
   const active = sel.theme || sel.topic
-  const label = [sel.theme, sel.topic].filter(Boolean).join(' × ')
+  const label = [sel.theme, sel.topic].filter(Boolean).join(' x ')
 
   return (
     <div className="cov-wrap">
       <div className="cov-summary">
         <span className="cov-sum-l"><GridFour size={13} /> Coverage — Marketing Leader</span>
         {gaps.length
-          ? <span className="cov-sum-gap"><b>{gaps.length}</b> empty cells · no story yet for <em>{gaps[0].theme} × {gaps[0].topic}</em></span>
+          ? <span className="cov-sum-gap"><b>{gaps.length}</b> empty cells · no story yet for <em>{gaps[0].theme} x {gaps[0].topic}</em></span>
           : <span className="cov-sum-ok"><CheckCircle size={12} /> Every cell covered</span>}
       </div>
 
@@ -239,7 +239,7 @@ function StoryList({ stories, onOpen, onAdd }: { stories: PlaybookEntry[]; onOpe
             <span className="sl-cell signal">{entry.framework?.toUpperCase() || firstTag(entry, 'Positioning')}</span>
             <span className="sl-cell tags">{brick.themes.slice(0, 3).map(t => <span key={t} className="cov-tag theme">{t}</span>)}</span>
             <span className="sl-cell proof">{entry.tags?.includes('win') ? <><Trophy size={11} /> 1</> : <span className="sl-dim">—</span>}</span>
-            <span className="sl-cell uses">{entry.list_order ?? 0}×</span>
+            <span className="sl-cell uses">{entry.list_order ?? 0}x</span>
             <span className="sl-open"><ArrowRight size={13} /></span>
           </button>
         ))}
@@ -320,7 +320,7 @@ function ValueBank({ values, onOpen, onAdd }: { values: PlaybookEntry[]; onOpen:
             <div className="pb-deploys">
               {entry.tags?.filter(t => t.startsWith('@')).length ? (
                 <>
-                  <span className="pb-deploys-lbl">Given {entry.tags.filter(t => t.startsWith('@')).length}×</span>
+                  <span className="pb-deploys-lbl">Given {entry.tags.filter(t => t.startsWith('@')).length}x</span>
                   <div className="pb-deploys-row">{entry.tags.filter(t => t.startsWith('@')).map(t => <span className="pb-deploy" key={t}>{t}<span className="pb-deploy-when">linked</span></span>)}</div>
                 </>
               ) : (
@@ -583,7 +583,7 @@ function AssembleOverlay({
   onSave: (title: string, content: string, type: PlaybookEntryType, tags: string[]) => Promise<void>
 }) {
   const [output, setOutput] = useState<'pitch' | 'application' | 'proposal' | 'cv'>('pitch')
-  const [target, setTarget] = useState(seed?.theme && seed?.topic ? `${seed.theme} × ${seed.topic}` : '')
+  const [target, setTarget] = useState(seed?.theme && seed?.topic ? `${seed.theme} x ${seed.topic}` : '')
   const [result, setResult] = useState('')
   const [copied, setCopied] = useState(false)
   const bricks = entries.filter(e => e.content).slice(0, 8)
@@ -607,7 +607,7 @@ function AssembleOverlay({
       <section className="asm">
         <header className="asm-hd">
           <div><span className="asm-kicker"><Sparkle size={12} /> Assemble</span><h2>Build from your Playbook bricks</h2></div>
-          <button className="peek-x" onClick={onClose}><X size={14} /></button>
+          <button className="peek-x" onClick={onClose} aria-label="Close playbook detail"><X size={14} /></button>
         </header>
         <div className="asm-grid">
           <div className="asm-form">

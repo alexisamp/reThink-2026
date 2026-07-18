@@ -14,7 +14,7 @@
  * User can flip survivor via the "Keep this one" button on either card.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { X, ArrowsLeftRight, WhatsappLogo, LinkedinLogo } from '@phosphor-icons/react'
+import { X, ArrowsLeftRight, WhatsappLogo, LinkedinLogo, CheckCircle } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Contact } from '@/types'
 
@@ -137,8 +137,8 @@ export default function MergeContactsModal({
     const s = stats[c.id]
     return (
       <div
-        className={`flex-1 border rounded-xl p-4 transition-all ${
-          isSurvivor ? 'border-pastel bg-pastel/5' : 'border-mercury bg-white'
+        className={`flex-1 border rounded-lg p-4 transition-all ${
+          isSurvivor ? 'border-burnham/25 bg-gossip/20' : 'border-mercury bg-white'
         }`}
       >
         <div className="flex items-start gap-3 mb-3">
@@ -155,7 +155,7 @@ export default function MergeContactsModal({
             {c.location && <p className="text-[11px] text-shuttle/50 truncate">{c.location}</p>}
           </div>
           {isSurvivor && (
-            <span className="text-[9px] font-semibold bg-pastel text-burnham px-1.5 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap">
+            <span className="text-[10px] font-semibold bg-gossip text-burnham px-1.5 py-0.5 rounded-md uppercase tracking-wider whitespace-nowrap">
               Keep
             </span>
           )}
@@ -163,20 +163,20 @@ export default function MergeContactsModal({
 
         {/* Stats */}
         <div className="space-y-1 mb-3 text-[11px] font-mono text-shuttle/70">
-          <div className="flex justify-between"><span>Interactions</span><span className="text-burnham font-semibold">{s?.interactions ?? '…'}</span></div>
+          <div className="flex justify-between"><span>Interactions</span><span className="text-burnham font-semibold">{s?.interactions ?? '...'}</span></div>
           <div className="flex justify-between"><span>Last contact</span><span>{formatAgo(daysSince(c.last_interaction_at))}</span></div>
           <div className="flex justify-between"><span>Health</span><span>{c.health_score ?? '—'}/10</span></div>
           <div className="flex justify-between">
             <span>Channels</span>
             <span className="flex items-center gap-1">
-              {s?.channels.includes('whatsapp') && <WhatsappLogo size={11} className="text-green-500" />}
-              {s?.channels.includes('linkedin') && <LinkedinLogo size={11} className="text-blue-500" />}
+              {s?.channels.includes('whatsapp') && <WhatsappLogo size={11} className="text-burnham" />}
+              {s?.channels.includes('linkedin') && <LinkedinLogo size={11} className="text-burnham" />}
               {(s?.channels.length ?? 0) === 0 && <span className="text-shuttle/40">none</span>}
             </span>
           </div>
           {c.tier && <div className="flex justify-between"><span>Tier</span><span>T{c.tier}</span></div>}
           {c.phone && <div className="flex justify-between"><span>Phone</span><span className="truncate max-w-[120px]">{c.phone}</span></div>}
-          {c.linkedin_url && <div className="flex justify-between"><span>LinkedIn</span><span className="truncate max-w-[120px] text-blue-600">✓</span></div>}
+          {c.linkedin_url && <div className="flex justify-between"><span>LinkedIn</span><CheckCircle size={12} weight="fill" className="text-burnham" /></div>}
         </div>
 
         {!isSurvivor && (
@@ -194,17 +194,17 @@ export default function MergeContactsModal({
 
   return (
     <div
-      className="fixed inset-0 z-[300] flex items-center justify-center bg-burnham/20 backdrop-blur-[2px] p-4"
+      className="merge-contacts-scrim fixed inset-0 z-50 flex items-center justify-center bg-burnham/20 backdrop-blur-[2px] p-4"
       onClick={(e) => { if (e.target === e.currentTarget && !merging) onClose() }}
     >
-      <div className="bg-white border border-mercury rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="merge-contacts-panel bg-white border border-mercury rounded-lg shadow-[var(--shadow-pop)] w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-mercury shrink-0">
           <div>
             <p className="text-[10px] font-semibold text-burnham uppercase tracking-widest">Merge contacts</p>
             <p className="text-[11px] text-shuttle/60 mt-0.5">The kept row absorbs interactions, channels, todos, and fills missing fields from the other.</p>
           </div>
-          <button onClick={onClose} disabled={merging} className="text-shuttle/40 hover:text-burnham transition-colors p-0.5">
+          <button onClick={onClose} disabled={merging} className="text-shuttle/40 hover:text-burnham transition-colors p-0.5" aria-label="Close merge contacts">
             <X size={14} />
           </button>
         </div>
@@ -258,7 +258,7 @@ export default function MergeContactsModal({
               disabled={merging || !survivorId}
               className="bg-burnham hover:bg-burnham/90 disabled:opacity-40 text-white text-[12px] font-medium px-4 py-1.5 rounded-lg transition-colors"
             >
-              {merging ? 'Merging…' : 'Confirm merge'}
+              {merging ? 'Merging...' : 'Confirm merge'}
             </button>
           </div>
         </div>

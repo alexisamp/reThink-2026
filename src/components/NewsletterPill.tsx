@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Tray, ArrowSquareOut, ArrowCounterClockwise, ArrowClockwise } from '@phosphor-icons/react'
+import { Tray, ArrowSquareOut, ArrowCounterClockwise, ArrowClockwise, Check, X } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { openLink } from '@/lib/openLink'
 
@@ -14,7 +14,7 @@ interface NewsletterItem {
 
 const SENDER_STYLES: Record<string, { initials: string; bgClass: string; textClass: string }> = {
   'Exit Five':           { initials: 'EF', bgClass: 'bg-burnham',    textClass: 'text-white' },
-  "Lenny's Newsletter":  { initials: 'LN', bgClass: 'bg-pastel',     textClass: 'text-burnham' },
+  "Lenny's Newsletter":  { initials: 'LN', bgClass: 'bg-gossip',     textClass: 'text-burnham' },
   'Ruben Hassid':        { initials: 'RH', bgClass: 'bg-shuttle/20', textClass: 'text-shuttle' },
   'Kieran Flanagan':     { initials: 'KF', bgClass: 'bg-gossip',     textClass: 'text-burnham' },
 }
@@ -149,11 +149,11 @@ export default function NewsletterPill() {
       {/* Pill */}
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 bg-white border border-mercury rounded-full px-3 py-1.5 shadow-md text-[11px] text-shuttle hover:border-shuttle/40 transition-colors"
+        className="flex items-center gap-2 bg-white border border-mercury rounded-md px-3 py-1.5 text-[11px] text-shuttle hover:border-shuttle/40 hover:bg-sidebar transition-colors"
       >
         <Tray size={12} className="text-shuttle/60" />
         <span>Feed</span>
-        <span className="bg-burnham text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+        <span className="bg-burnham text-white text-[10px] font-semibold rounded w-4 h-4 flex items-center justify-center leading-none">
           {unreadCount > 9 ? '9+' : unreadCount}
         </span>
       </button>
@@ -162,11 +162,11 @@ export default function NewsletterPill() {
       {open && (
         <>
           <div
-            className="fixed inset-0 z-[190] bg-black/10 backdrop-blur-[1px]"
+            className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px]"
             onClick={() => setOpen(false)}
           />
-          <div className="fixed inset-0 z-[195] flex items-center justify-center pointer-events-none">
-            <div className="pointer-events-auto w-96 max-h-[70vh] bg-white rounded-2xl border border-mercury shadow-2xl flex flex-col">
+          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+            <div className="pointer-events-auto w-96 max-h-[70vh] bg-white rounded-lg border border-mercury shadow-[var(--shadow-pop)] flex flex-col">
 
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-mercury/60">
@@ -183,14 +183,16 @@ export default function NewsletterPill() {
                     disabled={refreshing}
                     className="text-shuttle/40 hover:text-shuttle transition-colors disabled:opacity-30"
                     title="Actualizar"
+                    aria-label="Actualizar feed"
                   >
                     <ArrowClockwise size={14} className={refreshing ? 'animate-spin' : ''} />
                   </button>
                   <button
                     onClick={() => setOpen(false)}
-                    className="text-shuttle/40 hover:text-shuttle transition-colors text-lg leading-none"
+                    className="text-shuttle/40 hover:text-shuttle transition-colors"
+                    aria-label="Cerrar feed"
                   >
-                    ×
+                    <X size={15} />
                   </button>
                 </div>
               </div>
@@ -199,7 +201,7 @@ export default function NewsletterPill() {
               <div className="flex-1 overflow-y-auto">
                 {loading ? (
                   <div className="flex items-center justify-center h-32">
-                    <span className="text-[11px] text-shuttle/30 animate-pulse">Cargando…</span>
+                    <span className="text-[11px] text-shuttle/30 animate-pulse">Cargando...</span>
                   </div>
                 ) : items.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-40">
@@ -209,7 +211,7 @@ export default function NewsletterPill() {
                   <div className="py-2">
                     {unread.length > 0 && (
                       <div>
-                        <p className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono px-5 py-2">Sin leer</p>
+                        <p className="text-[10px] uppercase tracking-widest text-shuttle/30 font-mono px-5 py-2">Sin leer</p>
                         {unread.map(item => (
                           <FeedRow
                             key={item.id}
@@ -222,7 +224,7 @@ export default function NewsletterPill() {
                     )}
                     {read.length > 0 && (
                       <div>
-                        <p className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono px-5 py-2 mt-2">Leídos</p>
+                        <p className="text-[10px] uppercase tracking-widest text-shuttle/30 font-mono px-5 py-2 mt-2">Leídos</p>
                         {read.map(item => (
                           <FeedRow
                             key={item.id}
@@ -240,7 +242,7 @@ export default function NewsletterPill() {
 
               {/* Footer */}
               <div className="px-5 py-3 border-t border-mercury/60">
-                <p className="text-[9px] text-shuttle/25 font-mono">
+                <p className="text-[10px] text-shuttle/25 font-mono">
                   {lastSync ? formatSyncTime(lastSync) : '—'}
                 </p>
               </div>
@@ -274,7 +276,7 @@ function FeedRow({
       } ${isRead ? 'opacity-50' : ''}`}
     >
       {/* Sender avatar */}
-      <div className={`shrink-0 w-6 h-6 rounded-full ${style.bgClass} ${style.textClass} flex items-center justify-center text-[8px] font-bold mt-0.5`}>
+      <div className={`shrink-0 w-6 h-6 rounded-full ${style.bgClass} ${style.textClass} flex items-center justify-center text-[10px] font-semibold mt-0.5`}>
         {style.initials}
       </div>
 
@@ -282,7 +284,7 @@ function FeedRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 mb-0.5">
           <span className="text-[10px] text-shuttle/50 font-medium truncate">{item.newsletter}</span>
-          <span className="text-[9px] text-shuttle/30 ml-auto shrink-0">{formatRelative(item.received_at)}</span>
+          <span className="text-[10px] text-shuttle/30 ml-auto shrink-0">{formatRelative(item.received_at)}</span>
         </div>
         <span className={`text-[12px] leading-snug block ${
           isRead ? 'line-through text-shuttle/40' : 'text-burnham'
@@ -297,10 +299,11 @@ function FeedRow({
         {item.gmail_link && (
           <button
             onClick={() => openLink(item.gmail_link)}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-mercury text-[9px] text-shuttle/50 hover:border-shuttle/40 hover:text-shuttle transition-colors"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-md border border-mercury text-[10px] text-shuttle/50 hover:border-shuttle/40 hover:text-shuttle transition-colors"
             title="Abrir en Gmail"
+            aria-label="Abrir newsletter en Gmail"
           >
-            <ArrowSquareOut size={9} />
+            <ArrowSquareOut size={10} />
             <span>Abrir</span>
           </button>
         )}
@@ -309,9 +312,10 @@ function FeedRow({
         {!isRead && (
           <button
             onClick={onMark}
-            className="w-4 h-4 rounded border border-mercury hover:border-pastel transition-colors flex items-center justify-center group/check"
+            className="w-4 h-4 rounded border border-mercury hover:border-burnham transition-colors flex items-center justify-center group/check"
+            aria-label="Marcar como leído"
           >
-            <span className="text-[8px] text-pastel opacity-0 group-hover/check:opacity-100 transition-opacity">✓</span>
+            <Check size={10} className="text-burnham opacity-0 group-hover/check:opacity-100 transition-opacity" weight="bold" />
           </button>
         )}
 
@@ -321,6 +325,7 @@ function FeedRow({
             onClick={onUnmark}
             className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-shuttle"
             title="Marcar como no leído"
+            aria-label="Marcar como no leído"
           >
             <ArrowCounterClockwise size={11} />
           </button>
@@ -328,8 +333,8 @@ function FeedRow({
 
         {/* Read checkmark indicator */}
         {isRead && (
-          <span className="w-4 h-4 rounded bg-gossip/40 border border-pastel/40 flex items-center justify-center">
-            <span className="text-[8px] text-pastel">✓</span>
+          <span className="w-4 h-4 rounded bg-gossip/40 border border-gossip flex items-center justify-center">
+            <Check size={10} className="text-burnham" weight="bold" />
           </span>
         )}
       </div>

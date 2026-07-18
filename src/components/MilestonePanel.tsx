@@ -11,13 +11,13 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  X, Plus, Check, Trash, CalendarBlank, Warning, ArrowLineUp, Star,
+  X, Plus, Check, Trash, CalendarBlank, Warning, ArrowLineUp, Star, Target,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { Milestone, Todo, Goal } from '@/types'
 
 const EMOJI_PRESETS = ['🎯','🧑‍💼','💰','🎒','✍️','🚀','📈','🤝','🏋️','📚','🧠','🌱','🏡','❤️','🎨','🔧','📞','✈️','🏆','⚡']
-const COLOR_PRESETS = ['#4F5BD5','#2A8C82','#7C5CBF','#C16A4F','#C9943F','#3E7A4E','#3E5F7A','#7A3E68','#C2566E','#536471']
+const COLOR_PRESETS = ['#266DF0','#538BF3','#BAD0FA','#E4EDFF','#1C1D1F','#505967','#6F7988','#8F99A8','#CAD0D9','#E4E7EC']
 
 function cleanTodoText(text: string) {
   return text.replace(/\[\[mention:(person|company|opportunity):[^\]]+\]\]/g, '').replace(/\s{2,}/g, ' ').trim()
@@ -184,7 +184,7 @@ export default function MilestonePanel({
   const [deleting, setDeleting] = useState(false)
   const addRef = useRef<HTMLInputElement>(null)
 
-  const c = color ?? goal?.color ?? '#3E7A4E'
+  const c = color ?? goal?.color ?? '#266DF0'
 
   useEffect(() => {
     if (milestone) { const t = setTimeout(() => setVisible(true), 10); return () => clearTimeout(t) }
@@ -243,7 +243,7 @@ export default function MilestonePanel({
     onMilestoneUpdate({ ...milestone, emoji: val } as Milestone)
   }
   const saveColor = async (val: string) => {
-    const next = color === val ? null : val   // click selected swatch → reset to goal color
+    const next = color === val ? null : val   // click selected swatch to reset to goal color
     setColor(next)
     await supabase.from('milestones').update({ color: next }).eq('id', milestone.id)
     onMilestoneUpdate({ ...milestone, color: next } as Milestone)
@@ -333,14 +333,14 @@ export default function MilestonePanel({
         <div className="td-drawer-hd">
           {goal && (
             <div className="td-drawer-goal">
-              {goal.emoji ? `${goal.emoji} ` : ''}{goal.alias ?? goal.text.slice(0, 32)}
+              {goal.alias ?? goal.text.slice(0, 32)}
             </div>
           )}
 
           <div className="td-drawer-titlerow">
             <span style={{ position: 'relative' }}>
               <button className="td-drawer-emoji" onClick={() => setShowEmoji(v => !v)} title="Set emoji">
-                {emoji ?? goal?.emoji ?? '🎯'}
+                {emoji ?? goal?.emoji ?? <Target size={15} weight="bold" />}
               </button>
               {showEmoji && (
                 <div className="td-date-pop" style={{ left: 0, right: 'auto', width: 212, padding: 8 }}>
@@ -368,7 +368,7 @@ export default function MilestonePanel({
               {confirmDelete ? (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                   <Warning size={12} style={{ color: 'var(--danger)' }} />
-                  <button className="danger" style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }} onClick={handleDeleteMilestone}>{deleting ? '…' : 'delete'}</button>
+                  <button className="danger" style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }} onClick={handleDeleteMilestone}>{deleting ? '...' : 'delete'}</button>
                   <button onClick={() => setConfirmDelete(false)}><X size={12} /></button>
                 </span>
               ) : (
@@ -412,13 +412,13 @@ export default function MilestonePanel({
 
         {/* Note */}
         <div className="td-drawer-note-wrap">
-          <input className="td-drawer-note" value={description} onChange={e => handleDescChange(e.target.value)} placeholder="Add a note…" />
+          <input className="td-drawer-note" value={description} onChange={e => handleDescChange(e.target.value)} placeholder="Add a note..." />
         </div>
 
         {/* Steps */}
         <div className="td-drawer-body">
           {loading ? (
-            <div className="td-drawer-empty">loading…</div>
+            <div className="td-drawer-empty">loading...</div>
           ) : total === 0 ? (
             <div className="td-drawer-empty">Add the first step toward this milestone.</div>
           ) : (
@@ -464,10 +464,10 @@ export default function MilestonePanel({
                 onChange={e => setNewText(e.target.value)}
                 onBlur={() => { if (!newText.trim()) setAdding(false) }}
                 onKeyDown={e => { if (e.key === 'Enter') addStep(); if (e.key === 'Escape') { setNewText(''); setAdding(false) } }}
-                placeholder="Add a step and press Enter…"
+                placeholder="Add a step and press Enter..."
               />
             ) : (
-              <span>Add a step…</span>
+              <span>Add a step...</span>
             )}
           </div>
         </div>

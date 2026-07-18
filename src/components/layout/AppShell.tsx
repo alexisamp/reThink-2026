@@ -70,7 +70,7 @@ function NavItem({ path, icon, label, collapsed, onClick, indent, iconColor }: N
       </button>
       {/* Tooltip in collapsed mode */}
       {collapsed && (
-        <span className="pointer-events-none absolute left-12 top-1/2 -translate-y-1/2 z-50 bg-burnham text-white text-[11px] px-2 py-1 rounded-md whitespace-nowrap opacity-0 group-hover/item:opacity-100 transition-opacity shadow-md">
+        <span className="pointer-events-none absolute left-12 top-1/2 -translate-y-1/2 z-50 bg-burnham text-white text-[11px] px-2 py-1 rounded-md whitespace-nowrap opacity-0 group-hover/item:opacity-100 transition-opacity shadow-[var(--shadow-pop)]">
           {label}
         </span>
       )}
@@ -311,14 +311,14 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
               {/* Legacy static presets */}
               <NavItem
                 path="/people?list=board"
-                icon={<Star size={14} weight="fill" className="text-yellow-500" />}
+                icon={<Star size={14} weight="fill" className="text-burnham" />}
                 label="Board of Directors"
                 collapsed={collapsed}
                 indent
               />
               <NavItem
                 path="/people/opportunities?list=active"
-                icon={<Flame size={14} weight="fill" className="text-orange-400" />}
+                icon={<Flame size={14} weight="fill" className="text-[var(--record-deal)]" />}
                 label="Active Pipeline"
                 collapsed={collapsed}
                 indent
@@ -339,7 +339,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
                 initials
               )}
               {showUpdateDot && (
-                <span className="absolute top-0 right-0 w-2 h-2 bg-pastel border border-white rounded-full" />
+                <span className="absolute top-0 right-0 w-2 h-2 bg-burnham border border-white rounded-full" />
               )}
             </span>
             {!collapsed && (
@@ -356,7 +356,7 @@ export default function AppShell({ children, user, updater }: AppShellProps) {
               <>
                 <span className="flex-1 text-left">Settings</span>
                 {showUpdateDot && (
-                  <span className="text-[10px] font-medium text-pastel bg-gossip/40 px-1.5 py-0.5 rounded-full">update</span>
+                  <span className="text-[10px] font-medium text-burnham bg-gossip/40 px-1.5 py-0.5 rounded-full">update</span>
                 )}
               </>
             )}

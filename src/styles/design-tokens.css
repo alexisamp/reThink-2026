@@ -1,29 +1,29 @@
 /* ============================================================
    reThink Design System — Colors & Type tokens
    Ported from the reThink Design System handoff bundle
-   (colors_and_type.css). Geist + Source Serif 4 + JetBrains Mono
+   (colors_and_type.css). Inter + Geist + JetBrains Mono
    load from Google Fonts in index.html.
    ============================================================ */
 
 :root {
-  /* ── Brand palette ─────────────────────────────────────────── */
-  --burnham:    #003720;  /* primary dark green — text, logos, primary fills */
-  --moss:       #3E7A4E;  /* mid-green — surfaces, progress, checks */
+  /* ── Attio-aligned brand palette ───────────────────────────── */
+  --burnham:    #1C1D1F;  /* primary ink — headings, body text, dark fills */
+  --moss:       #266DF0;  /* cobalt accent — active states, progress, checks */
 
-  /* Accent palette — harmonic oklch family (earthy/editorial, NOT electric) */
-  --acc-clay:   oklch(0.64 0.13 32);    /* terracota — warm / featured / family */
-  --acc-amber:  oklch(0.67 0.14 78);    /* mustard gold — money / growth */
-  --acc-teal:   oklch(0.60 0.10 195);   /* muted teal — work / structure */
-  --acc-plum:   oklch(0.55 0.10 340);   /* dusty plum — reserve / craft */
+  /* Secondary accents remain restrained; object icons define categorical color. */
+  --acc-clay:   #6F7988;
+  --acc-amber:  #6F7988;
+  --acc-teal:   #266DF0;
+  --acc-plum:   #C23A3A;
 
-  --shuttle:    #536471;  /* muted text — secondary copy, icons */
-  --mercury:    #E3E3E3;  /* borders, dividers, neutral chip bg */
-  --pastel:     #79D65E;  /* logo background only — kept for the brand mark */
-  --gossip:     #EAF6CC;  /* refined — active nav, selection */
-  --midnight:   #1A1A1A;  /* near-black — high-emphasis text & contained chips */
-  --attio-blue: #2f6df6;
-  --mchip-person:  oklch(0.56 0.12 300);
-  --mchip-company: oklch(0.58 0.11 55);
+  --shuttle:    #6F7988;  /* muted text — secondary copy, icons */
+  --mercury:    #E4E7EC;  /* borders, dividers, neutral chip bg */
+  --pastel:     #266DF0;  /* legacy success/accent token remapped to cobalt */
+  --gossip:     #E4EDFF;  /* soft cobalt selection wash */
+  --midnight:   #101113;  /* deepest text and dark surfaces */
+  --attio-blue: #266DF0;
+  --mchip-person:  #0F9EA8;
+  --mchip-company: #266DF0;
   --mchip-opp:     var(--attio-blue);
 
   /* ── Semantic foreground / background tokens ──────────────── */
@@ -31,8 +31,8 @@
   --fg-2:       var(--shuttle);          /* secondary text */
   --fg-3:       color-mix(in oklab, var(--shuttle) 60%, transparent);  /* muted / meta */
 
-  --bg-canvas:  #F6F6F6;                 /* neutral light gray — main app canvas */
-  --bg-sidebar: #EDEDEA;                 /* slightly darker + warm — sidebar frame */
+  --bg-canvas:  #FFFFFF;                 /* Attio page canvas */
+  --bg-sidebar: #F4F5F6;                 /* alternate surface background */
   --bg-1:       #FFFFFF;                 /* cards / elevated surfaces */
 
   --border-1:   color-mix(in oklab, var(--mercury) 40%, transparent);  /* dividers — softer */
@@ -41,8 +41,8 @@
   --acc-clay-rgb: 197 119 87;   /* clay as rgb — for next-steps reach-out dot */
 
   /* ── Type system ──────────────────────────────────────────── */
-  --font-sans:    'Geist', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-display: 'Source Serif 4', 'Source Serif Pro', 'Tiempos Text', Georgia, serif;
+  --font-sans:    'Inter', 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Inter', 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono:    'JetBrains Mono', 'Geist Mono', 'SF Mono', Menlo, monospace;
 
   /* ── Radius ───────────────────────────────────────────────── */
@@ -53,10 +53,10 @@
   --radius-2xl: 20px;
 
   /* ── Shadows — the "1px ring + lift" trick for premium feel ─ */
-  --shadow-hairline: 0 0 0 1px rgba(0, 55, 32, 0.04);
-  --shadow-card:    0 1px 0 rgba(0, 55, 32, 0.04), 0 0 0 1px rgba(0, 55, 32, 0.04);
-  --shadow-card-hover: 0 2px 6px rgba(0, 55, 32, 0.06), 0 0 0 1px rgba(0, 55, 32, 0.06);
-  --shadow-pop:     0 12px 32px rgba(0, 55, 32, 0.12), 0 2px 6px rgba(0, 55, 32, 0.06);
+  --shadow-hairline: 0 0 0 1px rgba(28, 40, 64, 0.04);
+  --shadow-card:    0 1px 0 rgba(28, 40, 64, 0.04), 0 0 0 1px rgba(28, 40, 64, 0.04);
+  --shadow-card-hover: 0 2px 6px rgba(28, 40, 64, 0.06), 0 0 0 1px rgba(28, 40, 64, 0.06);
+  --shadow-pop:     0 8px 24px rgba(28, 40, 64, 0.10), 0 1px 4px rgba(28, 40, 64, 0.06);
 
   /* Motion */
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
@@ -64,23 +64,23 @@
   /* Featured todo accent (configurable; default brand green) */
   --featured-accent: var(--moss);
 
-  --danger: #E11D48;   /* destructive only — sparse */
+  --danger: #C23A3A;   /* destructive only — sparse */
 }
 
 /* ── Milestone palettes (goal = life area) ──────────────────────
    Default: COOL harmonic family (no traffic-light red/amber/green). */
 :root,
 [data-ms-palette="cool"] {
-  --goal-revenue: oklch(0.52 0.13 264);  /* indigo */
-  --goal-family:  oklch(0.58 0.11 200);  /* teal */
-  --goal-craft:   oklch(0.52 0.13 305);  /* violet */
-  --goal-growth:  oklch(0.56 0.12 150);  /* green-teal */
-  --goal-health:  oklch(0.60 0.12 60);   /* warm amber */
+  --goal-revenue: #266DF0;
+  --goal-family:  #538BF3;
+  --goal-craft:   #6F7988;
+  --goal-growth:  #BAD0FA;
+  --goal-health:  #505967;
 }
 [data-ms-palette="electric"] {
-  --goal-revenue: oklch(0.56 0.21 256);  /* electric blue */
-  --goal-family:  oklch(0.68 0.17 198);  /* electric cyan */
-  --goal-craft:   oklch(0.55 0.27 300);  /* electric violet */
-  --goal-growth:  oklch(0.66 0.20 150);  /* electric green */
-  --goal-health:  oklch(0.70 0.18 70);   /* electric amber */
+  --goal-revenue: #266DF0;
+  --goal-family:  #538BF3;
+  --goal-craft:   #BAD0FA;
+  --goal-growth:  #6F7988;
+  --goal-health:  #CAD0D9;
 }

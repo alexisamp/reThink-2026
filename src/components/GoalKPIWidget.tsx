@@ -64,7 +64,7 @@ export function GoalKPIWidget({
       })
   }, [userId, weekStart])
 
-  // Compute Domingo adherence: % of (habit × day) combos completed this week
+  // Compute Domingo adherence: % of habit-day combos completed this week.
   const domingoAdherence = (() => {
     if (!domingoHabitIds.length || !weekDates.length) return null
     const total = domingoHabitIds.length * weekDates.length
@@ -87,7 +87,7 @@ export function GoalKPIWidget({
       {/* Conversations */}
       <button
         onClick={onConversationClick}
-        className="flex-1 border border-mercury rounded-xl p-3 text-left hover:border-burnham/20 hover:bg-gossip/10 transition-all group"
+        className="flex-1 border border-mercury rounded-lg p-3 text-left hover:border-burnham/20 hover:bg-gossip/10 transition-all group"
       >
         <div className="flex items-center gap-1.5 mb-2">
           <ChatCircle size={13} className="text-shuttle shrink-0" />
@@ -98,15 +98,15 @@ export function GoalKPIWidget({
           <span className="text-xs text-shuttle/50">/ {CONV_TARGET} convos</span>
         </div>
         <div className="w-full bg-mercury rounded-full h-1">
-          <div className="h-1 rounded-full bg-pastel transition-all" style={{ width: `${convPct}%` }} />
+          <div className="h-1 rounded-sm bg-burnham transition-all" style={{ width: `${convPct}%` }} />
         </div>
-        <p className="text-[9px] text-shuttle/40 mt-1.5 font-mono">this week</p>
+        <p className="text-[10px] text-shuttle/40 mt-1.5 font-mono">this week</p>
       </button>
 
       {/* English */}
       <button
         onClick={onEnglishClick}
-        className="flex-1 border border-mercury rounded-xl p-3 text-left hover:border-burnham/20 hover:bg-gossip/10 transition-all group"
+        className="flex-1 border border-mercury rounded-lg p-3 text-left hover:border-burnham/20 hover:bg-gossip/10 transition-all group"
       >
         <div className="flex items-center gap-1.5 mb-2">
           <BookOpen size={13} className="text-shuttle shrink-0" />
@@ -117,13 +117,13 @@ export function GoalKPIWidget({
           <span className="text-xs text-shuttle/50">/ 5h</span>
         </div>
         <div className="w-full bg-mercury rounded-full h-1">
-          <div className="h-1 rounded-full bg-pastel transition-all" style={{ width: `${englishPct}%` }} />
+          <div className="h-1 rounded-sm bg-burnham transition-all" style={{ width: `${englishPct}%` }} />
         </div>
-        <p className="text-[9px] text-shuttle/40 mt-1.5 font-mono">this week</p>
+        <p className="text-[10px] text-shuttle/40 mt-1.5 font-mono">this week</p>
       </button>
 
       {/* Domingo */}
-      <div className="flex-1 border border-mercury rounded-xl p-3">
+      <div className="flex-1 border border-mercury rounded-lg p-3">
         <div className="flex items-center gap-1.5 mb-2">
           <Baby size={13} className="text-shuttle shrink-0" />
           <span className="text-[10px] font-semibold text-shuttle uppercase tracking-wider">Domingo</span>
@@ -135,7 +135,7 @@ export function GoalKPIWidget({
               <span className="text-xs text-shuttle/50">habits</span>
             </div>
             <div className="w-full bg-mercury rounded-full h-1">
-              <div className="h-1 rounded-full bg-pastel transition-all" style={{ width: `${domingoAdherence}%` }} />
+              <div className="h-1 rounded-sm bg-burnham transition-all" style={{ width: `${domingoAdherence}%` }} />
             </div>
           </>
         ) : (
@@ -143,7 +143,7 @@ export function GoalKPIWidget({
             <span className="text-xl font-semibold text-burnham/30">—</span>
           </div>
         )}
-        <p className="text-[9px] text-shuttle/40 mt-1.5 font-mono">this week</p>
+        <p className="text-[10px] text-shuttle/40 mt-1.5 font-mono">this week</p>
       </div>
     </div>
   )

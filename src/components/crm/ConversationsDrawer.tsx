@@ -96,10 +96,10 @@ export default function ConversationsDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-[190]">
+    <div className="fixed inset-0 z-50">
       <button className="absolute inset-0 cursor-default bg-burnham/10" onClick={onClose} aria-label="Close conversation drawer" />
-      <aside className="absolute right-0 top-0 flex h-full w-[420px] max-w-[94vw] flex-col border-l border-mercury bg-white shadow-[var(--shadow-pop)]">
-        <header className="flex items-start gap-3 border-b border-mercury/70 bg-gossip/20 px-4 py-3">
+      <aside className="conversation-drawer absolute right-0 top-0 flex h-full w-[420px] max-w-[94vw] flex-col border-l border-mercury bg-white shadow-[var(--shadow-pop)]">
+        <header className="conversation-drawer-head flex items-start gap-3 border-b border-mercury/70 bg-gossip/20 px-4 py-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-burnham text-sm font-semibold text-white">
             {contact.profile_photo_url ? <img src={contact.profile_photo_url} alt="" className="h-full w-full rounded-full object-cover" /> : contact.name[0]}
           </div>
@@ -107,11 +107,11 @@ export default function ConversationsDrawer({
             <h2 className="truncate text-[15px] font-semibold text-burnham">{contact.name}</h2>
             <p className="mt-1 line-clamp-2 text-[11px] text-shuttle">{context || contact.company || 'Relationship action'}</p>
           </div>
-          <button onClick={onClose} className="rounded-md p-1 text-shuttle hover:bg-mercury/40 hover:text-burnham"><X size={14} /></button>
+          <button onClick={onClose} aria-label="Close conversation drawer" className="rounded-md p-1 text-shuttle hover:bg-mercury/40 hover:text-burnham"><X size={14} /></button>
         </header>
         <div className="flex-1 overflow-y-auto px-4 py-4">
-          <div className="mb-4 rounded-lg border border-mercury bg-[#FAFAFA] px-3 py-2">
-            <div className="mb-2 flex items-center gap-2 font-mono text-[9px] uppercase tracking-widest text-shuttle/50">
+          <div className="conversation-drawer-card mb-4 rounded-lg border border-mercury bg-[#FAFAFA] px-3 py-2">
+            <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-shuttle/50">
               <ChatCircle size={12} />
               Capture
               {done && <span className="ml-auto normal-case tracking-normal text-burnham">{done}</span>}
@@ -133,8 +133,8 @@ export default function ConversationsDrawer({
             </div>
           </div>
 
-          <div className="rounded-lg border border-mercury bg-white px-3 py-2">
-            <div className="mb-2 font-mono text-[9px] uppercase tracking-widest text-shuttle/50">Suggested opener</div>
+          <div className="conversation-drawer-card rounded-lg border border-mercury bg-white px-3 py-2">
+            <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-shuttle/50">Suggested opener</div>
             <textarea
               value={opener}
               onChange={e => setDraft(e.target.value)}

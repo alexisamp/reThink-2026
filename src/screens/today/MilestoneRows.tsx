@@ -1,7 +1,7 @@
 // MilestoneRows — compact right-rail milestone rows (emoji + name colored by goal
 // + fraction + due chip + progress bar). Click opens the milestone detail panel.
 // Visual contract ported from the design bundle (MilestoneRail.jsx rows).
-import { CaretRight, Gear } from '@phosphor-icons/react'
+import { CaretRight, Gear, Target } from '@phosphor-icons/react'
 
 export interface MilestoneRowData {
   id: string
@@ -38,7 +38,7 @@ export default function MilestoneRows({ rows, activeId, onExpand, onManage }: Pr
             title="Open milestone detail"
           >
             <div className="td-ms-row">
-              <span className="emoji">{m.emoji || '🎯'}</span>
+              <span className="emoji">{m.emoji || <Target size={12} weight="bold" />}</span>
               <span className="name">{m.name}</span>
               <span className="frac">{m.done}/{m.total}</span>
               <span className={`due${m.urgent ? ' urgent' : ''}`}>{m.due ?? '—'}</span>

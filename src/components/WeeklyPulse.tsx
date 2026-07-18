@@ -7,7 +7,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { GearSix, ArrowRight } from '@phosphor-icons/react'
+import { GearSix, ArrowRight, Check, X } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type { WeeklyHabit, WeeklyHabitLog } from '@/types'
 
@@ -237,7 +237,7 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
   if (habits.length === 0) {
     if (compact) return <span className="text-[10px] text-shuttle/30">No goals yet</span>
     return (
-      <div className="mb-4 py-3 px-3 border border-dashed border-mercury rounded-xl flex items-center justify-between">
+      <div className="mb-4 py-3 px-3 border border-dashed border-mercury rounded-lg flex items-center justify-between">
         <span className="text-[11px] text-shuttle/40">No weekly goals yet</span>
         {onSettingsClick && (
           <button onClick={onSettingsClick}
@@ -280,10 +280,10 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
                   {hd.habit.name}
                 </span>
 
-                {/* Today's contribution — green badge, only when > 0 */}
+                {/* Today's contribution badge, only when > 0 */}
                 {tAmt > 0 && !isLogging && (
-                  <span className="text-[9px] font-mono shrink-0 leading-none"
-                    style={{ color: '#79D65E', opacity: 0.9 }}>
+                  <span className="text-[10px] font-mono shrink-0 leading-none"
+                    style={{ color: '#266DF0', opacity: 0.9 }}>
                     +{fmtAmount(hd.habit, tAmt)}
                   </span>
                 )}
@@ -303,17 +303,27 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
                       placeholder={isMinutes ? 'min' : 'n'}
                       className="w-10 text-[10px] font-mono text-burnham bg-mercury/20 border border-mercury/60 rounded px-1 py-0.5 focus:outline-none focus:border-burnham/30 text-center"
                     />
-                    <button onClick={() => handleQuickLog(hd)}
-                      className="text-[10px] font-mono text-pastel hover:text-burnham transition-colors leading-none">✓</button>
-                    <button onClick={() => { setLoggingGoalId(null); setLogInput('') }}
-                      className="text-[10px] font-mono text-shuttle/30 hover:text-shuttle/60 transition-colors leading-none">✗</button>
+                    <button
+                      onClick={() => handleQuickLog(hd)}
+                      aria-label="Save quick log"
+                      className="inline-flex h-5 w-5 items-center justify-center rounded-md text-burnham hover:text-burnham hover:bg-mercury/30 transition-colors"
+                    >
+                      <Check size={11} weight="bold" />
+                    </button>
+                    <button
+                      onClick={() => { setLoggingGoalId(null); setLogInput('') }}
+                      aria-label="Cancel quick log"
+                      className="inline-flex h-5 w-5 items-center justify-center rounded-md text-shuttle/35 hover:text-shuttle hover:bg-mercury/30 transition-colors"
+                    >
+                      <X size={11} weight="bold" />
+                    </button>
                   </div>
                 ) : (
                   <div className="flex items-baseline gap-[2px] shrink-0">
                     <span className={`text-[11px] tabular-nums font-medium leading-none ${done ? 'text-burnham/60' : 'text-shuttle/45'}`}>
                       {fmtAmount(hd.habit, total)}
                     </span>
-                    <span className="text-[9px] text-shuttle/22 font-mono">/{fmtTarget(hd.habit)}</span>
+                    <span className="text-[10px] text-shuttle/22 font-mono">/{fmtTarget(hd.habit)}</span>
                   </div>
                 )}
 
@@ -340,7 +350,7 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
                   <div className="absolute left-0 top-0 h-full rounded-full transition-all duration-500"
                     style={{
                       width: `${Math.max(prevPct, 2)}%`,
-                      backgroundColor: done ? '#003720' : '#79D65E',
+                      backgroundColor: done ? '#266DF0' : '#BAD0FA',
                       opacity: 0.32,
                     }}
                   />
@@ -352,7 +362,7 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
                     style={{
                       left: `${prevPct}%`,
                       width: `${Math.max(todayPct, 2)}%`,
-                      backgroundColor: done ? '#003720' : '#79D65E',
+                      backgroundColor: done ? '#266DF0' : '#BAD0FA',
                       opacity: 0.88,
                     }}
                   />
@@ -361,7 +371,7 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
                 {/* Done pulse — tiny accent at 100% */}
                 {done && (
                   <div className="absolute right-0 top-0 h-full w-[3px] rounded-full"
-                    style={{ backgroundColor: '#003720', opacity: 0.5 }} />
+                    style={{ backgroundColor: '#266DF0', opacity: 0.5 }} />
                 )}
               </div>
 
@@ -376,11 +386,11 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[9px] font-medium text-shuttle/30 uppercase tracking-widest">This week</span>
+        <span className="text-[10px] font-medium text-shuttle/30 uppercase tracking-widest">This week</span>
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/year?layer=weekly')}
-            className="flex items-center gap-0.5 text-[9px] text-shuttle/25 hover:text-shuttle/50 transition-colors font-mono"
+            className="flex items-center gap-0.5 text-[10px] text-shuttle/25 hover:text-shuttle/50 transition-colors font-mono"
             title="View history">
             history <ArrowRight size={9} />
           </button>
@@ -426,7 +436,7 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
                       className={[
                         'w-[11px] h-[11px] rounded-[2px] transition-all duration-150',
                         isAuto ? 'cursor-default' : isFuture ? 'cursor-default' : 'hover:opacity-80 cursor-pointer',
-                        filled ? (done ? 'bg-burnham/70' : 'bg-pastel/60') : (isFuture ? 'bg-mercury/20' : 'bg-mercury/50'),
+                        filled ? (done ? 'bg-burnham/70' : 'bg-burnham/35') : (isFuture ? 'bg-mercury/20' : 'bg-mercury/50'),
                         isToday && !filled ? 'ring-1 ring-shuttle/20' : '',
                         isActive ? 'opacity-40' : '',
                       ].join(' ')}
@@ -439,7 +449,7 @@ export function WeeklyPulse({ userId, weekDates, onSettingsClick, compact, today
                 <span className={`text-[11px] tabular-nums font-medium ${done ? 'text-shuttle/60' : 'text-shuttle/40'}`}>
                   {fmtAmount(hd.habit, total)}
                 </span>
-                <span className="text-[9px] text-shuttle/25 font-mono">/{fmtTarget(hd.habit)}</span>
+                <span className="text-[10px] text-shuttle/25 font-mono">/{fmtTarget(hd.habit)}</span>
               </div>
             </div>
           )

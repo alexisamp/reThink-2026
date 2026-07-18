@@ -10,6 +10,7 @@ import AppShell from '@/components/layout/AppShell'
 import FullAppShell from '@/components/layout/FullAppShell'
 import Assessment from '@/screens/Assessment'
 import Today from '@/screens/Today'
+import WeekPlan from '@/screens/WeekPlan'
 import ReviewQueue from '@/screens/ReviewQueue'
 import People from '@/screens/People'
 import PersonDetail from '@/screens/PersonDetail'
@@ -259,6 +260,7 @@ export default function App() {
         >
           <Route path="/" element={<Navigate to="/today" replace />} />
           <Route path="/today" element={<Today />} />
+          <Route path="/week-plan" element={<WeekPlan />} />
           <Route path="/people" element={<Navigate to="/people/view/all" replace />} />
           <Route path="/people/companies" element={<Navigate to="/companies/view/all" replace />} />
           <Route path="/people/opportunities" element={<Navigate to="/deals/view/all" replace />} />
@@ -289,6 +291,8 @@ export default function App() {
               <AppShell user={user} updater={updater}>
                 <Routes>
                   <Route path="/" element={<Navigate to="/today" replace />} />
+                  <Route path="/today" element={<Today />} />
+                  <Route path="/week-plan" element={<WeekPlan />} />
                   <Route path="/review" element={<ReviewQueue />} />
                   <Route path="/strategy" element={<Navigate to="/milestones" replace />} />
                   <Route path="/monthly" element={<Navigate to="/milestones" replace />} />

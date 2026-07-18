@@ -27,7 +27,7 @@ function getHabitGrade(completedDays: number, daysElapsed: number): { grade: str
   const pct = daysElapsed > 0 ? (completedDays / daysElapsed) * 100 : 0
   const s = getSettings()
   if (pct >= s.gradeA) return { grade: 'A', color: 'text-burnham bg-gossip' }
-  if (pct >= s.gradeB) return { grade: 'B', color: 'text-burnham bg-pastel/30' }
+  if (pct >= s.gradeB) return { grade: 'B', color: 'text-burnham bg-gossip/40' }
   if (pct >= s.gradeC) return { grade: 'C', color: 'text-shuttle bg-mercury/40' }
   return { grade: 'D', color: 'text-shuttle bg-mercury/20' }
 }
@@ -332,18 +332,18 @@ export default function Monthly() {
   const totalMilestones = milestones.length
 
   return (
-    <div className="h-screen flex overflow-hidden text-burnham relative">
+    <div className="monthly-screen h-screen flex overflow-hidden text-burnham relative">
       {/* Goal switcher pill — floats above the AppShell nav */}
       <div className="fixed bottom-[76px] left-1/2 -translate-x-1/2 z-40">
-        <div className="bg-white/90 backdrop-blur-md border border-mercury shadow-sm rounded-full p-1 flex items-center gap-1">
+        <div className="monthly-switcher bg-white/90 backdrop-blur-md border border-mercury rounded-lg p-1 flex items-center gap-1">
           {goals.map((goal, idx) => (
             <button
               key={goal.id}
               onClick={() => switchGoal(goal)}
               title={`⌘${idx === 0 ? '[' : ']'} to switch goals`}
-              className={`px-5 py-2 rounded-full text-[11px] font-semibold tracking-wide transition-all ${
+              className={`px-5 py-2 rounded-md text-[11px] font-semibold tracking-wide transition-all ${
                 activeGoal?.id === goal.id
-                  ? 'bg-mercury/30 ring-1 ring-mercury text-burnham shadow-sm'
+                  ? 'bg-mercury/30 ring-1 ring-mercury text-burnham'
                   : 'text-shuttle hover:text-burnham hover:bg-white/50'
               }`}
             >
@@ -356,7 +356,7 @@ export default function Monthly() {
       </div>
 
       {/* Main panel — 70% */}
-      <main className="w-[70%] h-full flex flex-col bg-white">
+      <main className="monthly-main w-[70%] h-full flex flex-col bg-white">
         <div className="flex-1 overflow-y-auto px-16 py-12 pb-40">
           <div className="max-w-5xl mx-auto w-full">
             {/* Breadcrumbs */}
@@ -384,7 +384,7 @@ export default function Monthly() {
                   <button
                     onClick={() => setViewMonth(m => Math.max(1, m - 1))}
                     disabled={viewMonth === 1}
-                    title="⌘←"
+                    title="Cmd+Left"
                     className="p-1.5 rounded hover:bg-mercury/10 transition-colors disabled:opacity-30"
                   >
                     <CaretLeft size={10} weight="bold" className="text-shuttle" />
@@ -395,7 +395,7 @@ export default function Monthly() {
                   <button
                     onClick={() => setViewMonth(m => Math.min(12, m + 1))}
                     disabled={viewMonth === 12}
-                    title="⌘→"
+                    title="Cmd+Right"
                     className="p-1.5 rounded hover:bg-mercury/10 transition-colors disabled:opacity-30"
                   >
                     <CaretRight size={10} weight="bold" className="text-shuttle" />
@@ -403,7 +403,7 @@ export default function Monthly() {
                   {viewMonth !== todayMonth && (
                     <button
                       onClick={() => setViewMonth(todayMonth)}
-                      className="ml-1 text-[9px] font-semibold text-shuttle hover:text-burnham px-2 py-1 rounded border border-mercury hover:border-burnham transition-colors uppercase tracking-wide"
+                      className="ml-1 text-[10px] font-semibold text-shuttle hover:text-burnham px-2 py-1 rounded border border-mercury hover:border-burnham transition-colors uppercase tracking-wide"
                     >
                       Today
                     </button>
@@ -455,7 +455,7 @@ export default function Monthly() {
                             <span className="block text-sm font-semibold text-burnham">
                               {activeGoal.metric}
                             </span>
-                            <span className="text-[8px] text-shuttle/50 uppercase mt-0.5 block">Outcome</span>
+                            <span className="text-[10px] text-shuttle/50 uppercase mt-0.5 block">Outcome</span>
                           </div>
                           {MONTHS.map((_, mIdx) => (
                             <div key={mIdx} className="text-center text-[10px] text-shuttle/40 font-mono">
@@ -482,7 +482,7 @@ export default function Monthly() {
                               <span className="block text-xs font-medium text-burnham">
                                 {ind.name}
                               </span>
-                              <span className="text-[8px] text-shuttle/50 uppercase mt-0.5 block">Lead</span>
+                              <span className="text-[10px] text-shuttle/50 uppercase mt-0.5 block">Lead</span>
                             </div>
                             {MONTHS.map((_, mIdx) => {
                               const m = mIdx + 1
@@ -510,7 +510,7 @@ export default function Monthly() {
                                       -
                                     </div>
                                   )}
-                                  <div className="text-[9px] text-mercury/60 mt-0.5 group-hover:text-shuttle transition-colors">
+                                  <div className="text-[10px] text-mercury/60 mt-0.5 group-hover:text-shuttle transition-colors">
                                     {monthlyTarget ?? '-'}
                                   </div>
                                 </div>
@@ -566,7 +566,7 @@ export default function Monthly() {
                               <span className="text-sm font-medium text-burnham">
                                 {habit.text}
                               </span>
-                              <span className="text-[9px] bg-mercury/40 text-shuttle px-1.5 py-0.5 rounded tracking-wide uppercase">
+                              <span className="text-[10px] bg-mercury/40 text-shuttle px-1.5 py-0.5 rounded tracking-wide uppercase">
                                 {habit.frequency}
                               </span>
                               {(() => {
@@ -587,7 +587,7 @@ export default function Monthly() {
                                 }
                                 const { grade, color } = getHabitGrade(completedDays, scheduledDaysElapsed)
                                 return (
-                                  <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${color}`}>
+                                  <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${color}`}>
                                     {grade}
                                   </span>
                                 )
@@ -598,9 +598,9 @@ export default function Monthly() {
                                 {done}/{total}{' '}
                                 {habit.frequency === 'WEEKLY' ? 'weeks' : 'days'}
                               </span>
-                              <div className="w-20 h-[1px] bg-mercury rounded-full overflow-hidden">
+                              <div className="w-20 h-[1px] bg-mercury rounded-sm overflow-hidden">
                                 <div
-                                  className="bg-pastel h-full transition-all"
+                                  className="bg-burnham h-full transition-all"
                                   style={{ width: `${pct}%` }}
                                 />
                               </div>
@@ -678,7 +678,7 @@ export default function Monthly() {
       </main>
 
       {/* Right aside — 30% */}
-      <aside className="w-[30%] min-w-[280px] bg-white border-l border-mercury h-full flex flex-col">
+      <aside className="monthly-aside w-[30%] min-w-[280px] bg-white border-l border-mercury h-full flex flex-col">
         {/* Header */}
         <div className="px-8 pt-8 pb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -689,7 +689,8 @@ export default function Monthly() {
           </div>
           <Link
             to={`/dashboard/goal/${activeGoal.id}`}
-            className="text-shuttle hover:text-burnham transition-colors p-1 hover:bg-mercury/10 rounded-full"
+            className="text-shuttle hover:text-burnham transition-colors p-1 hover:bg-mercury/10 rounded-md"
+            aria-label="Open goal dashboard"
           >
             <ArrowSquareOut size={16} />
           </Link>
@@ -710,9 +711,9 @@ export default function Monthly() {
                     {completedMilestones}/{totalMilestones}
                   </span>
                 </div>
-                <div className="h-[3px] w-full bg-mercury rounded-full overflow-hidden">
+                <div className="h-[3px] w-full bg-mercury rounded-sm overflow-hidden">
                   <div
-                    className="h-full bg-pastel transition-all"
+                    className="h-full bg-burnham transition-all"
                     style={{
                       width:
                         totalMilestones > 0
@@ -738,8 +739,8 @@ export default function Monthly() {
                         {habitsDone}/{habitsTotal}
                       </span>
                     </div>
-                    <div className="h-[3px] w-full bg-mercury rounded-full overflow-hidden">
-                      <div className="h-full bg-pastel transition-all" style={{ width: `${habitsPct}%` }} />
+                    <div className="h-[3px] w-full bg-mercury rounded-sm overflow-hidden">
+                      <div className="h-full bg-burnham transition-all" style={{ width: `${habitsPct}%` }} />
                     </div>
                   </div>
                 )
@@ -792,7 +793,7 @@ export default function Monthly() {
                     <button
                       key={n}
                       onClick={() => saveRating(n)}
-                      className={`w-8 h-8 rounded-full text-xs font-semibold transition-all border ${
+                      className={`w-8 h-8 rounded-md text-xs font-semibold transition-all border ${
                         rating !== null && rating >= n
                           ? 'bg-burnham text-white border-burnham'
                           : 'bg-white text-shuttle border-mercury hover:border-burnham hover:text-burnham'

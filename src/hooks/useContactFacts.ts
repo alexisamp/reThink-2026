@@ -5,24 +5,24 @@ import type { ContactFact, ContactFactCategory, ContactFactSource } from '@/type
 export const FACT_CATEGORIES: Array<{
   key: ContactFactCategory
   label: string
-  emoji: string
+  icon: string
   hint: string
 }> = [
-  { key: 'family',       label: 'Family',        emoji: '👨‍👩‍👧', hint: 'Spouse, kids, parents, siblings.' },
-  { key: 'career_intel', label: 'Career',        emoji: '💼', hint: 'Goals, what they want next, frictions.' },
-  { key: 'compensation', label: 'Compensation',  emoji: '💰', hint: 'Comp, equity, package details.' },
-  { key: 'obsession',    label: 'Obsession',     emoji: '🔥', hint: 'What lights them up — hobby, sport, topic.' },
-  { key: 'hot_button',   label: 'Hot button',    emoji: '⚡', hint: 'Topics they love to talk about.' },
-  { key: 'life_phase',   label: 'Life phase',    emoji: '🌊', hint: 'Baby coming, moving, sabbatical, divorce.' },
-  { key: 'pet_peeve',    label: 'Pet peeve',     emoji: '🚫', hint: 'Things they hate — avoid!' },
-  { key: 'origin_story', label: 'Origin',        emoji: '🎬', hint: 'Where you met, how you connected.' },
-  { key: 'health',       label: 'Health',        emoji: '🏥', hint: 'Relevant health context, diet, allergies.' },
-  { key: 'preference',   label: 'Preference',    emoji: '✨', hint: 'Favorite food, drink, venue, style.' },
-  { key: 'other',        label: 'Other',         emoji: '📝', hint: 'Anything else.' },
+  { key: 'family',       label: 'Family',        icon: 'users-three',     hint: 'Spouse, kids, parents, siblings.' },
+  { key: 'career_intel', label: 'Career',        icon: 'briefcase',       hint: 'Goals, what they want next, frictions.' },
+  { key: 'compensation', label: 'Compensation',  icon: 'currency-dollar', hint: 'Comp, equity, package details.' },
+  { key: 'obsession',    label: 'Obsession',     icon: 'fire',            hint: 'What lights them up — hobby, sport, topic.' },
+  { key: 'hot_button',   label: 'Hot button',    icon: 'lightning',       hint: 'Topics they love to talk about.' },
+  { key: 'life_phase',   label: 'Life phase',    icon: 'waves',           hint: 'Baby coming, moving, sabbatical, divorce.' },
+  { key: 'pet_peeve',    label: 'Pet peeve',     icon: 'prohibit',        hint: 'Things they hate — avoid!' },
+  { key: 'origin_story', label: 'Origin',        icon: 'film-slate',      hint: 'Where you met, how you connected.' },
+  { key: 'health',       label: 'Health',        icon: 'first-aid-kit',   hint: 'Relevant health context, diet, allergies.' },
+  { key: 'preference',   label: 'Preference',    icon: 'sparkle',         hint: 'Favorite food, drink, venue, style.' },
+  { key: 'other',        label: 'Other',         icon: 'note-pencil',     hint: 'Anything else.' },
 ]
 
-export function factEmoji(category: ContactFactCategory): string {
-  return FACT_CATEGORIES.find(c => c.key === category)?.emoji ?? '📝'
+export function factCategoryIcon(category: ContactFactCategory): string {
+  return FACT_CATEGORIES.find(c => c.key === category)?.icon ?? 'note-pencil'
 }
 
 export function factCategoryLabel(category: ContactFactCategory): string {

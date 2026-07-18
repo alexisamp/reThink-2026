@@ -4,7 +4,8 @@ import {
   ArrowLeft, CaretRight, PencilSimple, Check, Plus,
   WhatsappLogo, LinkedinLogo, TwitterLogo, Star, Briefcase,
   Trash, Target, User, ArrowSquareOut, X, ArrowUp, ArrowDown, Scales,
-  EnvelopeSimple,
+  EnvelopeSimple, Gift, Baby, Heart, Confetti, CalendarBlank,
+  Handshake, Newspaper, LinkSimple, Lightbulb, LockOpen, NotePencil, ArrowRight,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -24,13 +25,16 @@ function daysSince(dateStr: string | null): number | null {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
 }
 
-const MILESTONE_EMOJIS: Record<ContactMilestone['type'], string> = {
-  birthday_contact: '🎂',
-  birthday_child: '👶',
-  birthday_partner: '💑',
-  anniversary: '🎉',
-  anniversary_work: '💼',
-  custom: '📅',
+function MilestoneIcon({ type, size = 12 }: { type: ContactMilestone['type']; size?: number }) {
+  const className = "text-shuttle/70 shrink-0"
+  switch (type) {
+    case 'birthday_contact': return <Gift size={size} className={className} />
+    case 'birthday_child': return <Baby size={size} className={className} />
+    case 'birthday_partner': return <Heart size={size} className={className} />
+    case 'anniversary': return <Confetti size={size} className={className} />
+    case 'anniversary_work': return <Briefcase size={size} className={className} />
+    case 'custom': return <CalendarBlank size={size} className={className} />
+  }
 }
 
 /** Days until the next occurrence of a milestone (MM-DD recurring, or ISO date). null if past/none. */
@@ -50,12 +54,12 @@ function milestoneDaysUntil(m: ContactMilestone): number | null {
   return null
 }
 
-/** Color classes for a value-ledger bucket: green = healthy net giver, red = you owe / net taker. */
+/** Color classes for a value-ledger bucket. */
 function ledgerTone(bucket: LedgerBucket): { text: string; bg: string; border: string } {
   switch (bucket) {
     case 'champion':
     case 'healthy':
-      return { text: 'text-pastel', bg: 'bg-pastel/15', border: 'border-pastel/50' }
+      return { text: 'text-burnham', bg: 'bg-gossip/30', border: 'border-gossip' }
     case 'neutral':
       return { text: 'text-shuttle', bg: 'bg-mercury/30', border: 'border-mercury' }
     case 'owe_them':
@@ -80,15 +84,15 @@ function formatDate(d: string) {
 
 function healthColor(days: number | null): string {
   if (days === null) return 'text-shuttle'
-  if (days <= 14) return 'text-pastel'
-  if (days <= 30) return 'text-yellow-500'
+  if (days <= 14) return 'text-burnham'
+  if (days <= 30) return 'text-shuttle'
   return 'text-red-400'
 }
 
 function healthDotColor(days: number | null): string {
   if (days === null) return 'bg-mercury'
-  if (days <= 14) return 'bg-pastel'
-  if (days <= 30) return 'bg-yellow-400'
+  if (days <= 14) return 'bg-burnham'
+  if (days <= 30) return 'bg-shuttle'
   return 'bg-red-400'
 }
 
@@ -116,12 +120,12 @@ const INTERACTION_TYPES: { key: Interaction['type'], label: string }[] = [
 ]
 
 const INTERACTION_DOT: Record<string, string> = {
-  whatsapp: 'bg-green-400',
-  linkedin_msg: 'bg-blue-400',
+  whatsapp: 'bg-burnham',
+  linkedin_msg: 'bg-burnham',
   email: 'bg-shuttle',
   call: 'bg-burnham',
-  virtual_coffee: 'bg-yellow-400',
-  in_person: 'bg-pastel',
+  virtual_coffee: 'bg-shuttle',
+  in_person: 'bg-burnham',
 }
 
 const VALUE_TYPE_LABELS: Record<string, string> = {
@@ -130,22 +134,30 @@ const VALUE_TYPE_LABELS: Record<string, string> = {
   candor: 'Candor (they shared)', other: 'Other',
 }
 
-const VALUE_TYPE_EMOJIS: Record<string, string> = {
-  introduction: '🤝', content: '📰', referral: '🔗',
-  advice: '💡', endorsement: '⭐', opportunity: '🎯',
-  candor: '🔓', other: '📝',
+function ValueTypeIcon({ type, size = 10 }: { type: string; size?: number }) {
+  const className = "text-shuttle/70 shrink-0"
+  switch (type) {
+    case 'introduction': return <Handshake size={size} className={className} />
+    case 'content': return <Newspaper size={size} className={className} />
+    case 'referral': return <LinkSimple size={size} className={className} />
+    case 'advice': return <Lightbulb size={size} className={className} />
+    case 'endorsement': return <Star size={size} className={className} />
+    case 'opportunity': return <Target size={size} className={className} />
+    case 'candor': return <LockOpen size={size} className={className} />
+    default: return <NotePencil size={size} className={className} />
+  }
 }
 
 const CHANNEL_ICONS: Record<string, React.ReactNode> = {
-  whatsapp: <WhatsappLogo size={13} weight="fill" className="text-green-500" />,
-  linkedin: <LinkedinLogo size={13} weight="fill" className="text-blue-500" />,
+  whatsapp: <WhatsappLogo size={13} weight="fill" className="text-burnham" />,
+  linkedin: <LinkedinLogo size={13} weight="fill" className="text-burnham" />,
   x: <TwitterLogo size={13} weight="fill" className="text-shuttle" />,
-  exit5: <Star size={13} weight="fill" className="text-yellow-500" />,
+  exit5: <Star size={13} weight="fill" className="text-shuttle" />,
 }
 
 const TIER_COLORS: Record<number, string> = {
   1: 'bg-gossip text-burnham',
-  2: 'bg-yellow-100 text-yellow-800',
+  2: 'bg-mercury text-shuttle',
   3: 'bg-mercury text-shuttle',
 }
 
@@ -155,7 +167,7 @@ const TIER_LABELS: Record<number, string> = {
 
 const STAGE_COLORS: Record<string, string> = {
   exploring: 'text-shuttle', active: 'text-burnham font-medium',
-  negotiating: 'text-yellow-700 font-medium', won: 'text-pastel', lost: 'text-red-400',
+  negotiating: 'text-shuttle font-medium', won: 'text-burnham', lost: 'text-red-400',
 }
 
 // ── sub-components ────────────────────────────────────────────────────────────
@@ -177,7 +189,7 @@ function SidebarValue({ children }: { children: React.ReactNode }) {
 function SidebarSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mb-5">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">{title}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/50 mb-2">{title}</p>
       {children}
     </div>
   )
@@ -241,12 +253,13 @@ function EditableField({
       <div className="flex flex-col gap-0.5 flex-1 min-w-0">
         <SidebarLabel>{label}</SidebarLabel>
         <SidebarValue>
-          {value || <span className="text-mercury italic text-[11px]">{placeholder ?? '—'}</span>}
+          {value || <span className="text-shuttle/60 text-[11px]">{placeholder ?? '—'}</span>}
         </SidebarValue>
       </div>
       <button
         onClick={() => { setDraft(value ?? ''); setEditing(true) }}
         className="opacity-0 group-hover:opacity-100 text-shuttle hover:text-burnham transition-opacity flex-shrink-0 ml-1"
+        aria-label={`Edit ${label}`}
       >
         <PencilSimple size={10} />
       </button>
@@ -287,6 +300,7 @@ function TimelineItem({ interaction, onDelete }: { interaction: Interaction; onD
           <button
             onClick={onDelete}
             className="opacity-0 group-hover:opacity-100 text-mercury hover:text-red-400 transition-opacity"
+            aria-label="Delete interaction"
           >
             <Trash size={10} />
           </button>
@@ -317,9 +331,9 @@ function PulseCard({ contact }: { contact: Contact }) {
 
   const severityColor = {
     critical: 'text-red-600 bg-red-50 border-red-200',
-    warn: 'text-orange-700 bg-orange-50 border-orange-200',
-    info: 'text-burnham bg-gossip/40 border-pastel',
-    good: 'text-green-700 bg-green-50 border-green-200',
+    warn: 'text-shuttle bg-mercury/40 border-mercury',
+    info: 'text-burnham bg-gossip/40 border-gossip',
+    good: 'text-burnham bg-gossip/40 border-gossip',
   }[assessment.severity]
 
   return (
@@ -342,13 +356,13 @@ function PulseCard({ contact }: { contact: Contact }) {
 
       {/* Strength bar */}
       <div>
-        <div className="h-1.5 bg-mercury/50 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-mercury/50 rounded-sm overflow-hidden">
           <div
             className="h-full bg-burnham transition-all"
             style={{ width: `${Math.max(2, normalized * 100)}%` }}
           />
         </div>
-        <div className="text-[9px] text-shuttle/40 mt-0.5 text-right font-mono">
+        <div className="text-[10px] text-shuttle/40 mt-0.5 text-right font-mono">
           {strength.toFixed(1)}
         </div>
       </div>
@@ -601,10 +615,10 @@ export default function PersonDetail() {
   const activeOpps = opportunities.filter(o => o.stage === 'active' || o.stage === 'negotiating')
 
   return (
-    <div className="flex flex-col h-full bg-[#F7F7F5]">
+    <div className="person-detail-page flex flex-col h-full bg-canvas">
       {/* ── breadcrumb ── */}
       <div className="flex items-center gap-2 px-5 py-2.5 bg-white border-b border-mercury shrink-0">
-        <Link to="/people" className="text-shuttle hover:text-burnham transition-colors">
+        <Link to="/people" className="text-shuttle hover:text-burnham transition-colors" aria-label="Back to people">
           <ArrowLeft size={14} weight="bold" />
         </Link>
         <span className="text-[12px] text-shuttle">People</span>
@@ -649,7 +663,7 @@ export default function PersonDetail() {
                 className="w-10 h-10 rounded-full object-cover border border-mercury shrink-0"
               />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-gossip flex items-center justify-center text-burnham font-semibold text-sm border border-pastel shrink-0">
+              <div className="w-10 h-10 rounded-full bg-gossip flex items-center justify-center text-burnham font-semibold text-sm border border-gossip shrink-0">
                 {initials}
               </div>
             )}
@@ -700,24 +714,24 @@ export default function PersonDetail() {
             <div className="flex flex-col gap-4">
               {/* Conversation starters — what to bring up next time */}
               {hasStarters && (
-                <div className="bg-pastel/10 border border-pastel/40 rounded-lg px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-burnham/60 mb-2">Conversation starters</p>
+                <div className="bg-gossip/20 border border-gossip rounded-lg px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-burnham/60 mb-2">Conversation starters</p>
                   <div className="flex flex-col gap-1.5">
                     {birthdayDays != null && birthdayDays <= 30 && (
                       <div className="flex items-center gap-2 text-[12px] text-midnight">
-                        <span>🎂</span>
+                        <Gift size={12} className="text-shuttle/70 shrink-0" />
                         <span>Birthday {birthdayDays === 0 ? 'today' : `in ${birthdayDays}d`}</span>
                       </div>
                     )}
                     {upcomingMilestones.map(({ m, days }) => (
                       <div key={m.id} className="flex items-center gap-2 text-[12px] text-midnight">
-                        <span>{MILESTONE_EMOJIS[m.type] ?? '📅'}</span>
+                        <MilestoneIcon type={m.type} />
                         <span>{m.label} {days === 0 ? 'today' : `in ${days}d`}</span>
                       </div>
                     ))}
                     {starterFacts.map(f => (
                       <div key={f.id} className="flex items-start gap-2 text-[12px] text-midnight">
-                        <Star size={11} weight="fill" className="text-pastel mt-0.5 shrink-0" />
+                        <Star size={11} weight="fill" className="text-burnham mt-0.5 shrink-0" />
                         <span>{f.label ? <span className="text-shuttle">{f.label}: </span> : null}{f.value}</span>
                       </div>
                     ))}
@@ -728,7 +742,7 @@ export default function PersonDetail() {
               {/* personal_context — prominent block */}
               {contact.personal_context && (
                 <div className="bg-gossip/20 border border-gossip/40 rounded-lg px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-burnham/60 mb-1.5">Context</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-burnham/60 mb-1.5">Context</p>
                   <p className="text-[13px] text-midnight leading-relaxed whitespace-pre-wrap">{contact.personal_context}</p>
                 </div>
               )}
@@ -736,14 +750,14 @@ export default function PersonDetail() {
               {/* Active opportunity card */}
               {activeOpps.length > 0 && (
                 <div className="bg-white border border-mercury rounded-lg px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">Active Opportunity</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/50 mb-2">Active Opportunity</p>
                   {activeOpps.map(opp => (
                     <Link
                       key={opp.id}
                       to={`/people/opportunities/${opp.id}`}
                       className="flex items-center gap-3 hover:opacity-80 transition-opacity"
                     >
-                      <Target size={14} className="text-orange-400 shrink-0" />
+                      <Target size={14} className="text-[var(--record-deal)] shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-medium text-midnight truncate">{opp.title}</p>
                         <p className="text-[11px] text-shuttle">{opp.company?.name ?? 'No company'}</p>
@@ -757,14 +771,14 @@ export default function PersonDetail() {
                 </div>
               )}
 
-              {/* Daisy chain: LinkedIn → referred_by → status */}
+              {/* Daisy chain: LinkedIn -> referred_by -> status */}
               <div className="flex items-center gap-2 flex-wrap">
                 {contact.linkedin_url && (
                   <a
                     href={contact.linkedin_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-1 text-[11px] text-blue-600 bg-blue-50 px-2 py-1 rounded-full hover:bg-blue-100 transition-colors"
+                    className="flex items-center gap-1 text-[11px] text-burnham bg-gossip px-2 py-1 rounded-md hover:bg-mercury/30 transition-colors"
                   >
                     <LinkedinLogo size={11} weight="fill" />
                     LinkedIn
@@ -774,7 +788,7 @@ export default function PersonDetail() {
                   <span className="text-mercury text-[11px]">via</span>
                 )}
                 {contact.referred_by && (
-                  <span className="flex items-center gap-1 text-[11px] text-shuttle bg-mercury/50 px-2 py-1 rounded-full">
+                  <span className="flex items-center gap-1 text-[11px] text-shuttle bg-mercury/50 px-2 py-1 rounded-md">
                     <User size={11} />
                     Referred
                   </span>
@@ -782,9 +796,9 @@ export default function PersonDetail() {
                 {contact.status && (
                   <>
                     {(contact.linkedin_url || contact.referred_by) && (
-                      <span className="text-mercury text-[11px]">→</span>
+                      <ArrowRight size={10} className="text-mercury" />
                     )}
-                    <span className="text-[11px] text-shuttle bg-mercury/30 px-2 py-1 rounded-full">
+                    <span className="text-[11px] text-shuttle bg-mercury/30 px-2 py-1 rounded-md">
                       {contact.status}
                     </span>
                   </>
@@ -793,7 +807,7 @@ export default function PersonDetail() {
 
               {/* Pulse — connection strength + action recommendation */}
               <div className="bg-white border border-mercury rounded-lg p-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">Pulse</p>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/50 mb-2">Pulse</p>
                 <PulseCard contact={contact} />
               </div>
 
@@ -810,7 +824,7 @@ export default function PersonDetail() {
               {/* Recent interactions — timeline preview */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50">Recent Activity</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-shuttle/50">Recent Activity</p>
                   <button
                     onClick={() => { setTab('interactions'); setAddingInteraction(true) }}
                     className="flex items-center gap-1 text-[11px] text-burnham hover:underline"
@@ -819,7 +833,7 @@ export default function PersonDetail() {
                   </button>
                 </div>
                 {interactions.length === 0 ? (
-                  <p className="text-[12px] text-mercury italic">No interactions yet.</p>
+                  <p className="text-[12px] text-shuttle/60">No interactions yet.</p>
                 ) : (
                   <div>
                     {interactions.slice(0, 4).map(i => (
@@ -840,7 +854,7 @@ export default function PersonDetail() {
               {/* Value Ledger — given vs received (Jacob's reciprocity imbalance) */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50">Value Ledger</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-shuttle/50">Value Ledger</p>
                   <button
                     onClick={() => setAddingValueLog(true)}
                     className="flex items-center gap-1 text-[11px] text-burnham hover:underline"
@@ -857,12 +871,12 @@ export default function PersonDetail() {
                       <div className="flex items-center gap-2">
                         <Scales size={15} weight="bold" className={tone.text} />
                         <span className={`text-[12px] font-semibold ${tone.text}`}>{ledger.label}</span>
-                        <span className={`text-[11px] font-bold ml-auto ${tone.text}`}>
+                        <span className={`text-[11px] font-semibold ml-auto ${tone.text}`}>
                           {ledger.balance > 0 ? '+' : ''}{ledger.balance}
                         </span>
                       </div>
                       <div className="flex items-center gap-3 text-[11px] text-shuttle">
-                        <span className="flex items-center gap-1"><ArrowUp size={10} weight="bold" className="text-pastel" /> Given {ledger.given}</span>
+                        <span className="flex items-center gap-1"><ArrowUp size={10} weight="bold" className="text-burnham" /> Given {ledger.given}</span>
                         <span className="flex items-center gap-1"><ArrowDown size={10} weight="bold" className="text-shuttle/60" /> Received {ledger.received}</span>
                       </div>
                       <p className="text-[11px] text-shuttle/80 leading-snug">{ledger.suggestion}</p>
@@ -876,13 +890,13 @@ export default function PersonDetail() {
                     <div className="flex gap-1 p-0.5 bg-mercury/30 rounded-lg">
                       <button
                         onClick={() => setNewVLDirection('given')}
-                        className={`flex-1 flex items-center justify-center gap-1 text-[11px] py-1 rounded-md transition-colors ${newVLDirection === 'given' ? 'bg-white text-burnham shadow-sm font-medium' : 'text-shuttle'}`}
+                        className={`flex-1 flex items-center justify-center gap-1 text-[11px] py-1 rounded-md transition-colors ${newVLDirection === 'given' ? 'bg-white text-burnham shadow-[var(--shadow-card)] font-medium' : 'text-shuttle'}`}
                       >
                         <ArrowUp size={11} weight="bold" /> I gave
                       </button>
                       <button
                         onClick={() => setNewVLDirection('received')}
-                        className={`flex-1 flex items-center justify-center gap-1 text-[11px] py-1 rounded-md transition-colors ${newVLDirection === 'received' ? 'bg-white text-burnham shadow-sm font-medium' : 'text-shuttle'}`}
+                        className={`flex-1 flex items-center justify-center gap-1 text-[11px] py-1 rounded-md transition-colors ${newVLDirection === 'received' ? 'bg-white text-burnham shadow-[var(--shadow-card)] font-medium' : 'text-shuttle'}`}
                       >
                         <ArrowDown size={11} weight="bold" /> I received
                       </button>
@@ -910,18 +924,18 @@ export default function PersonDetail() {
                 )}
 
                 {valueLogs.length === 0 && !addingValueLog ? (
-                  <p className="text-[12px] text-mercury italic">No value exchanged yet. Give first.</p>
+                  <p className="text-[12px] text-shuttle/60">No value exchanged yet. Give first.</p>
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     {valueLogs.map(vl => {
                       const received = vl.direction === 'received'
                       return (
-                        <div key={vl.id} className={`flex items-center gap-2 px-2 py-1.5 border rounded-lg group ${vl.type === 'candor' ? 'bg-pastel/20 border-pastel' : 'bg-white border-mercury'}`}>
+                        <div key={vl.id} className={`flex items-center gap-2 px-2 py-1.5 border rounded-lg group ${vl.type === 'candor' ? 'bg-gossip/30 border-gossip' : 'bg-white border-mercury'}`}>
                           {received
                             ? <ArrowDown size={12} weight="bold" className="text-shuttle/60 shrink-0" />
-                            : <ArrowUp size={12} weight="bold" className="text-pastel shrink-0" />}
+                            : <ArrowUp size={12} weight="bold" className="text-burnham shrink-0" />}
                           <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-gossip text-burnham rounded flex items-center gap-1">
-                            <span>{VALUE_TYPE_EMOJIS[vl.type] ?? ''}</span>
+                            <ValueTypeIcon type={vl.type} />
                             <span>{VALUE_TYPE_LABELS[vl.type] ?? vl.type}</span>
                           </span>
                           <p className="text-[12px] text-shuttle flex-1 truncate">{vl.description || '—'}</p>
@@ -954,7 +968,7 @@ export default function PersonDetail() {
                       disabled={gmailSyncing}
                       className="flex items-center gap-1 text-[11px] px-3 py-1.5 border border-mercury text-shuttle rounded-lg hover:border-burnham hover:text-burnham transition-colors disabled:opacity-50"
                     >
-                      <EnvelopeSimple size={11} /> {gmailSyncing ? 'Syncing…' : 'Sync Gmail'}
+                      <EnvelopeSimple size={11} /> {gmailSyncing ? 'Syncing...' : 'Sync Gmail'}
                     </button>
                   )}
                   <button
@@ -998,7 +1012,7 @@ export default function PersonDetail() {
               )}
 
               {interactions.length === 0 ? (
-                <p className="text-[12px] text-mercury italic text-center py-8">No interactions logged yet.</p>
+                <p className="text-[12px] text-shuttle/60 text-center py-8">No interactions logged yet.</p>
               ) : (
                 <div className="mt-2">
                   {interactions.map(i => (
@@ -1037,7 +1051,7 @@ export default function PersonDetail() {
 
               {contact.personal_context && (
                 <div className="mt-2 p-3 bg-gossip/20 border border-gossip/40 rounded-lg">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-burnham/60 mb-1">Personal Context</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-burnham/60 mb-1">Personal Context</p>
                   <p className="text-[12px] text-midnight whitespace-pre-wrap">{contact.personal_context}</p>
                 </div>
               )}
@@ -1052,8 +1066,8 @@ export default function PersonDetail() {
                 <div className="text-center py-8">
                   <Briefcase size={28} className="text-mercury mx-auto mb-2" />
                   <p className="text-[12px] text-shuttle">No opportunities linked.</p>
-                  <Link to="/people/opportunities" className="text-[11px] text-burnham hover:underline mt-1 inline-block">
-                    Go to Opportunities →
+                  <Link to="/people/opportunities" className="inline-flex items-center gap-1 text-[11px] text-burnham hover:underline mt-1">
+                    Go to Opportunities <ArrowRight size={10} />
                   </Link>
                 </div>
               ) : (
@@ -1064,7 +1078,7 @@ export default function PersonDetail() {
                       to={`/people/opportunities/${opp.id}`}
                       className="flex items-center gap-3 p-3 bg-white border border-mercury rounded-lg hover:border-burnham transition-colors"
                     >
-                      <Target size={14} className="text-orange-400 shrink-0" />
+                      <Target size={14} className="text-[var(--record-deal)] shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-[13px] font-medium text-midnight truncate">{opp.title}</p>
                         <p className="text-[11px] text-shuttle">{opp.company?.name ?? 'No company'} · {opp.type}</p>
@@ -1144,10 +1158,14 @@ export default function PersonDetail() {
             {linkedinResult && (
               <div className="mb-3 p-3 bg-gossip/10 border border-gossip/40 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-burnham/70">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-burnham/70">
                     {linkedinResult.error ? 'Fetch failed' : 'Profile data'}
                   </p>
-                  <button onClick={() => setLinkedinResult(null)} className="text-shuttle hover:text-burnham">
+                  <button
+                    onClick={() => setLinkedinResult(null)}
+                    className="text-shuttle hover:text-burnham"
+                    aria-label="Close LinkedIn profile result"
+                  >
                     <X size={10} />
                   </button>
                 </div>
@@ -1271,17 +1289,17 @@ export default function PersonDetail() {
           {/* Channels */}
           <SidebarSection title="Channels">
             {channels.length === 0 ? (
-              <p className="text-[11px] text-mercury italic">No channels linked.</p>
+              <p className="text-[11px] text-shuttle/60">No channels linked.</p>
             ) : (
               <div className="flex flex-col gap-1.5">
                 {channels.map(ch => (
-                  <div key={ch.id} className="flex items-center gap-2 px-2 py-1.5 bg-[#F7F7F5] border border-mercury/60 rounded">
+                  <div key={ch.id} className="flex items-center gap-2 px-2 py-1.5 bg-white border border-mercury/60 rounded">
                     {CHANNEL_ICONS[ch.channel]}
                     <div className="flex-1 min-w-0">
                       <p className="text-[11px] font-medium text-midnight truncate">{ch.channel_name || ch.channel_identifier}</p>
                       <p className="text-[10px] text-shuttle/60 truncate">{ch.channel_identifier}</p>
                     </div>
-                    {ch.verified && <Check size={10} className="text-pastel flex-shrink-0" />}
+                    {ch.verified && <Check size={10} className="text-burnham flex-shrink-0" />}
                   </div>
                 ))}
               </div>
@@ -1295,7 +1313,7 @@ export default function PersonDetail() {
                 <Star size={9} weight="fill" /> Board of Directors
               </span>
             ) : (
-              <p className="text-[11px] text-mercury italic">Not in any lists.</p>
+              <p className="text-[11px] text-shuttle/60">Not in any lists.</p>
             )}
           </SidebarSection>
 
@@ -1307,7 +1325,7 @@ export default function PersonDetail() {
                   <Link
                     key={opp.id}
                     to={`/people/opportunities/${opp.id}`}
-                    className="flex items-center justify-between px-2 py-1.5 bg-[#F7F7F5] border border-mercury/60 rounded hover:border-burnham transition-colors"
+                    className="flex items-center justify-between px-2 py-1.5 bg-white border border-mercury/60 rounded hover:border-burnham transition-colors"
                   >
                     <span className="text-[11px] text-midnight truncate">{opp.title}</span>
                     <span className={`text-[10px] ml-2 flex-shrink-0 capitalize ${STAGE_COLORS[opp.stage] ?? 'text-shuttle'}`}>

@@ -1,7 +1,7 @@
 // src/screens/Dashboard.tsx
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { House, ArrowRight, Lightning, TrendUp, TrendDown, Minus } from '@phosphor-icons/react'
+import { House, ArrowRight, Lightning, TrendUp, TrendDown, Minus, WarningCircle } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import type { Goal, Milestone, LeadingIndicator, Habit, HabitLog, Review, MonthlyKpiEntry, Todo, Contact, ContactStatus } from '@/types'
@@ -11,7 +11,7 @@ import AICoach from '@/components/AICoach'
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DAYS = ['Mon', 'Wed', 'Fri']
 
-// Build 48 weeks × 7 days heatmap data from habit logs
+// Build 48 weeks x 7 days heatmap data from habit logs
 function buildHeatmap(logs: HabitLog[], habitCount: number, year: number) {
   const startOfYear = new Date(year, 0, 1)
   const today = new Date()
@@ -48,13 +48,14 @@ function buildHeatmap(logs: HabitLog[], habitCount: number, year: number) {
   return cells
 }
 
-const LEVEL_CLASSES = [
-  'bg-[#EBEDF0]',
-  'bg-[#9BE9A8]',
-  'bg-[#79D65E]',
-  'bg-[#30A14E]',
-  'bg-[#216E39]',
+const HEATMAP_COLORS = [
+  'var(--attio-haze, #EEEFF1)',
+  'var(--attio-ice, #E4EDFF)',
+  'var(--attio-periwinkle, #BAD0FA)',
+  'var(--attio-cobalt-500, #538BF3)',
+  'var(--attio-cobalt, #266DF0)',
 ]
+const ATTIO_COBALT = 'var(--attio-cobalt, #266DF0)'
 
 function Heatmap({ cells }: { cells: number[] }) {
   const weeks: number[][] = []
@@ -62,11 +63,11 @@ function Heatmap({ cells }: { cells: number[] }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex gap-4 items-start">
-        <div className="flex flex-col justify-between h-[74px] text-[9px] font-medium text-shuttle leading-none py-[3px]">
+        <div className="flex flex-col justify-between h-[74px] text-[10px] font-medium text-shuttle leading-none py-[2px]">
           {DAYS.map(d => <span key={d}>{d}</span>)}
         </div>
         <div className="flex flex-col gap-1 flex-1 overflow-hidden">
-          <div className="flex justify-between text-[9px] text-burnham font-medium w-full">
+          <div className="flex justify-between text-[10px] text-burnham font-medium w-full">
             {MONTHS.map(m => <span key={m}>{m}</span>)}
           </div>
           <div className="flex gap-[2px] w-full">
@@ -75,9 +76,11 @@ function Heatmap({ cells }: { cells: number[] }) {
                 {week.map((level, di) => (
                   <div
                     key={di}
-                    className={`w-full h-2.5 rounded-[1px] ${
-                      level < 0 ? 'bg-[#EBEDF0] opacity-20' : LEVEL_CLASSES[Math.min(level, 4)]
-                    }`}
+                    className="w-full h-2.5 rounded-[1px]"
+                    style={{
+                      backgroundColor: level < 0 ? 'var(--attio-haze, #EEEFF1)' : HEATMAP_COLORS[Math.min(level, 4)],
+                      opacity: level < 0 ? 0.24 : 1,
+                    }}
                   />
                 ))}
               </div>
@@ -85,9 +88,9 @@ function Heatmap({ cells }: { cells: number[] }) {
           </div>
         </div>
         <div className="flex flex-col gap-1 items-end pt-5 min-w-[32px]">
-          <div className="px-2 py-0.5 bg-burnham text-white rounded-md text-[9px] font-bold w-full text-center">2026</div>
-          <div className="px-2 py-0.5 text-mercury rounded-md text-[9px] font-medium w-full text-center">2025</div>
-          <div className="px-2 py-0.5 text-mercury rounded-md text-[9px] font-medium w-full text-center">2024</div>
+          <div className="px-2 py-0.5 bg-burnham text-white rounded-md text-[10px] font-semibold w-full text-center">2026</div>
+          <div className="px-2 py-0.5 text-mercury rounded-md text-[10px] font-medium w-full text-center">2025</div>
+          <div className="px-2 py-0.5 text-mercury rounded-md text-[10px] font-medium w-full text-center">2024</div>
         </div>
       </div>
     </div>
@@ -114,7 +117,7 @@ function ProductivityBars({ todos }: { todos: Todo[] }) {
   return (
     <div>
       <p className="text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-3">Productivity Window</p>
-      <p className="text-[9px] text-shuttle/60 mb-3">Tasks completed by hour of day</p>
+      <p className="text-[10px] text-shuttle/60 mb-3">Tasks completed by hour of day</p>
       <svg width="100%" viewBox={`0 0 ${W} ${H + 16}`} className="overflow-visible">
         {HOURS.map((h, i) => {
           const barH = Math.max(2, Math.round((counts[i] / maxCount) * H))
@@ -127,7 +130,7 @@ function ProductivityBars({ todos }: { todos: Todo[] }) {
                 width={barW}
                 height={barH}
                 rx={1}
-                className="fill-[#79D65E]"
+                fill={ATTIO_COBALT}
                 opacity={counts[i] === 0 ? 0.2 : 0.9}
               />
               {i % 3 === 0 && (
@@ -147,7 +150,7 @@ function ProductivityBars({ todos }: { todos: Todo[] }) {
         })}
       </svg>
       {todos.filter(t => t.completed_at).length === 0 && (
-        <p className="text-[9px] text-shuttle/40 italic mt-1">No completion timestamps yet</p>
+        <p className="text-[10px] text-shuttle/40 italic mt-1">No completion timestamps yet</p>
       )}
     </div>
   )
@@ -200,7 +203,7 @@ function EnergyScatter({ reviews, todos }: { reviews: Review[]; todos: Todo[] })
   return (
     <div>
       <p className="text-[10px] font-semibold text-shuttle uppercase tracking-widest mb-3">Energy vs Output</p>
-      <p className="text-[9px] text-shuttle/60 mb-3">Energy level vs tasks completed per day</p>
+      <p className="text-[10px] text-shuttle/60 mb-3">Energy level vs tasks completed per day</p>
       <svg width="100%" viewBox={`0 0 ${W} ${H + PY * 2}`} className="overflow-visible">
         {/* X axis labels */}
         {[1, 3, 5, 7, 9].map(n => (
@@ -213,7 +216,7 @@ function EnergyScatter({ reviews, todos }: { reviews: Review[]; todos: Todo[] })
           <line
             x1={trendLine.x1} y1={trendLine.y1}
             x2={trendLine.x2} y2={trendLine.y2}
-            stroke="#79D65E" strokeWidth="1" strokeDasharray="3,2" opacity={0.6}
+            stroke={ATTIO_COBALT} strokeWidth="1" strokeDasharray="3,2" opacity={0.6}
           />
         )}
         {/* Points */}
@@ -223,13 +226,13 @@ function EnergyScatter({ reviews, todos }: { reviews: Review[]; todos: Todo[] })
             cx={toSvgX(p.x)}
             cy={toSvgY(p.y)}
             r={Math.min(5, 2 + p.y * 0.5)}
-            className="fill-[#79D65E]"
+            fill={ATTIO_COBALT}
             opacity={0.7}
           />
         ))}
       </svg>
       {points.length === 0 && (
-        <p className="text-[9px] text-shuttle/40 italic mt-1">No data yet</p>
+        <p className="text-[10px] text-shuttle/40 italic mt-1">No data yet</p>
       )}
     </div>
   )
@@ -240,9 +243,9 @@ function TrendBadge({ current, prior }: { current: number; prior: number }) {
   if (prior === 0) return null
   const delta = current - prior
   const pct = Math.round(Math.abs(delta / prior) * 100)
-  if (pct < 2) return <span className="text-[9px] text-shuttle flex items-center gap-0.5"><Minus size={8} /> —</span>
-  if (delta > 0) return <span className="text-[9px] text-emerald-600 flex items-center gap-0.5"><TrendUp size={9} weight="bold" /> +{pct}%</span>
-  return <span className="text-[9px] text-red-500 flex items-center gap-0.5"><TrendDown size={9} weight="bold" /> -{pct}%</span>
+  if (pct < 2) return <span className="text-[10px] text-shuttle flex items-center gap-0.5"><Minus size={9} /> —</span>
+  if (delta > 0) return <span className="text-[10px] text-burnham flex items-center gap-0.5"><TrendUp size={10} weight="bold" /> +{pct}%</span>
+  return <span className="text-[10px] text-red-500 flex items-center gap-0.5"><TrendDown size={10} weight="bold" /> -{pct}%</span>
 }
 
 export default function Dashboard() {
@@ -414,11 +417,11 @@ export default function Dashboard() {
             <span>/</span>
             <span className="text-burnham font-semibold">Dashboard</span>
           </div>
-          <div className="flex items-center p-1 bg-gray-50 rounded-full gap-1">
+          <div className="flex items-center p-1 bg-sidebar rounded-lg gap-1">
             <button
               onClick={() => setFilteredGoal(null)}
-              className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${
-                filteredGoal === null ? 'bg-burnham text-white shadow-sm' : 'text-shuttle hover:text-burnham'
+              className={`px-3 py-1 rounded-md text-[11px] font-semibold uppercase tracking-wide transition-colors ${
+                filteredGoal === null ? 'bg-burnham text-white' : 'text-shuttle hover:text-burnham'
               }`}
             >
               All Goals
@@ -427,11 +430,11 @@ export default function Dashboard() {
               <button
                 key={g.id}
                 onClick={() => setFilteredGoal(g.id)}
-                className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide transition-colors ${
-                  filteredGoal === g.id ? 'bg-burnham text-white shadow-sm' : 'text-shuttle hover:text-burnham'
+                className={`px-3 py-1 rounded-md text-[11px] font-semibold uppercase tracking-wide transition-colors ${
+                  filteredGoal === g.id ? 'bg-burnham text-white' : 'text-shuttle hover:text-burnham'
                 }`}
               >
-                {g.text.length > 10 ? g.text.slice(0, 10) + '…' : g.text}
+                {g.text.length > 10 ? g.text.slice(0, 10) + '...' : g.text}
               </button>
             ))}
           </div>
@@ -442,10 +445,10 @@ export default function Dashboard() {
           {/* Avg Energy */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-1.5 text-shuttle text-[10px] font-semibold tracking-widest uppercase">
-              Avg Energy <span className="text-shuttle/40 text-[8px] font-normal">(30d)</span>
+              Avg Energy <span className="text-shuttle/40 text-[10px] font-normal">(30d)</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <div className="flex items-center gap-1 text-burnham text-4xl font-bold tracking-tight">
+              <div className="flex items-center gap-1 text-burnham text-4xl font-semibold tracking-tight">
                 <Lightning size={28} weight="fill" />
                 {avgEnergy || '—'}
               </div>
@@ -456,27 +459,27 @@ export default function Dashboard() {
           {/* Consistency */}
           <div className="flex flex-col gap-2">
             <div className="text-shuttle text-[10px] font-semibold tracking-widest uppercase">Consistency</div>
-            <p className="text-burnham text-4xl font-bold tracking-tight">{consistencyPct}%</p>
-            <p className="text-[9px] text-shuttle/60">of habit-days completed</p>
+            <p className="text-burnham text-4xl font-semibold tracking-tight">{consistencyPct}%</p>
+            <p className="text-[10px] text-shuttle/60">of habit-days completed</p>
           </div>
 
           {/* Velocity */}
           <div className="flex flex-col gap-2">
             <div className="text-shuttle text-[10px] font-semibold tracking-widest uppercase">Velocity</div>
             <div className="flex items-baseline gap-1">
-              <p className="text-burnham text-4xl font-bold tracking-tight">{totalHabitDays}</p>
+              <p className="text-burnham text-4xl font-semibold tracking-tight">{totalHabitDays}</p>
               <span className="text-shuttle text-sm">/ {daysSinceYearStart}d</span>
             </div>
-            <p className="text-[9px] text-shuttle/60">days with ≥1 habit done</p>
+            <p className="text-[10px] text-shuttle/60">days with at least 1 habit done</p>
           </div>
 
           {/* Deep Work */}
           <div className="flex flex-col gap-2">
             <div className="text-shuttle text-[10px] font-semibold tracking-widest uppercase">Deep Work</div>
             <div className="flex items-baseline gap-1">
-              <p className="text-burnham text-4xl font-bold tracking-tight">—</p>
+              <p className="text-burnham text-4xl font-semibold tracking-tight">—</p>
             </div>
-            <p className="text-[9px] text-shuttle/60">hrs (timer data pending)</p>
+            <p className="text-[10px] text-shuttle/60">hrs (timer data pending)</p>
           </div>
         </section>
 
@@ -508,18 +511,18 @@ export default function Dashboard() {
                 <span className="text-burnham">{display}</span>
               </div>
               <div className="h-[2px] w-full bg-mercury/30 overflow-hidden">
-                <div className="h-full bg-[#79D65E] transition-all" style={{ width: `${Math.min(100, value)}%` }} />
+                <div className="h-full bg-burnham transition-all" style={{ width: `${Math.min(100, value)}%` }} />
               </div>
-              <p className="text-[9px] text-shuttle/50">{sub}</p>
+              <p className="text-[10px] text-shuttle/50">{sub}</p>
             </div>
           ))}
         </section>
 
         {/* Context Window Warning */}
         {weekGoalSpread > 2 && (
-          <div className="mt-8 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-            <span className="text-amber-500 text-base mt-0.5">&#9888;</span>
-            <p className="text-xs text-amber-800">
+          <div className="mt-8 flex items-start gap-3 bg-mercury/20 border border-mercury rounded-lg px-4 py-3">
+            <WarningCircle size={15} className="mt-0.5 shrink-0 text-shuttle" />
+            <p className="text-xs text-shuttle">
               This week you spread across <strong>{weekGoalSpread} goals</strong>. Your best weeks historically are when you focus on 1-2.
             </p>
           </div>
@@ -549,13 +552,13 @@ export default function Dashboard() {
                     <div key={s.label} className="flex-1 flex flex-col items-center gap-1.5">
                       <div className="relative w-full bg-mercury/20 rounded-lg" style={{ height: 60 }}>
                         <div
-                          className="absolute bottom-0 w-full bg-pastel/60 rounded-lg"
+                          className="absolute bottom-0 w-full bg-burnham/40 rounded-lg"
                           style={{ height: barHeight }}
                         />
                       </div>
-                      <p className="text-lg font-bold text-burnham font-mono">{s.value}</p>
-                      <p className="text-[9px] text-shuttle/50 uppercase tracking-widest">{s.label}</p>
-                      <p className="text-[9px] text-shuttle/40 font-mono">
+                      <p className="text-lg font-semibold text-burnham font-mono">{s.value}</p>
+                      <p className="text-[10px] text-shuttle/50 uppercase tracking-widest">{s.label}</p>
+                      <p className="text-[10px] text-shuttle/40 font-mono">
                         {i === 0 ? `${pct}% of total` : convPct !== null ? `${convPct}% from prev` : '—'}
                       </p>
                     </div>
@@ -589,7 +592,7 @@ export default function Dashboard() {
                     <div className="lg:col-span-3 flex flex-col h-full pt-1 pr-4">
                       <div className="mb-6">
                         <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-bold text-burnham">{goal.text}</h3>
+                          <h3 className="text-lg font-semibold text-burnham">{goal.text}</h3>
                           {(() => {
                             const thirtyAgo = new Date()
                             thirtyAgo.setDate(thirtyAgo.getDate() - 30)
@@ -604,7 +607,7 @@ export default function Dashboard() {
                             })
                             const badge = getMomentumBadge(score)
                             return (
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.className}`}>
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${badge.className}`}>
                                 {badge.label}
                               </span>
                             )
@@ -627,7 +630,7 @@ export default function Dashboard() {
                                 <span className="text-[10px] font-mono text-shuttle">{progress}%</span>
                               </div>
                               <div className="h-[1px] w-full bg-mercury/50 overflow-hidden">
-                                <div className="h-full bg-[#79D65E] transition-all" style={{ width: `${progress}%` }} />
+                                <div className="h-full bg-burnham transition-all" style={{ width: `${progress}%` }} />
                               </div>
                             </div>
                           )
@@ -647,7 +650,7 @@ export default function Dashboard() {
                       </div>
                       <div className="mt-4 pt-3 border-t border-mercury/30 flex flex-col gap-1.5 w-full pl-14 pr-8">
                         {goalHabits.slice(0, 3).map(h => (
-                          <div key={h.id} className="flex items-center justify-between text-[9px]">
+                          <div key={h.id} className="flex items-center justify-between text-[10px]">
                             <span className="font-medium text-shuttle">{h.text}</span>
                             <span className="text-shuttle opacity-70 capitalize">{h.frequency.toLowerCase()}</span>
                           </div>
@@ -667,7 +670,7 @@ export default function Dashboard() {
                               <div className="absolute -left-[21px] top-1 bg-white p-0.5">
                                 <div className={`w-3 h-3 rounded-full ${
                                   ms.status === 'COMPLETE'
-                                    ? 'bg-[#79D65E] border-2 border-white ring-1 ring-[#79D65E]'
+                                    ? 'bg-burnham border-2 border-white ring-1 ring-burnham'
                                     : 'border border-mercury bg-white'
                                 }`} />
                               </div>
@@ -682,7 +685,7 @@ export default function Dashboard() {
                       <div className="flex justify-end mt-4">
                         <button
                           onClick={() => navigate(`/dashboard/goal/${goal.id}`)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-mercury text-[10px] font-semibold text-shuttle hover:text-burnham hover:bg-mercury/20 transition-all group"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-mercury text-[10px] font-semibold text-shuttle hover:text-burnham hover:bg-mercury/20 transition-all group"
                         >
                           VIEW DETAILS <ArrowRight size={10} weight="bold" className="group-hover:translate-x-0.5 transition-transform" />
                         </button>
@@ -707,10 +710,10 @@ export default function Dashboard() {
             <span className="text-[10px] text-shuttle uppercase tracking-widest">{currentYear} · Computed from task history</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-            <div className="bg-gray-50 rounded-xl p-6 border border-mercury/40">
+            <div className="bg-sidebar/70 rounded-lg p-5 border border-mercury/40">
               <ProductivityBars todos={completedTodos} />
             </div>
-            <div className="bg-gray-50 rounded-xl p-6 border border-mercury/40">
+            <div className="bg-sidebar/70 rounded-lg p-5 border border-mercury/40">
               <EnergyScatter reviews={reviews} todos={completedTodos} />
             </div>
           </div>

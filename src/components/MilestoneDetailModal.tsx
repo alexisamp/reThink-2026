@@ -51,13 +51,13 @@ function TimelineTodoRow({
     <div ref={setNodeRef} style={style} className="flex gap-3 group">
       <div className="flex flex-col items-center shrink-0 w-5">
         <div className={`w-3 h-3 rounded-full border-2 mt-3.5 shrink-0 z-10 ${
-          isDone ? 'bg-pastel border-pastel' :
+          isDone ? 'bg-burnham border-burnham' :
           isWaiting ? 'bg-mercury border-shuttle/40' :
           'bg-white border-mercury'
         }`} />
       </div>
 
-      <div className={`flex-1 mb-3 rounded-xl border px-4 py-3 transition-colors ${
+      <div className={`flex-1 mb-3 rounded-lg border px-4 py-3 transition-colors ${
         isDone ? 'border-mercury/30 opacity-50' : 'border-mercury bg-white hover:border-shuttle/30'
       }`}>
         <div className="flex items-center gap-2">
@@ -69,7 +69,7 @@ function TimelineTodoRow({
           )}
 
           <button onClick={onToggle} className="shrink-0 hover:opacity-70 transition-opacity">
-            {isDone ? <Check size={14} className="text-pastel" weight="bold" /> :
+            {isDone ? <Check size={14} className="text-burnham" weight="bold" /> :
              isWaiting ? <HourglassMedium size={14} className="text-shuttle/40" /> :
              <Circle size={14} className="text-mercury" />}
           </button>
@@ -82,22 +82,23 @@ function TimelineTodoRow({
 
           <div className="flex items-center gap-2 shrink-0">
             {todo.date && todo.date !== today && (
-              <span className="text-[9px] text-shuttle/30 font-mono">{todo.date}</span>
+              <span className="text-[10px] text-shuttle/30 font-mono">{todo.date}</span>
             )}
             {todo.date === today && (
-              <span className="text-[9px] text-pastel/70 font-mono">today</span>
+              <span className="text-[10px] text-burnham/70 font-mono">today</span>
             )}
             {!todo.completed && todo.date !== today && onScheduleToday && (
               <button
                 onClick={onScheduleToday}
-                className="opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-mono text-shuttle/40 hover:text-burnham px-1.5 py-0.5 rounded border border-transparent hover:border-mercury"
+                className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-mono text-shuttle/40 hover:text-burnham px-1.5 py-0.5 rounded border border-transparent hover:border-mercury"
                 title="Schedule for today"
               >
-                →today
+                today
               </button>
             )}
             <button onClick={onDelete}
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-red-400">
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-shuttle/30 hover:text-red-400"
+              aria-label="Delete todo">
               <Trash size={11} />
             </button>
           </div>
@@ -219,14 +220,14 @@ export default function MilestoneDetailModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-[210] bg-black/15 backdrop-blur-[1px]" onClick={onClose} />
-      <div className="fixed inset-0 z-[215] flex items-center justify-center pointer-events-none">
-        <div className="pointer-events-auto w-[560px] max-h-[82vh] bg-white rounded-2xl border border-mercury shadow-2xl flex flex-col overflow-hidden">
+      <div className="fixed inset-0 z-40 bg-black/15 backdrop-blur-[1px]" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+        <div className="pointer-events-auto w-[560px] max-h-[82vh] bg-white rounded-lg border border-mercury shadow-[var(--shadow-pop)] flex flex-col overflow-hidden">
 
           <div className="flex items-start justify-between px-4 py-3 border-b border-mercury/50 shrink-0">
             <div className="flex-1 min-w-0 pr-4">
               {goal && (
-                <span className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">
+                <span className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">
                   {goal.emoji ? `${goal.emoji} ` : ''}{goal.alias ?? goal.text.slice(0, 20)}
                 </span>
               )}
@@ -242,13 +243,13 @@ export default function MilestoneDetailModal({
 
           <div className="px-4 py-2 border-b border-mercury/30 shrink-0">
             <input value={description} onChange={e => handleDescChange(e.target.value)}
-              placeholder="Optional description…"
+              placeholder="Optional description..."
               className="w-full text-[11px] text-shuttle bg-transparent border-none outline-none placeholder-shuttle/25" />
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 pt-4 pb-2 min-h-0">
             {loading ? (
-              <p className="text-[11px] text-shuttle/30 text-center py-10 animate-pulse">Loading…</p>
+              <p className="text-[11px] text-shuttle/30 text-center py-10 animate-pulse">Loading...</p>
             ) : todos.length === 0 ? (
               <div className="text-center py-10">
                 <p className="text-xs text-shuttle/40">Add the first step toward this milestone</p>
@@ -291,7 +292,7 @@ export default function MilestoneDetailModal({
                     if (e.key === 'Enter') handleAddTodo(true)   // Enter = add to today
                     if (e.key === 'Escape') { setAddingTodo(false); setNewTodoText(''); setNewTodoDate('') }
                   }}
-                  placeholder="Describe the step…"
+                  placeholder="Describe the step..."
                   className="w-full text-[13px] text-burnham bg-transparent border-none outline-none placeholder-shuttle/25"
                 />
                 <div className="flex items-center gap-2">
@@ -329,7 +330,7 @@ export default function MilestoneDetailModal({
                     <X size={13} />
                   </button>
                 </div>
-                <p className="text-[9px] text-shuttle/25 font-mono">↵ add to today · Esc cancel</p>
+                <p className="text-[10px] text-shuttle/25 font-mono">Enter to add · Esc cancel</p>
               </div>
             ) : (
               <button

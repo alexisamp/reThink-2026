@@ -13,9 +13,9 @@ const FRICTION_OPTIONS = ['Travel', 'Forgot', 'Too tired', 'External blocker', '
 
 function StatBox({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-mercury/20 rounded-xl p-3 text-center">
+    <div className="bg-mercury/20 rounded-lg p-3 text-center">
       <p className="text-xl font-semibold text-burnham font-mono">{value}</p>
-      <p className="text-[9px] text-shuttle/50 uppercase tracking-widest mt-0.5">{label}</p>
+      <p className="text-[10px] text-shuttle/50 uppercase tracking-widest mt-0.5">{label}</p>
     </div>
   )
 }
@@ -39,13 +39,13 @@ const CONFETTI_DOTS = Array.from({ length: 20 }, (_, i) => ({
   id: i,
   left: Math.random() * 100,
   delay: Math.random() * 2,
-  color: ['#79D65E', '#E5F9BD', '#003720', '#536471', '#E3E3E3'][i % 5],
+  color: ['#266DF0', '#E4EDFF', '#1C1D1F', '#6F7988', '#E4E7EC'][i % 5],
   size: 6 + Math.random() * 6,
 }))
 
 function Confetti() {
   return (
-    <div className="fixed inset-0 z-[100] pointer-events-none overflow-hidden">
+    <div className="fixed inset-0 z-50 pointer-events-none overflow-hidden">
       {CONFETTI_DOTS.map(d => (
         <div
           key={d.id}
@@ -235,29 +235,29 @@ export default function WeeklyReview() {
   const progressPct = ((step) / 5) * 100
 
   return (
-    <div className="min-h-screen bg-white text-burnham font-sans flex flex-col">
+    <div className="weekly-review-screen min-h-screen bg-white text-burnham font-sans flex flex-col">
       {showConfetti && <Confetti />}
 
       {/* Progress bar */}
-      <div className="w-full h-1 bg-mercury">
+      <div className="weekly-review-progress w-full h-1 bg-mercury">
         <div
-          className="h-1 bg-pastel transition-all duration-500"
+          className="h-1 bg-burnham transition-all duration-500"
           style={{ width: `${progressPct}%` }}
         />
       </div>
 
       {/* Step indicator */}
-      <div className="flex items-center justify-center gap-2 pt-8 pb-2">
+      <div className="weekly-review-stepper flex items-center justify-center gap-2 pt-8 pb-2">
         {STEPS.map((label, i) => {
           const n = i + 1
           const isActive = step === n
           const isDone = step > n
           return (
             <div key={label} className="flex items-center gap-2">
-              {i > 0 && <div className={`w-8 h-px ${isDone ? 'bg-pastel' : 'bg-mercury'}`} />}
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${
+              {i > 0 && <div className={`w-8 h-px ${isDone ? 'bg-burnham' : 'bg-mercury'}`} />}
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold transition-all ${
                 isActive ? 'bg-burnham text-white' :
-                isDone ? 'bg-pastel text-burnham' :
+                isDone ? 'bg-burnham text-white' :
                 'bg-mercury text-shuttle'
               }`}>
                 {isDone ? <Check size={10} weight="bold" /> : n}
@@ -269,7 +269,7 @@ export default function WeeklyReview() {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex items-start justify-center px-6 py-8">
+      <div className="weekly-review-main flex-1 flex items-start justify-center px-6 py-8">
         <div className="w-full max-w-2xl">
 
           {/* STEP 1 — Last Week's Wins */}
@@ -281,12 +281,12 @@ export default function WeeklyReview() {
               <div className="grid gap-3">
                 <div className="bg-gray-50 border border-mercury rounded-lg p-4">
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle mb-1">Milestones Completed</p>
-                  <p className="text-2xl font-bold text-burnham">{completedMilestonesThisWeek.length}</p>
+                  <p className="text-2xl font-semibold text-burnham">{completedMilestonesThisWeek.length}</p>
                 </div>
                 <div className="bg-gray-50 border border-mercury rounded-lg p-4">
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle mb-1">Habits</p>
                   <p className="text-sm text-burnham">
-                    <span className="text-2xl font-bold">{totalHabitLogged}</span>
+                    <span className="text-2xl font-semibold">{totalHabitLogged}</span>
                     <span className="text-shuttle">/{totalHabitPossible} completed</span>
                     {biggestMiss && biggestMiss.logged < biggestMiss.total && (
                       <span className="block text-xs text-shuttle mt-1">
@@ -297,7 +297,7 @@ export default function WeeklyReview() {
                 </div>
                 <div className="bg-gray-50 border border-mercury rounded-lg p-4">
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle mb-1">Tasks Done</p>
-                  <p className="text-2xl font-bold text-burnham">{doneTodos.length}</p>
+                  <p className="text-2xl font-semibold text-burnham">{doneTodos.length}</p>
                 </div>
               </div>
 
@@ -344,14 +344,14 @@ export default function WeeklyReview() {
                   return (
                     <div key={goal.id} className="bg-gray-50 border border-mercury rounded-lg p-5">
                       <div className="flex items-start justify-between gap-3 mb-3">
-                        <p className="text-sm font-bold text-burnham">{goal.text}</p>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${badge.className}`}>
+                        <p className="text-sm font-semibold text-burnham">{goal.text}</p>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 ${badge.className}`}>
                           {badge.label}
                         </span>
                       </div>
                       <div className="flex items-center gap-4 text-xs text-shuttle">
                         <span>Habits: {goalWeekLogs.length}/{goalTotalPossible} logged</span>
-                        <span className={`font-semibold ${score >= 70 ? 'text-emerald-600' : score >= 40 ? 'text-amber-600' : 'text-red-500'}`}>
+                        <span className={`font-semibold ${score >= 70 ? 'text-burnham' : score >= 40 ? 'text-shuttle' : 'text-red-500'}`}>
                           {score >= 70 ? 'On track' : 'At risk'}
                         </span>
                       </div>
@@ -384,7 +384,7 @@ export default function WeeklyReview() {
                       <StatBox label="Connected" value={outreachStats.responded} />
                       <StatBox label="Engaged" value={outreachStats.meetings} />
                     </div>
-                    <p className="text-[9px] text-shuttle/50 font-mono">
+                    <p className="text-[10px] text-shuttle/50 font-mono">
                       {responseRate}% connection rate · {outreachStats.byCategory.business_dev} biz dev · {outreachStats.byCategory.peer} peers
                     </p>
                   </div>
@@ -413,7 +413,7 @@ export default function WeeklyReview() {
               <p className="text-xs text-shuttle">For each habit you didn't complete today, note why.</p>
 
               {unloggedHabits.length === 0 ? (
-                <div className="bg-gossip/20 border border-pastel rounded-lg p-6 text-center">
+                <div className="bg-gossip/20 border border-gossip rounded-lg p-6 text-center">
                   <Check size={24} weight="bold" className="mx-auto mb-2 text-burnham" />
                   <p className="text-sm font-medium text-burnham">All habits logged today!</p>
                 </div>
@@ -479,7 +479,7 @@ export default function WeeklyReview() {
               </div>
 
               {/* Peak energy window */}
-              <div className="bg-gossip/20 border border-pastel/50 rounded-lg p-4">
+              <div className="bg-gossip/20 border border-gossip rounded-lg p-4">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle mb-1">Peak Energy Window</p>
                 <p className="text-sm text-burnham font-medium">Mon-Fri, 9-11 AM</p>
                 <p className="text-[10px] text-shuttle mt-1">Based on your historical energy data</p>
@@ -515,7 +515,7 @@ export default function WeeklyReview() {
                         const habit = habits.find(h => h.id === hid)
                         return (
                           <p key={hid} className="text-xs text-shuttle">
-                            <span className="font-medium text-burnham">{habit?.text}</span> — {reason}
+                            <span className="font-medium text-burnham">{habit?.text}</span> - {reason}
                           </p>
                         )
                       })}
@@ -543,8 +543,8 @@ export default function WeeklyReview() {
               </button>
 
               <div className="text-center pt-2">
-                <Link to="/library" className="text-xs text-shuttle hover:text-burnham underline">
-                  View Reflection Library →
+                <Link to="/library" className="inline-flex items-center gap-1 text-xs text-shuttle hover:text-burnham underline">
+                  View Reflection Library <ArrowRight size={11} />
                 </Link>
               </div>
             </div>
@@ -554,7 +554,7 @@ export default function WeeklyReview() {
 
       {/* Nav buttons */}
       {step < 5 && (
-        <div className="flex items-center justify-between px-6 py-6 border-t border-mercury max-w-2xl mx-auto w-full">
+        <div className="weekly-review-nav flex items-center justify-between px-6 py-6 border-t border-mercury max-w-2xl mx-auto w-full">
           <button
             onClick={() => step > 1 ? setStep(s => s - 1) : navigate(-1)}
             className="flex items-center gap-2 text-sm text-shuttle hover:text-burnham transition-colors"
@@ -574,7 +574,7 @@ export default function WeeklyReview() {
       )}
 
       {step === 5 && !committed && (
-        <div className="flex items-center justify-start px-6 py-6 border-t border-mercury max-w-2xl mx-auto w-full">
+        <div className="weekly-review-nav flex items-center justify-start px-6 py-6 border-t border-mercury max-w-2xl mx-auto w-full">
           <button
             onClick={() => setStep(4)}
             className="flex items-center gap-2 text-sm text-shuttle hover:text-burnham transition-colors"

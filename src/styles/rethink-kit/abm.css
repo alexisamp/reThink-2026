@@ -4,19 +4,19 @@
 .ppl-page.wide { max-width: 1760px; }
 
 /* ── editable ICP / Source / Motion chips ── */
-.abm-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--burnham); background: color-mix(in oklab, var(--mercury) 45%, transparent); padding: 3px 9px; border-radius: 999px; letter-spacing: -0.005em; cursor: default; max-width: 100%; }
+.abm-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--burnham); background: color-mix(in oklab, var(--mercury) 45%, transparent); padding: 3px 9px; border-radius: 999px; letter-spacing: 0; cursor: default; max-width: 100%; }
 .abm-chip i { font-size: 11px; opacity: 0.7; flex-shrink: 0; }
 .abm-chip-tx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .abm-chip[title="Click to rename"] { cursor: pointer; }
 .abm-chip[title="Click to rename"]:hover { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--shuttle) 35%, transparent); }
 .abm-chip.icp { color: var(--ac, var(--burnham)); background: color-mix(in oklab, var(--ac, var(--moss)) 12%, transparent); font-weight: 500; }
-.abm-chip.icp .abm-chip-tag { font-family: var(--font-mono); font-size: 9px; opacity: 0.7; padding-left: 5px; margin-left: 3px; border-left: 1px solid color-mix(in oklab, var(--ac) 30%, transparent); }
+.abm-chip.icp .abm-chip-tag { font-family: var(--font-mono); font-size: 10px; opacity: 0.7; padding-left: 5px; margin-left: 3px; border-left: 1px solid color-mix(in oklab, var(--ac) 30%, transparent); }
 .abm-chip.mot { color: var(--burnham); }
 .abm-chip.editing { padding: 2px 6px; background: var(--bg-1); box-shadow: inset 0 0 0 1px var(--moss); }
 .abm-chip.editing input { border: 0; background: transparent; font: inherit; color: var(--burnham); width: 120px; }
 
 /* ── account stage pill ── */
-.acct-stage { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--burnham); letter-spacing: -0.005em; white-space: nowrap; }
+.acct-stage { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--burnham); letter-spacing: 0; white-space: nowrap; }
 .acct-stage-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--sc); flex-shrink: 0; }
 
 /* ── compact coverage meter (table cell) ── */
@@ -27,57 +27,57 @@
 .cov-mini-lbl.ok { color: var(--moss); }
 
 /* ── coverage strip (company peek) ── */
-.cov-strip { background: color-mix(in oklab, var(--mercury) 24%, transparent); border-radius: 12px; padding: 12px 13px; }
+.cov-strip { background: color-mix(in oklab, var(--mercury) 24%, transparent); border-radius: 8px; padding: 12px 13px; }
 .cov-strip.investor { background: transparent; padding: 4px 0; }
-.cov-invest { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; color: var(--shuttle); font-style: italic; }
+.cov-invest { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; color: var(--shuttle); font-style: normal; }
 .cov-invest i { color: var(--burnham); margin-top: 1px; flex-shrink: 0; }
 
 .cov-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .cov-head-l { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.cov-play { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.10em; color: var(--shuttle); }
-.cov-headline { font-size: 13px; font-weight: 500; color: var(--burnham); letter-spacing: -0.01em; }
+.cov-play { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0; color: var(--shuttle); }
+.cov-headline { font-size: 13px; font-weight: 500; color: var(--burnham); letter-spacing: 0; }
 .cov-headline.ok { color: var(--moss); }
 .cov-meter { display: inline-flex; gap: 3px; flex-shrink: 0; }
 .cov-seg { width: 14px; height: 5px; border-radius: 999px; }
-.cov-readout { font-size: 11.5px; line-height: 1.4; color: var(--shuttle); margin: 7px 0 11px; letter-spacing: -0.005em; text-wrap: pretty; }
+.cov-readout { font-size: 11.5px; line-height: 1.4; color: var(--shuttle); margin: 7px 0 11px; letter-spacing: 0; text-wrap: pretty; }
 
 .cov-seats { display: flex; flex-direction: column; gap: 1px; }
 .cov-seat { display: grid; grid-template-columns: 12px 1fr auto auto; gap: 9px; align-items: center; padding: 7px 0; }
 .cov-seat + .cov-seat { border-top: 1px solid color-mix(in oklab, var(--shuttle) 12%, transparent); }
 .cov-seat-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--ss); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ss) 16%, transparent); }
 .cov-seat.empty .cov-seat-dot { background: transparent; box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--shuttle) 35%, transparent); }
-.cov-seat-label { font-size: 12px; color: var(--burnham); letter-spacing: -0.005em; display: inline-flex; align-items: center; gap: 4px; }
+.cov-seat-label { font-size: 12px; color: var(--burnham); letter-spacing: 0; display: inline-flex; align-items: center; gap: 4px; }
 .cov-seat.primary .cov-seat-label { font-weight: 600; }
 .cov-seat.empty .cov-seat-label { color: var(--shuttle); }
 .cov-seat-star { color: var(--acc-amber, #c79a3e); font-size: 10px; }
 .cov-seat-person { display: inline-flex; align-items: center; gap: 6px; }
 .cov-seat-name { font-size: 11.5px; color: var(--burnham); white-space: nowrap; }
-.cov-seat-empty { font-size: 11px; color: var(--shuttle); font-style: italic; }
-.cov-seat-state { font-family: var(--font-mono); font-size: 9.5px; color: var(--ss); white-space: nowrap; text-align: right; min-width: 64px; }
+.cov-seat-empty { font-size: 11px; color: var(--shuttle); font-style: normal; }
+.cov-seat-state { font-family: var(--font-mono); font-size: 10px; color: var(--ss); white-space: nowrap; text-align: right; min-width: 64px; }
 .cov-seat.empty .cov-seat-state { color: var(--shuttle); }
 
 .cov-others { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; padding-top: 9px; border-top: 1px dashed color-mix(in oklab, var(--shuttle) 18%, transparent); }
-.cov-others-lbl { font-family: var(--font-mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.10em; color: var(--fg-3); }
+.cov-others-lbl { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0; color: var(--fg-3); }
 .cov-other { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--shuttle); }
 
-.cov-gap { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px; font-size: 11.5px; line-height: 1.4; color: color-mix(in oklab, var(--tier-1) 88%, var(--burnham)); letter-spacing: -0.005em; }
+.cov-gap { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px; font-size: 11.5px; line-height: 1.4; color: color-mix(in oklab, var(--tier-1) 88%, var(--burnham)); letter-spacing: 0; }
 .cov-gap i { margin-top: 1px; flex-shrink: 0; }
 
 /* ── strategy block (company peek) ── */
 .abm-strat { display: flex; flex-direction: column; gap: 11px; }
 .abm-strat-row { display: flex; flex-wrap: wrap; gap: 10px 18px; }
 .abm-strat-cell { display: flex; flex-direction: column; gap: 4px; }
-.abm-k { font-family: var(--font-mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.10em; color: var(--fg-3); }
+.abm-k { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0; color: var(--fg-3); }
 .abm-reason, .abm-gtm { display: flex; flex-direction: column; gap: 3px; }
-.abm-reason p, .abm-gtm p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--burnham); letter-spacing: -0.005em; text-wrap: pretty; }
+.abm-reason p, .abm-gtm p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--burnham); letter-spacing: 0; text-wrap: pretty; }
 .abm-gtm p { color: var(--shuttle); }
-.abm-next { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: var(--moss); font-weight: 500; letter-spacing: -0.005em; padding-top: 3px; }
+.abm-next { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: var(--moss); font-weight: 500; letter-spacing: 0; padding-top: 3px; }
 .abm-next i { margin-top: 2px; flex-shrink: 0; }
 
 /* ── account cell in the Job list + person-peek account context ── */
 .acct-cell { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-.acct-cell-icp { font-family: var(--font-mono); font-size: 9px; font-weight: 600; letter-spacing: 0.02em; color: var(--ac, var(--burnham)); background: color-mix(in oklab, var(--ac, var(--moss)) 12%, transparent); padding: 1px 6px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
-.peek-acctcov { font-size: 12px; color: var(--burnham); letter-spacing: -0.005em; }
+.acct-cell-icp { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0; color: var(--ac, var(--burnham)); background: color-mix(in oklab, var(--ac, var(--moss)) 12%, transparent); padding: 1px 6px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; }
+.peek-acctcov { font-size: 12px; color: var(--burnham); letter-spacing: 0; }
 
 .cov-seat.clickable { cursor: pointer; }
 .cov-seat.clickable:hover { background: color-mix(in oklab, var(--mercury) 30%, transparent); }
@@ -89,15 +89,15 @@
 .pk-person.clickable:hover { background: color-mix(in oklab, var(--mercury) 26%, transparent); }
 
 /* caption next to a peek block label (lowercase hint, not a badge) */
-.peek-hint { font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: -0.005em; color: var(--fg-3); font-style: italic; }
+.peek-hint { font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--fg-3); font-style: normal; }
 
 /* ── opportunity peek: account context + roster-cast stakeholders ── */
-.opp-acct { background: color-mix(in oklab, var(--mercury) 24%, transparent); border-radius: 11px; padding: 11px 13px; display: flex; flex-direction: column; gap: 8px; }
+.opp-acct { background: color-mix(in oklab, var(--mercury) 24%, transparent); border-radius: 8px; padding: 11px 13px; display: flex; flex-direction: column; gap: 8px; }
 .opp-acct-top { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
 .opp-acct-top .crm-name { flex: 0 1 auto; min-width: 0; }
 .opp-acct-top .crm-name .link { flex: 0 1 auto; }
 .opp-acct-top .abm-chip { flex: 0 0 auto; }
-.opp-acct-cov { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--shuttle); letter-spacing: -0.005em; }
+.opp-acct-cov { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--shuttle); letter-spacing: 0; }
 .opp-acct-cov.ok { color: var(--moss); }
 .opp-acct-cov i { flex-shrink: 0; }
 .stk-row.ghost { opacity: 0.82; }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import type { TodoMentionKind } from '@/types'
 import type { Mention, TodoMilestoneOption } from './types'
 import {
@@ -542,7 +543,7 @@ function FilePicker({
       >
         <span className="td-mention-avatar sq">+</span>
         <span className="td-mention-copy">
-          <span className="name">{importing ? 'Importing…' : 'Choose local file'}</span>
+          <span className="name">{importing ? 'Importing...' : 'Choose local file'}</span>
           <span className="sub">Excel and CSV files are converted to Google Sheets</span>
         </span>
       </button>
@@ -550,7 +551,7 @@ function FilePicker({
       {driveError ? (
         <div className="td-mention-empty compact">{driveError}</div>
       ) : driveSearching ? (
-        <div className="td-mention-empty compact">Searching Drive…</div>
+        <div className="td-mention-empty compact">Searching Drive...</div>
       ) : driveResults.length > 0 ? (
         driveResults.map((file, index) => (
           <button
@@ -946,7 +947,7 @@ export default function MentionEditor({
           if (e.key === 'Escape') { e.preventDefault(); onCancel() }
         }}
       />
-      {trigger && pickerStyle && (
+      {trigger && pickerStyle && createPortal(
         trigger.type === 'mention'
           ? <MentionPicker actions={actions} selected={selected} style={pickerStyle} onPick={action => { void pickAction(action) }} />
           : trigger.type === 'file'
@@ -963,7 +964,8 @@ export default function MentionEditor({
                 onPickDrive={pickDriveFile}
               />
             )
-            : <MilestonePicker actions={msActions} selected={selected} style={pickerStyle} onPick={pickMilestone} />
+            : <MilestonePicker actions={msActions} selected={selected} style={pickerStyle} onPick={pickMilestone} />,
+        document.body
       )}
     </div>
   )

@@ -16,7 +16,7 @@ const TYPE_LABELS: Record<OpportunityType, string> = {
 }
 const STAGES: OpportunityStage[] = ['exploring', 'active', 'negotiating', 'won', 'lost']
 
-// Map real opp stage → handoff STAGE_CFG key for StageChip.
+// Map real opp stage to handoff STAGE_CFG key for StageChip.
 const STAGE_MAP: Record<OpportunityStage, string> = {
   exploring: 'prospect', active: 'qualified', negotiating: 'closing', won: 'won', lost: 'prospect',
 }
@@ -67,7 +67,7 @@ function AddOppForm({ companies, onSave, onCancel }: {
     setSaving(false)
   }
   return (
-    <div className="flex items-center gap-3 px-6 py-3 bg-white border-b border-mercury flex-wrap">
+    <div className="people-record-addbar flex items-center gap-3 px-6 py-3 bg-white border-b border-mercury flex-wrap">
       <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Opportunity title *" autoFocus
         className="flex-1 min-w-[200px] text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham"
         onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onCancel() }} />
@@ -131,7 +131,7 @@ export default function PeopleOpportunities() {
   }
 
   return (
-    <div className="ppl-page">
+    <div className="ppl-page opportunities-page">
       <header className="ppl-hd">
         <div className="ppl-hd-l">
           <h1 className="ppl-title">Opportunities</h1>

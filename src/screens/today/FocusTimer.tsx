@@ -43,11 +43,11 @@ export default function FocusTimer({ open, onClose, goals, onStart }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-6" style={{ background: 'rgba(0,55,32,0.12)', backdropFilter: 'blur(3px)' }} onClick={onClose}>
-      <div className="w-full max-w-[360px] bg-white rounded-2xl p-6" style={{ boxShadow: 'var(--shadow-pop)' }} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6" style={{ background: 'rgba(28,40,64,0.12)', backdropFilter: 'blur(3px)' }} onClick={onClose}>
+      <div className="w-full max-w-[360px] bg-white rounded-lg p-6" style={{ boxShadow: 'var(--shadow-pop)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
-          <span className="font-serif text-[18px] text-burnham" style={{ letterSpacing: '-0.02em' }}>Focus</span>
-          <button onClick={onClose} className="p-1 rounded-md text-shuttle/60 hover:text-burnham hover:bg-mercury/40"><X size={15} /></button>
+          <span className="text-[18px] font-semibold text-burnham tracking-normal">Focus</span>
+          <button onClick={onClose} aria-label="Close focus timer" className="p-1 rounded-md text-shuttle/60 hover:text-burnham hover:bg-mercury/40"><X size={15} /></button>
         </div>
 
         {/* duration presets */}

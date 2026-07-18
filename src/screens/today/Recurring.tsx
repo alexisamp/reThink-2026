@@ -139,7 +139,7 @@ export function RecurringForm({
         <div className="rec-hd">
           <Repeat size={15} />
           <h3>{isOccurrence ? 'Edit this occurrence' : mode === 'convert' ? 'Make recurring' : (mode === 'series' ? 'Edit recurring task' : 'New recurring task')}</h3>
-          <button type="button" className="x" onClick={onClose}><X size={13} /></button>
+          <button type="button" className="x" onClick={onClose} aria-label="Close recurring task dialog"><X size={13} /></button>
         </div>
 
         <label className="rec-field">

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { House } from '@phosphor-icons/react'
+import { ArrowRight, House } from '@phosphor-icons/react'
 
 interface StepProps {
   onNext: (answers: Record<string, string>) => void
@@ -52,7 +52,7 @@ export default function L5({ onNext, onBack, saving, isLastStep, progress, step,
             <span className="text-mercury font-mono text-[10px]">{step} / {totalSteps}</span>
           </div>
           <div className="h-px w-full bg-mercury relative">
-            <div className="absolute left-0 top-0 h-full bg-pastel transition-all duration-500" style={{ width: `${progress}%` }} />
+            <div className="absolute left-0 top-0 h-full bg-burnham transition-all duration-500" style={{ width: `${progress}%` }} />
           </div>
         </header>
 
@@ -61,10 +61,10 @@ export default function L5({ onNext, onBack, saving, isLastStep, progress, step,
             <span className="text-[10px] uppercase tracking-[0.1em] text-shuttle block mb-4 font-medium">
               Level 5 of 11 — Small Steps for Momentum
             </span>
-            <h1 className="text-2xl md:text-3xl font-semibold text-burnham tracking-[-0.02em] mb-3">
+            <h1 className="text-2xl md:text-3xl font-semibold text-burnham tracking-normal mb-3">
               Small Steps for Momentum
             </h1>
-            <p className="text-shuttle italic font-serif text-sm">
+            <p className="text-shuttle text-sm font-medium leading-5">
               Action creates momentum, and momentum reveals opportunities that standing still never could.
             </p>
             <p className="text-burnham text-sm font-medium mt-4">
@@ -76,7 +76,7 @@ export default function L5({ onNext, onBack, saving, isLastStep, progress, step,
             {[1, 2, 3].map(i => (
               <div key={i}>
                 <div className="flex items-center gap-3 mb-5">
-                  <span className="w-6 h-6 rounded-full bg-gossip flex items-center justify-center text-burnham text-xs font-bold flex-shrink-0">
+                  <span className="w-6 h-6 rounded-full bg-gossip flex items-center justify-center text-burnham text-xs font-semibold flex-shrink-0">
                     {i}
                   </span>
                   <span className="font-semibold text-burnham truncate">{goals[i - 1]}</span>
@@ -118,10 +118,10 @@ export default function L5({ onNext, onBack, saving, isLastStep, progress, step,
             type="button"
             onClick={() => onNext(values)}
             disabled={saving}
-            className="text-sm font-bold text-burnham flex items-center gap-2 hover:opacity-80 transition-opacity disabled:opacity-50"
+            className="text-sm font-semibold text-burnham flex items-center gap-2 hover:opacity-80 transition-opacity disabled:opacity-50"
           >
             {saving ? 'Saving...' : isLastStep ? 'Finish' : 'Next'}
-            {!saving && <span className="text-pastel text-lg leading-none">→</span>}
+            {!saving && <ArrowRight size={15} className="text-burnham" />}
           </button>
         </footer>
       </main>

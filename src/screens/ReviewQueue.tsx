@@ -341,7 +341,7 @@ function isGenericReviewTitle(value: string | null | undefined) {
 function compactText(value: string | null | undefined, max = 190) {
   const clean = (value ?? '').replace(/\s+/g, ' ').trim()
   if (!clean) return ''
-  return clean.length > max ? `${clean.slice(0, max - 1).trim()}…` : clean
+  return clean.length > max ? `${clean.slice(0, max - 1).trim()}...` : clean
 }
 
 function externalParts(value: string | null | undefined) {
@@ -794,7 +794,7 @@ function RawPeek({ person, day, onClose }: { person: ReviewPerson; day: ReviewDa
           <span className="rv-src">{src.icon}<span>{src.label}</span></span>
           <span className="rv-rawpeek-date">{person.name} · {shortDate(day.date)}</span>
           <span className="rv-day-grow" />
-          <button className="peek-x" onClick={onClose}><X size={14} /></button>
+          <button className="peek-x" onClick={onClose} aria-label="Close review detail"><X size={14} /></button>
         </div>
         <div className="rv-rawpeek-body">
           <div className="rv-rawpeek-label">Original source</div>
@@ -947,7 +947,7 @@ export default function ReviewQueue() {
     const remoteId = remoteStagedId(item)
     if (remoteId) await supabase.from('conversation_ai_staged_outputs').update({ status: 'synced', error: null, confirmed_at: Date.now() }).eq('id', remoteId)
     setErrorById(prev => ({ ...prev, [item.id]: '' }))
-    showToast(<>✓ {REVIEW_TARGET_LABELS[target]} written</>)
+    showToast(<>{REVIEW_TARGET_LABELS[target]} written</>)
     await load()
   }
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ChartBar, CalendarBlank, Target, Lightning,
-  CheckCircle, Circle, DotOutline,
+  CheckCircle, Circle, DotOutline, ArrowRight,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -32,15 +32,15 @@ function formatWeekLabel(weekStart: string): string {
 const STATUS_COLORS: Record<string, string> = {
   NOT_STARTED: 'text-shuttle bg-mercury',
   ON_TRACK: 'text-burnham bg-gossip',
-  AT_RISK: 'text-yellow-800 bg-yellow-100',
+  AT_RISK: 'text-shuttle bg-mercury',
   BLOCKED: 'text-red-700 bg-red-100',
-  COMPLETE: 'text-green-800 bg-green-100',
+  COMPLETE: 'text-burnham bg-gossip',
 }
 
 // ── mini bar chart ─────────────────────────────────────────────────────────────
 
 function MiniBarChart({
-  data, color = '#79D65E', maxVal,
+  data, color = 'var(--attio-cobalt, #266DF0)', maxVal,
 }: {
   data: Array<{ label: string; value: number }>
   color?: string
@@ -59,7 +59,7 @@ function MiniBarChart({
               opacity: d.value === 0 ? 0.2 : 1,
             }}
           />
-          <span className="text-[9px] text-shuttle">{d.label}</span>
+          <span className="text-[10px] text-shuttle">{d.label}</span>
         </div>
       ))}
     </div>
@@ -96,8 +96,8 @@ function GoalCard({ goal }: { goal: Goal }) {
 
 function OppPipelineCard({ opp }: { opp: Opportunity }) {
   const stageColor = {
-    exploring: 'text-shuttle', active: 'text-pastel',
-    negotiating: 'text-yellow-500', won: 'text-green-500', lost: 'text-red-400',
+    exploring: 'text-shuttle', active: 'text-burnham',
+    negotiating: 'text-shuttle', won: 'text-burnham', lost: 'text-red-400',
   }[opp.stage] ?? 'text-shuttle'
 
   return (
@@ -244,7 +244,7 @@ export default function Plan() {
   if (loading) return <div className="flex items-center justify-center h-full text-shuttle text-sm">Loading...</div>
 
   return (
-    <div className="flex flex-col h-full bg-[#FAFAFA]">
+    <div className="flex flex-col h-full bg-sidebar">
       {/* header */}
       <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-mercury">
         <div className="flex items-center gap-2">
@@ -275,7 +275,7 @@ export default function Plan() {
             <section className="mb-6">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-shuttle mb-3">Active Goals</h2>
               {goals.length === 0 ? (
-                <p className="text-sm text-mercury italic">No active goals.</p>
+                <p className="text-sm text-shuttle/60">No active goals.</p>
               ) : (
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                   {goals.slice(0, 3).map(g => <GoalCard key={g.id} goal={g} />)}
@@ -295,7 +295,7 @@ export default function Plan() {
                       <span className="text-xs text-shuttle"> / 6 this week</span>
                     </div>
                   </div>
-                  <MiniBarChart data={convData} color="#79D65E" maxVal={6} />
+                  <MiniBarChart data={convData} color="var(--attio-cobalt, #266DF0)" maxVal={6} />
                 </div>
                 <div className="p-4 bg-white border border-mercury rounded-lg">
                   <div className="flex items-center justify-between mb-3">
@@ -305,7 +305,7 @@ export default function Plan() {
                       <span className="text-xs text-shuttle"> / 5h this week</span>
                     </div>
                   </div>
-                  <MiniBarChart data={englishData} color="#536471" maxVal={5} />
+                  <MiniBarChart data={englishData} color="var(--attio-slate-600, #6F7988)" maxVal={5} />
                 </div>
               </div>
             </section>
@@ -317,16 +317,16 @@ export default function Plan() {
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2">
                     {todosDone === todosTotal && todosTotal > 0 ? (
-                      <CheckCircle size={20} weight="fill" className="text-pastel" />
+                      <CheckCircle size={20} weight="fill" className="text-burnham" />
                     ) : (
                       <Circle size={20} className="text-mercury" />
                     )}
                     <span className="text-sm text-midnight font-medium">{todosDone} / {todosTotal} tasks done</span>
                   </div>
                   {todosTotal > 0 && (
-                    <div className="flex-1 bg-mercury rounded-full h-1.5">
+                    <div className="flex-1 bg-mercury rounded-sm h-1.5 overflow-hidden">
                       <div
-                        className="bg-pastel h-1.5 rounded-full transition-all"
+                        className="bg-burnham h-1.5 rounded-sm transition-all"
                         style={{ width: `${Math.round((todosDone / todosTotal) * 100)}%` }}
                       />
                     </div>
@@ -339,10 +339,10 @@ export default function Plan() {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xs font-semibold uppercase tracking-wide text-shuttle">Active Pipeline</h2>
-                <Link to="/people/opportunities" className="text-xs text-burnham hover:underline">View all →</Link>
+                <Link to="/people/opportunities" className="inline-flex items-center gap-1 text-xs text-burnham hover:underline">View all <ArrowRight size={11} /></Link>
               </div>
               {opportunities.length === 0 ? (
-                <p className="text-sm text-mercury italic">No active opportunities.</p>
+                <p className="text-sm text-shuttle/60">No active opportunities.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {opportunities.map(o => <OppPipelineCard key={o.id} opp={o} />)}

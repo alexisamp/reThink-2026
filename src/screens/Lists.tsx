@@ -11,9 +11,9 @@ import ListGlyph from '@/components/crm/ListGlyph'
 import { ListIconPickerPopover } from '@/components/crm/ListTitleEditor'
 
 const DEFAULT_STAGES = [
-  { key: 'new', label: 'New', color: '#79D65E' },
-  { key: 'in-progress', label: 'In progress', color: '#2F6DF6' },
-  { key: 'done', label: 'Done', color: '#22B8CF' },
+  { key: 'new', label: 'New', color: '#BAD0FA' },
+  { key: 'in-progress', label: 'In progress', color: '#538BF3' },
+  { key: 'done', label: 'Done', color: '#266DF0' },
 ]
 
 export default function Lists() {
@@ -25,7 +25,7 @@ export default function Lists() {
   const requestedObject = searchParams.get('object')
   const [objectSlug, setObjectSlug] = useState(() => requestedObject && ['companies', 'people', 'deals'].includes(requestedObject) ? requestedObject : 'companies')
   const [name, setName] = useState('')
-  const [icon, setIcon] = useState('📋')
+  const [icon, setIcon] = useState('icon:list')
   const [iconFile, setIconFile] = useState<File | null>(null)
   const [iconPreviewUrl, setIconPreviewUrl] = useState<string | null>(null)
   const [pickerAnchor, setPickerAnchor] = useState<DOMRect | null>(null)
@@ -52,7 +52,7 @@ export default function Lists() {
       name: name.trim() || 'New list',
       purpose: null,
       icon,
-      color: '#1F2321',
+      color: '#1C1D1F',
       stages: DEFAULT_STAGES,
       object_slug: objectSlug,
     })
@@ -85,5 +85,5 @@ export default function Lists() {
     navigate(`/lists/${created.id}`, { replace: true })
   }
 
-  return <div className="sv"><div className="sv-inner"><h2>{lists.length ? 'Create a list' : 'Start with a list'}</h2><p className="sub">Choose the object this list will organize.</p><div className="pick-grid">{supported.map(object => <button key={object.id} className={`pick${objectSlug === object.slug ? ' on' : ''}`} onClick={() => setObjectSlug(object.slug)}><span className={`pico ${object.slug}`}><Icon name={object.slug === 'people' ? 'users' : object.slug === 'deals' ? 'dollar' : 'contact'} size={14} /></span><span className="pt">{object.plural_name}</span></button>)}</div><div className="field-lbl">List name</div><div className="name-row"><button type="button" className="emoji-btn" title="Choose list icon" aria-expanded={Boolean(pickerAnchor)} onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); setPickerAnchor(current => current ? null : rect) }}>{iconPreviewUrl ? <span className="list-uploaded-icon" style={{ width: 22, height: 22 }}><img src={iconPreviewUrl} alt="" /></span> : <ListGlyph value={icon} size={20} />}</button><input className="txt" autoFocus placeholder="New list" value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !pickerAnchor) void submit(); if (event.key === 'Escape') setPickerAnchor(null) }} />{pickerAnchor && <ListIconPickerPopover anchor={pickerAnchor} className="create-list-emoji-pop" onClose={() => setPickerAnchor(null)} onPick={value => { setIcon(value); setIconFile(null); if (iconPreviewUrl) URL.revokeObjectURL(iconPreviewUrl); setIconPreviewUrl(null); setPickerAnchor(null) }} onUpload={file => { const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']; if (!allowed.includes(file.type)) { setError('Use PNG, JPG, WebP, or SVG'); return }; if (file.size > 1024 * 1024) { setError('Icon must be under 1MB'); return }; if (iconPreviewUrl) URL.revokeObjectURL(iconPreviewUrl); setIconFile(file); setIconPreviewUrl(URL.createObjectURL(file)); setPickerAnchor(null) }} />}</div>{error && <div className="rm-warn">{error}</div>}<div className="modal-ft inline"><button className="btn btn-ghost" onClick={() => navigate(lists[0] ? `/lists/${lists[0].id}` : '/today')}>Cancel</button><button className="btn btn-primary" disabled={saving} onClick={() => void submit()}>{saving ? 'Creating...' : 'Create list'}<span className="kbd">↵</span></button></div></div></div>
+  return <div className="sv"><div className="sv-inner"><h2>{lists.length ? 'Create a list' : 'Start with a list'}</h2><p className="sub">Choose the object this list will organize.</p><div className="pick-grid">{supported.map(object => <button key={object.id} className={`pick${objectSlug === object.slug ? ' on' : ''}`} onClick={() => setObjectSlug(object.slug)}><span className={`pico ${object.slug}`}><Icon name={object.slug === 'people' ? 'users' : object.slug === 'deals' ? 'dollar' : 'contact'} size={14} /></span><span className="pt">{object.plural_name}</span></button>)}</div><div className="field-lbl">List name</div><div className="name-row"><button type="button" className="emoji-btn" title="Choose list icon" aria-expanded={Boolean(pickerAnchor)} onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); setPickerAnchor(current => current ? null : rect) }}>{iconPreviewUrl ? <span className="list-uploaded-icon" style={{ width: 22, height: 22 }}><img src={iconPreviewUrl} alt="" /></span> : <ListGlyph value={icon} size={20} />}</button><input className="txt" autoFocus placeholder="New list" value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !pickerAnchor) void submit(); if (event.key === 'Escape') setPickerAnchor(null) }} />{pickerAnchor && <ListIconPickerPopover anchor={pickerAnchor} className="create-list-emoji-pop" onClose={() => setPickerAnchor(null)} onPick={value => { setIcon(value); setIconFile(null); if (iconPreviewUrl) URL.revokeObjectURL(iconPreviewUrl); setIconPreviewUrl(null); setPickerAnchor(null) }} onUpload={file => { const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']; if (!allowed.includes(file.type)) { setError('Use PNG, JPG, WebP, or SVG'); return }; if (file.size > 1024 * 1024) { setError('Icon must be under 1MB'); return }; if (iconPreviewUrl) URL.revokeObjectURL(iconPreviewUrl); setIconFile(file); setIconPreviewUrl(URL.createObjectURL(file)); setPickerAnchor(null) }} />}</div>{error && <div className="rm-warn">{error}</div>}<div className="modal-ft inline"><button className="btn btn-ghost" onClick={() => navigate(lists[0] ? `/lists/${lists[0].id}` : '/today')}>Cancel</button><button className="btn btn-primary" disabled={saving} onClick={() => void submit()}>{saving ? 'Creating...' : 'Create list'}<span className="kbd">Enter</span></button></div></div></div>
 }

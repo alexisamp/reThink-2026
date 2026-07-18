@@ -3,6 +3,7 @@ import {
   X, ArrowClockwise, CheckCircle, WarningCircle, DownloadSimple, RocketLaunch,
   Eye, EyeSlash, TrashSimple, Plugs, FunnelSimple, ArrowsClockwise,
   PuzzlePiece, UserCircle, Bell, Timer, SignOut, ChartBar, ClockCounterClockwise,
+  ArrowRight,
 } from '@phosphor-icons/react'
 import type { UpdaterState } from '@/hooks/useUpdater'
 import { supabase } from '@/lib/supabase'
@@ -186,10 +187,10 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
 
   const statusLabel: Record<typeof updater.status, string> = {
     idle: '',
-    checking: 'Checking for updates…',
+    checking: 'Checking for updates...',
     'up-to-date': 'You\'re on the latest version.',
     available: `New version available: ${updater.update?.version}`,
-    downloading: `Downloading… ${updater.progress}%`,
+    downloading: `Downloading... ${updater.progress}%`,
     ready: 'Download complete. Ready to restart.',
     error: updater.error ?? 'Error checking for updates.',
   }
@@ -201,32 +202,33 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
 
   return (
     <div
-      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-[4px]"
+      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[4px]"
       onClick={onClose}
     >
       <div
-        className="w-[960px] h-[660px] bg-white rounded-2xl shadow-2xl overflow-hidden flex border border-mercury/60 relative"
-        style={{ boxShadow: '0 32px 80px rgba(0,55,32,0.16), 0 4px 20px rgba(0,0,0,0.10)' }}
+        className="settings-modal-panel w-[960px] h-[660px] bg-white rounded-lg shadow-[var(--attio-shadow-pop)] overflow-hidden flex border border-mercury/60 relative"
+        style={{ boxShadow: 'var(--attio-shadow-pop, 0 12px 32px rgba(28,40,64,0.12), 0 2px 6px rgba(28,40,64,0.06))' }}
         onClick={e => e.stopPropagation()}
       >
         {/* ── Close button ── */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-7 h-7 flex items-center justify-center rounded-full text-shuttle/40 hover:text-shuttle hover:bg-mercury/50 transition-all"
+          aria-label="Close settings"
+          className="settings-modal-close absolute top-4 right-4 z-10 w-7 h-7 flex items-center justify-center rounded-md text-shuttle/40 hover:text-shuttle hover:bg-mercury/50 transition-all"
         >
           <X size={14} />
         </button>
 
         {/* ── Left Sidebar ── */}
-        <div className="w-[220px] bg-[#F5F7F5] border-r border-mercury/50 flex flex-col shrink-0">
+        <div className="settings-modal-side w-[220px] bg-canvas border-r border-mercury/50 flex flex-col shrink-0">
 
           {/* User identity */}
           <div className="px-5 pt-6 pb-5">
             <div className="flex items-center gap-3">
               {avatarUrl ? (
-                <img src={avatarUrl} alt="" className="w-10 h-10 rounded-full shrink-0 ring-2 ring-white shadow-sm" />
+                <img src={avatarUrl} alt="" className="w-10 h-10 rounded-full shrink-0 ring-2 ring-white shadow-[var(--shadow-card)]" />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-burnham flex items-center justify-center text-white text-sm font-bold shrink-0">
+                <div className="w-10 h-10 rounded-full bg-burnham flex items-center justify-center text-white text-sm font-semibold shrink-0">
                   {initials}
                 </div>
               )}
@@ -240,7 +242,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
           <div className="mx-4 border-t border-mercury/60" />
 
           {/* Nav items */}
-          <nav className="flex-1 px-3 py-3 space-y-0.5">
+          <nav className="settings-modal-nav flex-1 px-3 py-3 space-y-0.5">
             {SECTIONS.map(({ id, label, Icon }) => {
               const isActive = section === id
               const isUpdates = id === 'updates'
@@ -249,16 +251,16 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                   key={id}
                   onClick={() => setSection(id)}
                   className={[
-                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150 text-left',
+                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all duration-150 text-left',
                     isActive
-                      ? 'bg-gossip/60 text-burnham font-medium shadow-sm'
+                      ? 'bg-gossip/60 text-burnham font-medium shadow-[var(--shadow-card)]'
                       : 'text-shuttle hover:bg-mercury/50 hover:text-burnham',
                   ].join(' ')}
                 >
                   <Icon size={16} weight={isActive ? 'bold' : 'regular'} className="shrink-0" />
                   <span className="flex-1">{label}</span>
                   {isUpdates && showUpdateDot && (
-                    <span className="w-2 h-2 rounded-full bg-pastel shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-burnham shrink-0" />
                   )}
                 </button>
               )
@@ -267,10 +269,10 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
         </div>
 
         {/* ── Right Content ── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="settings-modal-content flex-1 flex flex-col overflow-hidden">
 
           {/* Section header */}
-          <div className="px-9 pt-8 pb-5 border-b border-mercury/40">
+          <div className="settings-modal-head px-9 pt-8 pb-5 border-b border-mercury/40">
             <h1 className="text-lg font-semibold text-burnham tracking-tight">
               {SECTIONS.find(s => s.id === section)?.label}
             </h1>
@@ -280,7 +282,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
           </div>
 
           {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto px-9 py-7">
+          <div className="settings-modal-body flex-1 overflow-y-auto px-9 py-7">
 
             {/* ── APPEARANCE ── */}
             {section === 'appearance' && (
@@ -295,7 +297,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                         key={level}
                         onClick={() => onZoomChange?.(level)}
                         className={[
-                          'px-4 py-1.5 rounded-lg text-sm font-medium transition-all border',
+                          'px-4 py-1.5 rounded-md text-sm font-medium transition-all border',
                           zoom === level
                             ? 'bg-burnham text-gossip border-burnham'
                             : 'bg-white text-shuttle border-mercury hover:border-burnham hover:text-burnham',
@@ -312,11 +314,11 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
             {/* ── PROFILE ── */}
             {section === 'profile' && (
               <div className="space-y-5">
-                <div className="flex items-center gap-5 p-5 border border-mercury/70 rounded-2xl bg-[#FAFAF9]">
+                <div className="flex items-center gap-5 p-5 border border-mercury/70 rounded-lg bg-white">
                   {avatarUrl ? (
-                    <img src={avatarUrl} alt="" className="w-16 h-16 rounded-full ring-2 ring-white shadow-md shrink-0" />
+                    <img src={avatarUrl} alt="" className="w-16 h-16 rounded-full ring-2 ring-white shadow-[var(--shadow-card)] shrink-0" />
                   ) : (
-                    <div className="w-16 h-16 rounded-full bg-burnham flex items-center justify-center text-white text-2xl font-bold shrink-0">
+                    <div className="w-16 h-16 rounded-full bg-burnham flex items-center justify-center text-white text-2xl font-semibold shrink-0">
                       {initials}
                     </div>
                   )}
@@ -339,7 +341,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                 <div className="pt-1">
                   <button
                     onClick={() => { supabase.auth.signOut(); onClose() }}
-                    className="flex items-center gap-2 text-sm text-red-500 hover:text-red-600 border border-red-200 hover:border-red-300 px-4 py-2 rounded-xl transition-all hover:bg-red-50"
+                    className="flex items-center gap-2 text-sm text-red-500 hover:text-red-600 border border-red-200 hover:border-red-300 px-4 py-2 rounded-md transition-all hover:bg-red-50"
                   >
                     <SignOut size={15} />
                     Sign out
@@ -381,7 +383,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                         <select
                           value={settings.notifWeeklyDay}
                           onChange={e => updateSettings({ notifWeeklyDay: Number(e.target.value) })}
-                          className="text-xs text-burnham border border-mercury rounded-xl px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
+                          className="text-xs text-burnham border border-mercury rounded-md px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
                         >
                           {DAYS.map((d, i) => (
                             <option key={d} value={i}>{d}</option>
@@ -391,7 +393,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                           type="time"
                           value={settings.notifWeeklyTime}
                           onChange={e => updateSettings({ notifWeeklyTime: e.target.value })}
-                          className="text-xs text-burnham border border-mercury rounded-xl px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
+                          className="text-xs text-burnham border border-mercury rounded-md px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
                         />
                       </>
                     )}
@@ -414,14 +416,14 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                       type="time"
                       value={settings.morningRitualStart}
                       onChange={e => updateSettings({ morningRitualStart: e.target.value })}
-                      className="text-xs text-burnham border border-mercury rounded-xl px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
+                      className="text-xs text-burnham border border-mercury rounded-md px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
                     />
                     <span className="text-xs text-shuttle/50">to</span>
                     <input
                       type="time"
                       value={settings.morningRitualEnd}
                       onChange={e => updateSettings({ morningRitualEnd: e.target.value })}
-                      className="text-xs text-burnham border border-mercury rounded-xl px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
+                      className="text-xs text-burnham border border-mercury rounded-md px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
                     />
                   </div>
                 </div>
@@ -441,7 +443,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                         key={minutes}
                         onClick={() => updateSettings({ focusDefaultMinutes: minutes })}
                         className={[
-                          'flex-1 py-3 px-3 rounded-xl border text-sm transition-all',
+                          'flex-1 py-3 px-3 rounded-md border text-sm transition-all',
                           settings.focusDefaultMinutes === minutes
                             ? 'border-burnham bg-burnham/5 text-burnham font-semibold'
                             : 'border-mercury text-shuttle hover:border-shuttle/40 hover:text-burnham',
@@ -463,7 +465,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                         key={m}
                         onClick={() => updateSettings({ focusShortBreak: m })}
                         className={[
-                          'flex-1 py-2.5 px-3 rounded-xl border text-sm transition-all',
+                          'flex-1 py-2.5 px-3 rounded-md border text-sm transition-all',
                           settings.focusShortBreak === m
                             ? 'border-burnham bg-burnham/5 text-burnham font-semibold'
                             : 'border-mercury text-shuttle hover:border-shuttle/40 hover:text-burnham',
@@ -484,7 +486,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                         key={m}
                         onClick={() => updateSettings({ focusLongBreak: m })}
                         className={[
-                          'flex-1 py-2.5 px-3 rounded-xl border text-sm transition-all',
+                          'flex-1 py-2.5 px-3 rounded-md border text-sm transition-all',
                           settings.focusLongBreak === m
                             ? 'border-burnham bg-burnham/5 text-burnham font-semibold'
                             : 'border-mercury text-shuttle hover:border-shuttle/40 hover:text-burnham',
@@ -505,7 +507,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                         key={s}
                         onClick={() => updateSettings({ focusAmbientSound: s })}
                         className={[
-                          'flex-1 py-2.5 px-3 rounded-xl border text-sm transition-all',
+                          'flex-1 py-2.5 px-3 rounded-md border text-sm transition-all',
                           settings.focusAmbientSound === s
                             ? 'border-burnham bg-burnham/5 text-burnham font-medium'
                             : 'border-mercury text-shuttle hover:border-shuttle/40 hover:text-burnham',
@@ -556,7 +558,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                       step={5}
                       value={settings.adherenceTarget}
                       onChange={e => updateSettings({ adherenceTarget: Number(e.target.value) })}
-                      className="w-16 text-sm text-burnham text-center border border-mercury rounded-xl px-2 py-1.5 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
+                      className="w-16 text-sm text-burnham text-center border border-mercury rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
                     />
                     <span className="text-sm text-shuttle/60">%</span>
                   </div>
@@ -569,12 +571,12 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                   <div className="space-y-3">
                     {[
                       { key: 'gradeA' as const, label: 'A', color: 'text-burnham bg-gossip border-gossip/70' },
-                      { key: 'gradeB' as const, label: 'B', color: 'text-burnham bg-pastel/30 border-pastel/40' },
+                      { key: 'gradeB' as const, label: 'B', color: 'text-burnham bg-gossip/40 border-gossip/70' },
                       { key: 'gradeC' as const, label: 'C', color: 'text-shuttle bg-mercury/40 border-mercury' },
                     ].map(({ key, label, color }) => (
                       <div key={key} className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <span className={`w-7 h-7 rounded-lg border text-xs font-bold flex items-center justify-center ${color}`}>
+                          <span className={`w-7 h-7 rounded-lg border text-xs font-semibold flex items-center justify-center ${color}`}>
                             {label}
                           </span>
                           <span className="text-sm text-burnham">Grade {label} ≥</span>
@@ -587,7 +589,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                             step={5}
                             value={settings[key]}
                             onChange={e => updateSettings({ [key]: Number(e.target.value) })}
-                            className="w-16 text-sm text-burnham text-center border border-mercury rounded-xl px-2 py-1.5 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
+                            className="w-16 text-sm text-burnham text-center border border-mercury rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
                           />
                           <span className="text-sm text-shuttle/60">%</span>
                         </div>
@@ -596,7 +598,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
 
                     <div className="flex items-center justify-between opacity-50">
                       <div className="flex items-center gap-3">
-                        <span className="w-7 h-7 rounded-lg border text-xs font-bold flex items-center justify-center text-shuttle bg-mercury/20 border-mercury">
+                        <span className="w-7 h-7 rounded-lg border text-xs font-semibold flex items-center justify-center text-shuttle bg-mercury/20 border-mercury">
                           D
                         </span>
                         <span className="text-sm text-burnham">Grade D &lt;</span>
@@ -605,7 +607,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                     </div>
                   </div>
 
-                  <div className="mt-5 px-4 py-3 rounded-xl bg-[#F5F7F5] border border-mercury/60">
+                  <div className="mt-5 px-4 py-3 rounded-lg bg-canvas border border-mercury/60">
                     <p className="text-xs text-shuttle/50 mb-1.5">Grade scale preview</p>
                     <p className="text-sm text-burnham font-mono">
                       A ≥ {settings.gradeA}% · B ≥ {settings.gradeB}% · C ≥ {settings.gradeC}% · D &lt; {settings.gradeC}%
@@ -637,7 +639,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                   {!chromeExtCode ? (
                     <button
                       onClick={generateExtensionCode}
-                      className="px-4 py-2 text-sm font-medium bg-burnham text-white rounded-xl hover:bg-burnham/90 transition-colors"
+                      className="px-4 py-2 text-sm font-medium bg-burnham text-white rounded-md hover:bg-burnham/90 transition-colors"
                     >
                       Generate connect code
                     </button>
@@ -647,13 +649,14 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                         readOnly
                         value={chromeExtCode}
                         onFocus={e => e.target.select()}
-                        className="flex-1 px-3 py-2 text-xs font-mono bg-mercury/30 border border-mercury rounded-xl text-shuttle truncate cursor-text min-w-0"
+                        className="flex-1 px-3 py-2 text-xs font-mono bg-mercury/30 border border-mercury rounded-md text-shuttle truncate cursor-text min-w-0"
                       />
                       <button
                         onClick={copyExtensionCode}
-                        className="shrink-0 px-4 py-2 text-sm font-medium bg-burnham text-white rounded-xl hover:bg-burnham/90 transition-colors"
+                        className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-burnham text-white rounded-md hover:bg-burnham/90 transition-colors"
                       >
-                        {chromeExtCopied ? 'Copied ✓' : 'Copy'}
+                        {chromeExtCopied && <CheckCircle size={13} weight="fill" />}
+                        {chromeExtCopied ? 'Copied' : 'Copy'}
                       </button>
                     </div>
                   )}
@@ -667,7 +670,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                   <div className="flex items-center gap-2 mt-1">
                     {googleConnected && googleDriveConnected ? (
                       <div className="flex items-center gap-1.5 text-sm">
-                        <CheckCircle size={15} className="text-pastel" weight="fill" />
+                        <CheckCircle size={15} className="text-burnham" weight="fill" />
                         <span className="text-burnham font-medium">Connected</span>
                         {googleEmail && (
                           <span className="text-shuttle/50 text-xs">as {googleEmail}</span>
@@ -689,9 +692,9 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                     <button
                       onClick={reconnectGoogle}
                       disabled={googleConnecting}
-                      className="px-4 py-2 text-sm font-medium bg-burnham text-white rounded-xl hover:bg-burnham/90 transition-colors disabled:opacity-60"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-burnham text-white rounded-md hover:bg-burnham/90 transition-colors disabled:opacity-60"
                     >
-                      {googleConnecting ? 'Connecting…' : 'Reconnect Google →'}
+                      {googleConnecting ? 'Connecting...' : <>Reconnect Google <ArrowRight size={13} /></>}
                     </button>
                   </div>
                   <p className="text-xs text-shuttle/40 mt-2">
@@ -712,12 +715,13 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                         onChange={e => setAttioKey(e.target.value)}
                         onBlur={saveAttioKey}
                         onKeyDown={e => { if (e.key === 'Enter') saveAttioKey() }}
-                        placeholder="Bearer token…"
-                        className="w-full text-sm text-burnham border border-mercury rounded-xl px-3 py-2 pr-9 focus:outline-none focus:border-shuttle/50 transition-colors bg-white"
+                        placeholder="Bearer token..."
+                        className="w-full text-sm text-burnham border border-mercury rounded-md px-3 py-2 pr-9 focus:outline-none focus:border-shuttle/50 transition-colors bg-white"
                       />
                       <button
                         type="button"
                         onClick={() => setAttioKeyVisible(v => !v)}
+                        aria-label={attioKeyVisible ? 'Hide Attio API key' : 'Show Attio API key'}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-shuttle/40 hover:text-shuttle transition-colors"
                       >
                         {attioKeyVisible ? <EyeSlash size={14} /> : <Eye size={14} />}
@@ -725,14 +729,14 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                     </div>
                     <button
                       onClick={saveAttioKey}
-                      className="shrink-0 px-4 py-2 text-sm font-medium bg-burnham text-white rounded-xl hover:bg-burnham/90 transition-colors"
+                      className="shrink-0 px-4 py-2 text-sm font-medium bg-burnham text-white rounded-md hover:bg-burnham/90 transition-colors"
                     >
                       Save
                     </button>
                   </div>
                   <p className="text-xs mt-2 font-mono">
                     {attioSaved
-                      ? <span className="text-pastel">Saved ✓</span>
+                      ? <span className="inline-flex items-center gap-1 text-burnham"><CheckCircle size={12} weight="fill" /> Saved</span>
                       : attioKey.trim()
                         ? <span className="text-shuttle/40">Configured</span>
                         : <span className="text-shuttle/30">Not configured</span>
@@ -749,14 +753,15 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                   const cfg = getStageConfig(status)
                   const isDeletable = !UNDELETABLE_STAGES.includes(status)
                   return (
-                    <div key={status} className="border border-mercury rounded-2xl p-5 space-y-3 bg-white">
+                    <div key={status} className="border border-mercury rounded-lg p-5 space-y-3 bg-white">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-shuttle/60">{status}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/60">{status}</span>
                         {isDeletable && (
                           <button
                             onClick={() => { setDeletingStage(status); setMigrateTo('PROSPECT'); setDeleteConfirmed(false) }}
                             className="text-shuttle/30 hover:text-red-400 transition-colors p-1 rounded hover:bg-red-50"
                             title={`Delete ${status} stage`}
+                            aria-label={`Delete ${status} stage`}
                           >
                             <TrashSimple size={13} />
                           </button>
@@ -769,7 +774,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                             type="text"
                             defaultValue={cfg.label}
                             onBlur={e => updateStage(status, { label: e.target.value })}
-                            className="w-full text-sm text-burnham border border-mercury rounded-xl px-3 py-2 focus:outline-none focus:border-shuttle/50 transition-colors bg-[#FAFAF9]"
+                            className="w-full text-sm text-burnham border border-mercury rounded-md px-3 py-2 focus:outline-none focus:border-shuttle/50 transition-colors bg-white"
                           />
                         </div>
                         <div>
@@ -778,7 +783,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                             type="text"
                             defaultValue={cfg.description}
                             onBlur={e => updateStage(status, { description: e.target.value })}
-                            className="w-full text-sm text-burnham border border-mercury rounded-xl px-3 py-2 focus:outline-none focus:border-shuttle/50 transition-colors bg-[#FAFAF9]"
+                            className="w-full text-sm text-burnham border border-mercury rounded-md px-3 py-2 focus:outline-none focus:border-shuttle/50 transition-colors bg-white"
                           />
                         </div>
                         <div>
@@ -787,7 +792,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                             rows={2}
                             defaultValue={cfg.entry_criteria}
                             onBlur={e => updateStage(status, { entry_criteria: e.target.value })}
-                            className="w-full text-sm text-burnham border border-mercury rounded-xl px-3 py-2 focus:outline-none focus:border-shuttle/50 transition-colors resize-none bg-[#FAFAF9]"
+                            className="w-full text-sm text-burnham border border-mercury rounded-md px-3 py-2 focus:outline-none focus:border-shuttle/50 transition-colors resize-none bg-white"
                           />
                         </div>
                         <div>
@@ -796,7 +801,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                             rows={2}
                             defaultValue={cfg.exit_criteria}
                             onBlur={e => updateStage(status, { exit_criteria: e.target.value })}
-                            className="w-full text-sm text-burnham border border-mercury rounded-xl px-3 py-2 focus:outline-none focus:border-shuttle/50 transition-colors resize-none bg-[#FAFAF9]"
+                            className="w-full text-sm text-burnham border border-mercury rounded-md px-3 py-2 focus:outline-none focus:border-shuttle/50 transition-colors resize-none bg-white"
                           />
                         </div>
                       </div>
@@ -805,7 +810,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                 })}
 
                 {deletingStage && (
-                  <div className="border border-red-200 bg-red-50/60 rounded-2xl p-5 space-y-3">
+                  <div className="border border-red-200 bg-red-50/60 rounded-lg p-5 space-y-3">
                     <p className="text-sm font-semibold text-red-700">
                       Delete stage "{config[deletingStage]?.label ?? deletingStage}"?
                     </p>
@@ -817,7 +822,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                       <select
                         value={migrateTo}
                         onChange={e => setMigrateTo(e.target.value as ContactStatus)}
-                        className="text-sm text-burnham border border-red-200 rounded-xl px-3 py-2 bg-white focus:outline-none"
+                        className="text-sm text-burnham border border-red-200 rounded-md px-3 py-2 bg-white focus:outline-none"
                       >
                         {FUNNEL_STAGE_ORDER.filter(s => s !== deletingStage && getActiveStages().includes(s)).map(s => (
                           <option key={s} value={s}>{config[s]?.label ?? s}</option>
@@ -827,7 +832,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                     <div className="flex gap-2">
                       <button
                         onClick={() => setDeletingStage(null)}
-                        className="flex-1 text-sm text-shuttle/60 border border-mercury rounded-xl px-3 py-2 hover:bg-mercury/20 transition-colors"
+                        className="flex-1 text-sm text-shuttle/60 border border-mercury rounded-md px-3 py-2 hover:bg-mercury/20 transition-colors"
                       >
                         Cancel
                       </button>
@@ -838,7 +843,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                           setDeletingStage(null)
                           setDeleteConfirmed(false)
                         }}
-                        className="flex-1 text-sm bg-red-500 text-white rounded-xl px-3 py-2 hover:bg-red-600 transition-colors font-medium"
+                        className="flex-1 text-sm bg-red-500 text-white rounded-md px-3 py-2 hover:bg-red-600 transition-colors font-medium"
                       >
                         {deleteConfirmed ? 'Confirm delete' : 'Delete stage'}
                       </button>
@@ -866,7 +871,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
 
                 {updater.status !== 'idle' && (
                   <div className={[
-                    'flex items-start gap-3 text-sm px-5 py-3.5 rounded-xl border',
+                    'flex items-start gap-3 text-sm px-5 py-3.5 rounded-lg border',
                     updater.status === 'error'
                       ? 'bg-red-50 text-red-600 border-red-200'
                       : updater.status === 'available' || updater.status === 'ready'
@@ -874,8 +879,8 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                         : 'bg-mercury/15 text-shuttle border-mercury/40',
                   ].join(' ')}>
                     {updater.status === 'error'      && <WarningCircle size={15} className="shrink-0 mt-0.5" />}
-                    {updater.status === 'up-to-date' && <CheckCircle size={15} className="shrink-0 mt-0.5 text-pastel" />}
-                    {updater.status === 'ready'      && <CheckCircle size={15} className="shrink-0 mt-0.5 text-pastel" />}
+                    {updater.status === 'up-to-date' && <CheckCircle size={15} className="shrink-0 mt-0.5 text-burnham" />}
+                    {updater.status === 'ready'      && <CheckCircle size={15} className="shrink-0 mt-0.5 text-burnham" />}
                     {updater.status === 'available'  && <DownloadSimple size={15} className="shrink-0 mt-0.5 text-burnham" />}
                     <span>{statusLabel[updater.status]}</span>
                   </div>
@@ -884,12 +889,12 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                 {updater.status === 'downloading' && (
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs text-shuttle/50">
-                      <span>Downloading update…</span>
+                      <span>Downloading update...</span>
                       <span>{updater.progress}%</span>
                     </div>
-                    <div className="w-full bg-mercury/40 rounded-full h-1.5 overflow-hidden">
+                    <div className="w-full bg-mercury/40 rounded-sm h-1.5 overflow-hidden">
                       <div
-                        className="h-full bg-pastel rounded-full transition-all duration-300"
+                        className="h-full bg-burnham rounded-sm transition-all duration-300"
                         style={{ width: `${updater.progress}%` }}
                       />
                     </div>
@@ -901,7 +906,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                     <button
                       onClick={updater.checkForUpdates}
                       disabled={!updater.isTauri}
-                      className="flex items-center gap-2 text-sm font-medium bg-burnham text-white px-5 py-2.5 rounded-xl hover:bg-burnham/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="flex items-center gap-2 text-sm font-medium bg-burnham text-white px-5 py-2.5 rounded-md hover:bg-burnham/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       <ArrowClockwise size={14} />
                       Check for updates
@@ -911,14 +916,14 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                   {updater.status === 'checking' && (
                     <div className="flex items-center gap-2 text-sm text-shuttle py-2">
                       <div className="w-4 h-4 border border-shuttle border-t-transparent rounded-full animate-spin" />
-                      Checking for updates…
+                      Checking for updates...
                     </div>
                   )}
 
                   {updater.status === 'available' && (
                     <button
                       onClick={updater.downloadAndInstall}
-                      className="flex items-center gap-2 text-sm font-medium bg-burnham text-white px-5 py-2.5 rounded-xl hover:bg-burnham/90 transition-colors"
+                      className="flex items-center gap-2 text-sm font-medium bg-burnham text-white px-5 py-2.5 rounded-md hover:bg-burnham/90 transition-colors"
                     >
                       <DownloadSimple size={14} />
                       Install v{updater.update?.version}
@@ -928,7 +933,7 @@ export default function SettingsModal({ open, onClose, updater, zoom = 100, onZo
                   {updater.status === 'ready' && (
                     <button
                       onClick={updater.restartApp}
-                      className="flex items-center gap-2 text-sm font-medium bg-gossip text-burnham px-5 py-2.5 rounded-xl hover:bg-gossip/80 transition-colors font-semibold"
+                      className="flex items-center gap-2 text-sm font-medium bg-gossip text-burnham px-5 py-2.5 rounded-md hover:bg-gossip/80 transition-colors font-semibold"
                     >
                       <RocketLaunch size={14} />
                       Restart and update
@@ -988,7 +993,7 @@ function SettingCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="border border-mercury/70 rounded-2xl p-5 space-y-3 bg-white shadow-sm">
+    <div className="border border-mercury/70 rounded-lg p-5 space-y-3 bg-white shadow-[var(--shadow-card)]">
       <div className="flex items-center gap-2.5">
         <span className="shrink-0">{icon}</span>
         <p className="text-sm font-semibold text-burnham">{label}</p>
@@ -1005,6 +1010,7 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean
   return (
     <button
       onClick={() => onChange(!enabled)}
+      aria-label={enabled ? 'Disable setting' : 'Enable setting'}
       className={[
         'relative w-10 h-[22px] rounded-full transition-colors duration-200 shrink-0',
         enabled ? 'bg-burnham' : 'bg-mercury',
@@ -1012,7 +1018,7 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean
     >
       <span
         className={[
-          'absolute top-[3px] w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200',
+          'absolute top-[3px] w-4 h-4 rounded-full bg-white shadow-[var(--shadow-card)] transition-transform duration-200',
           enabled ? 'translate-x-[22px]' : 'translate-x-[3px]',
         ].join(' ')}
       />
@@ -1047,7 +1053,7 @@ function NotifRow({
             type="time"
             value={time}
             onChange={e => onTimeChange(e.target.value)}
-            className="text-xs text-burnham border border-mercury rounded-xl px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
+            className="text-xs text-burnham border border-mercury rounded-md px-2.5 py-2 bg-white focus:outline-none focus:border-shuttle/50 transition-colors w-24"
           />
         )}
         <Toggle enabled={enabled} onChange={onToggle} />
@@ -1066,7 +1072,7 @@ interface CadenceSectionProps {
 
 const TIER_META: Array<{ tier: '1' | '2' | '3'; title: string; hint: string; color: string }> = [
   { tier: '1', title: 'Tier 1',  hint: 'Airport Test: you\'d pick them up. Closest pros.',          color: 'bg-gossip text-burnham border-gossip/70' },
-  { tier: '2', title: 'Tier 2',  hint: 'Shared identity / strong affinity. Maintained peers.',     color: 'bg-pastel/40 text-burnham border-pastel' },
+  { tier: '2', title: 'Tier 2',  hint: 'Shared identity / strong affinity. Maintained peers.',     color: 'bg-gossip/40 text-burnham border-gossip' },
   { tier: '3', title: 'Tier 3',  hint: 'Loose connections — touchpoints to keep them warm.',       color: 'bg-mercury/40 text-shuttle border-mercury' },
 ]
 
@@ -1120,7 +1126,7 @@ function CadenceSection({ profile, userId, onProfileUpdate }: CadenceSectionProp
           {TIER_META.map(({ tier, title, hint, color }) => (
             <div key={tier} className="flex items-center justify-between py-2 border-b border-mercury/40 last:border-0">
               <div className="flex items-center gap-3">
-                <span className={`w-9 h-9 rounded-lg border text-xs font-bold flex items-center justify-center ${color}`}>
+                <span className={`w-9 h-9 rounded-lg border text-xs font-semibold flex items-center justify-center ${color}`}>
                   T{tier}
                 </span>
                 <div>
@@ -1137,7 +1143,7 @@ function CadenceSection({ profile, userId, onProfileUpdate }: CadenceSectionProp
                   step={1}
                   value={config[tier]?.days ?? 0}
                   onChange={e => setTierDays(tier, Math.max(1, Number(e.target.value) || 1))}
-                  className="w-20 text-sm text-burnham text-center border border-mercury rounded-xl px-2 py-1.5 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
+                  className="w-20 text-sm text-burnham text-center border border-mercury rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-shuttle/50 transition-colors"
                 />
                 <span className="text-xs text-shuttle">days</span>
               </div>
@@ -1149,9 +1155,9 @@ function CadenceSection({ profile, userId, onProfileUpdate }: CadenceSectionProp
           <button
             onClick={save}
             disabled={saving || !userId}
-            className="px-4 py-2 text-sm font-medium bg-burnham text-white rounded-xl hover:bg-burnham/90 transition-colors disabled:opacity-40"
+            className="px-4 py-2 text-sm font-medium bg-burnham text-white rounded-md hover:bg-burnham/90 transition-colors disabled:opacity-40"
           >
-            {saving ? 'Saving…' : 'Save cadence'}
+            {saving ? 'Saving...' : 'Save cadence'}
           </button>
           {savedAt && (
             <span className="text-xs text-shuttle flex items-center gap-1">
@@ -1161,7 +1167,7 @@ function CadenceSection({ profile, userId, onProfileUpdate }: CadenceSectionProp
         </div>
       </div>
 
-      <div className="px-4 py-3 rounded-xl bg-[#F5F7F5] border border-mercury/60">
+      <div className="px-4 py-3 rounded-lg bg-canvas border border-mercury/60">
         <p className="text-xs text-shuttle/50 mb-1.5">How this is used</p>
         <p className="text-[11px] text-shuttle/70 leading-relaxed">
           In each contact's profile, the cadence shows "Last contact: X days ago" with a status

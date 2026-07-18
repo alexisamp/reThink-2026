@@ -68,7 +68,7 @@ export interface Goal {
   notes: string | null
   needs_config: boolean
   alias: string | null   // short label ≤6 chars shown as pill on todos
-  color: string | null   // hex color for the pill e.g. '#79D65E'
+  color: string | null   // hex color for the pill e.g. '#266DF0'
   emoji: string | null   // optional emoji icon
   created_at: string
   updated_at: string

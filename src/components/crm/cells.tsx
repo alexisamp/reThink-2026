@@ -42,7 +42,7 @@ export function TierChip({ tier }: { tier?: number | null }) {
   if (!c) return <span className="crm-empty">—</span>
   return (
     <span className={`crm-chip tier t${tier}`} style={{ '--chip': c.color } as Vars}>
-      <span className="em">{c.emoji}</span>{c.label}
+      {c.icon && <Icon name={c.icon} size={10} />}{c.label}
     </span>
   )
 }

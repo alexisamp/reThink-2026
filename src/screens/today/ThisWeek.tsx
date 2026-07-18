@@ -124,7 +124,7 @@ export default function ThisWeek({ userId, weekDates, today, onManage }: Props) 
     load()
   }
 
-  if (loading) return <div className="td-tw-empty">Loading…</div>
+  if (loading) return <div className="td-tw-empty">Loading...</div>
   if (habits.length === 0) return <div className="td-tw-empty">No weekly goals yet.</div>
 
   return (
