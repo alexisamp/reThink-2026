@@ -84,10 +84,11 @@ export default function FullAppShell({ children, user, updater }: FullAppShellPr
   }, [objects])
 
   const isToday = location.pathname === '/today'
+  const isWeekPlan = location.pathname === '/week-plan'
   const isRecordDetail = /\/(record|records)\//.test(location.pathname) && !/\/view\//.test(location.pathname)
   const currentList = lists.find(list => location.pathname === `/lists/${list.id}`)
   const currentRecord = records.find(object => location.pathname.startsWith(`/${object.slug}/view`) || location.pathname === `/records/${object.slug}`)
-  const title = location.pathname === '/__handoff-preview' ? 'Handoff QA' : currentList?.name ?? currentRecord?.plural_name ?? (location.pathname === '/lists' ? 'Lists' : 'Today')
+  const title = location.pathname === '/__handoff-preview' ? 'Handoff QA' : isWeekPlan ? 'Week Plan' : currentList?.name ?? currentRecord?.plural_name ?? (location.pathname === '/lists' ? 'Lists' : 'Today')
   const sortedFolders = useMemo(() => [...folders].sort((left, right) => left.position - right.position || left.created_at.localeCompare(right.created_at)), [folders])
   const sortedLists = useMemo(() => [...lists].sort((left, right) => (left.position ?? 0) - (right.position ?? 0) || left.created_at.localeCompare(right.created_at)), [lists])
   const unfiledLists = useMemo(() => sortedLists.filter(list => !list.folder_id), [sortedLists])
@@ -251,7 +252,8 @@ export default function FullAppShell({ children, user, updater }: FullAppShellPr
         </button>
         <div className="sb-scroll">
           <button className={`sb-row${isToday ? ' active' : ''}`} onClick={() => navigate('/today')}><span className="ico"><Icon name="home" size={16} /></span><span className="sb-label">Today</span></button>
-          {([['bell', 'Review'], ['sparkle', 'Suggestions'], ['article', 'Playbook'], ['target', 'Plan']] as Array<[TodayIconName, string]>).map(([icon, label]) => (
+          <button className={`sb-row${isWeekPlan ? ' active' : ''}`} onClick={() => navigate('/week-plan')}><span className="ico"><Icon name="calendar" size={16} /></span><span className="sb-label">Week Plan</span></button>
+          {([['bell', 'Review'], ['sparkle', 'Suggestions'], ['article', 'Playbook']] as Array<[TodayIconName, string]>).map(([icon, label]) => (
             <button key={label} className="sb-row soon" disabled><span className="ico"><Icon name={icon} size={16} /></span><span className="sb-label">{label}</span><span className="soon-tag">Soon</span></button>
           ))}
           <div className="sb-divider" />
@@ -309,7 +311,7 @@ export default function FullAppShell({ children, user, updater }: FullAppShellPr
       </aside>
       <main className="main" style={{ zoom: zoom / 100 }}>
         {!isRecordDetail && <div className="topbar">
-          <div className="tb-title">{isToday && <Icon name="home" size={16} />}{currentList ? <ListTitleEditor list={currentList} onUpdate={patch => updateList(currentList.id, patch)} onDelete={async () => { const result = await deleteList(currentList.id); if (result?.error) { notify('x', result.error.message || 'Could not delete list'); return }; notify('trash', 'List deleted'); navigate('/lists', { replace: true }) }} onNotify={notify} /> : title}</div>
+          <div className="tb-title">{isToday && <Icon name="home" size={16} />}{isWeekPlan && <Icon name="calendar" size={16} />}{currentList ? <ListTitleEditor list={currentList} onUpdate={patch => updateList(currentList.id, patch)} onDelete={async () => { const result = await deleteList(currentList.id); if (result?.error) { notify('x', result.error.message || 'Could not delete list'); return }; notify('trash', 'List deleted'); navigate('/lists', { replace: true }) }} onNotify={notify} /> : title}</div>
           <div className="tb-spacer" />
           {!isToday && <><button className="tb-btn" onClick={() => notify('link', 'Share is a product stub')}><span className="av">{initials.slice(0, 1)}</span>Share</button><div className="tb-sep" /></>}
           <button className="tb-btn" title="Comments" onClick={() => notify('chat', 'Comments are a product stub')}><Icon name="chat" size={15} /></button>
