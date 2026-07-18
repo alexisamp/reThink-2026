@@ -4,7 +4,7 @@ import {
   Table, Lightning, Users,
   WhatsappLogo, LinkedinLogo, TwitterLogo, IdentificationCard, At, Buildings,
   Briefcase, MapPin, Heartbeat, CircleHalf, Broadcast, GitFork, Target,
-  ArrowUpRight, ArrowDownLeft, Info, CalendarBlank, Plus, Trash,
+  ArrowUpRight, ArrowDownLeft, Info, CalendarBlank, Plus, Trash, X,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import type {
@@ -154,9 +154,9 @@ function docsFromTodos(todos: Todo[]) {
 
 const KANBAN_COLUMNS: { status: ContactStatus; label: string; dot: string }[] = [
   { status: 'PROSPECT',   label: 'Prospect',   dot: 'bg-mercury' },
-  { status: 'INTRO',      label: 'Intro',      dot: 'bg-blue-400' },
-  { status: 'CONNECTED',  label: 'Connected',  dot: 'bg-pastel' },
-  { status: 'ENGAGED',    label: 'Engaged',    dot: 'bg-pastel' },
+  { status: 'INTRO',      label: 'Intro',      dot: 'bg-burnham' },
+  { status: 'CONNECTED',  label: 'Connected',  dot: 'bg-burnham' },
+  { status: 'ENGAGED',    label: 'Engaged',    dot: 'bg-burnham' },
   { status: 'NURTURING',  label: 'Nurturing',  dot: 'bg-burnham' },
   { status: 'DORMANT',    label: 'Dormant',    dot: 'bg-red-300' },
 ]
@@ -193,10 +193,10 @@ function ChannelIcons({ channels }: { channels: Array<{ channel: string }> }) {
   }, {})
 
   const renderIcon = (channel: string) => {
-    if (channel === 'whatsapp') return <WhatsappLogo size={11} className="text-green-500" />
-    if (channel === 'linkedin') return <LinkedinLogo size={11} className="text-blue-500" />
+    if (channel === 'whatsapp') return <WhatsappLogo size={11} className="text-burnham" />
+    if (channel === 'linkedin') return <LinkedinLogo size={11} className="text-burnham" />
     if (channel === 'x') return <TwitterLogo size={11} className="text-shuttle" />
-    if (channel === 'exit5') return <span className="text-[9px] font-bold text-shuttle/60">E5</span>
+    if (channel === 'exit5') return <span className="text-[10px] font-semibold text-shuttle/60">E5</span>
     return null
   }
 
@@ -216,7 +216,7 @@ function ChannelIcons({ channels }: { channels: Array<{ channel: string }> }) {
           >
             {renderIcon(channel)}
             {count > 1 && (
-              <span className="text-[8px] font-mono text-shuttle/50">×{count}</span>
+              <span className="text-[10px] font-mono text-shuttle/50">x{count}</span>
             )}
           </span>
         )
@@ -756,7 +756,7 @@ export default function People() {
       label: 'Tier',
       width: '84px',
       render: contact => contact.tier
-        ? <span className="crm-chip tier" style={{ '--chip': contact.tier === 1 ? '#3E7A4E' : contact.tier === 2 ? '#D97706' : '#64748B' } as CSSProperties}>T{contact.tier}</span>
+        ? <span className="crm-chip tier" style={{ '--chip': contact.tier === 1 ? '#266DF0' : contact.tier === 2 ? '#6F7988' : '#8F99A8' } as CSSProperties}>T{contact.tier}</span>
         : <span className="crm-empty">—</span>,
     },
     {
@@ -828,7 +828,7 @@ export default function People() {
 
       {/* ── Bulk action bar (shows when ≥1 selected) ──────────────────────── */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 px-6 py-1.5 border-b border-mercury/50 bg-gossip/20 shrink-0 text-[11px]">
+        <div className="people-bulkbar flex items-center gap-3 px-6 py-1.5 border-b border-mercury/50 bg-gossip/20 shrink-0 text-[11px]">
           <span className="font-semibold text-burnham">
             {selectedIds.size} selected
           </span>
@@ -837,9 +837,9 @@ export default function People() {
           <div className="flex items-center gap-1">
             <span className="text-[10px] uppercase tracking-wide text-shuttle/60">Domain:</span>
             {([
-              { key: 'professional', label: 'Pro', icon: '💼' },
-              { key: 'mixed',        label: 'Mix', icon: '🔀' },
-              { key: 'personal',     label: 'Pers', icon: '👥' },
+              { key: 'professional', label: 'Pro', icon: <Briefcase size={11} /> },
+              { key: 'mixed',        label: 'Mix', icon: <GitFork size={11} /> },
+              { key: 'personal',     label: 'Pers', icon: <Users size={11} /> },
             ] as const).map(d => (
               <button
                 key={d.key}
@@ -870,10 +870,11 @@ export default function People() {
             <button
               onClick={() => handleBulkTier(null)}
               disabled={bulkTagging}
-              className="text-[10px] text-shuttle/40 hover:text-shuttle px-1 py-0.5 disabled:opacity-40 transition-colors"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-md text-shuttle/40 hover:text-shuttle hover:bg-mercury/30 disabled:opacity-40 transition-colors"
               title="Clear professional tier"
+              aria-label="Clear professional tier"
             >
-              ✕
+              <X size={10} weight="bold" />
             </button>
           </div>
 
@@ -897,10 +898,11 @@ export default function People() {
             <button
               onClick={() => handleBulkPersonalTier(null)}
               disabled={bulkTagging}
-              className="text-[10px] text-shuttle/40 hover:text-shuttle px-1 py-0.5 disabled:opacity-40 transition-colors"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-md text-shuttle/40 hover:text-shuttle hover:bg-mercury/30 disabled:opacity-40 transition-colors"
               title="Clear personal tier"
+              aria-label="Clear personal tier"
             >
-              ✕
+              <X size={10} weight="bold" />
             </button>
           </div>
 
@@ -910,7 +912,7 @@ export default function People() {
               disabled={bulkTagging}
               className="text-[10px] font-medium text-burnham border border-burnham/30 hover:border-burnham hover:bg-burnham hover:text-white px-2 py-0.5 rounded transition-colors disabled:opacity-40"
             >
-              Merge two…
+              Merge two...
             </button>
           )}
 
@@ -981,7 +983,7 @@ export default function People() {
             storageKey="people"
             kanban={{
               groupLabel: 'Status',
-              stages: KANBAN_COLUMNS.map(col => ({ id: col.status, label: col.label, color: col.status === 'ENGAGED' ? '#3E7A4E' : col.status === 'DORMANT' ? '#F87171' : '#94A3B8' })),
+              stages: KANBAN_COLUMNS.map(col => ({ id: col.status, label: col.label, color: col.status === 'ENGAGED' ? '#266DF0' : col.status === 'DORMANT' ? '#C23A3A' : '#6F7988' })),
               groupValue: contact => contact.status,
               cardColumns: ['company', 'tier', 'last'],
               onMove: async (contact, stage) => {

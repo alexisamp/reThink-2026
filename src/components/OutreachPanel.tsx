@@ -215,18 +215,18 @@ export default function OutreachPanel({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[199] bg-black/10"
+        className="fixed inset-0 z-40 bg-black/10"
         onClick={onClose}
       />
 
       {/* Panel */}
-      <div className="fixed inset-y-0 right-0 z-[200] w-80 bg-white border-l border-mercury shadow-2xl flex flex-col">
+      <div className="fixed inset-y-0 right-0 z-50 w-80 bg-white border-l border-mercury shadow-[var(--shadow-pop)] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-mercury shrink-0">
           <h2 className="text-sm font-semibold text-burnham">
             {editingLog ? editingLog.name : 'Log contact'}
           </h2>
-          <button onClick={onClose} className="text-shuttle/40 hover:text-shuttle transition-colors">
+          <button onClick={onClose} aria-label="Close outreach panel" className="text-shuttle/40 hover:text-shuttle transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -255,11 +255,11 @@ export default function OutreachPanel({
 
             {/* Attio search results dropdown */}
             {(attioSearching || attioSearchResults.length > 0) && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-mercury rounded-lg shadow-lg z-10 overflow-hidden">
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-mercury rounded-lg shadow-[var(--shadow-pop)] z-10 overflow-hidden">
                 {attioSearching && (
                   <div className="px-3 py-2 text-[11px] text-shuttle/40 flex items-center gap-2">
                     <div className="w-3 h-3 border border-shuttle/30 border-t-transparent rounded-full animate-spin" />
-                    Searching Attio…
+                    Searching Attio...
                   </div>
                 )}
                 {attioSearchResults.map(result => (
@@ -270,7 +270,7 @@ export default function OutreachPanel({
                   >
                     <span className="font-medium truncate">{result.full_name}</span>
                     {result.linkedin_url && (
-                      <span className="text-[9px] font-mono text-shuttle/40 shrink-0">linkedin</span>
+                      <span className="text-[10px] font-mono text-shuttle/40 shrink-0">linkedin</span>
                     )}
                   </button>
                 ))}
@@ -280,7 +280,7 @@ export default function OutreachPanel({
             {/* Attio linked pill */}
             {selectedAttioRecord && (
               <div className="mt-1.5 flex items-center gap-1.5">
-                <span className="text-[9px] bg-gossip text-burnham rounded px-2 py-0.5 font-mono">
+                <span className="text-[10px] bg-gossip text-burnham rounded px-2 py-0.5 font-mono">
                   Linked to Attio · {selectedAttioRecord.full_name}
                 </span>
                 <button
@@ -302,7 +302,7 @@ export default function OutreachPanel({
               type="text"
               value={linkedinUrl}
               onChange={e => { setLinkedinUrl(e.target.value); setLinkedinError(false) }}
-              placeholder="linkedin.com/in/… or just the handle"
+              placeholder="linkedin.com/in/... or just the handle"
               className={`w-full text-sm text-burnham border rounded-lg px-3 py-2 focus:outline-none focus:border-burnham transition-colors ${
                 linkedinError ? 'border-red-300' : 'border-mercury'
               }`}
@@ -397,7 +397,7 @@ export default function OutreachPanel({
                   <img src={referredBy.profile_photo_url} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" />
                 ) : (
                   <div className="w-5 h-5 rounded-full bg-burnham/10 flex items-center justify-center shrink-0">
-                    <span className="text-[9px] font-semibold text-burnham">{referredBy.name.charAt(0).toUpperCase()}</span>
+                    <span className="text-[10px] font-semibold text-burnham">{referredBy.name.charAt(0).toUpperCase()}</span>
                   </div>
                 )}
                 <span className="text-[12px] font-medium text-burnham truncate flex-1">{referredBy.name}</span>
@@ -420,13 +420,13 @@ export default function OutreachPanel({
                   className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-burnham transition-colors"
                 />
                 {referrerSearching && (
-                  <p className="text-[10px] text-shuttle/40 mt-1">Searching…</p>
+                  <p className="text-[10px] text-shuttle/40 mt-1">Searching...</p>
                 )}
                 {!referrerSearching && referrerQuery.trim().length >= 2 && referrerResults.length === 0 && (
                   <p className="text-[10px] text-shuttle/40 mt-1">No matches.</p>
                 )}
                 {referrerResults.length > 0 && (
-                  <ul className="mt-1 border border-mercury rounded-lg bg-white shadow-sm max-h-48 overflow-y-auto">
+                  <ul className="mt-1 border border-mercury rounded-lg bg-white shadow-[var(--shadow-card)] max-h-48 overflow-y-auto">
                     {referrerResults.map(r => (
                       <li key={r.id}>
                         <button
@@ -480,7 +480,7 @@ export default function OutreachPanel({
               rows={3}
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder="Notes about the conversation…"
+              placeholder="Notes about the conversation..."
               className="w-full text-sm text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-burnham transition-colors resize-none"
             />
           </div>
@@ -510,7 +510,7 @@ export default function OutreachPanel({
 
           {/* Attio sync status for existing synced records */}
           {editingLog?.attio_synced_at && (
-            <p className="text-[9px] text-shuttle/30 font-mono">
+            <p className="text-[10px] text-shuttle/30 font-mono">
               Synced to Attio · {new Date(editingLog.attio_synced_at).toLocaleDateString()}
             </p>
           )}
@@ -530,10 +530,10 @@ export default function OutreachPanel({
               disabled={saving}
               className="px-4 py-2 bg-burnham text-white text-sm font-medium rounded-lg hover:bg-burnham/90 disabled:opacity-50 transition-colors"
             >
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? 'Saving...' : 'Save'}
             </button>
             {syncing && !editingLog && (
-              <p className="text-[9px] text-shuttle/40 font-mono">Syncing to Attio…</p>
+              <p className="text-[10px] text-shuttle/40 font-mono">Syncing to Attio...</p>
             )}
           </div>
         </div>

@@ -1,7 +1,7 @@
 /**
  * YearAtAGlance — contribution-graph view of the whole year.
  * Two view modes:
- *   • Daily  — 7-row × 53-col GitHub grid, per-day cells with date numbers
+ *   • Daily - 7-row x 53-col GitHub grid, per-day cells with date numbers
  *   • Weekly — one cell per week, colored by % of weekly target
  * Three data layers: Weekly Goals | Daily Habits | Energy
  */
@@ -21,6 +21,20 @@ function todayISO(): string { return toISO(new Date()) }
 
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const ACTIVITY_SCALE = [
+  'var(--attio-haze, #EEEFF1)',
+  'var(--attio-ice, #E4EDFF)',
+  'var(--attio-periwinkle, #BAD0FA)',
+  'var(--attio-cobalt-500, #538BF3)',
+  'var(--attio-cobalt, #266DF0)',
+]
+const ENERGY_SCALE = [
+  'var(--attio-haze, #EEEFF1)',
+  'var(--attio-ice, #E4EDFF)',
+  'var(--attio-periwinkle, #BAD0FA)',
+  'var(--attio-cobalt-500, #538BF3)',
+  'var(--attio-cobalt, #266DF0)',
+]
 
 /** Build array of week-columns for a year.
  *  Each week = { monday: Date, days: (Date|null)[] length 7 }
@@ -85,36 +99,36 @@ interface TooltipState {
 // ─── Color scales ────────────────────────────────────────────────────────────
 
 function goalDailyColor(hasLog: boolean, qty: number, isFuture: boolean): string {
-  if (isFuture) return '#EBEDF0'
-  if (!hasLog || qty === 0) return '#EBEDF0'
-  if (qty >= 3) return '#003720'
-  if (qty >= 2) return '#30A14E'
-  return '#9BE9A8'
+  if (isFuture) return ACTIVITY_SCALE[0]
+  if (!hasLog || qty === 0) return ACTIVITY_SCALE[0]
+  if (qty >= 3) return ACTIVITY_SCALE[4]
+  if (qty >= 2) return ACTIVITY_SCALE[3]
+  return ACTIVITY_SCALE[2]
 }
 
 function goalWeeklyColor(pct: number, isFuture: boolean): string {
-  if (isFuture) return '#EBEDF0'
-  if (pct === 0) return '#EBEDF0'
-  if (pct < 0.5) return '#E5F9BD'
-  if (pct < 0.8) return '#79D65E'
-  if (pct < 1) return '#30A14E'
-  return '#003720'
+  if (isFuture) return ACTIVITY_SCALE[0]
+  if (pct === 0) return ACTIVITY_SCALE[0]
+  if (pct < 0.5) return ACTIVITY_SCALE[1]
+  if (pct < 0.8) return ACTIVITY_SCALE[2]
+  if (pct < 1) return ACTIVITY_SCALE[3]
+  return ACTIVITY_SCALE[4]
 }
 
 function habitColor(ratio: number, isFuture: boolean): string {
-  if (isFuture || ratio === 0) return '#EBEDF0'
-  if (ratio >= 0.9) return '#216E39'
-  if (ratio >= 0.6) return '#30A14E'
-  if (ratio >= 0.3) return '#9BE9A8'
-  return '#CAEBBE'
+  if (isFuture || ratio === 0) return ACTIVITY_SCALE[0]
+  if (ratio >= 0.9) return ACTIVITY_SCALE[4]
+  if (ratio >= 0.6) return ACTIVITY_SCALE[3]
+  if (ratio >= 0.3) return ACTIVITY_SCALE[2]
+  return ACTIVITY_SCALE[1]
 }
 
 function energyColor(e: number | undefined, isFuture: boolean): string {
-  if (isFuture || !e) return '#EBEDF0'
-  if (e >= 9) return '#1D4ED8'
-  if (e >= 7) return '#60A5FA'
-  if (e >= 5) return '#BFDBFE'
-  return '#DBEAFE'
+  if (isFuture || !e) return ENERGY_SCALE[0]
+  if (e >= 9) return ENERGY_SCALE[4]
+  if (e >= 7) return ENERGY_SCALE[3]
+  if (e >= 5) return ENERGY_SCALE[2]
+  return ENERGY_SCALE[1]
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -235,7 +249,7 @@ export default function YearAtAGlance() {
           {monthSpans.map(s => (
             <div
               key={s.month}
-              className="text-[9px] font-mono text-shuttle/40 text-left overflow-hidden"
+              className="text-[10px] font-mono text-shuttle/40 text-left overflow-hidden"
               style={{ width: s.count * (CELL + GAP) - GAP, flexShrink: 0 }}
             >
               {s.label}
@@ -252,7 +266,7 @@ export default function YearAtAGlance() {
             return (
               <div
                 key={wi}
-                className="text-[8px] font-mono text-shuttle/25 text-center overflow-hidden shrink-0"
+                className="text-[10px] font-mono text-shuttle/25 text-center overflow-hidden shrink-0"
                 style={{ width: CELL, marginRight: GAP }}
               >
                 {isFirst ? dayNum : ''}
@@ -268,7 +282,7 @@ export default function YearAtAGlance() {
             {DAY_LABELS.map((l, i) => (
               <div
                 key={i}
-                className="text-[9px] font-mono text-shuttle/30 text-right flex items-center justify-end pr-1"
+                className="text-[10px] font-mono text-shuttle/30 text-right flex items-center justify-end pr-1"
                 style={{ height: CELL }}
               >
                 {i % 2 === 0 ? l : ''}
@@ -301,7 +315,7 @@ export default function YearAtAGlance() {
                         borderRadius: 2,
                         cursor: isClickable ? 'pointer' : 'default',
                         opacity: isLogging ? 0.4 : 1,
-                        outline: isToday ? '1.5px solid #536471' : undefined,
+                        outline: isToday ? '1.5px solid var(--attio-cobalt, #266DF0)' : undefined,
                         outlineOffset: isToday ? 1 : undefined,
                         transition: 'opacity 0.1s',
                       }}
@@ -447,7 +461,7 @@ export default function YearAtAGlance() {
                   {monthSpans.map(s => (
                     <div
                       key={s.month}
-                      className="text-[9px] font-mono text-shuttle/40 text-left overflow-hidden"
+                      className="text-[10px] font-mono text-shuttle/40 text-left overflow-hidden"
                       style={{ width: s.count * (CELL + GAP) - GAP, flexShrink: 0 }}
                     >
                       {s.label}
@@ -462,7 +476,7 @@ export default function YearAtAGlance() {
                     return (
                       <div
                         key={wi}
-                        className="text-[8px] font-mono text-shuttle/25 text-center overflow-hidden shrink-0"
+                        className="text-[10px] font-mono text-shuttle/25 text-center overflow-hidden shrink-0"
                         style={{ width: CELL, marginRight: GAP }}
                       >
                         {isFirst && mon ? mon.getDate() : ''}
@@ -506,7 +520,7 @@ export default function YearAtAGlance() {
         {/* Legend */}
         <div className="flex items-center gap-1.5 pt-1">
           <span className="text-[10px] text-shuttle/40">0%</span>
-          {['#EBEDF0','#E5F9BD','#79D65E','#30A14E','#003720'].map(c => (
+          {ACTIVITY_SCALE.map(c => (
             <div key={c} style={{ width: CELL, height: CELL, backgroundColor: c, borderRadius: 2 }} />
           ))}
           <span className="text-[10px] text-shuttle/40">100%+</span>
@@ -543,7 +557,7 @@ export default function YearAtAGlance() {
         {renderDailyGrid(getColor, getTooltip)}
         <div className="flex items-center gap-1.5 mt-3">
           <span className="text-[10px] text-shuttle/40">0%</span>
-          {['#EBEDF0','#CAEBBE','#9BE9A8','#30A14E','#216E39'].map(c => (
+          {ACTIVITY_SCALE.map(c => (
             <div key={c} style={{ width: CELL, height: CELL, backgroundColor: c, borderRadius: 2 }} />
           ))}
           <span className="text-[10px] text-shuttle/40">100%</span>
@@ -577,7 +591,7 @@ export default function YearAtAGlance() {
         {renderDailyGrid(getColor, getTooltip)}
         <div className="flex items-center gap-1.5 mt-3">
           <span className="text-[10px] text-shuttle/40">Low</span>
-          {['#EBEDF0','#DBEAFE','#BFDBFE','#60A5FA','#1D4ED8'].map(c => (
+          {ENERGY_SCALE.map(c => (
             <div key={c} style={{ width: CELL, height: CELL, backgroundColor: c, borderRadius: 2 }} />
           ))}
           <span className="text-[10px] text-shuttle/40">High</span>
@@ -635,7 +649,7 @@ export default function YearAtAGlance() {
                   <button key={v} onClick={() => setViewMode(v)}
                     className={[
                       'text-[10px] px-3 py-1 rounded-md transition-colors font-medium',
-                      viewMode === v ? 'bg-white text-burnham shadow-sm' : 'text-shuttle/60 hover:text-burnham',
+                      viewMode === v ? 'bg-white text-burnham shadow-[var(--shadow-card)]' : 'text-shuttle/60 hover:text-burnham',
                     ].join(' ')}
                   >
                     {v === 'daily' ? 'Daily' : 'Weekly'}
@@ -662,21 +676,21 @@ export default function YearAtAGlance() {
               <div className="flex gap-8 text-sm flex-wrap">
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono mb-1">Habit Days</p>
-                  <p className="text-2xl font-bold text-burnham">{totalHabitDays}</p>
+                  <p className="text-2xl font-semibold text-burnham">{totalHabitDays}</p>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono mb-1">Conversations</p>
-                  <p className="text-2xl font-bold text-burnham">{totalInteractionsYear}</p>
+                  <p className="text-2xl font-semibold text-burnham">{totalInteractionsYear}</p>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono mb-1">English</p>
-                  <p className="text-2xl font-bold text-burnham">
+                  <p className="text-2xl font-semibold text-burnham">
                     {Math.floor(totalEnglishYear / 60)}h {totalEnglishYear % 60}m
                   </p>
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono mb-1">Milestones</p>
-                  <p className="text-2xl font-bold text-burnham">{milestones.length}</p>
+                  <p className="text-2xl font-semibold text-burnham">{milestones.length}</p>
                 </div>
               </div>
             </div>
@@ -687,7 +701,7 @@ export default function YearAtAGlance() {
       {/* Tooltip */}
       {tooltip && (
         <div
-          className="fixed z-50 bg-white border border-mercury/60 rounded-lg shadow-lg px-3 py-2 pointer-events-none"
+          className="fixed z-50 bg-white border border-mercury/60 rounded-lg shadow-[var(--shadow-pop)] px-3 py-2 pointer-events-none"
           style={{ left: tooltip.x + 14, top: tooltip.y - 48 }}
         >
           {tooltip.content.map((line, i) => (

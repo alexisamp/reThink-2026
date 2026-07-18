@@ -37,8 +37,8 @@ export default function HandoffPreview() {
     <aside className="hp-index"><div className="hp-index-hd"><Icon name="grid" size={14} /><span>Handoff states</span><b>{STATES.length}</b></div>{STATES.map((item, index) => <button key={item[0]} className={selected === index ? 'on' : ''} onClick={() => setSelected(index)}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item[1]}</strong></button>)}</aside>
     <section className="hp-main"><header className="hp-toolbar"><div><span className="hp-count">{label}</span><h1>{state[1]}</h1><small>{state[3]}</small></div><div className="hp-modes"><button className={mode === 'reference' ? 'on' : ''} onClick={() => setMode('reference')}>Reference</button><button className={mode === 'split' ? 'on' : ''} onClick={() => setMode('split')}>Split</button><button className={mode === 'live' ? 'on' : ''} onClick={() => setMode('live')}>Live</button></div><a className="btn btn-primary" href={state[2]} target="_blank" rel="noreferrer"><Icon name="arrowUpRight" size={12} />Open live</a></header>
       <div className={`hp-stage ${mode}`}>
-        {mode !== 'live' && <figure><figcaption>Handoff reference · 924×540</figcaption><img src={referenceUrl} alt={`${state[1]} handoff reference`} width={924} height={540} /></figure>}
-        {mode !== 'reference' && <figure><figcaption>Current implementation · 924×540</figcaption><iframe key={`${selected}-${state[2]}`} title={`${state[1]} live preview`} src={state[2]} width={924} height={540} /></figure>}
+        {mode !== 'live' && <figure><figcaption>Handoff reference · 924x540</figcaption><img src={referenceUrl} alt={`${state[1]} handoff reference`} width={924} height={540} /></figure>}
+        {mode !== 'reference' && <figure><figcaption>Current implementation · 924x540</figcaption><iframe key={`${selected}-${state[2]}`} title={`${state[1]} live preview`} src={state[2]} width={924} height={540} /></figure>}
       </div>
     </section>
   </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { House } from '@phosphor-icons/react'
+import { ArrowRight, House } from '@phosphor-icons/react'
 
 interface StepProps {
   onNext: (answers: Record<string, string>) => void
@@ -30,7 +30,7 @@ export default function L6({ onNext, onBack, saving, isLastStep, progress, step,
             <span className="text-mercury font-mono text-[10px]">{step} / {totalSteps}</span>
           </div>
           <div className="h-px w-full bg-mercury relative">
-            <div className="absolute left-0 top-0 h-full bg-pastel transition-all duration-500" style={{ width: `${progress}%` }} />
+            <div className="absolute left-0 top-0 h-full bg-burnham transition-all duration-500" style={{ width: `${progress}%` }} />
           </div>
         </header>
 
@@ -39,10 +39,10 @@ export default function L6({ onNext, onBack, saving, isLastStep, progress, step,
             <span className="text-[10px] uppercase tracking-[0.1em] text-shuttle block mb-4 font-medium">
               Level 6 of 11 — Play to Your Strengths
             </span>
-            <h1 className="text-2xl md:text-3xl font-semibold text-burnham tracking-[-0.02em] mb-3">
+            <h1 className="text-2xl md:text-3xl font-semibold text-burnham tracking-normal mb-3">
               Play to Your Strengths
             </h1>
-            <p className="text-shuttle italic font-serif text-sm">
+            <p className="text-shuttle text-sm font-medium leading-5">
               2026 is the year you find a workaround to weaknesses.
             </p>
             <p className="text-burnham text-sm font-medium mt-4">
@@ -99,10 +99,10 @@ export default function L6({ onNext, onBack, saving, isLastStep, progress, step,
             type="button"
             onClick={() => onNext(values)}
             disabled={saving}
-            className="text-sm font-bold text-burnham flex items-center gap-2 hover:opacity-80 transition-opacity disabled:opacity-50"
+            className="text-sm font-semibold text-burnham flex items-center gap-2 hover:opacity-80 transition-opacity disabled:opacity-50"
           >
             {saving ? 'Saving...' : isLastStep ? 'Finish' : 'Next'}
-            {!saving && <span className="text-pastel text-lg leading-none">→</span>}
+            {!saving && <ArrowRight size={15} className="text-burnham" />}
           </button>
         </footer>
       </main>

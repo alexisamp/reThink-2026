@@ -17,7 +17,7 @@ const DEFAULT_STAGES: ListStage[] = [
   { key: 'done',     label: 'Done',     description: '' },
 ]
 
-const COLORS = ['#79D65E', '#4ECDC4', '#F6B26B', '#9B6DDB', '#E8A87C', '#F67280', '#5D8AA8', '#6B7280']
+const COLORS = ['#266DF0', '#538BF3', '#BAD0FA', '#E4EDFF', '#1C1D1F', '#505967', '#6F7988', '#CAD0D9']
 
 export default function ListEditorModal({ open, existing, onClose, onSaved }: ListEditorModalProps) {
   const { user } = useAuth()
@@ -97,12 +97,12 @@ export default function ListEditorModal({ open, existing, onClose, onSaved }: Li
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="legacy-flow-scrim list-editor-scrim fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-xl"
+        className="legacy-flow-panel list-editor-panel bg-white rounded-lg max-w-2xl w-full max-h-[85vh] flex flex-col shadow-[var(--shadow-pop)]"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-3 border-b border-mercury">
+        <div className="legacy-flow-head flex items-center justify-between px-5 py-3 border-b border-mercury">
           <h2 className="text-sm font-semibold text-burnham">
             {existing ? 'Edit list' : 'New list'}
           </h2>
@@ -111,7 +111,7 @@ export default function ListEditorModal({ open, existing, onClose, onSaved }: Li
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto p-5 space-y-4">
+        <div className="legacy-flow-body flex-1 overflow-auto p-5 space-y-4">
           <div>
             <label className="block text-xs text-shuttle mb-1">Name *</label>
             <input
@@ -136,12 +136,12 @@ export default function ListEditorModal({ open, existing, onClose, onSaved }: Li
 
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="block text-xs text-shuttle mb-1">Icon (emoji)</label>
+              <label className="block text-xs text-shuttle mb-1">Icon</label>
               <input
                 value={icon}
                 onChange={e => setIcon(e.target.value)}
-                placeholder="e.g. 💰"
-                maxLength={3}
+                placeholder="icon:dollar"
+                maxLength={32}
                 className="w-full text-sm border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-burnham"
               />
             </div>
@@ -207,7 +207,7 @@ export default function ListEditorModal({ open, existing, onClose, onSaved }: Li
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-mercury">
+        <div className="legacy-flow-foot flex items-center justify-end gap-2 px-5 py-3 border-t border-mercury">
           <button onClick={onClose} className="px-3 py-1.5 text-sm text-shuttle hover:text-burnham">
             Cancel
           </button>
@@ -216,7 +216,7 @@ export default function ListEditorModal({ open, existing, onClose, onSaved }: Li
             disabled={saving || !name.trim() || stages.length === 0}
             className="px-4 py-1.5 bg-burnham text-gossip text-sm rounded-lg disabled:opacity-40"
           >
-            {saving ? 'Saving…' : existing ? 'Save changes' : 'Create list'}
+            {saving ? 'Saving...' : existing ? 'Save changes' : 'Create list'}
           </button>
         </div>
       </div>

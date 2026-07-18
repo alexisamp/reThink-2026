@@ -34,8 +34,8 @@ export function getMomentumBadge(score: number): {
   label: string
   className: string
 } {
-  if (score >= 90) return { label: `${score}`, className: 'text-burnham bg-gossip/50 border border-pastel' }
-  if (score >= 70) return { label: `${score}`, className: 'text-emerald-700 bg-emerald-50' }
-  if (score >= 40) return { label: `${score}`, className: 'text-amber-600 bg-amber-50' }
+  if (score >= 90) return { label: `${score}`, className: 'text-moss bg-gossip/50 border border-pastel' }
+  if (score >= 70) return { label: `${score}`, className: 'text-moss bg-gossip/50' }
+  if (score >= 40) return { label: `${score}`, className: 'text-shuttle bg-mercury/40' }
   return { label: `${score}`, className: 'text-red-600 bg-red-50' }
 }

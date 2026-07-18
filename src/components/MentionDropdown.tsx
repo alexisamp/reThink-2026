@@ -31,11 +31,11 @@ export default function MentionDropdown({ sections, selectedIdx, onSelect }: Men
   const showHeaders = activeSections.length > 1
 
   return (
-    <div className="bg-white border border-mercury rounded-xl shadow-lg overflow-hidden max-h-64 overflow-y-auto">
+    <div className="bg-white border border-mercury rounded-lg shadow-[var(--shadow-pop)] overflow-hidden max-h-64 overflow-y-auto">
       {sectionsWithStart.map(({ section, startIdx }, si) => (
         <div key={si}>
           {showHeaders && (
-            <p className={`text-[9px] uppercase tracking-widest text-shuttle/30 font-mono px-4 py-1.5 bg-mercury/10 ${si > 0 ? 'border-t border-mercury/30' : ''}`}>
+            <p className={`text-[10px] uppercase tracking-widest text-shuttle/30 font-mono px-4 py-1.5 bg-mercury/10 ${si > 0 ? 'border-t border-mercury/30' : ''}`}>
               {section.header}
             </p>
           )}
@@ -59,7 +59,7 @@ export default function MentionDropdown({ sections, selectedIdx, onSelect }: Men
         </div>
       ))}
       <div className="px-3 py-1 border-t border-mercury/40 bg-mercury/5">
-        <span className="text-[9px] text-shuttle/25 font-mono">↑↓ navegar · Tab seleccionar · Esc cerrar</span>
+        <span className="text-[10px] text-shuttle/25 font-mono">Up/Down navegar · Tab seleccionar · Esc cerrar</span>
       </div>
     </div>
   )

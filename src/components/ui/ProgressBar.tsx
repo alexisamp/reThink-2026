@@ -4,7 +4,7 @@ interface ProgressBarProps {
   color?: string
 }
 
-export default function ProgressBar({ value, className = '', color = 'bg-pastel' }: ProgressBarProps) {
+export default function ProgressBar({ value, className = '', color = 'bg-burnham' }: ProgressBarProps) {
   return (
     <div className={`h-[1px] w-full bg-mercury rounded-full overflow-hidden ${className}`}>
       <div

@@ -573,7 +573,7 @@ export default function TodoList({
               milestoneOptions={milestoneOptions}
               onCreateMention={onCreateMention}
               onAdd={(text, milestoneId, segments, links) => onAdd(text, milestoneId ?? (g.id === '__none__' ? null : g.id), segments, links)}
-              label={g.id === '__none__' ? 'Add a task' : `Add to ${g.name}…`}
+              label={g.id === '__none__' ? 'Add a task' : `Add to ${g.name}...`}
             />
           </div>
         ))

@@ -19,9 +19,9 @@ export interface CfgEntry {
 }
 
 export const TIER_CFG: Record<string, CfgEntry> = {
-  1: { label: 'T1', emoji: '✈️', name: 'Airport', color: 'var(--tier-1)' },
-  2: { label: 'T2', emoji: '🤝', name: 'Shared', color: 'var(--tier-2)' },
-  3: { label: 'T3', emoji: '🌱', name: 'Loose', color: 'var(--tier-3)' },
+  1: { label: 'T1', icon: 'paper-plane-tilt', name: 'Airport', color: 'var(--tier-1)' },
+  2: { label: 'T2', icon: 'handshake', name: 'Shared', color: 'var(--tier-2)' },
+  3: { label: 'T3', icon: 'git-branch', name: 'Loose', color: 'var(--tier-3)' },
 }
 
 export const STRENGTH_CFG: Record<string, CfgEntry> = {
@@ -57,9 +57,9 @@ export const STAGE_CFG: Record<string, CfgEntry> = {
 }
 
 export const DOMAIN_CFG: Record<string, CfgEntry> = {
-  pro: { emoji: '💼', name: 'professional' },
-  personal: { emoji: '👶', name: 'personal' },
-  mixed: { emoji: '⚖', name: 'mixed' },
+  pro: { icon: 'briefcase', name: 'professional' },
+  personal: { icon: 'users', name: 'personal' },
+  mixed: { icon: 'arrows-left-right', name: 'mixed' },
 }
 
 export const LIST_CFG: Record<string, CfgEntry> = {
@@ -101,9 +101,9 @@ export const SOURCE_CFG: Record<string, CfgEntry> = {
 
 // ── ABM layer ──────────────────────────────────────────────────────────────
 export const ICP_CFG: Record<string, CfgEntry> = {
-  icp1: { label: 'ICP 1', tag: 'AI-native · Seed–Series A', color: 'oklch(0.55 0.13 264)' },
-  icp2: { label: 'ICP 2', tag: 'AI / SaaS · Series B+', color: 'oklch(0.56 0.11 200)' },
-  icp3: { label: 'ICP 3', tag: 'Tech B2B / network', color: 'oklch(0.54 0.10 145)' },
+  icp1: { label: 'ICP 1', tag: 'AI-native · Seed–Series A', color: '#266DF0' },
+  icp2: { label: 'ICP 2', tag: 'AI / SaaS · Series B+', color: '#538BF3' },
+  icp3: { label: 'ICP 3', tag: 'Tech B2B / network', color: '#6F7988' },
 }
 
 export const ACCOUNT_SOURCE_CFG: Record<string, CfgEntry> = {

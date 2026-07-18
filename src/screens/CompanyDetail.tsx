@@ -43,10 +43,10 @@ function StatTile({
     <div className="p-2.5 bg-white border border-mercury rounded-lg">
       <div className="flex items-center gap-1 mb-1">
         {icon && <span className="text-shuttle/60">{icon}</span>}
-        <p className="text-[9px] text-shuttle uppercase tracking-wider font-medium">{label}</p>
+        <p className="text-[10px] text-shuttle uppercase tracking-wider font-medium">{label}</p>
       </div>
       <p className="text-base font-semibold text-midnight leading-none">{value}</p>
-      {subtitle && <p className="text-[9px] text-shuttle/60 mt-1 truncate">{subtitle}</p>}
+      {subtitle && <p className="text-[10px] text-shuttle/60 mt-1 truncate">{subtitle}</p>}
     </div>
   )
 }
@@ -117,7 +117,7 @@ function EditableField({
     <div className="group flex flex-col gap-0.5">
       <span className="text-xs text-shuttle uppercase tracking-wide">{label}</span>
       <div className="flex items-start gap-1">
-        <span className="text-sm text-midnight flex-1">{value || <span className="text-mercury italic">—</span>}</span>
+        <span className="text-sm text-midnight flex-1">{value || <span className="text-shuttle/60">—</span>}</span>
         <button onClick={() => { setDraft(value ?? ''); setEditing(true) }} className="opacity-0 group-hover:opacity-100 text-shuttle hover:text-burnham transition-opacity">
           <PencilSimple size={12} />
         </button>
@@ -166,9 +166,9 @@ export default function CompanyDetail() {
   )
 
   return (
-    <div className="flex flex-col h-full bg-[#FAFAFA]">
+    <div className="company-detail-page flex flex-col h-full bg-sidebar">
       {/* breadcrumb */}
-      <div className="flex items-center gap-2 px-6 py-3 bg-white border-b border-mercury">
+      <div className="detail-topbar flex items-center gap-2 px-6 py-3 bg-white border-b border-mercury">
         <Link to="/people/companies" className="text-shuttle hover:text-burnham"><ArrowLeft size={16} weight="bold" /></Link>
         <span className="text-shuttle text-sm">Companies</span>
         <CaretRight size={12} className="text-mercury" />
@@ -178,7 +178,7 @@ export default function CompanyDetail() {
         </button>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="detail-body flex flex-1 overflow-hidden">
         {/* main */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {/* ── Header: logo + name + headline ─────────────────── */}
@@ -193,7 +193,7 @@ export default function CompanyDetail() {
                   onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                 />
               ) : (
-                <div className="w-16 h-16 rounded-lg bg-gossip flex items-center justify-center text-burnham font-semibold text-2xl border border-pastel shrink-0">
+                <div className="w-16 h-16 rounded-lg bg-gossip flex items-center justify-center text-burnham font-semibold text-2xl border border-gossip shrink-0">
                   {company.name[0]?.toUpperCase()}
                 </div>
               )
@@ -205,7 +205,7 @@ export default function CompanyDetail() {
               )}
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 {company.linkedin_url && (
-                  <a href={company.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11px] text-blue-600 hover:underline">
+                  <a href={company.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11px] text-burnham hover:underline">
                     <LinkedinLogo size={12} weight="fill" />
                     LinkedIn
                   </a>
@@ -254,7 +254,7 @@ export default function CompanyDetail() {
           <div className="mb-6">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-shuttle mb-3">People ({people.length})</h3>
             {people.length === 0 ? (
-              <p className="text-sm text-mercury italic">No contacts linked to this company.</p>
+              <p className="text-sm text-shuttle/60">No contacts linked to this company.</p>
             ) : (
               <div className="flex flex-col gap-2">
                 {people.map(p => (
@@ -283,7 +283,7 @@ export default function CompanyDetail() {
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wide text-shuttle mb-3">Opportunities ({opps.length})</h3>
             {opps.length === 0 ? (
-              <p className="text-sm text-mercury italic">No opportunities linked.</p>
+              <p className="text-sm text-shuttle/60">No opportunities linked.</p>
             ) : (
               <div className="flex flex-col gap-2">
                 {opps.map(o => (
@@ -296,7 +296,7 @@ export default function CompanyDetail() {
                       <p className="text-sm font-medium text-midnight">{o.title}</p>
                       <p className="text-xs text-shuttle capitalize">{o.type}</p>
                     </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${
                       o.stage === 'won' ? 'bg-gossip text-burnham' :
                       o.stage === 'lost' ? 'bg-red-100 text-red-700' :
                       'bg-mercury text-shuttle'
@@ -309,7 +309,7 @@ export default function CompanyDetail() {
         </div>
 
         {/* sidebar */}
-        <aside className="w-[260px] flex-shrink-0 border-l border-mercury bg-white overflow-y-auto px-4 py-5">
+        <aside className="detail-sidebar w-[260px] flex-shrink-0 border-l border-mercury bg-white overflow-y-auto px-4 py-5">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-shuttle mb-4">Company Details</h4>
           <div className="flex flex-col gap-3">
             <EditableField label="Name" value={company.name} onSave={v => updateField('name', v ?? company.name)} />

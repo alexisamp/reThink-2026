@@ -1,5 +1,5 @@
 import React from 'react'
-import { House } from '@phosphor-icons/react'
+import { ArrowRight, House } from '@phosphor-icons/react'
 
 interface StepField {
   key: string
@@ -50,7 +50,7 @@ export default function StepLayout({
           {field.label}
         </span>
       ) : (
-        <span className="text-mercury font-mono text-xs group-focus-within:text-pastel transition-colors flex-shrink-0">
+        <span className="text-mercury font-mono text-xs group-focus-within:text-burnham transition-colors flex-shrink-0">
           {i + 1}
         </span>
       )}
@@ -97,7 +97,7 @@ export default function StepLayout({
           </div>
           <div className="h-px w-full bg-mercury relative">
             <div
-              className="absolute left-0 top-0 h-full bg-pastel transition-all duration-500"
+              className="absolute left-0 top-0 h-full bg-burnham transition-all duration-500"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -109,10 +109,10 @@ export default function StepLayout({
             <span className="text-[10px] uppercase tracking-[0.1em] text-shuttle block mb-4 font-medium">
               {tagline}
             </span>
-            <h1 className="text-2xl md:text-3xl font-semibold text-burnham tracking-[-0.02em] mb-3">
+            <h1 className="text-2xl md:text-3xl font-semibold text-burnham tracking-normal mb-3">
               {title}
             </h1>
-            <p className="text-shuttle italic font-serif text-sm">{subtitle}</p>
+            <p className="text-shuttle text-sm font-medium leading-5">{subtitle}</p>
           </div>
 
           {children ? (
@@ -121,7 +121,7 @@ export default function StepLayout({
             <div className="space-y-10">
               {sections.map((section, si) => (
                 <div key={si}>
-                  <h2 className="text-base font-bold text-burnham mb-5">{section.prompt}</h2>
+                  <h2 className="text-base font-semibold text-burnham mb-5">{section.prompt}</h2>
                   <div className="space-y-6">
                     {section.fields.map((f, fi) => renderField(f, fi))}
                   </div>
@@ -131,7 +131,7 @@ export default function StepLayout({
           ) : (
             <>
               <div className="mb-8">
-                <h2 className="text-lg font-bold text-burnham">{prompt}</h2>
+                <h2 className="text-lg font-semibold text-burnham">{prompt}</h2>
               </div>
               <form className="space-y-6" onSubmit={e => { e.preventDefault(); onNext() }}>
                 {fields?.map((f, fi) => renderField(f, fi))}
@@ -155,10 +155,10 @@ export default function StepLayout({
             type="button"
             onClick={onNext}
             disabled={saving}
-            className="text-sm font-bold text-burnham flex items-center gap-2 hover:opacity-80 transition-opacity disabled:opacity-50"
+            className="text-sm font-semibold text-burnham flex items-center gap-2 hover:opacity-80 transition-opacity disabled:opacity-50"
           >
             {saving ? 'Saving...' : isLastStep ? 'Finish' : 'Next'}
-            {!saving && <span className="text-pastel text-lg leading-none">→</span>}
+            {!saving && <ArrowRight size={15} className="text-burnham" />}
           </button>
         </footer>
       </main>

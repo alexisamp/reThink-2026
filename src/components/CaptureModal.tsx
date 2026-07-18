@@ -21,10 +21,10 @@ const CAPTURE_CONFIG: Record<CaptureType, {
   badgeText: string
 }> = {
   idea:       { label: 'Idea',       Icon: Lightbulb, chipBg: 'bg-gossip',         chipText: 'text-burnham', badgeBg: 'bg-gossip',         badgeText: 'text-burnham' },
-  learning:   { label: 'Learning',   Icon: BookOpen,  chipBg: 'bg-pastel/30',      chipText: 'text-burnham', badgeBg: 'bg-pastel/30',      badgeText: 'text-burnham' },
+  learning:   { label: 'Learning',   Icon: BookOpen,  chipBg: 'bg-gossip/40',      chipText: 'text-burnham', badgeBg: 'bg-gossip/40',      badgeText: 'text-burnham' },
   reflection: { label: 'Reflection', Icon: Eye,       chipBg: 'bg-shuttle/10',     chipText: 'text-shuttle', badgeBg: 'bg-shuttle/10',     badgeText: 'text-shuttle' },
   decision:   { label: 'Decision',   Icon: Scales,    chipBg: 'bg-burnham/15',     chipText: 'text-burnham', badgeBg: 'bg-burnham/15',     badgeText: 'text-burnham' },
-  win:        { label: 'Win',        Icon: Trophy,    chipBg: 'bg-pastel',         chipText: 'text-burnham', badgeBg: 'bg-pastel',         badgeText: 'text-burnham' },
+  win:        { label: 'Win',        Icon: Trophy,    chipBg: 'bg-gossip',         chipText: 'text-burnham', badgeBg: 'bg-gossip',         badgeText: 'text-burnham' },
   question:   { label: 'Question',   Icon: Question,  chipBg: 'bg-mercury',        chipText: 'text-shuttle', badgeBg: 'bg-mercury',        badgeText: 'text-shuttle' },
 }
 
@@ -39,7 +39,7 @@ export function CaptureChip({ type, title, onClick }: {
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${cfg.chipBg} ${cfg.chipText} hover:opacity-80 transition-opacity my-0.5`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium ${cfg.chipBg} ${cfg.chipText} hover:opacity-80 transition-opacity my-0.5`}
     >
       <Icon size={11} weight="bold" />
       <span>{title}</span>
@@ -143,7 +143,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
     saveTimer.current = setTimeout(() => persist(patch), 600)
   }, [persist])
 
-  // ── flushAndClose: reads from refs → always has latest values ──
+  // ── flushAndClose: reads from refs and always has latest values ──
   const flushAndClose = useCallback(() => {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
@@ -218,27 +218,27 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[200] bg-black/10 backdrop-blur-[2px]"
+        className="capture-scrim fixed inset-0 z-40 bg-black/10 backdrop-blur-[2px]"
         onClick={flushAndClose}
       />
 
       {/* Panel */}
-      <div className="fixed inset-0 z-[205] flex items-center justify-center pointer-events-none">
-        <div className="pointer-events-auto w-[560px] max-h-[80vh] bg-white rounded-2xl border border-mercury shadow-2xl flex flex-col overflow-hidden">
+      <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+        <div className="capture-panel pointer-events-auto w-[560px] max-h-[80vh] bg-white rounded-lg border border-mercury shadow-[var(--shadow-pop)] flex flex-col overflow-hidden">
 
           {/* ── Header ── */}
-          <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-mercury/50 shrink-0">
-            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${cfg.badgeBg} ${cfg.badgeText}`}>
+          <div className="capture-head flex items-center justify-between px-6 pt-5 pb-3 border-b border-mercury/50 shrink-0">
+            <div className={`capture-badge inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold ${cfg.badgeBg} ${cfg.badgeText}`}>
               <Icon size={12} weight="bold" />
               <span>{cfg.label}</span>
             </div>
-            <button onClick={flushAndClose} className="text-shuttle/30 hover:text-shuttle transition-colors">
+            <button onClick={flushAndClose} aria-label="Close capture modal" className="text-shuttle/30 hover:text-shuttle transition-colors">
               <X size={16} />
             </button>
           </div>
 
           {/* ── Title ── */}
-          <div className="px-6 pt-4 pb-2 shrink-0">
+          <div className="capture-title-wrap px-6 pt-4 pb-2 shrink-0">
             <div className="relative">
               <input
                 type="text"
@@ -252,8 +252,8 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                 onBlur={e => {
                   if (e.target.value.trim()) persist({ title: e.target.value })
                 }}
-                className="w-full text-xl font-semibold text-burnham bg-transparent border-none outline-none placeholder-shuttle/20 pr-8"
-                placeholder="Title…"
+                className="capture-title w-full text-xl font-semibold text-burnham bg-transparent border-none outline-none placeholder-shuttle/20 pr-8"
+                placeholder="Title..."
               />
               {title.trim() && hasGeminiKey && (
                 <button
@@ -265,7 +265,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                   <MagicWand size={13} />
                 </button>
               )}
-              {aiLoading && <p className="text-[10px] text-shuttle/50 mt-1 animate-pulse">Scoring…</p>}
+              {aiLoading && <p className="text-[10px] text-shuttle/50 mt-1 animate-pulse">Scoring...</p>}
               {aiResult && (
                 <div className="mt-2 p-2 bg-gossip/20 rounded-lg border border-gossip/40 text-[11px]">
                   <div className="flex items-center justify-between mb-1">
@@ -277,7 +277,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                       >
                         Apply
                       </button>
-                      <button onClick={clearAi} className="text-shuttle/40 hover:text-shuttle transition-colors">
+                      <button onClick={clearAi} aria-label="Dismiss AI score" className="text-shuttle/40 hover:text-shuttle transition-colors">
                         <X size={10} />
                       </button>
                     </div>
@@ -290,8 +290,8 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
           </div>
 
           {/* ── Body — always editable textarea, no toggle ── */}
-          <div className="flex-1 overflow-y-auto px-6 pb-4 min-h-0">
-            <div className="flex items-center gap-0.5 mb-2 -ml-1">
+          <div className="capture-body flex-1 overflow-y-auto px-6 pb-4 min-h-0">
+            <div className="capture-toolbar flex items-center gap-0.5 mb-2 -ml-1">
               <ToolbarBtn label="B"  onClick={() => wrapSelection('**')} />
               <ToolbarBtn label="I"  onClick={() => wrapSelection('*')} />
               <ToolbarBtn label="~~" onClick={() => wrapSelection('~~')} />
@@ -319,13 +319,13 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                   linked_milestone_id: linkedMilestoneIdRef.current || null,
                 })
               }}
-              className="w-full min-h-[140px] bg-transparent border-none outline-none text-sm text-burnham resize-none leading-relaxed placeholder-shuttle/20 focus:ring-0"
-              placeholder="Add context, notes, reflections…"
+              className="capture-textarea w-full min-h-[140px] bg-transparent border-none outline-none text-sm text-burnham resize-none leading-relaxed placeholder-shuttle/20 focus:ring-0"
+              placeholder="Add context, notes, reflections..."
             />
           </div>
 
           {/* ── Meta fields ── */}
-          <div className="px-6 py-3 border-t border-mercury/50 space-y-2 shrink-0">
+          <div className="capture-meta px-6 py-3 border-t border-mercury/50 space-y-2 shrink-0">
             {/* URL */}
             <div className="flex items-center gap-2">
               <Link size={12} className="text-shuttle/30 shrink-0" />
@@ -339,7 +339,7 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                   scheduleSave({ url: v || null })
                 }}
                 onBlur={e => persist({ url: e.target.value || null })}
-                placeholder="https://…"
+                placeholder="https://..."
                 className="flex-1 text-[12px] text-burnham bg-transparent border-none outline-none placeholder-shuttle/20"
               />
               {url && (
@@ -404,8 +404,8 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
           </div>
 
           {/* ── Footer ── */}
-          <div className="px-6 py-3 border-t border-mercury/50 flex items-center justify-between shrink-0">
-            <span className="text-[9px] font-mono text-shuttle/25">
+          <div className="capture-footer px-6 py-3 border-t border-mercury/50 flex items-center justify-between shrink-0">
+            <span className="text-[10px] font-mono text-shuttle/25">
               {formattedDate} · {cfg.label.toLowerCase()}
             </span>
             <div className="flex items-center gap-3">
@@ -418,8 +418,8 @@ export default function CaptureModal({ capture, onClose, goals, milestones, onUp
                   <span>delete</span>
                 </button>
               )}
-              <span className="text-[9px] font-mono text-shuttle/25">
-                {saveStatus === 'saving' ? 'saving…' : saveStatus === 'saved' ? 'saved ✓' : 'Esc to close'}
+              <span className="text-[10px] font-mono text-shuttle/25">
+                {saveStatus === 'saving' ? 'saving...' : saveStatus === 'saved' ? 'saved' : 'Esc to close'}
               </span>
             </div>
           </div>

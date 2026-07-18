@@ -16,16 +16,16 @@ const STAGES: OpportunityStage[] = ['exploring', 'active', 'negotiating', 'won',
 const STAGE_COLORS: Record<OpportunityStage, string> = {
   exploring: 'text-shuttle bg-mercury',
   active: 'text-burnham bg-gossip',
-  negotiating: 'text-yellow-800 bg-yellow-100',
-  won: 'text-green-800 bg-green-100',
+  negotiating: 'text-shuttle bg-mercury',
+  won: 'text-burnham bg-gossip',
   lost: 'text-red-700 bg-red-100',
 }
 
 const STAGE_BAR: Record<OpportunityStage, string> = {
   exploring: 'bg-mercury',
-  active: 'bg-pastel',
-  negotiating: 'bg-yellow-400',
-  won: 'bg-green-400',
+  active: 'bg-burnham',
+  negotiating: 'bg-shuttle',
+  won: 'bg-burnham',
   lost: 'bg-red-400',
 }
 
@@ -72,14 +72,14 @@ function formatValue(n: number | null): string {
 }
 
 function roundStatusIcon(status: string) {
-  if (status === 'completed') return <CheckCircle size={14} weight="fill" className="text-pastel" />
-  if (status === 'scheduled') return <Warning size={14} weight="fill" className="text-yellow-500" />
+  if (status === 'completed') return <CheckCircle size={14} weight="fill" className="text-burnham" />
+  if (status === 'scheduled') return <Warning size={14} weight="fill" className="text-shuttle" />
   return <Circle size={14} className="text-mercury" />
 }
 
 function filterStatusIcon(val: string) {
-  if (val === '✅' || val === 'true') return <CheckCircle size={13} weight="fill" className="text-pastel" />
-  if (val === '⚠️') return <Warning size={13} weight="fill" className="text-yellow-500" />
+  if (val === '✅' || val === 'true') return <CheckCircle size={13} weight="fill" className="text-burnham" />
+  if (val === '⚠️') return <Warning size={13} weight="fill" className="text-shuttle" />
   return <Circle size={13} className="text-mercury" />
 }
 
@@ -138,7 +138,7 @@ function EditableField({
           />
         )}
         <div className="flex gap-1">
-          <button onClick={save} className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 bg-burnham text-gossip rounded">
+          <button onClick={save} className="flex items-center gap-0.5 text-[10px] px-2 py-0.5 bg-burnham text-gossip rounded-md">
             <Check size={8} /> Save
           </button>
           <button onClick={() => setEditing(false)} className="text-[10px] px-2 py-0.5 text-shuttle hover:text-burnham">Cancel</button>
@@ -152,10 +152,11 @@ function EditableField({
       <SidebarLabel>{label}</SidebarLabel>
       <div className="flex items-start gap-1">
         <span className="text-[12px] text-midnight flex-1 whitespace-pre-wrap">
-          {value || <span className="text-mercury italic text-[11px]">{placeholder ?? '—'}</span>}
+          {value || <span className="text-shuttle/60 text-[11px]">{placeholder ?? '—'}</span>}
         </span>
         <button onClick={() => { setDraft(value ?? ''); setEditing(true) }}
-          className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-shuttle hover:text-burnham transition-opacity">
+          className="opacity-0 group-hover:opacity-100 flex-shrink-0 text-shuttle hover:text-burnham transition-opacity"
+          aria-label={`Edit ${label}`}>
           <PencilSimple size={10} />
         </button>
       </div>
@@ -178,10 +179,11 @@ function ContentField({ label, value, onSave }: { label: string; value: string |
   return (
     <div className="group mb-4">
       <div className="flex items-center gap-2 mb-1.5">
-        <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50">{label}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-shuttle/50">{label}</p>
         {!editing && (
           <button onClick={() => { setDraft(value ?? ''); setEditing(true) }}
-            className="opacity-0 group-hover:opacity-100 text-shuttle hover:text-burnham transition-opacity">
+            className="opacity-0 group-hover:opacity-100 text-shuttle hover:text-burnham transition-opacity"
+            aria-label={`Edit ${label}`}>
             <PencilSimple size={10} />
           </button>
         )}
@@ -196,13 +198,13 @@ function ContentField({ label, value, onSave }: { label: string; value: string |
             autoFocus
           />
           <div className="flex gap-2">
-            <button onClick={save} className="text-[11px] px-3 py-1 bg-burnham text-gossip rounded">Save</button>
+            <button onClick={save} className="text-[11px] px-3 py-1 bg-burnham text-gossip rounded-md">Save</button>
             <button onClick={() => setEditing(false)} className="text-[11px] px-2 py-1 text-shuttle hover:text-burnham">Cancel</button>
           </div>
         </div>
       ) : (
         <p className="text-[13px] text-midnight whitespace-pre-wrap leading-relaxed">
-          {value || <span className="text-mercury italic">Click to add...</span>}
+          {value || <span className="text-shuttle/60">Click to add...</span>}
         </p>
       )}
     </div>
@@ -298,10 +300,10 @@ export default function OpportunityDetail() {
   ]
 
   return (
-    <div className="flex flex-col h-full bg-[#F7F7F5]">
+    <div className="opportunity-detail-page flex flex-col h-full bg-canvas">
       {/* ── breadcrumb ── */}
-      <div className="flex items-center gap-2 px-5 py-2.5 bg-white border-b border-mercury shrink-0">
-        <Link to="/people/opportunities" className="text-shuttle hover:text-burnham transition-colors">
+      <div className="detail-topbar flex items-center gap-2 px-5 py-2.5 bg-white border-b border-mercury shrink-0">
+        <Link to="/people/opportunities" className="text-shuttle hover:text-burnham transition-colors" aria-label="Back to opportunities">
           <ArrowLeft size={14} weight="bold" />
         </Link>
         <span className="text-[12px] text-shuttle">Opportunities</span>
@@ -311,7 +313,7 @@ export default function OpportunityDetail() {
 
       {/* ── TLDR bar ── */}
       {prepData.tldr && (
-        <div className="px-5 py-2 bg-gossip/20 border-b border-gossip/40 shrink-0">
+        <div className="detail-tldr px-5 py-2 bg-gossip/20 border-b border-gossip/40 shrink-0">
           <p className="text-[12px] text-burnham leading-relaxed">
             <span className="font-semibold mr-1.5">TLDR:</span>
             {prepData.tldr}
@@ -320,7 +322,7 @@ export default function OpportunityDetail() {
       )}
 
       {/* ── stage pipeline ── */}
-      <div className="px-5 py-2.5 bg-white border-b border-mercury shrink-0">
+      <div className="detail-stagebar px-5 py-2.5 bg-white border-b border-mercury shrink-0">
         <div className="flex items-center gap-0.5">
           {STAGES.map((s, i) => {
             const passed = STAGES.indexOf(opp.stage) >= i
@@ -340,7 +342,7 @@ export default function OpportunityDetail() {
                   <span className="relative">{s}</span>
                 </button>
                 {i < STAGES.length - 1 && (
-                  <span className="text-mercury text-[10px] mx-0.5">›</span>
+                  <CaretRight size={9} className="text-mercury mx-0.5" />
                 )}
               </div>
             )
@@ -349,7 +351,7 @@ export default function OpportunityDetail() {
       </div>
 
       {/* ── tabs ── */}
-      <div className="flex items-center gap-0 px-5 bg-white border-b border-mercury shrink-0">
+      <div className="detail-tabs flex items-center gap-0 px-5 bg-white border-b border-mercury shrink-0">
         {TAB_CONFIG.filter(t => t.show !== false).map(t => (
           <button
             key={t.key}
@@ -366,7 +368,7 @@ export default function OpportunityDetail() {
         ))}
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="detail-body flex flex-1 overflow-hidden">
         {/* main content */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
 
@@ -406,7 +408,7 @@ export default function OpportunityDetail() {
               {/* Decision filter checklist */}
               {decisionFilter && Object.keys(decisionFilter).length > 0 && (
                 <div className="mb-5 p-3 bg-white border border-mercury rounded-lg">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">Decision Filter</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/50 mb-2">Decision Filter</p>
                   <div className="grid grid-cols-2 gap-1.5">
                     {Object.entries(decisionFilter).map(([key, val]) => (
                       <div key={key} className="flex items-center gap-1.5">
@@ -432,11 +434,11 @@ export default function OpportunityDetail() {
 
               {/* People — always expanded */}
               <div className="mt-2">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-shuttle/50 mb-2">
                   People ({contacts.length})
                 </p>
                 {contacts.length === 0 ? (
-                  <p className="text-[12px] text-mercury italic">No contacts linked.</p>
+                  <p className="text-[12px] text-shuttle/60">No contacts linked.</p>
                 ) : (
                   <div className="flex flex-col gap-1.5">
                     {contacts.map(c => (
@@ -487,14 +489,14 @@ export default function OpportunityDetail() {
                     return (
                       <div key={round} className="mb-6">
                         <div className="flex items-center gap-2 mb-3">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                            allDone ? 'bg-pastel text-white' : 'bg-mercury text-shuttle'
+                          <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-semibold shrink-0 ${
+                            allDone ? 'bg-burnham text-white' : 'bg-mercury text-shuttle'
                           }`}>
                             {round}
                           </div>
                           <span className="text-[12px] font-semibold text-midnight">Round {round}</span>
                           {allDone && (
-                            <span className="text-[10px] text-pastel font-medium">Completed</span>
+                            <span className="text-[10px] text-burnham font-medium">Completed</span>
                           )}
                         </div>
                         <div className="ml-3 border-l-2 border-mercury pl-4 flex flex-col gap-3">
@@ -511,7 +513,7 @@ export default function OpportunityDetail() {
                                 )}
                                 <span className={`mt-1 inline-block text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                   person.status === 'completed' ? 'bg-gossip text-burnham' :
-                                  person.status === 'scheduled' ? 'bg-yellow-100 text-yellow-800' :
+                                  person.status === 'scheduled' ? 'bg-mercury text-shuttle' :
                                   'bg-mercury text-shuttle'
                                 }`}>
                                   {person.status}
@@ -529,7 +531,7 @@ export default function OpportunityDetail() {
               {/* CLOSER framework prep */}
               {isActive && (
                 <div className="mt-6 pt-4 border-t border-mercury">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50 mb-3">CLOSER Framework</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-shuttle/50 mb-3">CLOSER Framework</p>
                   <div className="flex flex-col gap-3">
                     {[
                       { key: 'C', label: 'Clarify the role & fit' },
@@ -589,12 +591,12 @@ export default function OpportunityDetail() {
             <div>
               <p className="text-[13px] font-semibold text-midnight mb-1">Local Files</p>
               {!localDocs ? (
-                <p className="text-[12px] text-mercury italic">No local docs linked. Populated by the jacob-prep plugin via interview_prep.local_docs.</p>
+                <p className="text-[12px] text-shuttle/60">No local docs linked. Populated by the jacob-prep plugin via interview_prep.local_docs.</p>
               ) : (
                 <div className="flex flex-col gap-3 mt-3">
                   {localDocs.folder && (
                     <div className="p-3 bg-white border border-mercury rounded-lg">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-1">Folder</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/50 mb-1">Folder</p>
                       <div className="flex items-center gap-2">
                         <p className="text-[12px] text-midnight font-mono flex-1 truncate">{localDocs.folder}</p>
                         <button
@@ -617,7 +619,7 @@ export default function OpportunityDetail() {
                         : filename
                       return (
                         <div key={key} className="p-3 bg-white border border-mercury rounded-lg">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-1">{key}</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/50 mb-1">{key}</p>
                           <div className="flex items-center gap-2">
                             <p className="text-[12px] text-midnight flex-1 truncate">{filename}</p>
                             <button
@@ -642,7 +644,7 @@ export default function OpportunityDetail() {
               <p className="text-[13px] font-semibold text-midnight mb-4">Negotiation Prep</p>
 
               <div className="mb-5">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50 mb-3">GAINS Framework</p>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-shuttle/50 mb-3">GAINS Framework</p>
                 <div className="flex flex-col gap-1">
                   {[
                     { key: 'G', label: 'Goals — what you want' },
@@ -665,7 +667,7 @@ export default function OpportunityDetail() {
               </div>
 
               <div className="pt-4 border-t border-mercury">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50 mb-3">Comp Levers & Scripts</p>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-shuttle/50 mb-3">Comp Levers & Scripts</p>
                 {[
                   { key: 'comp_target', label: 'Base salary target / range' },
                   { key: 'scripts', label: 'Deflection scripts (counter-offer, delay, anchor)' },
@@ -687,10 +689,10 @@ export default function OpportunityDetail() {
         </div>
 
         {/* ── sidebar ── */}
-        <aside className="w-[240px] flex-shrink-0 border-l border-mercury bg-white overflow-y-auto px-4 py-4">
+        <aside className="detail-sidebar w-[240px] flex-shrink-0 border-l border-mercury bg-white overflow-y-auto px-4 py-4">
 
           <div className="mb-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">Details</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/50 mb-2">Details</p>
           </div>
 
           <EditableField label="Title" value={opp.title} onSave={v => updateField('title', v ?? opp.title)} />
@@ -739,7 +741,8 @@ export default function OpportunityDetail() {
             <div className="flex items-center gap-2 mt-1">
               <button
                 onClick={() => updateField('decision_filter_pass', !opp.decision_filter_pass)}
-                className={`w-8 h-4 rounded-full transition-colors ${opp.decision_filter_pass ? 'bg-pastel' : 'bg-mercury'}`}
+                className={`w-8 h-4 rounded-full transition-colors ${opp.decision_filter_pass ? 'bg-burnham' : 'bg-mercury'}`}
+                aria-label="Toggle decision filter"
               >
                 <div className={`w-3 h-3 rounded-full bg-white shadow transition-transform mx-0.5 ${opp.decision_filter_pass ? 'translate-x-4' : 'translate-x-0'}`} />
               </button>
@@ -758,7 +761,7 @@ export default function OpportunityDetail() {
                     to={`/people/${c.id}`}
                     className="flex items-center gap-1.5 hover:text-burnham transition-colors"
                   >
-                    <div className="w-4 h-4 rounded-full bg-gossip flex items-center justify-center text-burnham text-[8px] font-bold shrink-0">
+                    <div className="w-4 h-4 rounded-full bg-gossip flex items-center justify-center text-burnham text-[10px] font-semibold shrink-0">
                       {c.name[0]?.toUpperCase()}
                     </div>
                     <span className="text-[11px] text-midnight truncate">{c.name}</span>

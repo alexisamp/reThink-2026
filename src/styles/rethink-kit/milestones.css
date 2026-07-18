@@ -6,12 +6,12 @@
 /* ── Page header ── */
 .msc-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; margin-bottom: 34px; }
 .msc-hd-l { max-width: 600px; }
-.msc-title { font-family: var(--font-display); font-size: 30px; font-weight: 400; color: var(--burnham); letter-spacing: -0.025em; line-height: 1.05; margin: 0 0 7px; }
-.msc-sub { font-size: 13px; line-height: 1.5; color: var(--shuttle); margin: 0; letter-spacing: -0.005em; text-wrap: pretty; }
+.msc-title { font-family: var(--font-display); font-size: 30px; font-weight: 400; color: var(--burnham); letter-spacing: 0; line-height: 1.05; margin: 0 0 7px; }
+.msc-sub { font-size: 13px; line-height: 1.5; color: var(--shuttle); margin: 0; letter-spacing: 0; text-wrap: pretty; }
 .msc-hd-stat { flex-shrink: 0; text-align: right; padding-top: 4px; }
-.msc-hd-num { display: block; font-family: var(--font-display); font-size: 26px; font-weight: 400; color: var(--burnham); letter-spacing: -0.02em; line-height: 1; }
+.msc-hd-num { display: block; font-family: var(--font-display); font-size: 26px; font-weight: 400; color: var(--burnham); letter-spacing: 0; line-height: 1; }
 .msc-hd-num .msc-hd-den { color: var(--fg-3); }
-.msc-hd-lbl { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.10em; color: var(--fg-3); }
+.msc-hd-lbl { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0; color: var(--fg-3); }
 
 /* ── Goal list ── */
 .goal-list { display: flex; flex-direction: column; gap: 26px; }
@@ -21,23 +21,23 @@
 .goal-emoji { font-size: 19px; line-height: 1.1; }
 .goal-hd-txt { min-width: 0; }
 .goal-hd-top { display: flex; align-items: baseline; gap: 9px; margin-bottom: 2px; }
-.goal-name { font-family: var(--font-display); font-size: 17px; font-weight: 500; color: var(--burnham); letter-spacing: -0.018em; margin: 0; }
-.goal-area { font-family: var(--font-mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.10em; color: var(--c); background: color-mix(in oklab, var(--c) 12%, transparent); padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
-.goal-north { font-size: 12px; line-height: 1.45; color: var(--shuttle); font-style: italic; margin: 0; max-width: 540px; letter-spacing: -0.005em; text-wrap: pretty; }
+.goal-name { font-family: var(--font-display); font-size: 17px; font-weight: 500; color: var(--burnham); letter-spacing: 0; margin: 0; }
+.goal-area { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0; color: var(--c); background: color-mix(in oklab, var(--c) 12%, transparent); padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+.goal-north { font-size: 12px; line-height: 1.45; color: var(--shuttle); font-style: normal; margin: 0; max-width: 540px; letter-spacing: 0; text-wrap: pretty; }
 
 .goal-stat { min-width: 124px; text-align: right; }
 .goal-stat-line { display: flex; align-items: baseline; justify-content: flex-end; gap: 5px; }
 .goal-stat-num { font-family: var(--font-display); font-size: 16px; font-weight: 500; color: var(--burnham); line-height: 1; }
 .goal-stat-num .goal-stat-den { color: var(--fg-3); font-weight: 400; }
-.goal-stat-lbl { font-family: var(--font-mono); font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-3); }
+.goal-stat-lbl { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0; color: var(--fg-3); }
 .goal-stat-bar { height: 3px; border-radius: 999px; background: color-mix(in oklab, var(--mercury) 70%, transparent); overflow: hidden; margin: 6px 0 4px; }
 .goal-stat-bar span { display: block; height: 100%; border-radius: 999px; background: var(--c); transition: width 280ms var(--ease-out-soft); }
-.goal-stat-sub { font-family: var(--font-mono); font-size: 9px; color: var(--fg-3); letter-spacing: 0.02em; }
+.goal-stat-sub { font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); letter-spacing: 0; }
 
 /* ── Milestone grid ── */
 .goal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 11px; }
 
-.msc-card { --c: var(--goal-revenue); position: relative; background: var(--bg-1); border-radius: 11px; box-shadow: var(--shadow-card); padding: 11px 13px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 9px; overflow: hidden; transition: box-shadow 150ms ease, transform 150ms var(--ease-out-soft); }
+.msc-card { --c: var(--goal-revenue); position: relative; background: var(--bg-1); border-radius: 8px; box-shadow: var(--shadow-card); padding: 11px 13px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 9px; overflow: hidden; transition: box-shadow 150ms ease, transform 150ms var(--ease-out-soft); }
 .msc-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2.5px; background: var(--c); opacity: 0.8; }
 .msc-card:hover { box-shadow: var(--shadow-card-hover); transform: translateY(-1px); }
 .msc-card.done { opacity: 0.66; }
@@ -47,14 +47,14 @@
 .msc-emoji { font-size: 14px; line-height: 1; text-align: center; }
 [data-ms-emoji="off"] .msc-emoji { display: none; }
 [data-ms-emoji="off"] .msc-card-top { grid-template-columns: 1fr auto; }
-.msc-name { font-size: 13px; font-weight: 500; color: var(--burnham); letter-spacing: -0.01em; line-height: 1.25; }
-.msc-due { font-family: var(--font-mono); font-size: 9.5px; color: var(--fg-3); white-space: nowrap; letter-spacing: 0.02em; }
+.msc-name { font-size: 13px; font-weight: 500; color: var(--burnham); letter-spacing: 0; line-height: 1.25; }
+.msc-due { font-family: var(--font-mono); font-size: 10px; color: var(--fg-3); white-space: nowrap; letter-spacing: 0; }
 .msc-due.urgent { color: var(--acc-clay, var(--tier-1)); }
 
 .msc-prog { display: flex; align-items: center; gap: 9px; }
 .msc-bar { flex: 1; height: 3px; border-radius: 999px; background: color-mix(in oklab, var(--mercury) 70%, transparent); overflow: hidden; }
 .msc-bar span { display: block; height: 100%; border-radius: 999px; background: var(--c); transition: width 280ms var(--ease-out-soft); }
-.msc-frac { font-family: var(--font-mono); font-size: 9.5px; color: var(--shuttle); white-space: nowrap; }
+.msc-frac { font-family: var(--font-mono); font-size: 10px; color: var(--shuttle); white-space: nowrap; }
 .msc-frac-d { color: var(--fg-3); }
 
 /* quiet linked-entities row — only when truly relational, no label */
@@ -62,11 +62,11 @@
 .msc-push-people { display: inline-flex; }
 .msc-pushav { display: inline-flex; border-radius: 999px; box-shadow: 0 0 0 2px var(--bg-1); margin-left: -6px; }
 .msc-pushav:first-child { margin-left: 0; }
-.msc-pushmore { font-family: var(--font-mono); font-size: 9.5px; color: var(--shuttle); margin-left: 4px; align-self: center; }
-.msc-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--shuttle); background: color-mix(in oklab, var(--mercury) 42%, transparent); padding: 2px 8px 2px 4px; border-radius: 999px; letter-spacing: -0.005em; }
+.msc-pushmore { font-family: var(--font-mono); font-size: 10px; color: var(--shuttle); margin-left: 4px; align-self: center; }
+.msc-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--shuttle); background: color-mix(in oklab, var(--mercury) 42%, transparent); padding: 2px 8px 2px 4px; border-radius: 999px; letter-spacing: 0; }
 .msc-chip.opp { padding-left: 7px; color: var(--c); background: color-mix(in oklab, var(--c) 10%, transparent); }
 .msc-chip.opp i { font-size: 10px; }
-.msc-comark { width: 14px; height: 14px; border-radius: 4px; background: var(--burnham); color: #fff; font-size: 7.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.msc-comark { width: 14px; height: 14px; border-radius: 4px; background: var(--burnham); color: #fff; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
 /* ── Inline add (milestone card + goal row) ── */
 .msc-card.add { background: transparent; box-shadow: none; border: 1px dashed color-mix(in oklab, var(--shuttle) 30%, transparent); justify-content: center; align-items: center; min-height: 0; color: var(--shuttle); transition: border-color 150ms, color 150ms, background 150ms; }
@@ -80,10 +80,10 @@
 .msc-addrow input::placeholder { color: var(--fg-3); }
 
 /* next step inside the shared milestone overlay */
-.ms-overlay-next { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.4; color: var(--shuttle); letter-spacing: -0.005em; padding: 10px 0 2px; margin-bottom: 4px; border-bottom: 1px dashed var(--border-1); }
+.ms-overlay-next { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.4; color: var(--shuttle); letter-spacing: 0; padding: 10px 0 2px; margin-bottom: 4px; border-bottom: 1px dashed var(--border-1); }
 .ms-overlay-next i { color: var(--burnham); margin-top: 1px; flex-shrink: 0; }
 
-.goal-add { display: flex; align-items: center; padding: 14px 16px; border: 1px dashed color-mix(in oklab, var(--shuttle) 30%, transparent); border-radius: 12px; color: var(--shuttle); cursor: pointer; transition: border-color 150ms, color 150ms, background 150ms; }
+.goal-add { display: flex; align-items: center; padding: 14px 16px; border: 1px dashed color-mix(in oklab, var(--shuttle) 30%, transparent); border-radius: 8px; color: var(--shuttle); cursor: pointer; transition: border-color 150ms, color 150ms, background 150ms; }
 .goal-add:hover { border-color: var(--moss); color: var(--burnham); background: color-mix(in oklab, var(--moss) 5%, transparent); }
 .goal-add.active { border-style: solid; border-color: var(--moss); background: var(--bg-1); }
 .goal-add .msc-addrow input { font-family: var(--font-display); font-size: 16px; }

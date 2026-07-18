@@ -9,16 +9,16 @@ import SystematizeModal from '@/components/SystematizeModal'
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 const LEVEL_LABELS: Record<number, string> = {
-  1: 'L1 • The Mission',
-  2: 'L2 • Core Values',
-  3: 'L3 • The Audience',
-  4: 'L4 • The Critical Three',
-  5: 'L5 • Brand Promise',
-  6: 'L6 • 10-Year Vision',
-  7: 'L7 • 3-Year Picture',
-  8: 'L8 • 1-Year Plan',
-  9: 'L9 • Key Resources',
-  10: 'L10 • Risks',
+  1: 'L1 - The Mission',
+  2: 'L2 - Core Values',
+  3: 'L3 - The Audience',
+  4: 'L4 - The Critical Three',
+  5: 'L5 - Brand Promise',
+  6: 'L6 - 10-Year Vision',
+  7: 'L7 - 3-Year Picture',
+  8: 'L8 - 1-Year Plan',
+  9: 'L9 - Key Resources',
+  10: 'L10 - Risks',
 }
 
 export default function Strategy() {
@@ -48,7 +48,7 @@ export default function Strategy() {
   const [annualLetterSaved, setAnnualLetterSaved] = useState(false)
   const annualLetterTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editingGoalPill, setEditingGoalPill] = useState<string | null>(null)
-  const [pillDraft, setPillDraft] = useState<{ emoji: string; alias: string; color: string }>({ emoji: '', alias: '', color: '#79D65E' })
+  const [pillDraft, setPillDraft] = useState<{ emoji: string; alias: string; color: string }>({ emoji: '', alias: '', color: '#266DF0' })
   const [editingHabitPill, setEditingHabitPill] = useState<string | null>(null)
   const [habitPillDraft, setHabitPillDraft] = useState<{ emoji: string; alias: string }>({ emoji: '', alias: '' })
 
@@ -238,7 +238,7 @@ export default function Strategy() {
   }
 
   const openGoalPillEdit = (goal: Goal) => {
-    setPillDraft({ emoji: goal.emoji ?? '', alias: goal.alias ?? '', color: goal.color ?? '#79D65E' })
+    setPillDraft({ emoji: goal.emoji ?? '', alias: goal.alias ?? '', color: goal.color ?? '#266DF0' })
     setEditingGoalPill(goal.id)
   }
 
@@ -288,12 +288,12 @@ export default function Strategy() {
   )
 
   return (
-    <div className="min-h-screen bg-white text-burnham font-sans antialiased pb-40">
-      <main className="w-full max-w-[1400px] mx-auto px-6 md:px-12 lg:px-16 py-12">
+    <div className="strategy-screen min-h-screen bg-white text-burnham font-sans antialiased pb-40">
+      <main className="strategy-main w-full max-w-[1400px] mx-auto px-6 md:px-12 lg:px-16 py-12">
 
         {/* Header */}
-        <header className="mb-10">
-          <div className="flex items-center justify-between mb-8">
+        <header className="strategy-header mb-10">
+          <div className="strategy-breadcrumb-row flex items-center justify-between mb-8">
             <div className="flex items-center gap-2 text-xs font-medium text-shuttle">
               <button onClick={() => navigate('/today')} className="hover:text-burnham transition-colors">
                 <House size={14} />
@@ -306,30 +306,30 @@ export default function Strategy() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-burnham tracking-tight">Strategy War Map</h1>
+            <h1 className="strategy-title text-2xl font-semibold text-burnham tracking-tight">Strategy</h1>
           </div>
         </header>
 
         {/* Goals Grid */}
-        <div className="border-t border-mercury pt-4 pb-12">
+        <div className="strategy-goals-shell border-t border-mercury pt-4 pb-12">
           {/* Column headers */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 mb-6">
             <div className="lg:col-span-2">
               <div className="grid grid-cols-12 gap-6 items-center">
                 <div className="col-span-3">
-                  <span className="text-[10px] font-bold text-shuttle uppercase tracking-widest pl-1">ACTIVE GOALS</span>
+                  <span className="text-[10px] font-semibold text-shuttle uppercase tracking-widest pl-1">ACTIVE GOALS</span>
                 </div>
                 <div className="col-span-4">
-                  <span className="text-[10px] font-bold text-shuttle uppercase tracking-widest pl-2">MILESTONES</span>
+                  <span className="text-[10px] font-semibold text-shuttle uppercase tracking-widest pl-2">MILESTONES</span>
                 </div>
                 <div className="col-span-3 pl-6">
-                  <span className="text-[10px] font-bold text-shuttle uppercase tracking-widest">HABITS</span>
+                  <span className="text-[10px] font-semibold text-shuttle uppercase tracking-widest">HABITS</span>
                 </div>
                 <div className="col-span-2" />
               </div>
             </div>
             <div className="lg:col-span-1 pl-8 hidden lg:block">
-              <span className="text-[10px] font-bold text-shuttle uppercase tracking-widest">NOT DOING / BACKLOG</span>
+              <span className="text-[10px] font-semibold text-shuttle uppercase tracking-widest">NOT DOING / BACKLOG</span>
             </div>
           </div>
 
@@ -341,13 +341,13 @@ export default function Strategy() {
                   <p className="text-shuttle text-sm">No active goals yet. Complete the assessment to add goals.</p>
                 )}
                 {activeGoals.map(goal => (
-                  <div key={goal.id} className="w-full bg-white group/card">
+                  <div key={goal.id} className="strategy-goal-card w-full bg-white group/card">
                     <div className="grid grid-cols-12 gap-6 items-start">
                       <div className="col-span-3 flex flex-col gap-1 pr-2">
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2">
                             <h2
-                              className="text-burnham text-lg font-semibold tracking-[-0.02em] leading-snug cursor-pointer hover:underline"
+                              className="text-burnham text-lg font-semibold tracking-normal leading-snug cursor-pointer hover:underline"
                               onClick={() => navigate(`/dashboard/goal/${goal.id}`)}
                             >
                               {goal.text}
@@ -367,7 +367,7 @@ export default function Strategy() {
                               })
                               const badge = getMomentumBadge(score)
                               return (
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.className}`}>
+                                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${badge.className}`}>
                                   {badge.label}
                                 </span>
                               )
@@ -402,7 +402,7 @@ export default function Strategy() {
                               onChange={e => setPillDraft(p => ({ ...p, color: e.target.value }))}
                               className="w-5 h-5 rounded cursor-pointer border-0 p-0 bg-transparent"
                             />
-                            <button onClick={() => saveGoalPill(goal.id)} className="text-[10px] text-pastel font-semibold hover:text-burnham transition-colors">Save</button>
+                            <button onClick={() => saveGoalPill(goal.id)} className="text-[10px] text-burnham font-semibold hover:text-burnham transition-colors">Save</button>
                           </div>
                         ) : (
                           <button
@@ -411,17 +411,17 @@ export default function Strategy() {
                           >
                             {(goal.alias || goal.emoji || goal.color) ? (
                               <span
-                                className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full leading-none"
+                                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md leading-none"
                                 style={{
-                                  backgroundColor: goal.color ? `${goal.color}25` : '#E5F9BD',
-                                  color: goal.color ?? '#003720',
-                                  border: `1px solid ${goal.color ? `${goal.color}40` : '#79D65E40'}`,
+                                  backgroundColor: goal.color ? `${goal.color}18` : 'var(--attio-ice, #E4EDFF)',
+                                  color: goal.color ?? 'var(--attio-cobalt, #266DF0)',
+                                  border: `1px solid ${goal.color ? `${goal.color}33` : 'color-mix(in oklab, var(--attio-cobalt, #266DF0) 20%, transparent)'}`,
                                 }}
                               >
                                 {goal.emoji ? `${goal.emoji} ` : ''}{goal.alias ?? goal.text.slice(0, 6)}
                               </span>
                             ) : (
-                              <span className="text-[9px] text-shuttle/40 hover:text-shuttle transition-colors opacity-0 group-hover/card:opacity-100">+ tag</span>
+                              <span className="text-[10px] text-shuttle/40 hover:text-shuttle transition-colors opacity-0 group-hover/card:opacity-100">+ tag</span>
                             )}
                           </button>
                         )}
@@ -431,10 +431,10 @@ export default function Strategy() {
                           <ul className="space-y-2">
                             {getGoalMilestones(goal.id).map(m => (
                               <li key={m.id} className="flex items-center gap-3">
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.status === 'COMPLETE' ? 'bg-pastel' : 'bg-mercury'}`} />
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.status === 'COMPLETE' ? 'bg-burnham' : 'bg-mercury'}`} />
                                 <span className="text-sm text-burnham truncate flex-1">{m.text}</span>
                                 {m.target_date && (
-                                  <span className="text-[9px] font-mono text-shuttle/50 shrink-0">
+                                  <span className="text-[10px] font-mono text-shuttle/50 shrink-0">
                                     {MONTHS[new Date(m.target_date + 'T12:00:00').getMonth()]}
                                   </span>
                                 )}
@@ -449,7 +449,7 @@ export default function Strategy() {
                             <input
                               autoFocus
                               className="text-xs text-burnham border-b border-mercury bg-transparent focus:outline-none focus:border-burnham pl-4 pb-0.5 transition-colors"
-                              placeholder="Milestone text, then Enter…"
+                              placeholder="Milestone text, then Enter..."
                               value={newMilestoneText}
                               onChange={e => setNewMilestoneText(e.target.value)}
                               onKeyDown={e => {
@@ -495,12 +495,12 @@ export default function Strategy() {
                                         className="text-[11px] border-b border-mercury bg-transparent focus:outline-none focus:border-burnham w-28"
                                         onKeyDown={e => { if (e.key === 'Enter') saveHabitMeta(h.id) }}
                                       />
-                                      <button onClick={() => saveHabitMeta(h.id)} className="text-[10px] text-pastel font-semibold hover:text-burnham transition-colors">Save</button>
+                                      <button onClick={() => saveHabitMeta(h.id)} className="text-[10px] text-burnham font-semibold hover:text-burnham transition-colors">Save</button>
                                     </div>
                                   ) : (
                                     <div className="flex items-center gap-1.5">
                                       {(h.emoji || h.alias) && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-mercury/40 text-shuttle font-medium shrink-0">
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-mercury/40 text-shuttle font-medium shrink-0">
                                           {h.emoji ? `${h.emoji} ` : ''}{h.alias}
                                         </span>
                                       )}
@@ -516,7 +516,7 @@ export default function Strategy() {
                                   <span className="text-sm font-medium text-burnham">{h.text}</span>
                                 </div>
                               </div>
-                              <span className="text-shuttle text-[9px] uppercase tracking-wider">{h.frequency.replace('_', '×').replace('3×WEEK','3×/wk').replace('WEEKDAYS','Wkdays')}</span>
+                              <span className="text-shuttle text-[10px] uppercase tracking-wider">{h.frequency.replace('_', 'x').replace('3xWEEK','3x/wk').replace('WEEKDAYS','Wkdays')}</span>
                             </div>
                           ))}
                           {/* Inline add habit */}
@@ -524,7 +524,7 @@ export default function Strategy() {
                             <input
                               autoFocus
                               className="text-xs text-burnham border-b border-mercury bg-transparent focus:outline-none focus:border-burnham pb-0.5 transition-colors w-full"
-                              placeholder="Habit, then Enter…"
+                              placeholder="Habit, then Enter..."
                               value={newHabitText}
                               onChange={e => setNewHabitText(e.target.value)}
                               onKeyDown={e => {
@@ -544,13 +544,13 @@ export default function Strategy() {
                         </div>
                       </div>
                       <div className="col-span-2 flex flex-col items-end gap-2">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider h-fit ${statusBadge(goal.status, goal.goal_type)}`}>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider h-fit ${statusBadge(goal.status, goal.goal_type)}`}>
                           {goal.goal_type === 'ACTIVE' ? 'Active' : 'Planned'}
                         </span>
                         {needsSetup(goal) && (
                           <button
                             onClick={() => setSystematizeGoal(goal)}
-                            className="flex items-center gap-1.5 px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
+                            className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider bg-mercury/20 text-shuttle border border-mercury hover:bg-mercury/30 transition-colors"
                           >
                             <GearSix size={10} weight="fill" />
                             Needs Setup
@@ -559,7 +559,7 @@ export default function Strategy() {
                         {!needsSetup(goal) && (
                           <button
                             onClick={() => setSystematizeGoal(goal)}
-                            className="opacity-0 group-hover/card:opacity-100 flex items-center gap-1.5 px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider text-shuttle hover:text-burnham transition-all"
+                            className="opacity-0 group-hover/card:opacity-100 flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider text-shuttle hover:text-burnham transition-all"
                           >
                             <GearSix size={10} />
                             Edit System
@@ -573,17 +573,17 @@ export default function Strategy() {
 
                 {/* Add goal button */}
                 <button
-                  className="w-full flex items-center justify-center gap-2 py-4 border border-dashed border-mercury rounded-lg text-shuttle hover:text-burnham hover:border-burnham/30 transition-all"
+                  className="strategy-add-goal w-full flex items-center justify-center gap-2 py-4 border border-dashed border-mercury rounded-lg text-shuttle hover:text-burnham hover:border-burnham/30 transition-all"
                   onClick={() => navigate('/assessment')}
                 >
                   <Plus size={16} className="opacity-60" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Add Goal</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-widest">Add Goal</span>
                 </button>
               </div>
             </div>
 
             {/* Right: Backlog */}
-            <div className="lg:col-span-1 border-l border-mercury pl-8 hidden lg:block h-full">
+            <div className="strategy-backlog lg:col-span-1 border-l border-mercury pl-8 hidden lg:block h-full">
               <div className="space-y-5">
                 {backlogGoals.map(g => (
                   <div key={g.id} className="flex flex-col gap-1">
@@ -644,7 +644,7 @@ export default function Strategy() {
         </div>
 
         {/* Manifesto */}
-        <section className="mt-8 border-t border-mercury pt-8">
+        <section className="strategy-manifesto mt-8 border-t border-mercury pt-8">
           <div className="max-w-4xl mx-auto">
             <button
               onClick={() => setShowManifesto(v => !v)}
@@ -654,7 +654,7 @@ export default function Strategy() {
                 Manifesto 2026
               </span>
               <span className="text-[10px] text-shuttle/50 group-hover:text-shuttle transition-colors">
-                {showManifesto ? '— hide' : '+ show'}
+                {showManifesto ? 'Hide' : 'Show'}
               </span>
             </button>
 
@@ -668,7 +668,7 @@ export default function Strategy() {
                     const isEditing = editingEntry === key
                     return (
                       <div key={level} className="relative flex gap-8 items-start group">
-                        <div className="relative z-10 flex-shrink-0 w-6 h-6 rounded-full bg-white border border-mercury text-pastel text-[10px] flex items-center justify-center font-bold mt-1">
+                        <div className="relative z-10 flex-shrink-0 w-6 h-6 rounded-md bg-white border border-mercury text-burnham text-[10px] flex items-center justify-center font-semibold mt-1">
                           {level}
                         </div>
                         <div className="flex-1 pt-1">
@@ -711,10 +711,10 @@ export default function Strategy() {
         </section>
 
         {/* Annual Letter */}
-        <div className="mt-16 pt-12 border-t border-mercury">
+        <div className="strategy-annual-letter mt-16 pt-12 border-t border-mercury">
           <div className="max-w-2xl">
             <div className="flex items-center gap-3 mb-6">
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">Annual Letter · 2026</span>
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">Annual Letter - 2026</span>
             </div>
             <p className="text-xs text-shuttle mb-4 leading-relaxed">
               Write a letter from December 31, 2026 to yourself today. What would you tell yourself if you achieved everything you set out to do?
@@ -728,7 +728,7 @@ export default function Strategy() {
               }}
               placeholder={"Dear [your name],\n\nIt's December 31, 2026, and looking back on this year..."}
               rows={10}
-              className="w-full text-sm text-burnham bg-transparent border-b border-mercury focus:border-burnham focus:outline-none resize-none leading-relaxed placeholder-shuttle/30 transition-colors"
+              className="strategy-annual-textarea w-full text-sm text-burnham bg-transparent border-b border-mercury focus:border-burnham focus:outline-none resize-none leading-relaxed placeholder-shuttle/30 transition-colors"
             />
             {annualLetterSaved && (
               <p className="text-[10px] text-shuttle/40 mt-2">Saved</p>

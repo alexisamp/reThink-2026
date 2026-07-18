@@ -14,14 +14,14 @@ const CAPTURE_MENU = [
 ]
 
 // Inline styles per capture type (avoids Tailwind purge issues in innerHTML)
-// goal/milestone/win/idea/learning/decision → green tones; question/reflection → gray
+// Attio-aligned: cobalt for active semantic tags, neutral gray for reflective tags.
 const PILL_STYLE: Record<CaptureType, string> = {
-  idea:       'background:#E5F9BD;border:1px solid rgba(121,214,94,0.4);color:#003720',
-  learning:   'background:rgba(121,214,94,0.3);border:1px solid rgba(121,214,94,0.4);color:#003720',
-  reflection: 'background:rgba(227,227,227,0.4);border:1px solid rgba(227,227,227,0.8);color:rgba(83,100,113,0.7)',
-  decision:   'background:rgba(0,55,32,0.08);border:1px solid rgba(0,55,32,0.15);color:#003720',
-  win:        'background:#79D65E;border:1px solid rgba(121,214,94,0.6);color:#003720',
-  question:   'background:rgba(227,227,227,0.5);border:1px solid #E3E3E3;color:#536471',
+  idea:       'background:#E4EDFF;border:1px solid rgba(38,109,240,0.22);color:#266DF0',
+  learning:   'background:rgba(38,109,240,0.07);border:1px solid rgba(38,109,240,0.20);color:#266DF0',
+  reflection: 'background:rgba(238,239,241,0.72);border:1px solid #E4E7EC;color:#6F7988',
+  decision:   'background:rgba(38,109,240,0.08);border:1px solid rgba(38,109,240,0.24);color:#266DF0',
+  win:        'background:#BAD0FA;border:1px solid rgba(38,109,240,0.28);color:#1C1D1F',
+  question:   'background:rgba(238,239,241,0.78);border:1px solid #E4E7EC;color:#6F7988',
 }
 
 const PILL_BASE = [
@@ -40,7 +40,7 @@ const PILL_BASE = [
 
 // ── Serialization helpers ──────────────────────────────────────────────────────
 
-/** Stored text → innerHTML with pill spans */
+/** Stored text to innerHTML with pill spans. */
 export function deserializeToHTML(text: string): string {
   // Backward compat: convert old block format /type title lines
   const normalized = text.replace(/^\/(\w+)\s+(.+)$/gm, (_, t, title) =>
@@ -72,11 +72,11 @@ export function deserializeToHTML(text: string): string {
       )
     }
   )
-  // Newlines → <br>
+  // Newlines to <br>.
   return withPills.replace(/\n/g, '<br>')
 }
 
-/** contentEditable DOM → stored text with [~type:title:gid:mid:tid~] markers (new 5-part format) */
+/** contentEditable DOM to stored text with [~type:title:gid:mid:tid~] markers (new 5-part format). */
 export function serializeFromDOM(div: HTMLDivElement): string {
   function walk(node: Node): string {
     if (node.nodeType === Node.TEXT_NODE) return node.textContent || ''
@@ -124,7 +124,7 @@ export function JournalEditor({
   onCaptureCreate,
   onFocus,
   onBlur,
-  placeholder = "What's on your mind…",
+  placeholder = "What's on your mind...",
   className = '',
   onScoreText,
   hasAiScorer = false,
@@ -140,7 +140,7 @@ export function JournalEditor({
   const dropdownRef = useRef(dropdown)
   dropdownRef.current = dropdown
 
-  // ── Sync external value → DOM ────────────────────────────────────────────
+  // ── Sync external value to DOM ───────────────────────────────────────────
   useEffect(() => {
     const el = editorRef.current
     if (!el) return
@@ -343,7 +343,7 @@ export function JournalEditor({
             return
           }
         }
-        // Normal Enter → insert <br>
+        // Normal Enter inserts <br>.
         const br = document.createElement('br')
         const range2 = sel.getRangeAt(0)
         range2.deleteContents()
@@ -378,7 +378,7 @@ export function JournalEditor({
         if (!sel || !sel.rangeCount) return
         const range = sel.getRangeAt(0)
 
-        // If selection contains a pill → block
+        // If selection contains a pill, block.
         if (!range.collapsed) {
           if (range.cloneContents().querySelector('[data-capture-pill]')) {
             e.preventDefault()
@@ -426,7 +426,7 @@ export function JournalEditor({
     <div className="relative">
       {/* ── Dropdown ── */}
       {dropdown && dropdown.items.length > 0 && (
-        <div className="mb-1 bg-white border border-mercury rounded-xl shadow-sm overflow-hidden min-w-[180px]">
+        <div className="mb-1 bg-white border border-mercury rounded-lg shadow-[var(--shadow-card)] overflow-hidden min-w-[180px]">
           {dropdown.items.map((item, idx) => (
             <button
               key={item.type}
@@ -456,7 +456,7 @@ export function JournalEditor({
         if (m && CAPTURE_TYPES.includes(m[1] as CaptureType)) {
           return (
             <p className="text-[10px] text-shuttle/30 font-mono mb-1">
-              type title, then ↵ to create {m[1]}
+              type title, then Enter to create {m[1]}
             </p>
           )
         }

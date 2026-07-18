@@ -119,19 +119,19 @@ export function WeeklyGoalsModal({ userId, onClose }: WeeklyGoalsModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-burnham/10 backdrop-blur-[2px]"
+      className="legacy-flow-scrim weekly-goals-scrim fixed inset-0 z-50 flex items-center justify-center bg-burnham/10 backdrop-blur-[2px]"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white border border-mercury rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+      <div className="legacy-flow-panel weekly-goals-panel bg-white border border-mercury rounded-lg shadow-[var(--shadow-pop)] w-full max-w-md mx-4 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-mercury/50">
+        <div className="legacy-flow-head flex items-center justify-between px-5 py-4 border-b border-mercury/50">
           <span className="text-[12px] font-semibold text-burnham uppercase tracking-widest">Weekly Goals</span>
-          <button onClick={onClose} className="text-shuttle/30 hover:text-shuttle transition-colors p-0.5">
+          <button onClick={onClose} aria-label="Close weekly goals" className="text-shuttle/30 hover:text-shuttle transition-colors p-0.5">
             <X size={14} />
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-2 max-h-[60vh] overflow-y-auto">
+        <div className="legacy-flow-body px-5 py-4 space-y-2 max-h-[60vh] overflow-y-auto">
           {loading ? (
             <p className="text-[11px] text-shuttle/40 py-4 text-center">Loading...</p>
           ) : (
@@ -204,7 +204,7 @@ export function WeeklyGoalsModal({ userId, onClose }: WeeklyGoalsModalProps) {
           )}
         </div>
 
-        <div className="px-5 pb-4 pt-2 border-t border-mercury/40">
+        <div className="legacy-flow-foot px-5 pb-4 pt-2 border-t border-mercury/40">
           <p className="text-[10px] text-shuttle/30 font-mono">Goals appear as dot-rows on Today screen</p>
         </div>
       </div>
@@ -226,12 +226,12 @@ function EditForm({
   saving: boolean
 }) {
   return (
-    <div className="border border-burnham/15 rounded-xl p-3 bg-gossip/5 space-y-2.5">
+    <div className="legacy-flow-subpanel border border-burnham/15 rounded-lg p-3 bg-gossip/5 space-y-2.5">
       <div className="flex items-center gap-2">
         <input
           value={editing.emoji}
           onChange={e => setEditing({ ...editing, emoji: e.target.value })}
-          placeholder="🎯"
+          placeholder="Icon"
           className="w-10 text-center text-[16px] border border-mercury rounded-lg py-1 focus:outline-none focus:border-burnham/30"
           maxLength={2}
         />
@@ -246,7 +246,7 @@ function EditForm({
       </div>
       <div className="flex items-center gap-2">
         <div className="flex-1">
-          <label className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">Type</label>
+          <label className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">Type</label>
           <select
             value={editing.type}
             onChange={e => setEditing({ ...editing, type: e.target.value as EditingHabit['type'] })}
@@ -256,7 +256,7 @@ function EditForm({
           </select>
         </div>
         <div className="flex-1">
-          <label className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">
+          <label className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">
             Target / week {editing.type === 'minutes' ? '(min)' : ''}
           </label>
           <input
@@ -269,7 +269,7 @@ function EditForm({
         </div>
       </div>
       <div>
-        <label className="text-[9px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">Data source</label>
+        <label className="text-[10px] uppercase tracking-widest text-shuttle/40 font-mono block mb-1">Data source</label>
         <select
           value={editing.integration_source}
           onChange={e => setEditing({ ...editing, integration_source: e.target.value })}

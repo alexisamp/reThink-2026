@@ -543,7 +543,7 @@ function FilePicker({
       >
         <span className="td-mention-avatar sq">+</span>
         <span className="td-mention-copy">
-          <span className="name">{importing ? 'Importing…' : 'Choose local file'}</span>
+          <span className="name">{importing ? 'Importing...' : 'Choose local file'}</span>
           <span className="sub">Excel and CSV files are converted to Google Sheets</span>
         </span>
       </button>
@@ -551,7 +551,7 @@ function FilePicker({
       {driveError ? (
         <div className="td-mention-empty compact">{driveError}</div>
       ) : driveSearching ? (
-        <div className="td-mention-empty compact">Searching Drive…</div>
+        <div className="td-mention-empty compact">Searching Drive...</div>
       ) : driveResults.length > 0 ? (
         driveResults.map((file, index) => (
           <button
@@ -965,7 +965,7 @@ export default function MentionEditor({
               />
             )
             : <MilestonePicker actions={msActions} selected={selected} style={pickerStyle} onPick={pickMilestone} />,
-        document.body,
+        document.body
       )}
     </div>
   )

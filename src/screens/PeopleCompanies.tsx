@@ -35,7 +35,7 @@ function normIcp(v: string | null | undefined): string | null {
   return null
 }
 
-// Real `account_stage` → handoff stage key (keep raw if unknown; chip renders it).
+// Real `account_stage` to handoff stage key (keep raw if unknown; chip renders it).
 function normStage(v: string | null | undefined): string | null {
   if (!v) return null
   const s = v.toLowerCase().trim()
@@ -198,7 +198,7 @@ export default function PeopleCompanies() {
       </header>
 
       {showAdd && (
-        <div className="flex items-center gap-3 px-6 py-3 bg-white border-b border-mercury">
+        <div className="people-record-addbar flex items-center gap-3 px-6 py-3 bg-white border-b border-mercury">
           <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Company name *" autoFocus
             className="flex-1 text-sm border border-mercury rounded px-2 py-1.5 focus:outline-none focus:border-burnham"
             onKeyDown={e => { if (e.key === 'Enter') addCompany(); if (e.key === 'Escape') setShowAdd(false) }} />

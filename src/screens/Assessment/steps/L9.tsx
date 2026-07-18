@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { House } from '@phosphor-icons/react'
+import { ArrowRight, House } from '@phosphor-icons/react'
 
 interface StepProps {
   onNext: (answers: Record<string, string>) => void
@@ -62,7 +62,7 @@ export default function L9({ onNext, onBack, saving, isLastStep, progress, step,
             <span className="text-mercury font-mono text-[10px]">{step} / {totalSteps}</span>
           </div>
           <div className="h-px w-full bg-mercury relative">
-            <div className="absolute left-0 top-0 h-full bg-pastel transition-all duration-500" style={{ width: `${progress}%` }} />
+            <div className="absolute left-0 top-0 h-full bg-burnham transition-all duration-500" style={{ width: `${progress}%` }} />
           </div>
         </header>
 
@@ -71,10 +71,10 @@ export default function L9({ onNext, onBack, saving, isLastStep, progress, step,
             <span className="text-[10px] uppercase tracking-[0.1em] text-shuttle block mb-4 font-medium">
               Level 9 of 11 — The Inner Circle
             </span>
-            <h1 className="text-2xl md:text-3xl font-semibold text-burnham tracking-[-0.02em] mb-3">
+            <h1 className="text-2xl md:text-3xl font-semibold text-burnham tracking-normal mb-3">
               The Inner Circle
             </h1>
-            <p className="text-shuttle italic font-serif text-sm">
+            <p className="text-shuttle text-sm font-medium leading-5">
               Consider each person from your list on the previous page and score their impact (+1 for positive, 0 for neutral, -1 for negative). Use the insights to strengthen relationships that elevate you and thoughtfully adjust those that don't.
             </p>
           </div>
@@ -104,7 +104,7 @@ export default function L9({ onNext, onBack, saving, isLastStep, progress, step,
             {people.map((name, pi) => (
               <div key={pi} className="grid grid-cols-[1fr_repeat(5,_44px)] gap-2 items-center py-3 border-b border-mercury">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="w-5 h-5 rounded-full bg-gossip flex items-center justify-center text-burnham text-[10px] font-bold flex-shrink-0">
+                  <span className="w-5 h-5 rounded-full bg-gossip flex items-center justify-center text-burnham text-[10px] font-semibold flex-shrink-0">
                     {pi + 1}
                   </span>
                   <span className="text-sm text-burnham font-medium truncate">{name}</span>
@@ -119,7 +119,7 @@ export default function L9({ onNext, onBack, saving, isLastStep, progress, step,
                           key={opt.value}
                           type="button"
                           onClick={() => change(key, opt.value)}
-                          className={`w-8 h-6 rounded text-xs font-bold transition-all ${
+                          className={`w-8 h-6 rounded text-xs font-semibold transition-all ${
                             current === opt.value
                               ? opt.value === '1'
                                 ? 'bg-gossip text-burnham'
@@ -144,7 +144,7 @@ export default function L9({ onNext, onBack, saving, isLastStep, progress, step,
               return (
                 <div key={pi} className="flex items-center gap-1.5 text-xs text-shuttle">
                   <span className="truncate max-w-[80px]">{name}</span>
-                  <span className={`font-bold ${score > 2 ? 'text-pastel' : score < 0 ? 'text-shuttle' : 'text-burnham'}`}>
+                  <span className={`font-semibold ${score > 2 ? 'text-burnham' : score < 0 ? 'text-shuttle' : 'text-burnham'}`}>
                     {score > 0 ? '+' : ''}{score}
                   </span>
                 </div>
@@ -166,10 +166,10 @@ export default function L9({ onNext, onBack, saving, isLastStep, progress, step,
             type="button"
             onClick={() => onNext(values)}
             disabled={saving}
-            className="text-sm font-bold text-burnham flex items-center gap-2 hover:opacity-80 transition-opacity disabled:opacity-50"
+            className="text-sm font-semibold text-burnham flex items-center gap-2 hover:opacity-80 transition-opacity disabled:opacity-50"
           >
             {saving ? 'Saving...' : isLastStep ? 'Finish' : 'Next'}
-            {!saving && <span className="text-pastel text-lg leading-none">→</span>}
+            {!saving && <ArrowRight size={15} className="text-burnham" />}
           </button>
         </footer>
       </main>

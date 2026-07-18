@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Star, Plus, Archive, CaretRight, SquaresFour, ChartLineUp, Check,
+  ArrowLeft, Star, Plus, Archive, CaretRight, SquaresFour, ChartLineUp, Check, Target,
 } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -15,7 +15,7 @@ import MilestonePanel from '@/components/MilestonePanel'
 import type { Milestone, Goal, Todo } from '@/types'
 
 type GoalLite = Pick<Goal, 'id' | 'text' | 'alias' | 'color' | 'emoji'>
-const FALLBACK = ['#3E7A4E', '#536471', '#7A3E68', '#3E5F7A', '#9A6B4F']
+const FALLBACK = ['#266DF0', '#538BF3', '#BAD0FA', '#6F7988', '#CAD0D9']
 
 function localDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -79,7 +79,7 @@ export default function MilestonePlan() {
     const idx = [...m.goal_id].reduce((s, ch) => s + ch.charCodeAt(0), 0) % FALLBACK.length
     return FALLBACK[idx]
   }
-  const emojiOf = (m: Milestone) => m.emoji ?? goalsMap.get(m.goal_id)?.emoji ?? '🎯'
+  const emojiOf = (m: Milestone) => m.emoji ?? goalsMap.get(m.goal_id)?.emoji
 
   const toggleFocus = async (m: Milestone, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -119,7 +119,7 @@ export default function MilestonePlan() {
         style={{ '--c': c } as React.CSSProperties}
       >
         <div className="msc-card-top">
-          <span className="msc-emoji" style={{ filter: isComplete ? 'grayscale(0.6)' : 'none' }}>{emojiOf(m)}</span>
+          <span className="msc-emoji" style={{ filter: isComplete ? 'grayscale(0.6)' : 'none' }}>{emojiOf(m) ?? <Target size={13} weight="bold" />}</span>
           <span className="msc-name">{m.text}</span>
           {due && <span className={`msc-due${due.urgent ? ' urgent' : ''}`}>{due.label}</span>}
         </div>
@@ -128,7 +128,7 @@ export default function MilestonePlan() {
             <span style={{ width: `${pct}%` }} />
           </div>
           <span className="msc-frac">{cnt.done}<span className="msc-frac-d">/{cnt.total}</span></span>
-          {isComplete && <Check size={12} weight="bold" className="text-moss shrink-0" />}
+          {isComplete && <Check size={12} weight="bold" className="text-burnham shrink-0" />}
         </div>
         <div className="msc-link">
           <button onClick={e => toggleFocus(m, e)} title={m.focused ? 'In Today' : 'Show in Today'} className="msc-chip">
@@ -172,16 +172,16 @@ export default function MilestonePlan() {
 
       <div className="goal-list">
         {loading ? (
-          <p className="text-[13px] text-shuttle/40">Loading…</p>
+          <p className="text-[13px] text-shuttle/40">Loading...</p>
         ) : view === 'overview' ? (
           <div className="space-y-9">
             {goals.map(g => {
               const list = pending.filter(m => m.goal_id === g.id)
-              const gc = g.color ?? '#3E7A4E'
+              const gc = g.color ?? '#266DF0'
               return (
                 <section key={g.id} className="goal-sec" style={{ '--c': gc } as React.CSSProperties}>
                   <header className="goal-hd">
-                    <span className="goal-emoji">{g.emoji ?? '🎯'}</span>
+                    <span className="goal-emoji">{g.emoji ?? <Target size={14} weight="bold" />}</span>
                     <div className="goal-hd-txt">
                       <div className="goal-hd-top">
                         <h2 className="goal-name">{g.alias ?? g.text}</h2>

@@ -62,9 +62,9 @@ const GROUPS: Array<{ id: DueBucket; label: string; hint: string }> = [
 ]
 
 const HEALTH = {
-  ok: { color: 'color-mix(in oklab, var(--moss) 62%, #fff)', label: 'on track' },
-  watch: { color: 'oklch(0.80 0.075 80)', label: 'needs attention' },
-  risk: { color: 'oklch(0.71 0.09 22)', label: 'at risk' },
+  ok: { color: '#266DF0', label: 'on track' },
+  watch: { color: '#6F7988', label: 'needs attention' },
+  risk: { color: '#C23A3A', label: 'at risk' },
 }
 
 function todayLocal(d = new Date()) {

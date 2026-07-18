@@ -1,8 +1,8 @@
 // NextSteps — people feed that nourishes the This Week KPIs.
-//  🟢 scheduled  : a contact with a planned/overdue next step (interactions.next_step)
-//  🟠 reach-out  : a contact overdue per cadence, birthday soon, or value owed
-// Data comes from the shared useRelationshipBrief hook (same source the People → Focus tab uses).
-// Each action logs an interaction today → auto-feeds the weekly KPIs (interactions / tier touches).
+// scheduled: a contact with a planned/overdue next step (interactions.next_step)
+// reach-out: a contact overdue per cadence, birthday soon, or value owed
+// Data comes from the shared useRelationshipBrief hook (same source the People Focus tab uses).
+// Each action logs an interaction today and auto-feeds the weekly KPIs (interactions / tier touches).
 import { Check, PaperPlaneTilt, UsersThree } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useRelationshipBrief, type BriefItem } from '@/hooks/useRelationshipBrief'
@@ -33,7 +33,7 @@ function toNSItem(b: BriefItem, today: string): NSItem {
   let when = b.reasonLabel
   if (scheduled && b.nextStepDate) when = fmtWhen(b.nextStepDate, today)
   else if (b.primaryReason === 'cadence_overdue') when = b.daysSinceContact != null ? `Cold ${b.daysSinceContact}d` : 'New'
-  else if (b.primaryReason === 'birthday_upcoming' && b.birthdayInDays != null) when = `🎂 ${b.birthdayInDays}d`
+  else if (b.primaryReason === 'birthday_upcoming' && b.birthdayInDays != null) when = `Birthday ${b.birthdayInDays}d`
   return {
     contactId: b.contactId,
     name: b.name,
@@ -71,7 +71,7 @@ export default function NextSteps({ userId, today, weekEnd, onActioned, onManage
 
   return (
     <div className="td-ns-rows">
-      {loading && <div className="td-ns-empty">Loading…</div>}
+      {loading && <div className="td-ns-empty">Loading...</div>}
       {!loading && items.length === 0 && <div className="td-ns-empty">Nobody waiting. Plan a follow-up.</div>}
       {!loading && items.map(it => (
         <div className={`td-ns-row ${it.status}`} key={it.contactId}>
@@ -81,7 +81,7 @@ export default function NextSteps({ userId, today, weekEnd, onActioned, onManage
             <span className="meta">
               <span className={`status-dot ${it.status}`} />
               <span className="when">{it.when}</span>
-              <span className="feeds">→ {it.feeds}</span>
+              <span className="feeds">{it.feeds}</span>
             </span>
           </div>
           <button

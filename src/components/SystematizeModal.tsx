@@ -225,10 +225,10 @@ export default function SystematizeModal({ goal, workbookId, userId, onClose, on
       className="fixed inset-0 bg-black/25 backdrop-blur-sm z-50 flex items-center justify-center p-6"
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className="h-[90vh] w-full max-w-5xl flex rounded-xl border border-mercury overflow-hidden shadow-2xl">
+      <div className="h-[90vh] w-full max-w-5xl flex rounded-lg border border-mercury overflow-hidden shadow-[var(--shadow-pop)]">
 
         {/* ── Left panel: Workbook Context ─────────────────── */}
-        <div className="w-[30%] bg-[#F8F9F9] border-r border-mercury flex flex-col shrink-0">
+        <div className="w-[30%] bg-mercury/20 border-r border-mercury flex flex-col shrink-0">
           <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-mercury/50">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">
               Context
@@ -247,7 +247,7 @@ export default function SystematizeModal({ goal, workbookId, userId, onClose, on
                 L8 · 1-Year Plan
               </p>
               <p className="text-[13px] text-burnham leading-relaxed">
-                {l8 || <span className="text-mercury italic text-xs">Not filled yet</span>}
+                {l8 || <span className="text-shuttle/60 text-xs">Not filled yet</span>}
               </p>
             </div>
             <div>
@@ -255,7 +255,7 @@ export default function SystematizeModal({ goal, workbookId, userId, onClose, on
                 L4 · Critical Three
               </p>
               <p className="text-[13px] text-burnham leading-relaxed">
-                {l4 || <span className="text-mercury italic text-xs">Not filled yet</span>}
+                {l4 || <span className="text-shuttle/60 text-xs">Not filled yet</span>}
               </p>
             </div>
             <div>
@@ -263,7 +263,7 @@ export default function SystematizeModal({ goal, workbookId, userId, onClose, on
                 L1 · The Mission
               </p>
               <p className="text-[13px] text-burnham leading-relaxed">
-                {l1 || <span className="text-mercury italic text-xs">Not filled yet</span>}
+                {l1 || <span className="text-shuttle/60 text-xs">Not filled yet</span>}
               </p>
             </div>
           </div>
@@ -271,16 +271,16 @@ export default function SystematizeModal({ goal, workbookId, userId, onClose, on
           {/* Save button */}
           <div className="px-6 pb-6 pt-4 border-t border-mercury">
             {warning && (
-              <p className="text-[10px] text-amber-600 mb-3 leading-relaxed bg-amber-50 rounded p-2">
+              <p className="text-[10px] text-shuttle mb-3 leading-relaxed bg-mercury/20 rounded p-2">
                 {warning}
               </p>
             )}
             <button
               onClick={handleSave}
               disabled={saving}
-              className="w-full py-3 bg-burnham text-white text-[10px] font-bold uppercase tracking-widest rounded hover:bg-[#002817] transition-colors disabled:opacity-60"
+              className="w-full py-3 bg-burnham text-white text-[10px] font-semibold uppercase tracking-widest rounded hover:bg-[#101113] transition-colors disabled:opacity-60"
             >
-              {saving ? 'Saving…' : 'Initialize System'}
+              {saving ? 'Saving...' : 'Initialize System'}
             </button>
           </div>
         </div>
@@ -317,7 +317,7 @@ export default function SystematizeModal({ goal, workbookId, userId, onClose, on
                       value={metric}
                       onChange={e => setMetric(e.target.value)}
                       className="w-full text-sm text-burnham border-b border-mercury pb-2 bg-transparent focus:outline-none focus:border-burnham transition-colors"
-                      placeholder="Success looks like…"
+                      placeholder="Success looks like..."
                     />
                   </div>
                   <div>
@@ -344,7 +344,7 @@ export default function SystematizeModal({ goal, workbookId, userId, onClose, on
                 </p>
                 <div className="relative group">
                   <Info size={12} className="text-shuttle/30 cursor-help" />
-                  <div className="absolute left-5 top-0 z-20 w-60 p-3 bg-burnham text-white text-[10px] leading-relaxed rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  <div className="absolute left-5 top-0 z-20 w-60 p-3 bg-burnham text-white text-[10px] leading-relaxed rounded shadow-[var(--shadow-pop)] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                     Inputs you control (calls made, hours coded, demos booked) that predict your outcome metric.
                   </div>
                 </div>
@@ -352,7 +352,7 @@ export default function SystematizeModal({ goal, workbookId, userId, onClose, on
 
               <div className="w-full">
                 {/* Header row */}
-                <div className="grid gap-3 mb-2 text-[9px] font-semibold uppercase tracking-widest text-shuttle/60"
+                <div className="grid gap-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-shuttle/60"
                   style={{ gridTemplateColumns: '1fr 100px 110px 28px' }}>
                   <div>Indicator Name</div>
                   <div>Unit</div>
@@ -417,7 +417,7 @@ export default function SystematizeModal({ goal, workbookId, userId, onClose, on
               </p>
               <div className="space-y-3">
                 {habits.map((h, i) => (
-                  <div key={i} className="bg-[#F8F9F9] border-l-2 border-pastel rounded-r p-4">
+                  <div key={i} className="bg-mercury/20 border-l-2 border-burnham rounded-r p-4">
                     <div className="mb-3">
                       <input
                         type="text"
@@ -429,7 +429,7 @@ export default function SystematizeModal({ goal, workbookId, userId, onClose, on
                     </div>
                     <div className="grid grid-cols-4 gap-4 items-end">
                       <div>
-                        <label className="text-[9px] font-semibold uppercase tracking-widest text-shuttle/60 block mb-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/60 block mb-1">
                           Frequency
                         </label>
                         <select
@@ -439,12 +439,12 @@ export default function SystematizeModal({ goal, workbookId, userId, onClose, on
                         >
                           <option value="DAILY">Daily</option>
                           <option value="WEEKDAYS">Weekdays</option>
-                          <option value="3X_WEEK">3× / Week</option>
+                          <option value="3X_WEEK">3x / Week</option>
                           <option value="WEEKLY">Weekly</option>
                         </select>
                       </div>
                       <div>
-                        <label className="text-[9px] font-semibold uppercase tracking-widest text-shuttle/60 block mb-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/60 block mb-1">
                           Time
                         </label>
                         <input
@@ -455,7 +455,7 @@ export default function SystematizeModal({ goal, workbookId, userId, onClose, on
                         />
                       </div>
                       <div>
-                        <label className="text-[9px] font-semibold uppercase tracking-widest text-shuttle/60 block mb-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-widest text-shuttle/60 block mb-1">
                           Reward
                         </label>
                         <input

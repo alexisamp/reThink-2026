@@ -291,6 +291,8 @@ export default function App() {
               <AppShell user={user} updater={updater}>
                 <Routes>
                   <Route path="/" element={<Navigate to="/today" replace />} />
+                  <Route path="/today" element={<Today />} />
+                  <Route path="/week-plan" element={<WeekPlan />} />
                   <Route path="/review" element={<ReviewQueue />} />
                   <Route path="/strategy" element={<Navigate to="/milestones" replace />} />
                   <Route path="/monthly" element={<Navigate to="/milestones" replace />} />

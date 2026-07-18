@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { MagnifyingGlass, BookOpen, CalendarBlank, Lightning, FileText } from '@phosphor-icons/react'
+import { ArrowLeft, MagnifyingGlass, BookOpen, CalendarBlank, Lightning, FileText } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useNavigate } from 'react-router-dom'
 
@@ -45,7 +45,7 @@ export default function ReflectionLibrary() {
             id: `review-notes-${r.id}`,
             type: 'daily_note',
             date: r.date,
-            title: `Daily Note — ${new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
+            title: `Daily Note - ${new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
             content: r.notes,
             meta: r.energy_level ? `Energy ${r.energy_level}/10` : undefined,
           })
@@ -55,7 +55,7 @@ export default function ReflectionLibrary() {
             id: `review-weekly-${r.id}`,
             type: 'weekly_insight',
             date: r.date,
-            title: `Weekly Focus — ${new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+            title: `Weekly Focus - ${new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
             content: r.weekly_one_thing,
           })
         }
@@ -64,7 +64,7 @@ export default function ReflectionLibrary() {
             id: `review-onething-${r.id}`,
             type: 'daily_note',
             date: r.date,
-            title: `One Thing — ${new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
+            title: `One Thing - ${new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
             content: r.one_thing,
           })
         }
@@ -81,7 +81,7 @@ export default function ReflectionLibrary() {
             date: `${p.year}-${String(p.month).padStart(2, '0')}-01`,
             title: `${monthNames[p.month - 1]} ${p.year} Monthly Recap`,
             content,
-            meta: p.rating ? `★ ${p.rating}/5` : undefined,
+            meta: p.rating ? `Rating ${p.rating}/5` : undefined,
           })
         }
       }
@@ -94,7 +94,7 @@ export default function ReflectionLibrary() {
           id: `workbook-${e.id}`,
           type: isAnnualLetter ? 'annual_letter' : 'workbook_entry',
           date: e.created_at?.split('T')[0] ?? '2026-01-01',
-          title: isAnnualLetter ? 'Annual Letter — 2026' : 'Workbook Entry',
+          title: isAnnualLetter ? 'Annual Letter - 2026' : 'Workbook Entry',
           content: e.answer,
           meta: e.section_key,
         })
@@ -143,17 +143,17 @@ export default function ReflectionLibrary() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="reflection-library-screen min-h-screen bg-white">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-mercury px-8 py-5">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-lg font-bold text-burnham">Reflection Library</h1>
+              <h1 className="text-lg font-semibold text-burnham">Reflection Library</h1>
               <p className="text-xs text-shuttle mt-0.5">{items.length} entries · 2026</p>
             </div>
-            <button onClick={() => navigate(-1)} className="text-xs text-shuttle hover:text-burnham transition-colors">
-              ← Back
+            <button onClick={() => navigate(-1)} className="inline-flex items-center gap-1 text-xs text-shuttle hover:text-burnham transition-colors">
+              <ArrowLeft size={12} /> Back
             </button>
           </div>
 
@@ -177,7 +177,7 @@ export default function ReflectionLibrary() {
                 className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide transition-all ${
                   typeFilter === t
                     ? 'bg-burnham text-white'
-                    : 'bg-[#F8F9F9] text-shuttle hover:bg-mercury'
+                    : 'bg-mercury/20 text-shuttle hover:bg-mercury'
                 }`}
               >
                 {t === 'all' ? 'All' : typeLabel(t)}
@@ -192,7 +192,7 @@ export default function ReflectionLibrary() {
         {loading ? (
           <div className="space-y-4">
             {[1,2,3,4,5].map(i => (
-              <div key={i} className="h-20 bg-[#F8F9F9] rounded-xl animate-pulse" />
+              <div key={i} className="h-20 bg-mercury/20 rounded-lg animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
@@ -205,9 +205,9 @@ export default function ReflectionLibrary() {
             {filtered.map(item => (
               <div key={item.id}
                 onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
-                className={`p-4 rounded-xl border transition-all hover:border-shuttle/40 cursor-pointer ${
+                className={`p-4 rounded-lg border transition-all hover:border-shuttle/40 cursor-pointer ${
                   item.type === 'annual_letter'
-                    ? 'bg-gossip/20 border-pastel/50'
+                    ? 'bg-gossip/20 border-gossip'
                     : 'bg-white border-mercury'
                 }`}
               >

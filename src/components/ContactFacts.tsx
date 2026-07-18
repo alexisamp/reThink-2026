@@ -1,13 +1,17 @@
 import { useState } from 'react'
-import { Plus, PencilSimple, TrashSimple, X, Star } from '@phosphor-icons/react'
+import {
+  Plus, PencilSimple, TrashSimple, X, Star,
+  UsersThree, Briefcase, CurrencyDollar, Fire, Lightning, Waves,
+  Prohibit, FilmSlate, FirstAidKit, Sparkle, NotePencil,
+} from '@phosphor-icons/react'
 import { useAuth } from '@/hooks/useAuth'
-import { useContactFacts, FACT_CATEGORIES, factEmoji, factCategoryLabel } from '@/hooks/useContactFacts'
+import { useContactFacts, FACT_CATEGORIES, factCategoryIcon, factCategoryLabel } from '@/hooks/useContactFacts'
 import type { ContactFact, ContactFactCategory } from '@/types'
 
 /**
  * Displays + captures key facts (Jacob's "ammunition for the Two-Thirds rule").
  * - Top view: all facts sorted by importance, with quick-expire badge if set
- * - Add button → opens compact modal
+ * - Add button opens compact modal
  * - Edit/delete inline
  */
 export default function ContactFacts({ contactId }: { contactId: string }) {
@@ -52,7 +56,7 @@ export default function ContactFacts({ contactId }: { contactId: string }) {
           {Object.entries(grouped).map(([category, list]) => (
             <div key={category}>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-shuttle/50 mb-1 flex items-center gap-1">
-                <span>{factEmoji(category as ContactFactCategory)}</span>
+                <FactCategoryIcon category={category as ContactFactCategory} />
                 <span>{factCategoryLabel(category as ContactFactCategory)}</span>
               </p>
               <div className="space-y-1 pl-4">
@@ -86,6 +90,23 @@ export default function ContactFacts({ contactId }: { contactId: string }) {
   )
 }
 
+function FactCategoryIcon({ category }: { category: ContactFactCategory }) {
+  const props = { size: 11, className: 'text-shuttle/60 shrink-0' }
+  switch (factCategoryIcon(category)) {
+    case 'users-three': return <UsersThree {...props} />
+    case 'briefcase': return <Briefcase {...props} />
+    case 'currency-dollar': return <CurrencyDollar {...props} />
+    case 'fire': return <Fire {...props} />
+    case 'lightning': return <Lightning {...props} />
+    case 'waves': return <Waves {...props} />
+    case 'prohibit': return <Prohibit {...props} />
+    case 'film-slate': return <FilmSlate {...props} />
+    case 'first-aid-kit': return <FirstAidKit {...props} />
+    case 'sparkle': return <Sparkle {...props} />
+    default: return <NotePencil {...props} />
+  }
+}
+
 // ─── Fact row ───────────────────────────────────────────────────────────────
 
 function FactRow({ fact, onEdit, onDelete }: { fact: ContactFact; onEdit: () => void; onDelete: () => void }) {
@@ -94,7 +115,7 @@ function FactRow({ fact, onEdit, onDelete }: { fact: ContactFact; onEdit: () => 
     <div className="flex items-start gap-1.5 group">
       <div className="flex items-center gap-0.5">
         {Array.from({ length: fact.importance }).map((_, i) => (
-          <Star key={i} size={8} weight="fill" className="text-yellow-500" />
+          <Star key={i} size={8} weight="fill" className="text-burnham" />
         ))}
       </div>
       <div className="flex-1 min-w-0">
@@ -157,14 +178,14 @@ function FactEditorModal({ existing, onClose, onSave }: FactEditorModalProps) {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
-        className="bg-white rounded-xl max-w-md w-full shadow-xl"
+        className="bg-white rounded-lg max-w-md w-full shadow-[var(--shadow-pop)]"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-mercury">
           <h2 className="text-sm font-semibold text-burnham">
             {existing ? 'Edit fact' : 'Capture fact'}
           </h2>
-          <button onClick={onClose} className="text-shuttle hover:text-burnham"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Close fact editor" className="text-shuttle hover:text-burnham"><X size={16} /></button>
         </div>
 
         <div className="p-4 space-y-3">
@@ -176,10 +197,10 @@ function FactEditorModal({ existing, onClose, onSave }: FactEditorModalProps) {
                   key={c.key}
                   onClick={() => setCategory(c.key)}
                   className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] transition-colors ${
-                    category === c.key ? 'bg-gossip text-burnham border border-pastel' : 'bg-white text-shuttle border border-mercury hover:border-burnham'
+                    category === c.key ? 'bg-gossip text-burnham border border-gossip' : 'bg-white text-shuttle border border-mercury hover:border-burnham'
                   }`}
                 >
-                  <span>{c.emoji}</span>
+                  <FactCategoryIcon category={c.key} />
                   <span>{c.label}</span>
                 </button>
               ))}

@@ -31,7 +31,7 @@ export function ListIconPickerPanel({ onPick, onUpload, className = '', style }:
     : EMOJI_CATEGORIES
 
   return <div className={`emoji-pop ${className}`.trim()} style={style} onClick={event => event.stopPropagation()}>
-    <input className="emoji-search" autoFocus placeholder="Search Emojis" value={query} onChange={event => setQuery(event.target.value)} />
+    <input className="emoji-search" autoFocus placeholder="Search icons" value={query} onChange={event => setQuery(event.target.value)} />
     {onUpload && <button type="button" className="emoji-upload" onClick={() => fileRef.current?.click()}><Icon name="image" size={15} /><span>Upload icon</span></button>}
     {onUpload && <input
       ref={fileRef}

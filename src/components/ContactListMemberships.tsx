@@ -6,7 +6,7 @@ import { useLists, useListMemberships } from '@/hooks/useLists'
 
 /**
  * Shows the lists this contact is in + their stage.
- * Inline add/remove/move stage. Click → opens list detail.
+ * Inline add/remove/move stage. Click opens list detail.
  */
 export default function ContactListMemberships({ contactId }: { contactId: string }) {
   const { user } = useAuth()
@@ -111,7 +111,7 @@ export default function ContactListMemberships({ contactId }: { contactId: strin
       </div>
 
       {showAdd && (
-        <div className="mt-2 p-2 bg-gossip/20 border border-pastel/40 rounded-lg space-y-1.5">
+        <div className="mt-2 p-2 bg-gossip/20 border border-gossip rounded-lg space-y-1.5">
           <div className="flex items-center gap-1.5">
             <select
               value={selectedListId}
@@ -122,7 +122,7 @@ export default function ContactListMemberships({ contactId }: { contactId: strin
               }}
               className="flex-1 text-xs border border-mercury bg-white rounded px-1.5 py-1 focus:outline-none focus:border-burnham"
             >
-              <option value="">Select list…</option>
+              <option value="">Select list...</option>
               {availableLists.map(l => (
                 <option key={l.id} value={l.id}>{l.icon ? `${l.icon} ` : ''}{l.name}</option>
               ))}

@@ -72,21 +72,21 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
 
   return (
     <>
-      <div className="fixed inset-0 z-[220] bg-black/15 backdrop-blur-[1px]" onClick={onClose} />
+      <div className="legacy-flow-scrim habit-edit-scrim fixed inset-0 z-40 bg-black/15 backdrop-blur-[1px]" onClick={onClose} />
       <div
-        className="fixed right-0 top-0 bottom-0 z-[225] w-80 bg-white border-l border-mercury shadow-2xl flex flex-col"
+        className="legacy-flow-panel legacy-flow-drawer habit-edit-panel fixed right-0 top-0 bottom-0 z-50 w-80 bg-white border-l border-mercury shadow-[var(--shadow-pop)] flex flex-col"
         tabIndex={0}
         onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
       >
 
-        <div className="flex items-center justify-between px-5 py-4 border-b border-mercury shrink-0">
+        <div className="legacy-flow-head flex items-center justify-between px-5 py-4 border-b border-mercury shrink-0">
           <p className="text-[10px] font-semibold text-burnham uppercase tracking-wide">Edit habit</p>
-          <button onClick={onClose} className="text-shuttle/30 hover:text-shuttle transition-colors">
+          <button onClick={onClose} aria-label="Close habit editor" className="text-shuttle/30 hover:text-shuttle transition-colors">
             <X size={14} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        <div className="legacy-flow-body flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
           <div>
             <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">Habit name</label>
@@ -99,7 +99,7 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
               <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">Alias (≤20 chars)</label>
               <input value={alias} onChange={e => setAlias(e.target.value.slice(0, 20))} maxLength={20}
                 className="w-full text-[11px] text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors"
-                placeholder="gym, read…" />
+                placeholder="gym, read..." />
             </div>
             <div className="w-20">
               <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">Emoji</label>
@@ -136,7 +136,7 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
                 <label className="text-[10px] uppercase tracking-wide text-shuttle/50 font-medium block mb-1">Unit</label>
                 <input value={unit} onChange={e => setUnit(e.target.value)}
                   className="w-full text-[11px] text-burnham border border-mercury rounded-lg px-3 py-2 focus:outline-none focus:border-shuttle transition-colors"
-                  placeholder="glasses, km, pages…" />
+                  placeholder="glasses, km, pages..." />
               </div>
             </div>
           )}
@@ -158,7 +158,7 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
               <option value="networking">People talked to today</option>
               <option value="prospecting">New contacts mapped</option>
             </select>
-            <p className="text-[9px] text-shuttle/30 mt-1">Auto-increments this habit when a contact is logged in Outreach</p>
+            <p className="text-[10px] text-shuttle/30 mt-1">Auto-increments this habit when a contact is logged in Outreach</p>
           </div>
 
           <div>
@@ -179,17 +179,17 @@ export default function HabitEditModal({ habit, goals, onClose, onUpdate }: Habi
                 </button>
               ))}
             </div>
-            <p className="text-[9px] text-shuttle/30 mt-1 font-mono">
+            <p className="text-[10px] text-shuttle/30 mt-1 font-mono">
               {scheduledDays ? `${scheduledDays.length} day${scheduledDays.length !== 1 ? 's' : ''} / week` : 'Every day'}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center justify-between px-5 py-4 border-t border-mercury/50 shrink-0">
+        <div className="legacy-flow-foot flex items-center justify-between px-5 py-4 border-t border-mercury/50 shrink-0">
           <button onClick={onClose} className="text-[10px] text-shuttle/50 hover:text-shuttle transition-colors">Cancel</button>
           <button onClick={handleSave} disabled={saving}
             className="px-3 py-1.5 bg-burnham text-gossip text-[10px] font-semibold rounded-lg hover:bg-burnham/80 transition-colors disabled:opacity-50">
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>

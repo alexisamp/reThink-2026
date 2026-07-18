@@ -70,7 +70,7 @@ function HabitDotGrid30({ logs }: { logs: HabitLog[] }) {
           title={dot.dateStr}
           className={`w-3 h-3 rounded-full ${
             dot.done
-              ? 'bg-pastel'
+              ? 'bg-burnham'
               : 'border border-mercury bg-transparent'
           }`}
         />
@@ -116,7 +116,7 @@ function InlineText({
       onChange={e => setDraft(e.target.value)}
       onBlur={() => { setEditing(false); if (draft !== value) onSave(draft) }}
       onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur() } }}
-      className={`bg-white border border-mercury rounded px-1 -mx-1 outline-none focus:border-pastel ${className}`}
+      className={`bg-white border border-mercury rounded px-1 -mx-1 outline-none focus:border-burnham ${className}`}
     />
   )
 }
@@ -162,7 +162,7 @@ function InlineDate({
       value={draft}
       onChange={e => setDraft(e.target.value)}
       onBlur={() => { setEditing(false); if (draft !== value) onSave(draft) }}
-      className={`bg-white border border-mercury rounded px-1 -mx-1 outline-none focus:border-pastel text-sm ${className}`}
+      className={`bg-white border border-mercury rounded px-1 -mx-1 outline-none focus:border-burnham text-sm ${className}`}
     />
   )
 }
@@ -411,17 +411,17 @@ export default function GoalDetail() {
   // ── Render ───────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-white pb-40">
-      <main className="w-full max-w-[960px] mx-auto px-6 py-8 flex flex-col gap-12">
+    <div className="goal-detail-screen min-h-screen bg-white pb-40">
+      <main className="goal-detail-main w-full max-w-[960px] mx-auto px-6 py-8 flex flex-col gap-12">
 
         {/* Breadcrumbs + back */}
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
           <nav className="flex flex-wrap items-center gap-2 text-sm font-medium">
-            <Link to="/today" className="flex items-center gap-1 text-shuttle hover:text-pastel transition-colors">
+            <Link to="/today" className="flex items-center gap-1 text-shuttle hover:text-burnham transition-colors">
               <House size={14} />
             </Link>
             <span className="text-mercury">/</span>
-            <Link to="/dashboard" className="text-shuttle hover:text-pastel transition-colors">Dashboard</Link>
+            <Link to="/dashboard" className="text-shuttle hover:text-burnham transition-colors">Dashboard</Link>
             <span className="text-mercury">/</span>
             <span className="text-burnham">{goal.text}</span>
           </nav>
@@ -430,13 +430,13 @@ export default function GoalDetail() {
             className="group flex items-center gap-2 pl-3 pr-5 py-2 rounded-full border border-mercury hover:border-burnham/20 bg-transparent hover:bg-gray-50 transition-all"
           >
             <ArrowLeft size={16} className="text-burnham" />
-            <span className="text-xs font-bold tracking-wider text-burnham">BACK</span>
+            <span className="text-xs font-semibold tracking-wider text-burnham">BACK</span>
           </button>
         </header>
 
         {/* ── Header ───────────────────────────────────────────── */}
         <section className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold text-burnham">{goal.text}</h1>
+          <h1 className="text-2xl font-semibold text-burnham">{goal.text}</h1>
           <p className="text-sm text-shuttle">Annual Target: {goal.metric || 'Not set'}</p>
         </section>
 
@@ -444,15 +444,15 @@ export default function GoalDetail() {
         <section className="grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-mercury pt-6">
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">Current Consistency</span>
-            <span className="text-2xl font-bold text-burnham">{consistency}%</span>
+            <span className="text-2xl font-semibold text-burnham">{consistency}%</span>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">Reps YTD</span>
-            <span className="text-2xl font-bold text-burnham">{repsYTD}</span>
+            <span className="text-2xl font-semibold text-burnham">{repsYTD}</span>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">Next Critical Milestone</span>
-            <span className="text-sm font-bold text-burnham leading-tight">{nextMilestoneStr}</span>
+            <span className="text-sm font-semibold text-burnham leading-tight">{nextMilestoneStr}</span>
           </div>
         </section>
 
@@ -478,15 +478,15 @@ export default function GoalDetail() {
                     {/* Circle */}
                     <div className="flex-shrink-0 relative z-10 bg-white py-0.5">
                       {state === 'completed' && (
-                        <div className="flex items-center justify-center w-7 h-7 rounded-full bg-pastel text-white">
+                        <div className="flex items-center justify-center w-7 h-7 rounded-full bg-burnham text-white">
                           <Check size={12} weight="bold" />
                         </div>
                       )}
                       {state === 'current' && (
                         <div className="relative flex items-center justify-center w-7 h-7">
-                          <span className="absolute inline-flex h-full w-full animate-pulse rounded-full bg-pastel opacity-30" />
-                          <div className="relative flex items-center justify-center w-7 h-7 rounded-full border-2 border-pastel bg-white">
-                            <div className="w-2 h-2 rounded-full bg-pastel" />
+                          <span className="absolute inline-flex h-full w-full animate-pulse rounded-full bg-burnham opacity-30" />
+                          <div className="relative flex items-center justify-center w-7 h-7 rounded-full border-2 border-burnham bg-white">
+                            <div className="w-2 h-2 rounded-full bg-burnham" />
                           </div>
                         </div>
                       )}
@@ -504,7 +504,7 @@ export default function GoalDetail() {
                           state === 'completed'
                             ? 'text-shuttle line-through'
                             : state === 'current'
-                            ? 'font-bold text-burnham'
+                            ? 'font-semibold text-burnham'
                             : 'text-shuttle'
                         }`}
                       />
@@ -512,7 +512,7 @@ export default function GoalDetail() {
                         value={ms.target_date || ''}
                         onSave={v => updateMilestoneDate(ms.id, v)}
                         className={`text-xs flex-shrink-0 ${
-                          state === 'current' ? 'font-bold text-burnham' : 'text-shuttle'
+                          state === 'current' ? 'font-semibold text-burnham' : 'text-shuttle'
                         }`}
                       />
                     </div>
@@ -537,7 +537,7 @@ export default function GoalDetail() {
               {habitStats.map((hs, idx) => (
                 <div key={hs.habit.id}>
                   <div className="flex flex-col gap-2 mb-2">
-                    <h4 className="text-sm font-bold text-burnham">{hs.habit.text}</h4>
+                    <h4 className="text-sm font-semibold text-burnham">{hs.habit.text}</h4>
                     <HabitDotGrid30 logs={hs.logs} />
                     <p className="text-xs text-shuttle">
                       Current Streak: {hs.streak} Days &middot; Success Rate: {hs.successRate}%
@@ -589,14 +589,14 @@ export default function GoalDetail() {
                                 type="number"
                                 defaultValue={val ?? ''}
                                 onBlur={e => upsertKpi(ind.id, month, e.target.value)}
-                                className="w-full min-w-[36px] text-center text-sm text-burnham bg-transparent border border-transparent hover:border-mercury focus:border-pastel focus:bg-white rounded px-0.5 py-1 outline-none transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                className="w-full min-w-[36px] text-center text-sm text-burnham bg-transparent border border-transparent hover:border-mercury focus:border-burnham focus:bg-white rounded px-0.5 py-1 outline-none transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                               />
                             </td>
                           )
                         })}
-                        <td className="py-2 px-2 text-center text-sm font-bold text-burnham">{ytd || ''}</td>
+                        <td className="py-2 px-2 text-center text-sm font-semibold text-burnham">{ytd || ''}</td>
                         <td className="py-2 px-1 text-center">
-                          {trend === 'up' && <TrendUp size={14} className="text-pastel inline" />}
+                          {trend === 'up' && <TrendUp size={14} className="text-burnham inline" />}
                           {trend === 'down' && <TrendDown size={14} className="text-red-400 inline" />}
                         </td>
                       </tr>
@@ -620,7 +620,7 @@ export default function GoalDetail() {
             value={notes}
             onChange={handleNotesChange}
             placeholder="Identify blockers, pivot notes, or resource needs..."
-            className="w-full min-h-[140px] p-4 rounded-lg border border-mercury focus:border-pastel focus:ring-0 bg-white font-mono text-sm text-burnham placeholder:text-shuttle/40 resize-none outline-none transition-colors"
+            className="w-full min-h-[140px] p-4 rounded-lg border border-mercury focus:border-burnham focus:ring-0 bg-white font-mono text-sm text-burnham placeholder:text-shuttle/40 resize-none outline-none transition-colors"
           />
         </section>
 

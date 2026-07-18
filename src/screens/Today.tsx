@@ -181,7 +181,7 @@ interface RecurringSeriesRow {
   active: boolean
 }
 
-const FALLBACK_COLORS = ['#3E7A4E', '#536471', '#7A3E68', '#3E5F7A', '#9A6B4F']
+const FALLBACK_COLORS = ['#266DF0', '#538BF3', '#BAD0FA', '#6F7988', '#CAD0D9']
 
 function shouldFallbackWithoutContentSegments(error: { message?: string; code?: string } | null) {
   if (!error) return false

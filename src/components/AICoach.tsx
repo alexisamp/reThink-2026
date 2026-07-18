@@ -76,7 +76,7 @@ export default function AICoach({ goals, habits, habitLogs, milestones, reviews,
   }
 
   return (
-    <div className="border border-mercury rounded-xl p-5">
+    <div className="border border-mercury rounded-lg p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Brain size={14} className="text-shuttle" />

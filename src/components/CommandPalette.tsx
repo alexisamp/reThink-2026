@@ -326,22 +326,22 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-start justify-center pt-[20vh] bg-black/10 backdrop-blur-[2px]"
+        className="cmdk-scrim fixed inset-0 z-50 flex items-start justify-center pt-[20vh] bg-black/10 backdrop-blur-[2px]"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-white border border-mercury rounded-xl shadow-2xl overflow-hidden"
+        className="cmdk-panel w-full max-w-lg bg-white border border-mercury rounded-lg shadow-[var(--shadow-pop)] overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         <input
           ref={inputRef}
-          placeholder="Type a command or search…"
-          className="w-full px-4 py-3 text-sm border-b border-mercury outline-none bg-white text-burnham placeholder-shuttle/50"
+          placeholder="Type a command or search..."
+          className="cmdk-input w-full px-4 py-3 text-sm border-b border-mercury outline-none bg-white text-burnham placeholder-shuttle/50"
           value={query}
           onChange={e => { setQuery(e.target.value); setSelected(0) }}
           onKeyDown={handleKeyDown}
         />
-        <div className="max-h-80 overflow-y-auto">
+        <div className="cmdk-list max-h-80 overflow-y-auto">
           {isSearchMode ? (
             searchResults.length === 0 ? (
               <div className="flex items-center justify-center py-12">
@@ -349,7 +349,7 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
               </div>
             ) : (
               <div className="py-1">
-                <p className="text-[9px] uppercase tracking-widest text-shuttle/30 font-mono px-4 py-2 mt-1">
+                <p className="cmdk-section text-[10px] uppercase tracking-widest text-shuttle/30 font-mono px-4 py-2 mt-1">
                   Search
                 </p>
                 {searchResults.map((item, globalIdx) => (
@@ -358,7 +358,7 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
                     onClick={item.action}
                     onMouseEnter={() => setSelected(globalIdx)}
                     className={[
-                      'w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors',
+                      'cmdk-item w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors',
                       globalIdx === selected ? 'bg-mercury/30' : 'hover:bg-mercury/20',
                     ].join(' ')}
                   >
@@ -368,7 +368,7 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
                       {item.sub && <p className="text-[10px] text-shuttle/40 font-mono truncate">{item.sub}</p>}
                     </div>
                     {item.badge && (
-                      <span className="text-[9px] font-mono text-shuttle/45 bg-mercury/30 px-1.5 py-0.5 rounded">
+                        <span className="cmdk-badge text-[10px] font-mono text-shuttle/45 bg-mercury/30 px-1.5 py-0.5 rounded">
                         {item.badge}
                       </span>
                     )}
@@ -384,7 +384,7 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
                 {showNavSection && (
                   <>
                     {!query.trim() && (
-                      <p className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-shuttle/50">Navigate</p>
+                      <p className="cmdk-section px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-shuttle/50">Navigate</p>
                     )}
                     {navItems.map((cmd) => {
                       const globalIdx = sections.indexOf(cmd)
@@ -393,7 +393,7 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
                           key={cmd.id}
                           onClick={cmd.action}
                           className={[
-                            'w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 transition-colors',
+                            'cmdk-item w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 transition-colors',
                             globalIdx === selected ? 'bg-mercury/30 text-burnham' : 'text-burnham hover:bg-mercury/20',
                           ].join(' ')}
                           onMouseEnter={() => setSelected(globalIdx)}
@@ -401,7 +401,7 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
                           <cmd.Icon size={14} className="text-shuttle shrink-0" />
                           <span>{cmd.label}</span>
                           {cmd.shortcut && (
-                            <span className="ml-auto text-[10px] font-mono text-shuttle/40 bg-mercury/30 px-1.5 py-0.5 rounded">
+                            <span className="cmdk-shortcut ml-auto text-[10px] font-mono text-shuttle/40 bg-mercury/30 px-1.5 py-0.5 rounded">
                               {cmd.shortcut}
                             </span>
                           )}
@@ -413,7 +413,7 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
                 {showMilestoneSection && (
                   <>
                     {!query.trim() && (
-                      <p className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-shuttle/50 border-t border-mercury/50 mt-1">
+                      <p className="cmdk-section px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-shuttle/50 border-t border-mercury/50 mt-1">
                         Mark milestone complete
                       </p>
                     )}
@@ -424,12 +424,12 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
                           key={cmd.id}
                           onClick={cmd.action}
                           className={[
-                            'w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 transition-colors',
+                            'cmdk-item w-full text-left px-4 py-2.5 text-sm flex items-center gap-3 transition-colors',
                             globalIdx === selected ? 'bg-gossip/30 text-burnham' : 'text-burnham hover:bg-mercury/20',
                           ].join(' ')}
                           onMouseEnter={() => setSelected(globalIdx)}
                         >
-                          <cmd.Icon size={14} className="text-pastel shrink-0" weight="bold" />
+                          <cmd.Icon size={14} className="text-burnham shrink-0" weight="bold" />
                           <span className="truncate">{cmd.label}</span>
                         </button>
                       )
@@ -440,7 +440,7 @@ export default function CommandPalette({ open, onClose, onStartTimer }: CommandP
             )
           )}
         </div>
-        <div className="px-4 py-2 border-t border-mercury/50 flex items-center gap-3">
+        <div className="cmdk-footer px-4 py-2 border-t border-mercury/50 flex items-center gap-3">
           <span className="text-[10px] text-shuttle/50 font-mono">&uarr;&darr; navigate &middot; &crarr; select &middot; esc close &middot; ⌘K open</span>
         </div>
       </div>

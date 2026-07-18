@@ -26,11 +26,11 @@ export function TierInfoHelper({ align = 'left' }: { align?: 'left' | 'right' })
 
       {open && (
         <div
-          className={`absolute top-5 ${align === 'right' ? 'right-0' : 'left-0'} z-20 w-72 bg-white border border-mercury rounded-xl shadow-lg p-3 text-left`}
+          className={`absolute top-5 ${align === 'right' ? 'right-0' : 'left-0'} z-20 w-72 bg-white border border-mercury rounded-lg shadow-[var(--shadow-pop)] p-3 text-left`}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-start justify-between mb-2">
-            <span className="text-[9px] font-semibold uppercase tracking-widest text-shuttle">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-shuttle">
               Airport Test — Jacob Warwick
             </span>
             <button
@@ -75,7 +75,7 @@ export function TierInfoHelper({ align = 'left' }: { align?: 'left' | 'right' })
             </div>
           </div>
 
-          <p className="text-[9.5px] text-shuttle/50 mt-3 italic">
+          <p className="text-[10px] text-shuttle/50 mt-3 italic">
             Start the daisy chain at T1, work outward. Starting at T3 kills momentum.
           </p>
         </div>

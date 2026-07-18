@@ -67,7 +67,7 @@ export default function ContactTodosFiles({ contactId, userId }: { contactId: st
       {/* Files */}
       {files.length > 0 && (
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">Linked files ({files.length})</p>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-shuttle/50 mb-2">Linked files ({files.length})</p>
           <div className="flex flex-col gap-1.5">
             {files.map(f => (
               <button
@@ -86,14 +86,14 @@ export default function ContactTodosFiles({ contactId, userId }: { contactId: st
 
       {/* Todos */}
       <div>
-        <p className="text-[11px] font-bold uppercase tracking-widest text-shuttle/50 mb-2">Todos ({todos.length})</p>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-shuttle/50 mb-2">Todos ({todos.length})</p>
         <div className="flex flex-col gap-1.5">
           {todos.map(t => {
             const label = plainTextFromContentSegments(t.content_segments) || t.text
             return (
               <div key={t.id} className="flex items-center gap-2 px-3 py-2 bg-white border border-mercury rounded-lg">
                 {t.completed
-                  ? <CheckCircle size={15} weight="fill" className="text-pastel shrink-0" />
+                  ? <CheckCircle size={15} weight="fill" className="text-burnham shrink-0" />
                   : <Circle size={15} className="text-mercury shrink-0" />}
                 <span className={`text-[12px] flex-1 truncate ${t.completed ? 'text-shuttle/50 line-through' : 'text-midnight'}`}>{label}</span>
                 {t.date && <span className="text-[10px] text-shuttle/40 shrink-0">{t.date}</span>}

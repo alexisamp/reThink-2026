@@ -175,7 +175,7 @@ export default function NewPersonPeek({ open, userId, goals, onClose, onSave }: 
             </div>
 
             <div className="peek-section">
-              <div className="peek-section-hd"><span>Record details</span><button className="peek-icn"><CaretDown size={12} /></button></div>
+              <div className="peek-section-hd"><span>Record details</span><button className="peek-icn" aria-label="Collapse record details"><CaretDown size={12} /></button></div>
               <div className="peek-fields">
                 <div className="peek-field">
                   <span className="pf-label"><IdentificationCard size={12} /> Name</span>
@@ -202,7 +202,7 @@ export default function NewPersonPeek({ open, userId, goals, onClose, onSave }: 
             </div>
 
             <div className="peek-section">
-              <div className="peek-section-hd"><span>Lists</span><button className="peek-icn"><CaretDown size={12} /></button></div>
+              <div className="peek-section-hd"><span>Lists</span><button className="peek-icn" aria-label="Collapse lists"><CaretDown size={12} /></button></div>
               <div className="peek-lists">
                 <span className="spk-chip">Network</span>
                 <span className="spk-chip">{status}</span>
@@ -259,7 +259,7 @@ export default function NewPersonPeek({ open, userId, goals, onClose, onSave }: 
                       <span className="pk-person-name">{referredBy.name}</span>
                       <span className="pk-person-role">{referredBy.company || 'Network'}</span>
                     </span>
-                    <button className="peek-icn" onClick={() => setReferredBy(null)}><X size={12} /></button>
+                    <button className="peek-icn" onClick={() => setReferredBy(null)} aria-label="Clear referrer"><X size={12} /></button>
                   </div>
                 ) : (
                   <div className="peek-fields">

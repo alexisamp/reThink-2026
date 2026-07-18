@@ -2,7 +2,7 @@
  * MilestoneOverviewPanel — right-side slide-in roadmap view
  *
  * Design: editorial timeline. Goals as section headers with vertical
- * spine lines connecting milestone nodes. Click a node → detail panel.
+ * spine lines connecting milestone nodes. Click a node to open the detail panel.
  * Milestones ordered by target_date ASC within each goal.
  */
 import { useState } from 'react'
@@ -29,8 +29,8 @@ function daysLabel(dateStr: string | null | undefined): { text: string; color: s
     (new Date(dateStr + 'T12:00:00').getTime() - Date.now()) / 86400000
   )
   if (diff < 0)  return { text: `${Math.abs(diff)}d over`, color: 'text-red-400/70' }
-  if (diff === 0) return { text: 'today', color: 'text-amber-500/80' }
-  if (diff <= 7)  return { text: `${diff}d`, color: 'text-amber-500/60' }
+  if (diff === 0) return { text: 'today', color: 'text-burnham' }
+  if (diff <= 7)  return { text: `${diff}d`, color: 'text-shuttle' }
   return { text: `${diff}d`, color: 'text-shuttle/30' }
 }
 
@@ -85,14 +85,14 @@ export default function MilestoneOverviewPanel({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[200] bg-black/8 backdrop-blur-[0.5px] transition-opacity duration-300"
+        className="fixed inset-0 z-40 bg-black/8 backdrop-blur-[0.5px] transition-opacity duration-300"
         style={{ opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none' }}
         onClick={onClose}
       />
 
       {/* Panel */}
       <div
-        className="fixed top-0 right-0 bottom-0 z-[205] flex flex-col bg-white border-l border-mercury/50 shadow-2xl"
+        className="fixed top-0 right-0 bottom-0 z-50 flex flex-col bg-white border-l border-mercury/50 shadow-[var(--shadow-pop)]"
         style={{
           width: 380,
           transform: open ? 'translateX(0)' : 'translateX(100%)',
@@ -148,7 +148,7 @@ export default function MilestoneOverviewPanel({
                   <div className="flex items-center gap-2 mb-4">
                     {g.emoji && <span className="text-[14px]">{g.emoji}</span>}
                     <span className="text-[11px] font-semibold text-burnham/80">{g.alias ?? g.text}</span>
-                    <span className="text-[9px] font-mono text-shuttle/30 ml-1">{items.length} milestones</span>
+                    <span className="text-[10px] font-mono text-shuttle/30 ml-1">{items.length} milestones</span>
                   </div>
                 )}
                 {/* Full vertical timeline */}
@@ -164,7 +164,7 @@ export default function MilestoneOverviewPanel({
                     return (
                       <div key={ms.id} className="flex gap-3 group/ms mb-3">
                         <div className="shrink-0 flex flex-col items-center pt-0.5">
-                          <div className={`w-2.5 h-2.5 rounded-full border-[1.5px] z-10 transition-all ${isDone ? 'bg-pastel border-pastel' : 'bg-white border-mercury group-hover/ms:border-burnham/40'}`} />
+                          <div className={`w-2.5 h-2.5 rounded-full border-[1.5px] z-10 transition-all ${isDone ? 'bg-burnham border-burnham' : 'bg-white border-mercury group-hover/ms:border-burnham/40'}`} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start gap-2">
@@ -173,22 +173,22 @@ export default function MilestoneOverviewPanel({
                               {ms.target_date && (
                                 <div className="flex items-center gap-2 mt-0.5">
                                   <CalendarBlank size={9} className="text-shuttle/25" />
-                                  <span className="text-[9px] font-mono text-shuttle/30">{ms.target_date}</span>
-                                  {dl && <span className={`text-[9px] font-mono ${dl.color}`}>{dl.text}</span>}
+                                  <span className="text-[10px] font-mono text-shuttle/30">{ms.target_date}</span>
+                                  {dl && <span className={`text-[10px] font-mono ${dl.color}`}>{dl.text}</span>}
                                 </div>
                               )}
                             </button>
                             <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover/ms:opacity-100 transition-opacity pt-0.5">
-                              <button onClick={() => onMilestoneStatusToggle(ms)} className="text-shuttle/25 hover:text-pastel p-0.5">
-                                {isDone ? <CheckCircle size={12} weight="fill" className="text-pastel/60" /> : <Circle size={12} />}
+                              <button onClick={() => onMilestoneStatusToggle(ms)} aria-label={isDone ? 'Mark milestone incomplete' : 'Mark milestone complete'} className="text-shuttle/25 hover:text-burnham p-0.5">
+                                {isDone ? <CheckCircle size={12} weight="fill" className="text-burnham/60" /> : <Circle size={12} />}
                               </button>
                               {isConfirming ? (
                                 <div className="flex items-center gap-1">
-                                  <button onClick={() => handleDelete(ms)} disabled={!!isDeleting} className="text-[9px] font-mono text-red-400 px-1.5 py-0.5 rounded border border-red-200">{isDeleting ? '…' : 'del'}</button>
-                                  <button onClick={() => setConfirmDeleteId(null)} className="text-shuttle/25 p-0.5"><X size={9} /></button>
+                                  <button onClick={() => handleDelete(ms)} disabled={!!isDeleting} className="text-[10px] font-mono text-red-400 px-1.5 py-0.5 rounded border border-red-200">{isDeleting ? '...' : 'del'}</button>
+                                  <button onClick={() => setConfirmDeleteId(null)} aria-label="Cancel milestone delete" className="text-shuttle/25 p-0.5"><X size={9} /></button>
                                 </div>
                               ) : (
-                                <button onClick={() => handleDelete(ms)} className="text-shuttle/20 hover:text-red-400 p-0.5"><Trash size={11} /></button>
+                                <button onClick={() => handleDelete(ms)} aria-label="Delete milestone" className="text-shuttle/20 hover:text-red-400 p-0.5"><Trash size={11} /></button>
                               )}
                             </div>
                           </div>
@@ -218,10 +218,10 @@ export default function MilestoneOverviewPanel({
                 <div key={goal.id}>
                   <div className="flex items-center gap-2 mb-3">
                     {goal.emoji && <span className="text-[13px] leading-none">{goal.emoji}</span>}
-                    <span className="text-[9px] uppercase tracking-widest font-medium text-burnham/50 font-mono">
+                    <span className="text-[10px] uppercase tracking-widest font-medium text-burnham/50 font-mono">
                       {goal.alias ?? goal.text.slice(0, 28)}
                     </span>
-                    <span className="text-[9px] font-mono text-shuttle/20 ml-auto">{items.length}</span>
+                    <span className="text-[10px] font-mono text-shuttle/20 ml-auto">{items.length}</span>
                   </div>
 
                   <div className="relative">
@@ -236,33 +236,33 @@ export default function MilestoneOverviewPanel({
                       return (
                         <div key={ms.id} className={`flex gap-2 group/ms ${idx < visible.length - 1 || hiddenCount > 0 ? 'mb-2' : ''}`}>
                           <div className="shrink-0 flex flex-col items-center pt-1">
-                            <div className={`w-2.5 h-2.5 rounded-full border-[1.5px] z-10 transition-all ${isDone ? 'bg-pastel border-pastel' : 'bg-white border-mercury group-hover/ms:border-burnham/40'}`} />
+                            <div className={`w-2.5 h-2.5 rounded-full border-[1.5px] z-10 transition-all ${isDone ? 'bg-burnham border-burnham' : 'bg-white border-mercury group-hover/ms:border-burnham/40'}`} />
                           </div>
                           <div className="flex-1 min-w-0 pb-1">
                             <div className="flex items-start gap-2">
                               <button className="flex-1 min-w-0 text-left group/inner" onClick={() => { setConfirmDeleteId(null); onSelectMilestone(ms) }}>
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className={`text-[12.5px] leading-snug transition-colors ${isDone ? 'line-through text-shuttle/35' : 'text-burnham/80 group-hover/inner:text-burnham'}`}>{ms.text}</span>
-                                  {isDone && <span className="text-[8px] font-mono text-pastel/70 bg-gossip/60 px-1 py-px rounded shrink-0">done</span>}
+                                  {isDone && <span className="text-[10px] font-mono text-burnham/70 bg-gossip/60 px-1 py-px rounded shrink-0">done</span>}
                                 </div>
                                 {ms.target_date && (
                                   <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-[9px] font-mono text-shuttle/30">{ms.target_date}</span>
-                                    {dl && <span className={`text-[9px] font-mono ${dl.color}`}>{dl.text}</span>}
+                                    <span className="text-[10px] font-mono text-shuttle/30">{ms.target_date}</span>
+                                    {dl && <span className={`text-[10px] font-mono ${dl.color}`}>{dl.text}</span>}
                                   </div>
                                 )}
                               </button>
                               <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover/ms:opacity-100 transition-opacity pt-0.5">
-                                <button onClick={() => onMilestoneStatusToggle(ms)} className="text-shuttle/25 hover:text-pastel p-0.5">
-                                  {isDone ? <CheckCircle size={13} weight="fill" className="text-pastel/60" /> : <Circle size={13} />}
+                                <button onClick={() => onMilestoneStatusToggle(ms)} aria-label={isDone ? 'Mark milestone incomplete' : 'Mark milestone complete'} className="text-shuttle/25 hover:text-burnham p-0.5">
+                                  {isDone ? <CheckCircle size={13} weight="fill" className="text-burnham/60" /> : <Circle size={13} />}
                                 </button>
                                 {isConfirming ? (
                                   <div className="flex items-center gap-1">
-                                    <button onClick={() => handleDelete(ms)} disabled={!!isDeleting} className="text-[9px] font-mono text-red-400 hover:text-red-600 px-1.5 py-0.5 rounded border border-red-200">{isDeleting ? '…' : 'delete'}</button>
-                                    <button onClick={() => setConfirmDeleteId(null)} className="text-shuttle/30 p-0.5"><X size={10} /></button>
+                                    <button onClick={() => handleDelete(ms)} disabled={!!isDeleting} className="text-[10px] font-mono text-red-400 hover:text-red-600 px-1.5 py-0.5 rounded border border-red-200">{isDeleting ? '...' : 'delete'}</button>
+                                    <button onClick={() => setConfirmDeleteId(null)} aria-label="Cancel milestone delete" className="text-shuttle/30 p-0.5"><X size={10} /></button>
                                   </div>
                                 ) : (
-                                  <button onClick={() => handleDelete(ms)} className="text-shuttle/20 hover:text-red-400 p-0.5"><Trash size={12} /></button>
+                                  <button onClick={() => handleDelete(ms)} aria-label="Delete milestone" className="text-shuttle/20 hover:text-red-400 p-0.5"><Trash size={12} /></button>
                                 )}
                               </div>
                             </div>
@@ -281,7 +281,7 @@ export default function MilestoneOverviewPanel({
                           onClick={() => setDrilldownGoalId(goal.id)}
                           className="text-[10px] font-mono text-burnham/40 hover:text-burnham transition-colors pb-1 flex items-center gap-1"
                         >
-                          → {hiddenCount} más
+                          +{hiddenCount} more
                         </button>
                       </div>
                     )}
@@ -292,7 +292,7 @@ export default function MilestoneOverviewPanel({
 
             {noDateMilestones.length > 0 && (
               <div>
-                <div className="text-[9px] uppercase tracking-widest text-shuttle/25 font-mono mb-3">Unassigned</div>
+                <div className="text-[10px] uppercase tracking-widest text-shuttle/25 font-mono mb-3">Unassigned</div>
                 <div className="space-y-2">
                   {noDateMilestones.slice(0, MAX_PER_GOAL).map(ms => {
                     const isConfirming = confirmDeleteId === ms.id
@@ -302,14 +302,14 @@ export default function MilestoneOverviewPanel({
                         <div className="w-2 h-2 rounded-full border border-mercury/50 shrink-0" />
                         <button className="flex-1 text-left text-[12px] text-shuttle/50 hover:text-burnham transition-colors truncate" onClick={() => onSelectMilestone(ms)}>{ms.text}</button>
                         <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover/ms:opacity-100 transition-opacity">
-                          <button onClick={() => onMilestoneStatusToggle(ms)} className="text-shuttle/25 hover:text-pastel p-0.5"><Circle size={12} /></button>
+                          <button onClick={() => onMilestoneStatusToggle(ms)} aria-label="Mark milestone complete" className="text-shuttle/25 hover:text-burnham p-0.5"><Circle size={12} /></button>
                           {isConfirming ? (
                             <div className="flex items-center gap-1">
-                              <button onClick={() => handleDelete(ms)} disabled={!!isDeleting} className="text-[9px] font-mono text-red-400 px-1.5 py-0.5 rounded border border-red-200">{isDeleting ? '…' : 'confirm'}</button>
-                              <button onClick={() => setConfirmDeleteId(null)} className="text-shuttle/30 p-0.5"><X size={9} /></button>
+                              <button onClick={() => handleDelete(ms)} disabled={!!isDeleting} className="text-[10px] font-mono text-red-400 px-1.5 py-0.5 rounded border border-red-200">{isDeleting ? '...' : 'confirm'}</button>
+                              <button onClick={() => setConfirmDeleteId(null)} aria-label="Cancel milestone delete" className="text-shuttle/30 p-0.5"><X size={9} /></button>
                             </div>
                           ) : (
-                            <button onClick={() => handleDelete(ms)} className="text-shuttle/20 hover:text-red-400 p-0.5"><Trash size={11} /></button>
+                            <button onClick={() => handleDelete(ms)} aria-label="Delete milestone" className="text-shuttle/20 hover:text-red-400 p-0.5"><Trash size={11} /></button>
                           )}
                         </div>
                       </div>
@@ -324,7 +324,7 @@ export default function MilestoneOverviewPanel({
 
         {/* ── Footer ────────────────────────────────────────────────── */}
         <div className="shrink-0 px-5 py-2.5 border-t border-mercury/30">
-          <span className="text-[9px] font-mono text-shuttle/20">M · ⌘⇧M to toggle · Esc to close</span>
+          <span className="text-[10px] font-mono text-shuttle/20">M · Cmd+Shift+M to toggle · Esc to close</span>
         </div>
       </div>
     </>
