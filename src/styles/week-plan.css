@@ -122,11 +122,82 @@
   padding: 14px 14px 10px;
 }
 
+.wp-panel-hd > div {
+  min-width: 0;
+  flex: 1;
+}
+
 .wp-panel-hd h2 {
   margin: 0;
   font-size: 15px;
   font-weight: 650;
   color: var(--burnham);
+}
+
+.wp-panel-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-3);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.wp-panel-action:hover {
+  background: color-mix(in oklab, var(--attio-cobalt) 7%, transparent);
+  color: var(--attio-cobalt);
+}
+
+.wp-panel-action:disabled {
+  opacity: .38;
+  cursor: default;
+}
+
+.wp-ms-create {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 7px;
+  margin: 0 12px 10px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--attio-border);
+  background: var(--bg-1);
+}
+
+.wp-ms-create svg {
+  margin-top: 4px;
+  color: var(--fg-3);
+}
+
+.wp-ms-create input,
+.wp-ms-create select {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--burnham);
+  font: inherit;
+  font-size: 12px;
+}
+
+.wp-ms-create input::placeholder {
+  color: color-mix(in oklab, var(--shuttle) 48%, transparent);
+}
+
+.wp-ms-create select,
+.wp-ms-create input[type="date"] {
+  grid-column: 2;
+  height: 24px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--attio-paper) 68%, transparent);
+  color: var(--shuttle);
+  font-size: 11px;
 }
 
 .wp-add {
@@ -299,7 +370,8 @@
   color: var(--fg-3);
 }
 
-.wp-group-add {
+.wp-group-add,
+.wp-group-delete {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -318,6 +390,21 @@
   opacity: 1;
   color: var(--attio-cobalt);
   background: color-mix(in oklab, var(--attio-cobalt) 7%, transparent);
+}
+
+.wp-group-delete {
+  opacity: 0;
+}
+
+.wp-group-hd:hover .wp-group-delete,
+.wp-group-delete:focus-visible {
+  opacity: .58;
+}
+
+.wp-group-delete:hover {
+  opacity: 1;
+  color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 9%, transparent);
 }
 
 .wp-inline-add {
