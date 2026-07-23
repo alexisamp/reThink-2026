@@ -198,6 +198,10 @@ export default function WeekPlan() {
   const [sortBy, setSortBy] = useState<SortBy>('created_desc')
   const [groupDrafts, setGroupDrafts] = useState<Record<string, string>>({})
   const [openAddGroup, setOpenAddGroup] = useState<string | null>(null)
+  const [showMilestoneCreate, setShowMilestoneCreate] = useState(false)
+  const [newMilestoneText, setNewMilestoneText] = useState('')
+  const [newMilestoneGoalId, setNewMilestoneGoalId] = useState('')
+  const [newMilestoneDate, setNewMilestoneDate] = useState('')
   const [splitWidth, setSplitWidth] = useState(initialSplit)
   const [dropDate, setDropDate] = useState<string | null>(null)
   const [dropMinute, setDropMinute] = useState<Record<string, number | null>>({})
@@ -297,10 +301,10 @@ export default function WeekPlan() {
       companiesRes,
       opportunitiesRes,
     ] = await Promise.all([
-      supabase.from('todos').select('*').eq('user_id', userId).gte('date', anchorWeek).lte('date', weekEnd).is('backlog_at', null).order('date').order('scheduled_start_minutes', { nullsFirst: false }).order('created_at'),
+      supabase.from('todos').select('*').eq('user_id', userId).eq('completed', false).gte('date', anchorWeek).lte('date', weekEnd).is('backlog_at', null).order('date').order('scheduled_start_minutes', { nullsFirst: false }).order('created_at'),
       supabase.from('todos').select('*').eq('user_id', userId).eq('completed', false).not('backlog_at', 'is', null).order('backlog_at', { ascending: false }),
       supabase.from('todos').select('*').eq('user_id', userId).eq('completed', false).is('date', null).is('backlog_at', null).order('created_at', { ascending: false }),
-      supabase.from('milestones').select('*').eq('user_id', userId).neq('status', 'COMPLETE').order('target_date', { nullsFirst: false }),
+      supabase.from('milestones').select('*').eq('user_id', userId).neq('status', 'COMPLETE').neq('status', 'ARCHIVED').order('target_date', { nullsFirst: false }),
       supabase.from('goals').select('id, text, alias, color, emoji').eq('user_id', userId).eq('goal_type', 'ACTIVE').order('position'),
       supabase.from('outreach_logs').select('id, name, profile_photo_url, company, job_title, email, status').eq('user_id', userId).order('name'),
       supabase.from('companies').select('id, name, logo_url, favicon_url, domain, sector, headline').eq('user_id', userId).order('name'),
@@ -332,6 +336,10 @@ export default function WeekPlan() {
   useEffect(() => {
     zoomDraftsRef.current = zoomDrafts
   }, [zoomDrafts])
+
+  useEffect(() => {
+    if (!newMilestoneGoalId && goals[0]?.id) setNewMilestoneGoalId(goals[0].id)
+  }, [goals, newMilestoneGoalId])
 
   const setTodoEverywhere = (id: string, updater: (todo: Todo) => Todo | null) => {
     setTodos(prev => prev.flatMap(todo => todo.id === id ? [updater(todo)].filter(Boolean) as Todo[] : [todo]))
@@ -387,7 +395,24 @@ export default function WeekPlan() {
     if (!existing || !userId) return
     const completed = !existing.completed
     const completedAt = completed ? new Date().toISOString() : null
-    setTodoEverywhere(id, todo => ({ ...todo, completed, completed_at: completedAt }))
+    if (completed) {
+      setTodos(prev => prev.filter(todo => todo.id !== id))
+      setBacklog(prev => prev.filter(todo => todo.id !== id))
+      setZoomDrafts(prev => {
+        const next = { ...prev }
+        delete next[id]
+        zoomDraftsRef.current = next
+        return next
+      })
+      setDrafts(prev => {
+        const next = { ...prev }
+        delete next[id]
+        draftsRef.current = next
+        return next
+      })
+    } else {
+      setTodoEverywhere(id, todo => ({ ...todo, completed, completed_at: completedAt }))
+    }
     const { error } = await supabase.from('todos').update({ completed, completed_at: completedAt }).eq('user_id', userId).eq('id', id)
     if (error) {
       console.error('Could not toggle todo', error)
@@ -649,6 +674,63 @@ export default function WeekPlan() {
         console.error('Could not update goal color', error)
         void load()
       }
+    }
+  }
+
+  const createMilestone = async (event: FormEvent) => {
+    event.preventDefault()
+    const text = newMilestoneText.trim()
+    const goalId = newMilestoneGoalId || goals[0]?.id
+    if (!text || !goalId || !userId) return
+    const payload = {
+      user_id: userId,
+      goal_id: goalId,
+      text,
+      target_date: newMilestoneDate || null,
+      status: 'PENDING',
+      focused: false,
+      color: goalsMap.get(goalId)?.color ?? null,
+      position: milestones.length,
+    }
+    const { data, error } = await supabase.from('milestones').insert(payload).select('*').single()
+    if (error) {
+      console.error('Could not create milestone', error)
+      void load()
+      return
+    }
+    if (data) {
+      setMilestones(prev => [...prev, data as Milestone])
+      setGroupBy('milestone')
+      setMilestoneFilter('all')
+    }
+    setNewMilestoneText('')
+    setNewMilestoneDate('')
+    setShowMilestoneCreate(false)
+  }
+
+  const archiveMilestone = async (milestone: Milestone) => {
+    if (!userId) return
+    const ok = window.confirm(`Delete "${milestone.text}" from Week Plan? Its todos will stay, but move to No milestone.`)
+    if (!ok) return
+    setMilestones(prev => prev.filter(item => item.id !== milestone.id))
+    setTodos(prev => prev.map(todo => todo.milestone_id === milestone.id ? { ...todo, milestone_id: null, goal_id: milestone.goal_id } : todo))
+    setBacklog(prev => prev.map(todo => todo.milestone_id === milestone.id ? { ...todo, milestone_id: null, goal_id: milestone.goal_id } : todo))
+    if (milestoneFilter === milestone.id) setMilestoneFilter('all')
+
+    const todosRes = await supabase
+      .from('todos')
+      .update({ milestone_id: null, goal_id: milestone.goal_id })
+      .eq('user_id', userId)
+      .eq('milestone_id', milestone.id)
+    const milestoneRes = await supabase
+      .from('milestones')
+      .update({ status: 'ARCHIVED' })
+      .eq('user_id', userId)
+      .eq('id', milestone.id)
+
+    if (todosRes.error || milestoneRes.error) {
+      console.error('Could not delete milestone', todosRes.error ?? milestoneRes.error)
+      void load()
     }
   }
 
@@ -1139,7 +1221,39 @@ export default function WeekPlan() {
               <h2>Backlog</h2>
               <span>{filteredBacklog.length} todo{filteredBacklog.length === 1 ? '' : 's'}</span>
             </div>
+            <button
+              className="wp-panel-action"
+              type="button"
+              onClick={() => setShowMilestoneCreate(value => !value)}
+              title="New milestone"
+              disabled={goals.length === 0}
+            >
+              <Plus size={12} />
+            </button>
           </div>
+
+          {showMilestoneCreate && (
+            <form className="wp-ms-create" onSubmit={event => void createMilestone(event)}>
+              <Plus size={12} />
+              <input
+                autoFocus
+                value={newMilestoneText}
+                onChange={event => setNewMilestoneText(event.target.value)}
+                onKeyDown={event => { if (event.key === 'Escape') setShowMilestoneCreate(false) }}
+                placeholder={goals.length ? 'New milestone...' : 'Create a goal first'}
+                disabled={goals.length === 0}
+              />
+              <select value={newMilestoneGoalId} onChange={event => setNewMilestoneGoalId(event.target.value)} disabled={goals.length === 0}>
+                {goals.map(goal => <option key={goal.id} value={goal.id}>{goal.alias || goal.text}</option>)}
+              </select>
+              <input
+                type="date"
+                value={newMilestoneDate}
+                onChange={event => setNewMilestoneDate(event.target.value)}
+                disabled={goals.length === 0}
+              />
+            </form>
+          )}
 
           <div className="wp-viewbar">
             <label className="wp-view-pill">
@@ -1202,6 +1316,15 @@ export default function WeekPlan() {
                   )}
                   <span className="wp-group-title">{group.label}</span>
                   <span className="wp-group-count">{group.todos.length}</span>
+                  {group.kind === 'milestone' && group.milestoneId && milestonesMap.has(group.milestoneId) && (
+                    <button
+                      className="wp-group-delete"
+                      title="Delete milestone"
+                      onClick={() => void archiveMilestone(milestonesMap.get(group.milestoneId as string)!)}
+                    >
+                      <Trash size={11} />
+                    </button>
+                  )}
                   <button
                     className="wp-group-add"
                     title="Add todo to this group"
