@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { Archive, ArrowBendUpLeft, ArrowsOutSimple, CalendarBlank, CaretLeft, CaretRight, Check, DotsSixVertical, FunnelSimple, Plus, Star, Trash, X } from '@phosphor-icons/react'
+import { Archive, ArrowBendUpLeft, ArrowsOutSimple, CalendarBlank, CaretDown, CaretLeft, CaretRight, Check, DotsSixVertical, FunnelSimple, Plus, Star, Trash, X } from '@phosphor-icons/react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import type { Goal, Milestone, Todo, TodoContentSegment, TodoMentionKind } from '@/types'
@@ -194,9 +194,11 @@ export default function WeekPlan() {
   const [mentionOptions, setMentionOptions] = useState<Mention[]>([])
   const [groupBy, setGroupBy] = useState<GroupBy>('milestone')
   const [attributeFilter, setAttributeFilter] = useState<AttributeFilter>('all')
-  const [milestoneFilter, setMilestoneFilter] = useState('all')
+  const [milestoneFilters, setMilestoneFilters] = useState<string[]>([])
+  const [milestoneFilterOpen, setMilestoneFilterOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortBy>('created_desc')
   const [groupDrafts, setGroupDrafts] = useState<Record<string, string>>({})
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const [openAddGroup, setOpenAddGroup] = useState<string | null>(null)
   const [showMilestoneCreate, setShowMilestoneCreate] = useState(false)
   const [newMilestoneText, setNewMilestoneText] = useState('')
@@ -220,6 +222,7 @@ export default function WeekPlan() {
   const draggingTodoIdRef = useRef<string | null>(null)
   const zoomPointerDragRef = useRef<ZoomPointerDrag | null>(null)
   const dayGridRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const milestoneFilterRef = useRef<HTMLDivElement | null>(null)
 
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(anchorWeek, i)), [anchorWeek])
   const weekEnd = weekDates[6]
@@ -230,6 +233,16 @@ export default function WeekPlan() {
 
   const goalsMap = useMemo(() => new Map(goals.map(goal => [goal.id, goal])), [goals])
   const milestonesMap = useMemo(() => new Map(milestones.map(milestone => [milestone.id, milestone])), [milestones])
+
+  const milestoneFilterLabel = useMemo(() => {
+    if (milestoneFilters.length === 0) return 'All'
+    if (milestoneFilters.length === 1) {
+      const [value] = milestoneFilters
+      if (value === '__none__') return 'No milestone'
+      return milestonesMap.get(value)?.text ?? '1 selected'
+    }
+    return `${milestoneFilters.length} selected`
+  }, [milestoneFilters, milestonesMap])
 
   const colorForGoal = useCallback((goalId: string | null) => {
     const goal = goalId ? goalsMap.get(goalId) : null
@@ -340,6 +353,24 @@ export default function WeekPlan() {
   useEffect(() => {
     if (!newMilestoneGoalId && goals[0]?.id) setNewMilestoneGoalId(goals[0].id)
   }, [goals, newMilestoneGoalId])
+
+  useEffect(() => {
+    if (!milestoneFilterOpen) return
+    const close = (event: MouseEvent) => {
+      if (milestoneFilterRef.current?.contains(event.target as Node)) return
+      setMilestoneFilterOpen(false)
+    }
+    window.addEventListener('mousedown', close)
+    return () => window.removeEventListener('mousedown', close)
+  }, [milestoneFilterOpen])
+
+  const toggleMilestoneFilter = (value: string) => {
+    setMilestoneFilters(prev => prev.includes(value) ? prev.filter(item => item !== value) : [...prev, value])
+  }
+
+  const milestoneAllowed = useCallback((milestoneId: string | null) => {
+    return milestoneFilters.length === 0 || milestoneFilters.includes(milestoneId ?? '__none__')
+  }, [milestoneFilters])
 
   const setTodoEverywhere = (id: string, updater: (todo: Todo) => Todo | null) => {
     setTodos(prev => prev.flatMap(todo => todo.id === id ? [updater(todo)].filter(Boolean) as Todo[] : [todo]))
@@ -701,7 +732,7 @@ export default function WeekPlan() {
     if (data) {
       setMilestones(prev => [...prev, data as Milestone])
       setGroupBy('milestone')
-      setMilestoneFilter('all')
+      setMilestoneFilters([])
     }
     setNewMilestoneText('')
     setNewMilestoneDate('')
@@ -715,7 +746,7 @@ export default function WeekPlan() {
     setMilestones(prev => prev.filter(item => item.id !== milestone.id))
     setTodos(prev => prev.map(todo => todo.milestone_id === milestone.id ? { ...todo, milestone_id: null, goal_id: milestone.goal_id } : todo))
     setBacklog(prev => prev.map(todo => todo.milestone_id === milestone.id ? { ...todo, milestone_id: null, goal_id: milestone.goal_id } : todo))
-    if (milestoneFilter === milestone.id) setMilestoneFilter('all')
+    setMilestoneFilters(prev => prev.filter(item => item !== milestone.id))
 
     const todosRes = await supabase
       .from('todos')
@@ -861,7 +892,7 @@ export default function WeekPlan() {
 
   const filteredBacklog = useMemo(() => {
     const matches = backlog.filter(todo => {
-      if (milestoneFilter !== 'all' && (todo.milestone_id ?? '__none__') !== milestoneFilter) return false
+      if (!milestoneAllowed(todo.milestone_id ?? null)) return false
       if (attributeFilter === 'must_do' && !todo.must_do) return false
       if (attributeFilter === 'waiting' && !todo.waiting) return false
       if (attributeFilter === 'unlinked' && (todo.milestone_id || todo.goal_id || todo.contact_id || todo.company_id || todo.opportunity_id)) return false
@@ -880,7 +911,7 @@ export default function WeekPlan() {
       }
       return 0
     })
-  }, [attributeFilter, backlog, milestoneFilter, milestonesMap, sortBy])
+  }, [attributeFilter, backlog, milestoneAllowed, milestonesMap, sortBy])
 
   const backlogGroups = useMemo(() => {
     const groups = new Map<string, BacklogGroup>()
@@ -891,7 +922,7 @@ export default function WeekPlan() {
 
     if (groupBy === 'milestone') {
       for (const milestone of milestones) {
-        if (milestoneFilter !== 'all' && milestoneFilter !== milestone.id) continue
+        if (!milestoneAllowed(milestone.id)) continue
         ensure({
           key: milestone.id,
           kind: 'milestone',
@@ -902,22 +933,24 @@ export default function WeekPlan() {
           todos: [],
         })
       }
-      if (milestoneFilter === 'all' || milestoneFilter === '__none__') {
+      if (milestoneAllowed(null)) {
         ensure({ key: '__none__', kind: 'milestone', label: 'No milestone', color: colorForGoal(null), milestoneId: null, goalId: null, todos: [] })
       }
     } else if (groupBy === 'goal') {
-      for (const goal of goals) {
-        ensure({
-          key: goal.id,
-          kind: 'goal',
-          label: goal.alias || goal.text,
-          color: goal.color ?? colorForGoal(goal.id),
-          milestoneId: null,
-          goalId: goal.id,
-          todos: [],
-        })
+      if (milestoneFilters.length === 0) {
+        for (const goal of goals) {
+          ensure({
+            key: goal.id,
+            kind: 'goal',
+            label: goal.alias || goal.text,
+            color: goal.color ?? colorForGoal(goal.id),
+            milestoneId: null,
+            goalId: goal.id,
+            todos: [],
+          })
+        }
+        ensure({ key: '__none__', kind: 'goal', label: 'No goal', color: colorForGoal(null), milestoneId: null, goalId: null, todos: [] })
       }
-      ensure({ key: '__none__', kind: 'goal', label: 'No goal', color: colorForGoal(null), milestoneId: null, goalId: null, todos: [] })
     } else {
       ensure({ key: '__all__', kind: 'none', label: 'All backlog', color: colorForGoal(null), milestoneId: null, goalId: null, todos: [] })
     }
@@ -948,7 +981,7 @@ export default function WeekPlan() {
       ensure({ key, kind: groupBy, label, color, milestoneId, goalId, todos: [] }).todos.push(todo)
     }
     return [...groups.values()]
-  }, [colorForGoal, colorForTodo, filteredBacklog, goals, goalsMap, groupBy, milestoneFilter, milestones, milestonesMap])
+  }, [colorForGoal, colorForTodo, filteredBacklog, goals, goalsMap, groupBy, milestoneAllowed, milestoneFilters.length, milestones, milestonesMap])
 
   const visibleTodos = useMemo(() => todos.map(todo => {
     const draft = drafts[todo.id]
@@ -1275,14 +1308,49 @@ export default function WeekPlan() {
                 <option value="unlinked">Unlinked</option>
               </select>
             </label>
-            <label className="wp-view-pill">
+            <div className="wp-view-pill wp-multi-filter" ref={milestoneFilterRef}>
               <span>Milestone</span>
-              <select value={milestoneFilter} onChange={event => setMilestoneFilter(event.target.value)}>
-                <option value="all">All</option>
-                <option value="__none__">No milestone</option>
-                {milestones.map(milestone => <option key={milestone.id} value={milestone.id}>{milestone.text}</option>)}
-              </select>
-            </label>
+              <button className="wp-multi-trigger" type="button" onClick={() => setMilestoneFilterOpen(open => !open)}>
+                <span>{milestoneFilterLabel}</span>
+                <CaretDown size={10} />
+              </button>
+              {milestoneFilterOpen && (
+                <div className="wp-multi-menu">
+                  <button
+                    className={`wp-multi-item${milestoneFilters.length === 0 ? ' active' : ''}`}
+                    type="button"
+                    onClick={() => setMilestoneFilters([])}
+                  >
+                    <span className="wp-multi-check">{milestoneFilters.length === 0 && <Check size={10} />}</span>
+                    <span>All</span>
+                  </button>
+                  <button
+                    className={`wp-multi-item${milestoneFilters.includes('__none__') ? ' active' : ''}`}
+                    type="button"
+                    onClick={() => toggleMilestoneFilter('__none__')}
+                  >
+                    <span className="wp-multi-check">{milestoneFilters.includes('__none__') && <Check size={10} />}</span>
+                    <span className="wp-dot-mini" style={{ '--group-color': colorForGoal(null) } as CSSProperties} />
+                    <span>No milestone</span>
+                  </button>
+                  {milestones.map(milestone => {
+                    const selected = milestoneFilters.includes(milestone.id)
+                    return (
+                      <button
+                        key={milestone.id}
+                        className={`wp-multi-item${selected ? ' active' : ''}`}
+                        type="button"
+                        onClick={() => toggleMilestoneFilter(milestone.id)}
+                      >
+                        <span className="wp-multi-check">{selected && <Check size={10} />}</span>
+                        <span className="wp-dot-mini" style={{ '--group-color': milestone.color ?? colorForGoal(milestone.goal_id) } as CSSProperties} />
+                        <span>{milestone.text}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
             <label className="wp-view-pill">
               <span>Sort</span>
               <select value={sortBy} onChange={event => setSortBy(event.target.value as SortBy)}>
@@ -1293,7 +1361,7 @@ export default function WeekPlan() {
                 <option value="text">Text</option>
               </select>
             </label>
-            <button className="wp-view-reset" type="button" onClick={() => { setAttributeFilter('all'); setMilestoneFilter('all'); setGroupBy('milestone'); setSortBy('created_desc') }}>
+            <button className="wp-view-reset" type="button" onClick={() => { setAttributeFilter('all'); setMilestoneFilters([]); setGroupBy('milestone'); setSortBy('created_desc') }}>
               <X size={10} /> Reset
             </button>
           </div>
@@ -1304,9 +1372,19 @@ export default function WeekPlan() {
                 <span>No backlog todos.</span>
                 <small>Add one above or drag a scheduled block here.</small>
               </div>
-            ) : backlogGroups.map(group => (
-              <section key={`${group.kind}:${group.key}`} className="wp-group">
+            ) : backlogGroups.map(group => {
+              const groupKey = `${group.kind}:${group.key}`
+              const collapsed = Boolean(collapsedGroups[groupKey])
+              return (
+              <section key={groupKey} className="wp-group">
                 <div className="wp-group-hd" style={{ '--group-color': group.color } as CSSProperties}>
+                  <button
+                    className="wp-group-toggle"
+                    title={collapsed ? 'Expand' : 'Collapse'}
+                    onClick={() => setCollapsedGroups(prev => ({ ...prev, [groupKey]: !prev[groupKey] }))}
+                  >
+                    {collapsed ? <CaretRight size={10} /> : <CaretDown size={10} />}
+                  </button>
                   {group.key === '__none__' || group.kind === 'none' ? (
                     <span className="wp-color-dot" />
                   ) : (
@@ -1328,29 +1406,29 @@ export default function WeekPlan() {
                   <button
                     className="wp-group-add"
                     title="Add todo to this group"
-                    onClick={() => setOpenAddGroup(openAddGroup === `${group.kind}:${group.key}` ? null : `${group.kind}:${group.key}`)}
+                    onClick={() => { setCollapsedGroups(prev => ({ ...prev, [groupKey]: false })); setOpenAddGroup(openAddGroup === groupKey ? null : groupKey) }}
                   >
                     <Plus size={12} />
                   </button>
                 </div>
-                {openAddGroup === `${group.kind}:${group.key}` && (
+                {!collapsed && openAddGroup === groupKey && (
                   <form
                     className="wp-inline-add"
-                    onSubmit={event => addBacklogTodo(event, { milestoneId: group.milestoneId, goalId: group.goalId, groupKey: `${group.kind}:${group.key}` })}
+                    onSubmit={event => addBacklogTodo(event, { milestoneId: group.milestoneId, goalId: group.goalId, groupKey })}
                   >
                     <Plus size={12} />
                     <input
                       autoFocus
-                      value={groupDrafts[`${group.kind}:${group.key}`] ?? ''}
-                      onChange={event => setGroupDrafts(prev => ({ ...prev, [`${group.kind}:${group.key}`]: event.target.value }))}
+                      value={groupDrafts[groupKey] ?? ''}
+                      onChange={event => setGroupDrafts(prev => ({ ...prev, [groupKey]: event.target.value }))}
                       onKeyDown={event => { if (event.key === 'Escape') setOpenAddGroup(null) }}
                       placeholder="New todo..."
                     />
                   </form>
                 )}
-                {group.todos.map(todo => renderTodoRow(todo))}
+                {!collapsed && group.todos.map(todo => renderTodoRow(todo))}
               </section>
-            ))}
+            )})}
           </div>
         </aside>
 

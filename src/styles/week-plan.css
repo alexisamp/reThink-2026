@@ -259,7 +259,9 @@
   border-top: 1px solid color-mix(in oklab, var(--attio-border) 75%, transparent);
   border-bottom: 1px solid var(--attio-border);
   background: var(--bg-1);
-  overflow-x: auto;
+  overflow: visible;
+  position: relative;
+  z-index: 20;
 }
 
 .wp-view-pill,
@@ -302,6 +304,97 @@
   appearance: none;
 }
 
+.wp-multi-filter {
+  padding-right: 5px;
+}
+
+.wp-multi-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 118px;
+  min-width: 0;
+  height: 22px;
+  margin: 0 -2px 0 -2px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--burnham);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.wp-multi-trigger span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wp-multi-trigger:hover {
+  background: color-mix(in oklab, var(--attio-paper) 72%, transparent);
+}
+
+.wp-multi-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 216px;
+  max-height: 292px;
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--attio-border);
+  border-radius: 9px;
+  background: var(--bg-1);
+  box-shadow: 0 12px 32px color-mix(in oklab, var(--burnham) 14%, transparent);
+  z-index: 50;
+}
+
+.wp-multi-item {
+  display: grid;
+  grid-template-columns: 14px 8px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 26px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--shuttle);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+}
+
+.wp-multi-item:first-child {
+  grid-template-columns: 14px minmax(0, 1fr);
+}
+
+.wp-multi-item:hover,
+.wp-multi-item.active {
+  background: color-mix(in oklab, var(--attio-paper) 82%, transparent);
+  color: var(--burnham);
+}
+
+.wp-multi-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  color: var(--attio-cobalt);
+}
+
+.wp-dot-mini {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--group-color);
+}
+
 .wp-view-reset {
   border: 0;
   background: transparent;
@@ -325,9 +418,31 @@
   --group-color: var(--tp-accent);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   min-height: 28px;
   padding: 5px 6px 4px;
+}
+
+.wp-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: -3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fg-3);
+  cursor: pointer;
+  opacity: .62;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.wp-group-toggle:hover {
+  opacity: 1;
+  color: var(--burnham);
+  background: color-mix(in oklab, var(--attio-paper) 76%, transparent);
 }
 
 .wp-color-dot {
